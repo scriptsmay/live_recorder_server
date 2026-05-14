@@ -1,6 +1,8 @@
 # 数据库文档
 
-## 连接信息
+## PostgreSQL
+
+### 连接信息
 
 从 `.env` 读取以下环境变量：
 
@@ -13,6 +15,34 @@
 | `DB_PASSWORD` | 数据库密码 |
 
 连接池在 `db/index.js` 中创建，使用 `pg` 模块。
+
+---
+
+## Redis
+
+### 连接信息
+
+从 `.env` 读取以下环境变量：
+
+| 变量 | 说明 |
+|------|------|
+| `REDIS_HOST` | Redis 主机 |
+| `REDIS_PORT` | Redis 端口，默认 6379 |
+| `REDIS_PASSWORD` | Redis 密码 |
+| `REDIS_USER` | Redis 用户，默认 `default` |
+| `REDIS_DB` | Redis 数据库编号，默认 1 |
+
+客户端在 `db/redis.js` 中创建，使用 `redis` 模块。
+
+### 缓存策略
+
+| 用途 | Key 模式 | TTL | 说明 |
+|------|----------|-----|------|
+| 直播间缓存 | `room:{room_url}` | 5 分钟 | 减少 `getOrCreateRoom` 的 DB 查询 |
+| 录制任务锁 | `active_task:{roomKey}` | 24 小时 | 防止重复录制，替代内存 Map |
+
+- 直播间写操作（创建/更新/删除/暂停/恢复/停止）后自动清除对应缓存
+- 应用启动时自动清理残留的录制任务锁
 
 ---
 

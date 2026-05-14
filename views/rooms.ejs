@@ -39,7 +39,7 @@
           <input type="text" class="form-control" id="inputName" placeholder="主播名" />
         </div>
         <div class="mb-3">
-          <label class="form-label">文件名模板</label>
+          <label class="form-label">文件名模板（留空则默认为<code>{room_name}_{datetime}</code>）</label>
           <input type="text" class="form-control" id="inputTemplate" placeholder="{room_name}_{datetime}" />
           <div class="form-text">支持：<code>{room_name}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{ss}</code></div>
         </div>
@@ -73,7 +73,7 @@ async function loadRooms() {
 
     const actions = [];
     if (r.status === 'idle') {
-      actions.push(`<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}" data-url="${r.room_url}" data-name="${r.room_name}" data-template="${r.filename_template}">编辑</button>`);
+      actions.push(`<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}" data-url="${r.room_url}" data-name="${r.room_name || ''}" data-template="${r.filename_template || ''}">编辑</button>`);
       actions.push(`<button class="btn btn-sm btn-outline-danger deleteBtn" data-id="${r.id}">删除</button>`);
     }
     if (r.status === 'recording') {

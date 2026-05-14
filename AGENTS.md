@@ -9,6 +9,7 @@
 ## 技术栈
 - Express 5（CommonJS）、EJS 模板、morgan、cors
 - PostgreSQL（`pg` 模块）—— 连接池在 `db/index.js`
+- Redis（`redis` 模块）—— 客户端在 `db/redis.js`
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
 - 无测试套件（test 脚本为占位）
 
@@ -16,6 +17,7 @@
 - 启动时自动迁移建表（`db/migrate.js`），详见 `docs/DB.md`
 - 表：`rooms`（直播间状态与配置）、`recordings`（录制历史）
 - 连接信息从 `.env` 的 `DB_*` 变量读取
+- Redis 缓存直播间数据，写操作后自动失效
 
 ## 关键端点
 

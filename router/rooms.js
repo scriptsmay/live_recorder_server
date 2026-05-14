@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
+const redis = require('../db/redis');
+
+async function delRoomCache(roomUrl) {
+  try {
+    if (roomUrl) await redis.del(`room:${roomUrl}`);
+  } catch (_) {}
+}
 
 // GET /api/rooms — 直播间列表
 router.get('/rooms', async (req, res) => {
@@ -37,6 +44,7 @@ router.post('/rooms', async (req, res) => {
        RETURNING *`,
       [room_url, room_name || '', filename_template || null]
     );
+    await delRoomCache(result.rows[0].room_url);
     res.status(201).json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 创建失败:', err);
@@ -76,6 +84,7 @@ router.put('/rooms/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
+    await delRoomCache(result.rows[0].room_url);
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 更新失败:', err);
@@ -94,6 +103,7 @@ router.delete('/rooms/:id', async (req, res) => {
     if (room.rows[0].status !== 'idle') {
       return res.status(400).json({ status: 'Error', message: '直播间录制中，无法删除' });
     }
+    await delRoomCache(room.rows[0].room_url);
     await pool.query('DELETE FROM rooms WHERE id = $1', [id]);
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
@@ -125,6 +135,7 @@ router.post('/rooms/:id/pause', async (req, res) => {
       `UPDATE rooms SET status = 'paused', updated_at = NOW() WHERE id = $1`,
       [id]
     );
+    await delRoomCache(r.room_url);
     res.json({ status: 'ok', message: '已暂停录制' });
   } catch (err) {
     console.error('[rooms] 暂停失败:', err);
@@ -155,6 +166,7 @@ router.post('/rooms/:id/resume', async (req, res) => {
       `UPDATE rooms SET status = 'recording', updated_at = NOW() WHERE id = $1`,
       [id]
     );
+    await delRoomCache(r.room_url);
     res.json({ status: 'ok', message: '已恢复录制' });
   } catch (err) {
     console.error('[rooms] 恢复失败:', err);
@@ -190,6 +202,7 @@ router.post('/rooms/:id/stop', async (req, res) => {
        WHERE room_url = $1 AND status = 'recording'`,
       [r.room_url]
     );
+    await delRoomCache(r.room_url);
     res.json({ status: 'ok', message: '已停止录制' });
   } catch (err) {
     console.error('[rooms] 停止失败:', err);
@@ -225,6 +238,21 @@ router.get('/recordings', async (req, res) => {
   } catch (err) {
     console.error('[recordings] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+// DELETE /api/recordings/:id — 删除录制记录
+router.delete('/recordings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM recordings WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
+    }
+    res.json({ status: 'ok', message: '已删除' });
+  } catch (err) {
+    console.error('[recordings] 删除失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
 

@@ -6,8 +6,61 @@ const router = express.Router();
 const config = require('../config/config');
 const dayjs = require('dayjs');
 const pool = require('../db/index');
+const redis = require('../db/redis');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
+
+const ROOM_CACHE_TTL = 300; // 5 分钟
+const ACTIVE_TASK_TTL = 86400; // 24 小时
+
+function redisKey(roomUrl) {
+  return `room:${roomUrl}`;
+}
+
+function activeTaskKey(roomKey) {
+  return `active_task:${roomKey}`;
+}
+
+async function getRoomCache(roomUrl) {
+  try {
+    const data = await redis.get(redisKey(roomUrl));
+    if (data) return JSON.parse(data);
+  } catch (_) {}
+  return null;
+}
+
+async function setRoomCache(room) {
+  try {
+    await redis.setEx(redisKey(room.room_url), ROOM_CACHE_TTL, JSON.stringify(room));
+  } catch (_) {}
+}
+
+async function delRoomCache(roomUrl) {
+  try {
+    await redis.del(redisKey(roomUrl));
+  } catch (_) {}
+}
+
+async function isActiveTask(roomKey) {
+  try {
+    const exists = await redis.exists(activeTaskKey(roomKey));
+    return exists === 1;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function setActiveTask(roomKey, data) {
+  try {
+    await redis.setEx(activeTaskKey(roomKey), ACTIVE_TASK_TTL, JSON.stringify(data));
+  } catch (_) {}
+}
+
+async function delActiveTask(roomKey) {
+  try {
+    await redis.del(activeTaskKey(roomKey));
+  } catch (_) {}
+}
 
 function sanitizeFilename(name) {
   return name
@@ -36,9 +89,14 @@ function generateFilename(template, roomName) {
 }
 
 async function getOrCreateRoom(roomUrl, roomName) {
+  const cached = await getRoomCache(roomUrl);
+  if (cached) return cached;
+
   const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
   if (exist.rows.length > 0) {
-    return exist.rows[0];
+    const room = exist.rows[0];
+    await setRoomCache(room);
+    return room;
   }
   const result = await pool.query(
     `INSERT INTO rooms (room_url, room_name)
@@ -46,10 +104,10 @@ async function getOrCreateRoom(roomUrl, roomName) {
      RETURNING *`,
     [roomUrl, roomName || '']
   );
-  return result.rows[0];
+  const room = result.rows[0];
+  await setRoomCache(room);
+  return room;
 }
-
-const activeTasks = new Map();
 
 router.get('/', (req, res) => {
   res.status(200).json({
@@ -95,7 +153,7 @@ router.post('/notify/live_download', async (req, res) => {
   const { url, title, room_url } = req.body;
   const roomKey = room_url || url;
 
-  if (activeTasks.has(roomKey)) {
+  if (await isActiveTask(roomKey)) {
     return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
   }
 
@@ -117,7 +175,7 @@ router.post('/notify/live_download', async (req, res) => {
   console.log(`[开始] 直播间 ${roomKey} 开始录制`);
 
   const template = room.filename_template || '{room_name}_{datetime}';
-  const filename = generateFilename(template, title);
+  const filename = generateFilename(template, room.room_name || title);
   const outputFilePath = path.join(DOWNLOAD_DIR, filename);
   console.log(`[任务启动] 文件名模板: ${template} → ${filename}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePath}`);
@@ -139,6 +197,7 @@ router.post('/notify/live_download', async (req, res) => {
       `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
       [outputFilePath, ffmpeg.pid, room.id]
     );
+    await delRoomCache(room.room_url);
     const rec = await pool.query(
       `INSERT INTO recordings (room_url, file_path, started_at, status)
        VALUES ($1, $2, NOW(), 'recording')
@@ -152,23 +211,26 @@ router.post('/notify/live_download', async (req, res) => {
     return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
-  activeTasks.set(roomKey, { pid: ffmpeg.pid, outputPath: outputFilePath });
+  await setActiveTask(roomKey, { pid: ffmpeg.pid, outputPath: outputFilePath, roomId: room.id, startTime: Date.now() });
 
   ffmpeg.on('close', async (code) => {
-    activeTasks.delete(roomKey);
+    await delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePath}`);
 
     let fileSize = 0;
     try {
       const stat = fs.statSync(outputFilePath);
       fileSize = stat.size;
-    } catch (_) {}
+    } catch (statErr) {
+      console.warn(`[api] 无法获取文件大小: ${outputFilePath}`, statErr.message);
+    }
 
     try {
       await pool.query(
         `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
         [room.id]
       );
+      await delRoomCache(room.room_url);
       if (recordingId) {
         await pool.query(
           `UPDATE recordings SET ended_at = NOW(), file_size = $1, status = $2 WHERE id = $3`,

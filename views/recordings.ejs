@@ -19,6 +19,7 @@
         <th>状态</th>
         <th>开始时间</th>
         <th>结束时间</th>
+        <th>操作</th>
       </tr>
     </thead>
     <tbody id="recordingsBody"></tbody>
@@ -56,6 +57,7 @@ async function loadRecordings(roomUrl) {
       <td>${statusBadge}</td>
       <td><small>${r.started_at ? new Date(r.started_at).toLocaleString() : '-'}</small></td>
       <td><small>${r.ended_at ? new Date(r.ended_at).toLocaleString() : '-'}</small></td>
+      <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -76,6 +78,17 @@ async function loadRoomFilter() {
 
 document.getElementById('roomFilter').addEventListener('change', e => {
   loadRecordings(e.target.value);
+});
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.deleteRecBtn');
+  if (!btn) return;
+  if (!confirm('确定删除此录制记录？')) return;
+  const id = btn.dataset.id;
+  const res = await fetch(`/api/recordings/${id}`, { method: 'DELETE' });
+  const json = await res.json();
+  if (!res.ok) return alert(json.message || '删除失败');
+  loadRecordings(document.getElementById('roomFilter').value);
 });
 
 loadRoomFilter();
