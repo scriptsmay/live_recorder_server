@@ -180,6 +180,29 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 ---
 
+### GET /api/recording_files
+
+查询录制文件跟踪记录。
+
+**参数（Query）：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| status | string | 否 | 按状态筛选：`pending` / `recording` / `completed` / `interrupted` / `missing` / `orphaned` |
+| session_id | integer | 否 | 按会话 ID 筛选 |
+
+### PUT /api/recording_files/:id/associate
+
+将孤文件（`orphaned`）关联到录制会话。
+
+**请求体：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| session_id | integer | 是 | 目标录制会话 ID |
+
+---
+
 ## 文件名模板
 
 默认模板：`{room_name}_{datetime}`

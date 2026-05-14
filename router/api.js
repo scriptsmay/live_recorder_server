@@ -573,6 +573,65 @@ router.post('/notify/live_download', async (req, res) => {
   });
 });
 
+// GET /api/recording_files — 查询文件跟踪记录
+router.get('/recording_files', async (req, res) => {
+  try {
+    const { status, session_id } = req.query;
+    const conditions = [];
+    const params = [];
+    if (status) {
+      conditions.push(`status = $${params.length + 1}`);
+      params.push(status);
+    }
+    if (session_id) {
+      conditions.push(`session_id = $${params.length + 1}`);
+      params.push(parseInt(session_id));
+    }
+    let sql = 'SELECT * FROM recording_files';
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ' ORDER BY id DESC';
+    const result = await pool.query(sql, params);
+    res.json({ status: 'ok', data: result.rows });
+  } catch (err) {
+    console.error('[api] recording_files 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+// PUT /api/recording_files/:id/associate — 将孤文件关联到录制会话
+router.put('/recording_files/:id/associate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { session_id } = req.body;
+    if (!session_id) return res.status(400).json({ status: 'Error', message: '缺少 session_id' });
+
+    const file = await pool.query('SELECT * FROM recording_files WHERE id = $1', [id]);
+    if (file.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    if (file.rows[0].status !== 'orphaned') return res.status(400).json({ status: 'Error', message: '仅孤文件可关联' });
+
+    const session = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [session_id]);
+    if (session.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
+
+    const fp = file.rows[0];
+    const ss = session.rows[0];
+    const fileSize = fp.file_size || 0;
+
+    await pool.query(
+      `UPDATE recording_files SET session_id = $1, room_url = $2, status = 'completed', checked_at = NOW() WHERE id = $3`,
+      [session_id, ss.room_url, id]
+    );
+    await pool.query(
+      `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
+      [fileSize, session_id]
+    );
+
+    res.json({ status: 'ok', message: '已关联' });
+  } catch (err) {
+    console.error('[api] 关联失败:', err);
+    res.status(500).json({ status: 'Error', message: err.message });
+  }
+});
+
 module.exports = {
   router,
   sanitizeFilename,

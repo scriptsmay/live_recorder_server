@@ -41,6 +41,10 @@ router.get('/_/rooms/table', async (req, res) => {
   res.render('partials/_rooms_table', { rooms: result.rows, layout: false });
 });
 
+router.get('/files', (req, res) => {
+  res.render('files', { title: '文件管理' });
+});
+
 router.get('/apiview', (req, res) => {
   res.render('apiview', {
     siteUrl: config.SITE_URL,

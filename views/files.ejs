@@ -1,0 +1,118 @@
+<h2>文件管理</h2>
+
+<ul class="nav nav-tabs mb-3" id="fileTabs">
+  <li class="nav-item">
+    <button class="nav-link active" data-status="orphaned">孤文件</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-status="recording">录制中</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-status="completed">已完成</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-status="interrupted">中断</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-status="missing">缺失</button>
+  </li>
+</ul>
+
+<div id="fileList"><div class="text-center text-muted py-4">加载中...</div></div>
+
+<script>
+  let currentStatus = 'orphaned';
+
+  async function loadFiles(status) {
+    currentStatus = status;
+    const res = await fetch(`/api/recording_files?status=${status}`);
+    const json = await res.json();
+    const container = document.getElementById('fileList');
+    container.innerHTML = '';
+    if (!json.data || json.data.length === 0) {
+      container.innerHTML = '<p class="text-muted text-center py-4">无文件</p>';
+      return;
+    }
+    for (const f of json.data) {
+      const card = document.createElement('div');
+      card.className = 'card mb-2';
+      card.innerHTML = `
+        <div class="card-body py-2">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1 me-3" style="min-width:0">
+              <small class="text-muted">${f.file_name}</small>
+              <div class="text-truncate"><small class="text-muted">${f.file_path}</small></div>
+              <small class="text-muted">${f.file_size ? (f.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</small>
+              ${f.session_id ? `<small class="text-muted ms-2">会话: ${f.session_id}</small>` : ''}
+            </div>
+            ${status === 'orphaned' ? `
+            <div class="flex-shrink-0">
+              <select class="form-select form-select-sm d-inline-block w-auto sessionSelect" data-file-id="${f.id}">
+                <option value="">关联会话</option>
+              </select>
+              <button class="btn btn-sm btn-outline-primary associateBtn" data-file-id="${f.id}" disabled>关联</button>
+            </div>` : ''}
+          </div>
+        </div>`;
+      container.appendChild(card);
+    }
+
+    if (status === 'orphaned') {
+      const sessionsRes = await fetch('/api/sessions?limit=100&show_deleted=1');
+      const sessionsJson = await sessionsRes.json();
+      const sessions = sessionsJson.data || [];
+      document.querySelectorAll('.sessionSelect').forEach(sel => {
+        sessions.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `#${s.id} ${s.room_name || s.room_url || ''} [${s.status}]`;
+          sel.appendChild(opt);
+        });
+      });
+      document.querySelectorAll('.sessionSelect').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const btn = sel.parentElement.querySelector('.associateBtn');
+          btn.disabled = !sel.value;
+        });
+      });
+      document.querySelectorAll('.associateBtn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const sel = btn.parentElement.querySelector('.sessionSelect');
+          if (!sel.value) return;
+          btn.disabled = true;
+          btn.textContent = '关联中...';
+          try {
+            const res = await fetch(`/api/recording_files/${btn.dataset.fileId}/associate`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: parseInt(sel.value) }),
+            });
+            const json = await res.json();
+            if (res.ok) {
+              btn.textContent = '已关联';
+              btn.className = 'btn btn-sm btn-success';
+            } else {
+              alert(json.message || '关联失败');
+              btn.disabled = false;
+              btn.textContent = '关联';
+            }
+          } catch (err) {
+            alert('关联失败');
+            btn.disabled = false;
+            btn.textContent = '关联';
+          }
+        });
+      });
+    }
+  }
+
+  document.querySelectorAll('#fileTabs .nav-link').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#fileTabs .nav-link').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      loadFiles(tab.dataset.status);
+    });
+  });
+
+  loadFiles('orphaned');
+</script>
