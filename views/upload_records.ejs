@@ -10,6 +10,7 @@
         <th>文件数</th>
         <th>大小</th>
         <th>状态</th>
+        <th>BV号</th>
         <th>时间</th>
         <th>操作</th>
       </tr>
@@ -44,6 +45,7 @@ async function loadRecords() {
       <td>${r.file_count}</td>
       <td>${size}</td>
       <td>${badge}</td>
+      <td>${r.bv_id ? '<code>' + r.bv_id + '</code>' : '-'}</td>
       <td><small>${r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-')}</small></td>
       <td>
         <button class="btn btn-sm btn-outline-info viewOutputBtn" data-output='${(r.output || "").replace(/'/g, "&#39;").replace(/\n/g, "\\n")}'>输出</button>

@@ -261,18 +261,23 @@ router.delete('/recordings/:id', async (req, res) => {
 // GET /api/sessions — 录制会话列表
 router.get('/sessions', async (req, res) => {
   try {
-    const { room_url, limit } = req.query;
+    const { room_url, limit, show_deleted } = req.query;
+    const conditions = ['s.deleted_at IS NULL'];
+    const params = [];
+    if (room_url) {
+      conditions.push(`s.room_url = $${params.length + 1}`);
+      params.push(room_url);
+    }
+    if (show_deleted === '1') {
+      conditions[0] = '1=1';
+    }
     let query = `
       SELECT s.*, rm.room_name
       FROM recording_sessions s
       LEFT JOIN rooms rm ON s.room_url = rm.room_url
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY s.id DESC
     `;
-    const params = [];
-    if (room_url) {
-      query += ` WHERE s.room_url = $1`;
-      params.push(room_url);
-    }
-    query += ' ORDER BY s.id DESC';
     if (limit) {
       query += ` LIMIT $${params.length + 1}`;
       params.push(parseInt(limit, 10));
@@ -282,6 +287,22 @@ router.get('/sessions', async (req, res) => {
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+// POST /api/sessions/:id/delete — 软删除会话
+router.post('/sessions/:id/delete', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `UPDATE recording_sessions SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在或已删除' });
+    res.json({ status: 'ok', message: '已标记删除' });
+  } catch (err) {
+    console.error('[sessions] 删除失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
 

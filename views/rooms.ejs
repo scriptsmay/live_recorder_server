@@ -97,7 +97,7 @@ async function loadRooms() {
     tr.innerHTML = `
       <td>${r.id}</td>
       <td>${r.room_name || '-'}</td>
-      <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url.length > 40 ? r.room_url.slice(0, 40) + '…' : r.room_url}</a></td>
+      <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url}</a></td>
       <td>${statusBadge}</td>
       <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
       <td>${segLabel}</td>

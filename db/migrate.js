@@ -63,6 +63,10 @@ async function migrate() {
     `);
 
     await client.query(`
+      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS upload_templates (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL DEFAULT '',
