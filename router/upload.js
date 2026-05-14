@@ -166,7 +166,7 @@ async function executeUpload(session, tmpl) {
   const biliupPath = process.env.BILIUP_PATH || 'biliup';
   const args = ['-u', tmpl.cookies_path, 'upload'];
   if (title) args.push('--title', title);
-  if (desc) args.push('--desc', desc);
+  if (desc) args.push(`--desc=${desc}`);
   if (tmpl.tid) args.push('--tid', String(tmpl.tid));
   if (tags) args.push('--tag', tags);
   if (tmpl.copyright) args.push('--copyright', String(tmpl.copyright));
