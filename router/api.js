@@ -236,6 +236,43 @@ router.post('/notify/feishu_webhook', async (req, res) => {
   }
 });
 
+router.get('/notify/status', async (req, res) => {
+  const url = req.query.url;
+  if (!url) {
+    return res.status(400).json({ exists: false, message: '缺少 url 参数' });
+  }
+
+  try {
+    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [url]);
+    if (result.rows.length === 0) {
+      return res.json({ exists: false });
+    }
+
+    const room = result.rows[0];
+    const data = { room: { id: room.id, room_url: room.room_url, room_name: room.room_name } };
+
+    if (room.status === 'recording' || room.status === 'paused') {
+      const session = await pool.query(
+        `SELECT id, started_at FROM recording_sessions
+         WHERE room_url = $1 AND status = 'recording'
+         ORDER BY started_at DESC LIMIT 1`,
+        [room.room_url]
+      );
+      data.status = room.status;
+      if (session.rows.length) {
+        data.session = { id: session.rows[0].id, started_at: session.rows[0].started_at };
+      }
+    } else {
+      data.status = 'idle';
+    }
+
+    res.json({ exists: true, data });
+  } catch (err) {
+    console.error('[api] 状态查询失败:', err);
+    res.status(500).json({ exists: false, message: '查询失败' });
+  }
+});
+
 router.post('/notify/live_download', async (req, res) => {
   if (!req.body || !req.body.url || !req.body.title) {
     return res.status(400).json({
