@@ -9,16 +9,24 @@ module.exports = {
       autorestart: true,
 
       // --- 开发环境配置 (pm2 start ecosystem.config.js) ---
-      // 默认情况下，PM2 会读取这里的 env
-      watch: true, // 开启监听
-      ignore_watch: ['node_modules', 'logs', '.git', '*.log'],
+      watch: true,
+      ignore_watch: ['node_modules', 'logs', 'backups', '.git', '*.log'],
       env: {
         NODE_ENV: 'development',
       },
       env_production: {
         NODE_ENV: 'production',
-        watch: false, // 生产环境务必关闭 watch，防止意外重启
+        watch: false,
       },
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+    {
+      name: 'daily-backup',
+      script: './scripts/backup-db.js',
+      cron_restart: '0 4 * * *',   // 每天凌晨 4 点
+      autorestart: false,
+      instances: 1,
+      watch: false,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
   ],

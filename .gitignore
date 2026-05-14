@@ -25,3 +25,6 @@ yarn.lock
 pnpm-lock.yaml
 .pnp.cjs
 .DS_Store
+
+# database backups
+backups/
