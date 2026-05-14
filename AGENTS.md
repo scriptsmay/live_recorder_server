@@ -20,6 +20,7 @@
 - 启动时自动迁移建表（`db/migrate.js`），详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
+- `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
 - 连接信息从 `.env` 的 `DB_*` 变量读取
 - Redis 缓存直播间数据，写操作后自动失效
 

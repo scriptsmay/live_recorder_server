@@ -578,7 +578,8 @@ router.post('/notify/live_download', async (req, res) => {
 // POST /api/scan_files — 触发磁盘扫描
 router.post('/scan_files', async (req, res) => {
   try {
-    const r = await scanRecordingFiles();
+    const force = req.body?.force === true;
+    const r = await scanRecordingFiles(force);
     res.json({ status: 'ok', data: r });
   } catch (err) {
     console.error('[api] 扫描失败:', err);

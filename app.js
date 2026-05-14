@@ -291,7 +291,7 @@ async function cleanupStaleRedis() {
 
 async function runFileScan() {
   try {
-    const r = await scanRecordingFiles();
+    const r = await scanRecordingFiles(true);
     if (r.missing > 0 || r.orphaned > 0) {
       console.log(`[文件扫描] 完成: ${r.missing} 缺失, ${r.orphaned} 孤⽂件`);
     }
