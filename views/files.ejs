@@ -97,7 +97,7 @@
     const modal = new bootstrap.Modal(document.getElementById('sessionModal'));
     modal.show();
 
-    const res = await fetch('/api/sessions?limit=200&show_deleted=1');
+    const res = await fetch('/api/sessions?limit=200');
     const json = await res.json();
     const sessions = json.data || [];
     document.getElementById('modalLoading').classList.add('d-none');
