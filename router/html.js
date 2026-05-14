@@ -15,6 +15,14 @@ router.get('/', (req, res) => {
   res.redirect('/apiview');
 });
 
+router.get('/rooms', (req, res) => {
+  res.render('rooms', { title: '直播间管理' });
+});
+
+router.get('/recordings', (req, res) => {
+  res.render('recordings', { title: '录制历史' });
+});
+
 router.get('/apiview', (req, res) => {
   res.render('apiview', {
     siteUrl: config.SITE_URL,

@@ -2,16 +2,55 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
-const axios = require('axios');
 const router = express.Router();
-// 导入配置文件
 const config = require('../config/config');
 const dayjs = require('dayjs');
+const pool = require('../db/index');
 
-// 1. 定义一个绝对路径（不要放在项目代码文件夹内）
-const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR; // 或者你的 NAS 挂载路径
+const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
-// 新增: GET /api 路由，返回欢迎信息
+function sanitizeFilename(name) {
+  return name
+    .replace(/[\\/:\*\?"<>\|\x00-\x1F\x7F]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function generateFilename(template, roomName) {
+  const now = dayjs();
+  const vars = {
+    room_name: sanitizeFilename(roomName || 'unknown'),
+    datetime: now.format('YYYYMMDD_HHmmss'),
+    YYYY: now.format('YYYY'),
+    MM: now.format('MM'),
+    DD: now.format('DD'),
+    HH: now.format('HH'),
+    mm: now.format('mm'),
+    ss: now.format('ss'),
+  };
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  }
+  return sanitizeFilename(result) + '.mp4';
+}
+
+async function getOrCreateRoom(roomUrl, roomName) {
+  const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
+  if (exist.rows.length > 0) {
+    return exist.rows[0];
+  }
+  const result = await pool.query(
+    `INSERT INTO rooms (room_url, room_name)
+     VALUES ($1, $2)
+     RETURNING *`,
+    [roomUrl, roomName || '']
+  );
+  return result.rows[0];
+}
+
+const activeTasks = new Map();
+
 router.get('/', (req, res) => {
   res.status(200).json({
     message: '欢迎使用API服务。',
@@ -21,21 +60,14 @@ router.get('/', (req, res) => {
         {
           name: '自动启动直播录制接口',
           description:
-            `直播录制接口，请提供直播流URL和标题。录制文件将保存在目录：[${DOWNLOAD_DIR}]。` +
-            `这个接口需要配合浏览器插件使用，仓库：https://github.com/scriptsmay/live_listener`,
+            `直播录制接口，请提供直播流URL、标题和直播间地址。录制文件将保存在目录：[${DOWNLOAD_DIR}]。` +
+            `直播间将自动创建，支持自定义文件名模板。`,
           url: config.SITE_URL + 'api/notify/live_download',
           method: 'POST',
           params: [
-            {
-              name: 'url',
-              description: '直播流URL',
-              required: true,
-            },
-            {
-              name: 'title',
-              description: '直播标题',
-              required: true,
-            },
+            { name: 'url', description: '直播流URL', required: true },
+            { name: 'title', description: '直播标题', required: true },
+            { name: 'room_url', description: '直播间地址（唯一标识）', required: true },
           ],
         },
       ],
@@ -43,15 +75,6 @@ router.get('/', (req, res) => {
   });
 });
 
-const activeTasks = new Set(); // 存储当前正在录制的 URL
-// 后端：按直播间标题锁定
-const recordingTitles = new Set();
-
-/**
- * POST /api/notify/live_download 直播录制接口
- * @param {*} req body { url: '直播流URL', title: '直播标题' }
- * @param {*} res 返回结果
- */
 router.post('/notify/live_download', async (req, res) => {
   if (!req.body || !req.body.url || !req.body.title) {
     return res.status(400).json({
@@ -59,75 +82,113 @@ router.post('/notify/live_download', async (req, res) => {
       message: '请提供直播流URL和标题。',
     });
   }
-  // 确保文件夹存在
   if (!DOWNLOAD_DIR) {
     return res.status(500).json({
       status: 'Error',
-      message: '请设置 DOWNLOAD_DIR 环境变量，并确保该目录已存在。',
+      message: '请设置 VIDEO_DOWNLOAD_DIR 环境变量，并确保该目录已存在。',
     });
   }
   if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
   }
 
-  const { url, title } = req.body;
-  console.log(`[INFO] 接收到录制请求，URL: ${url}, 标题: ${title}`);
+  const { url, title, room_url } = req.body;
+  const roomKey = room_url || url;
 
-  // 如果该 URL 已经在录制中，直接返回成功，不重复开启 ffmpeg
-  if (activeTasks.has(url)) {
-    console.log(`[拦截] URL 已在录制列表中，跳过重复请求`);
-    return res
-      .status(400)
-      .json({ status: 'Already recording', message: '请勿重复开启' });
+  if (activeTasks.has(roomKey)) {
+    return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
   }
-  // 提取核心标题作为锁定标识，防止同一直播间多次录制
-  const roomKey = title;
-  if (recordingTitles.has(roomKey)) {
-    console.log(`[拒绝] 直播间 ${roomKey} 已经在录制中，不再开启新进程`);
+
+  let room;
+  try {
+    room = await getOrCreateRoom(roomKey, title);
+  } catch (dbErr) {
+    console.error('[api] 数据库操作失败:', dbErr);
+    return res.status(500).json({ status: 'Error', message: '数据库操作失败' });
+  }
+
+  if (room.status === 'recording' || room.status === 'paused') {
     return res.status(400).json({
       status: 'Already recording',
-      message: `[拒绝] 直播间 ${roomKey} 已经在录制中，不再开启新进程`,
+      message: `直播间 ${room.room_name || room.room_url} 已在录制中`,
     });
   }
+
   console.log(`[开始] 直播间 ${roomKey} 开始录制`);
-  recordingTitles.add(roomKey);
-  activeTasks.add(url);
 
-  const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss');
-  const safeTitle = title
-    .replace(/[\\/:\*\?"<>\|\x00-\x1F\x7F]/g, '') // 删掉非法字符
-    .replace(/\s+/g, '_') // 连在一起的空格换成一个下划线
-    .replace(/^_+|_+$/g, ''); // 去掉首尾多余的下划线
-  // 2. 使用 path.join 生成绝对路径
-  const outputFilePath = path.join(
-    DOWNLOAD_DIR,
-    `${timestamp}_${safeTitle}.mp4`
-  );
-
+  const template = room.filename_template || '{room_name}_{datetime}';
+  const filename = generateFilename(template, title);
+  const outputFilePath = path.join(DOWNLOAD_DIR, filename);
+  console.log(`[任务启动] 文件名模板: ${template} → ${filename}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePath}`);
 
   const ffmpeg = spawn('ffmpeg', [
-    '-i',
-    url,
-    '-c',
-    'copy',
-    '-fflags',
-    '+genpts',
-    outputFilePath, // 使用绝对路径
+    '-i', url,
+    '-c', 'copy',
+    '-fflags', '+genpts',
+    outputFilePath,
   ]);
 
-  // 防止 ffmpeg 启动失败导致 Node 崩溃
   ffmpeg.on('error', (err) => {
     console.error('FFmpeg 启动失败:', err);
   });
 
-  ffmpeg.on('close', (code) => {
-    activeTasks.delete(url); // 录制结束后，从记录中移除，允许下次再次录制
-    console.log(`[${code}]录制结束，已释放 URL 锁定。路径: ${outputFilePath}`);
-    // 此时调用后续脚本，传入 outputFilePath
+  let recordingId = null;
+  try {
+    await pool.query(
+      `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
+      [outputFilePath, ffmpeg.pid, room.id]
+    );
+    const rec = await pool.query(
+      `INSERT INTO recordings (room_url, file_path, started_at, status)
+       VALUES ($1, $2, NOW(), 'recording')
+       RETURNING id`,
+      [room.room_url, outputFilePath]
+    );
+    recordingId = rec.rows[0].id;
+  } catch (dbErr) {
+    console.error('[api] 更新数据库状态失败:', dbErr);
+    ffmpeg.kill();
+    return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
+  }
+
+  activeTasks.set(roomKey, { pid: ffmpeg.pid, outputPath: outputFilePath });
+
+  ffmpeg.on('close', async (code) => {
+    activeTasks.delete(roomKey);
+    console.log(`[${code}] 录制结束，路径: ${outputFilePath}`);
+
+    let fileSize = 0;
+    try {
+      const stat = fs.statSync(outputFilePath);
+      fileSize = stat.size;
+    } catch (_) {}
+
+    try {
+      await pool.query(
+        `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
+        [room.id]
+      );
+      if (recordingId) {
+        await pool.query(
+          `UPDATE recordings SET ended_at = NOW(), file_size = $1, status = $2 WHERE id = $3`,
+          [fileSize, code === 0 ? 'completed' : 'interrupted', recordingId]
+        );
+      }
+    } catch (dbErr) {
+      console.error('[api] 录制结束数据库更新失败:', dbErr);
+    }
   });
 
-  res.status(200).json({ status: 'Recording started', path: outputFilePath });
+  res.status(200).json({
+    status: 'Recording started',
+    data: {
+      room_id: room.id,
+      room_url: room.room_url,
+      filename,
+      path: outputFilePath,
+    },
+  });
 });
 
 module.exports = router;

@@ -11,7 +11,7 @@ module.exports = {
       // --- 开发环境配置 (pm2 start ecosystem.config.js) ---
       // 默认情况下，PM2 会读取这里的 env
       watch: true, // 开启监听
-      ignore_watch: ['node_modules', 'logs'],
+      ignore_watch: ['node_modules', 'logs', '.git', '*.log'],
       env: {
         NODE_ENV: 'development',
       },
