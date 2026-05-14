@@ -37,10 +37,18 @@
           >
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">投稿</a>
+          <a
+            class="nav-link dropdown-toggle"
+            href="#"
+            role="button"
+            data-bs-toggle="dropdown"
+            >投稿</a
+          >
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="/templates">投稿模板</a></li>
-            <li><a class="dropdown-item" href="/upload_records">投稿记录</a></li>
+            <li>
+              <a class="dropdown-item" href="/upload_records">投稿记录</a>
+            </li>
           </ul>
         </li>
         <li class="nav-item">
@@ -51,13 +59,13 @@
           >
         </li>
 
-        <li class="nav-item">
+        <!-- <li class="nav-item">
           <a
             class="nav-link <%= path === '/logs' ? 'active' : '' %>"
             href="/logs"
             >日志</a
           >
-        </li>
+        </li> -->
       </ul>
     </div>
   </div>
