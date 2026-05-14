@@ -57,6 +57,7 @@
 
   async function loadFiles(status) {
     currentStatus = status;
+    await fetch('/api/scan_files', { method: 'POST' }).catch(() => {});
     const res = await fetch(`/api/recording_files?status=${status}`);
     const json = await res.json();
     const container = document.getElementById('fileList');

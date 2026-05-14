@@ -10,6 +10,7 @@ const redis = require('../db/redis');
 const { findAndAutoUpload } = require('./upload');
 const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
+const { scanRecordingFiles } = require('../lib/scan-files');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -572,6 +573,17 @@ router.post('/notify/live_download', async (req, res) => {
       path: outputFilePattern,
     },
   });
+});
+
+// POST /api/scan_files — 触发磁盘扫描
+router.post('/scan_files', async (req, res) => {
+  try {
+    const r = await scanRecordingFiles();
+    res.json({ status: 'ok', data: r });
+  } catch (err) {
+    console.error('[api] 扫描失败:', err);
+    res.status(500).json({ status: 'Error', message: '扫描失败' });
+  }
 });
 
 // GET /api/recording_files — 查询文件跟踪记录

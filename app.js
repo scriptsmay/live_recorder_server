@@ -21,6 +21,7 @@ const { router: apiRouter, sanitizeFilename, generateFilename, templateToStrftim
 const roomsRouter = require('./router/rooms');
 const { router: uploadRouter } = require('./router/upload');
 const { createProcLog } = require('./lib/proc-log');
+const { scanRecordingFiles } = require('./lib/scan-files');
 
 // ──────────────────────────────────────────────
 // 2. Express 配置
@@ -288,56 +289,11 @@ async function cleanupStaleRedis() {
   }
 }
 
-async function scanRecordingFiles() {
-  const VIDEO_DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
-  if (!VIDEO_DOWNLOAD_DIR) return;
-  if (!fs.existsSync(VIDEO_DOWNLOAD_DIR)) return;
-
+async function runFileScan() {
   try {
-    const tracked = await pool.query(`SELECT id, file_path, status FROM recording_files WHERE status NOT IN ('missing', 'deleted')`);
-    const trackedSet = new Map();
-    for (const row of tracked.rows) trackedSet.set(row.file_path, row);
-
-    const diskFiles = new Set();
-    const walkDir = (dir) => {
-      let entries;
-      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-      for (const entry of entries) {
-        const fp = path.join(dir, entry.name);
-        if (entry.isDirectory()) { walkDir(fp); continue; }
-        if (/\.(mp4|flv|ts|mkv|avi|mov)$/i.test(entry.name)) diskFiles.add(fp);
-      }
-    };
-    walkDir(VIDEO_DOWNLOAD_DIR);
-
-    // 标记 tracked 但磁盘上不存在的文件
-    let missingCount = 0;
-    for (const [fp, row] of trackedSet) {
-      if (!diskFiles.has(fp)) {
-        await pool.query(
-          `UPDATE recording_files SET status = 'missing', file_size = 0, checked_at = NOW() WHERE id = $1`,
-          [row.id]
-        );
-        missingCount++;
-      }
-    }
-
-    // 发现磁盘上未被 tracking 的文件（孤⽂件）
-    let orphanCount = 0;
-    for (const fp of diskFiles) {
-      if (!trackedSet.has(fp)) {
-        const stat = fs.statSync(fp);
-        await pool.query(
-          `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
-           VALUES ($1, $2, $3, 'orphaned', NOW())`,
-          [fp, path.basename(fp), stat.size]
-        );
-        orphanCount++;
-      }
-    }
-
-    if (missingCount > 0 || orphanCount > 0) {
-      console.log(`[文件扫描] 完成: ${missingCount} 缺失, ${orphanCount} 孤⽂件`);
+    const r = await scanRecordingFiles();
+    if (r.missing > 0 || r.orphaned > 0) {
+      console.log(`[文件扫描] 完成: ${r.missing} 缺失, ${r.orphaned} 孤⽂件`);
     }
   } catch (err) {
     console.error('[文件扫描] 失败:', err.message);
@@ -434,7 +390,7 @@ async function startup() {
   await migrate();
   await cleanupStaleRecordings();
   await cleanupStaleRedis();
-  await scanRecordingFiles();
+  await runFileScan();
 }
 
 startup()
