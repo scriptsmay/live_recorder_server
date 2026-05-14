@@ -20,6 +20,38 @@
 
 <div id="fileList"><div class="text-center text-muted py-4">加载中...</div></div>
 
+<div class="modal fade" id="sessionModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">选择会话 - <span id="modalFileName"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="text-center text-muted py-4" id="modalLoading">加载中...</div>
+        <div id="sessionTableWrap" class="d-none">
+          <input class="form-control form-control-sm m-2" style="width:auto" id="sessionSearch" placeholder="搜索ID或主播名...">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light"><tr>
+              <th>ID</th>
+              <th>主播</th>
+              <th>开始时间</th>
+              <th>文件数</th>
+              <th>大小</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr></thead>
+            <tbody id="sessionTbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   let currentStatus = 'orphaned';
 
@@ -40,59 +72,66 @@
         <div class="card-body py-2">
           <div class="d-flex justify-content-between align-items-start">
             <div class="flex-grow-1 me-3" style="min-width:0">
-              <small class="text-muted">${f.file_name}</small>
+              <strong>${f.file_name}</strong>
               <div class="text-truncate"><small class="text-muted">${f.file_path}</small></div>
               <small class="text-muted">${f.file_size ? (f.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</small>
               ${f.session_id ? `<small class="text-muted ms-2">会话: ${f.session_id}</small>` : ''}
             </div>
             ${status === 'orphaned' ? `
             <div class="flex-shrink-0">
-              <select class="form-select form-select-sm d-inline-block w-auto sessionSelect" data-file-id="${f.id}">
-                <option value="">关联会话</option>
-              </select>
-              <button class="btn btn-sm btn-outline-primary associateBtn" data-file-id="${f.id}" disabled>关联</button>
+              <button class="btn btn-sm btn-outline-primary associateOpenBtn" data-file-id="${f.id}" data-file-name="${f.file_name}">关联会话</button>
             </div>` : ''}
           </div>
         </div>`;
       container.appendChild(card);
     }
+    document.querySelectorAll('.associateOpenBtn').forEach(btn => {
+      btn.addEventListener('click', () => openSessionModal(btn.dataset.fileId, btn.dataset.fileName));
+    });
+  }
 
-    if (status === 'orphaned') {
-      const sessionsRes = await fetch('/api/sessions?limit=100&show_deleted=1');
-      const sessionsJson = await sessionsRes.json();
-      const sessions = sessionsJson.data || [];
-      document.querySelectorAll('.sessionSelect').forEach(sel => {
-        sessions.forEach(s => {
-          const opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = `#${s.id} ${s.room_name || s.room_url || ''} [${s.status}]`;
-          sel.appendChild(opt);
-        });
-      });
-      document.querySelectorAll('.sessionSelect').forEach(sel => {
-        sel.addEventListener('change', () => {
-          const btn = sel.parentElement.querySelector('.associateBtn');
-          btn.disabled = !sel.value;
-        });
-      });
-      document.querySelectorAll('.associateBtn').forEach(btn => {
+  async function openSessionModal(fileId, fileName) {
+    document.getElementById('modalFileName').textContent = fileName;
+    document.getElementById('modalLoading').classList.remove('d-none');
+    document.getElementById('sessionTableWrap').classList.add('d-none');
+    const modal = new bootstrap.Modal(document.getElementById('sessionModal'));
+    modal.show();
+
+    const res = await fetch('/api/sessions?limit=200&show_deleted=1');
+    const json = await res.json();
+    const sessions = json.data || [];
+    document.getElementById('modalLoading').classList.add('d-none');
+    document.getElementById('sessionTableWrap').classList.remove('d-none');
+
+    const tbody = document.getElementById('sessionTbody');
+    function renderSessions(list) {
+      tbody.innerHTML = list.map(s => `
+        <tr>
+          <td>${s.id}</td>
+          <td>${s.room_name || s.room_url || '-'}</td>
+          <td><small>${s.started_at ? new Date(s.started_at).toLocaleString() : '-'}</small></td>
+          <td>${s.total_segments || 0}</td>
+          <td>${s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</td>
+          <td>${s.status}</td>
+          <td><button class="btn btn-sm btn-outline-success doAssociateBtn" data-file-id="${fileId}" data-session-id="${s.id}">关联</button></td>
+        </tr>
+      `).join('');
+      document.querySelectorAll('.doAssociateBtn').forEach(btn => {
         btn.addEventListener('click', async () => {
-          const sel = btn.parentElement.querySelector('.sessionSelect');
-          if (!sel.value) return;
           btn.disabled = true;
           btn.textContent = '关联中...';
           try {
-            const res = await fetch(`/api/recording_files/${btn.dataset.fileId}/associate`, {
+            const r = await fetch(`/api/recording_files/${btn.dataset.fileId}/associate`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: parseInt(sel.value) }),
+              body: JSON.stringify({ session_id: parseInt(btn.dataset.sessionId) }),
             });
-            const json = await res.json();
-            if (res.ok) {
-              btn.textContent = '已关联';
-              btn.className = 'btn btn-sm btn-success';
+            const j = await r.json();
+            if (r.ok) {
+              modal.hide();
+              loadFiles(currentStatus);
             } else {
-              alert(json.message || '关联失败');
+              alert(j.message || '关联失败');
               btn.disabled = false;
               btn.textContent = '关联';
             }
@@ -104,6 +143,12 @@
         });
       });
     }
+    renderSessions(sessions);
+
+    document.getElementById('sessionSearch').oninput = (e) => {
+      const q = e.target.value.toLowerCase();
+      renderSessions(sessions.filter(s => String(s.id).includes(q) || (s.room_name || '').toLowerCase().includes(q) || (s.room_url || '').toLowerCase().includes(q)));
+    };
   }
 
   document.querySelectorAll('#fileTabs .nav-link').forEach(tab => {
