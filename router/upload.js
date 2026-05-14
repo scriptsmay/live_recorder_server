@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
 const notify = require('../lib/notify');
+const { createProcLog } = require('../lib/proc-log');
 
 function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] !== undefined ? vars[key] : `{${key}}`);
@@ -165,11 +166,14 @@ async function executeUpload(session, tmpl) {
 
   notify.uploadStart(session.room_name, tmpl.name, files.length);
 
+  const { stream: logStream, logPath } = createProcLog('biliup', recordId);
+  console.log(`[投稿] biliup 日志: ${logPath}`);
+
   const proc = spawn(biliupPath, args, { cwd: process.env.BILIUP_WORK_DIR || process.env.HOME });
 
   let output = '';
-  proc.stdout.on('data', (d) => { output += d.toString(); });
-  proc.stderr.on('data', (d) => { output += d.toString(); });
+  proc.stdout.on('data', (d) => { const s = d.toString(); output += s; logStream.write(s); });
+  proc.stderr.on('data', (d) => { const s = d.toString(); output += s; logStream.write(s); });
 
   proc.on('error', async () => {
     await pool.query(

@@ -9,6 +9,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const { findAndAutoUpload } = require('./upload');
 const notify = require('../lib/notify');
+const { createProcLog } = require('../lib/proc-log');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -300,7 +301,9 @@ router.post('/notify/live_download', async (req, res) => {
   );
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
-  const ffmpegArgs = ['-i', url, '-c', 'copy', '-fflags', '+genpts'];
+  const ffmpegArgs = ['-i', url, '-c', 'copy', '-fflags', '+genpts',
+    '-timeout', '2147483647',
+    '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '60'];
   if (useSegment) {
     segmentListPath = path.join(
       DOWNLOAD_DIR,
@@ -321,7 +324,10 @@ router.post('/notify/live_download', async (req, res) => {
   }
   ffmpegArgs.push(outputFilePattern);
 
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+  const { fd: logFd, logPath, rename: renameLog } = createProcLog('ffmpeg');
+  console.log(`[任务启动] ffmpeg 日志: ${logPath}`);
+
+  const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', logFd] });
 
   ffmpeg.on('error', (err) => {
     console.error('FFmpeg 启动失败:', err);
@@ -348,6 +354,7 @@ router.post('/notify/live_download', async (req, res) => {
       ]
     );
     sessionId = session.rows[0].id;
+    renameLog(sessionId);
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
     ffmpeg.kill();
@@ -366,7 +373,7 @@ router.post('/notify/live_download', async (req, res) => {
 
   ffmpeg.on('close', async (code) => {
     await delActiveTask(roomKey);
-    console.log(`[${code}] 录制结束，路径: ${outputFilePattern}`);
+    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/ffmpeg_${sessionId}.log)`);
 
     try {
       await pool.query(
@@ -498,4 +505,13 @@ router.post('/notify/live_download', async (req, res) => {
   });
 });
 
-module.exports = router;
+module.exports = {
+  router,
+  sanitizeFilename,
+  generateFilename,
+  templateToStrftime,
+  setActiveTask,
+  delActiveTask,
+  delRoomCache,
+  activeTaskKey,
+};

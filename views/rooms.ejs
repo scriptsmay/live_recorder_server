@@ -1,35 +1,19 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2>直播间管理</h2>
-  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">+ 新增直播间</button>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roomModal">+ 新增直播间</button>
 </div>
 
-<div class="table-responsive">
-  <table class="table table-hover align-middle" id="roomsTable">
-    <thead class="table-light">
-      <tr>
-        <th>ID</th>
-        <th>名称</th>
-        <th>直播间地址</th>
-        <th>状态</th>
-        <th>文件名模板</th>
-        <th>分段时间</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody id="roomsBody"></tbody>
-  </table>
-  <p class="text-muted text-center" id="emptyMsg">暂无直播间数据</p>
-</div>
+<div id="roomsBody" hx-get="/_/rooms/table" hx-trigger="load" hx-swap="innerHTML"></div>
 
 <!-- 创建/编辑 Modal -->
-<div class="modal fade" id="createModal" tabindex="-1">
+<div class="modal fade" id="roomModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="modalTitle">新增直播间</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
+      <div id="modalBody" class="modal-body">
         <input type="hidden" id="editId" value="" />
         <div class="mb-3">
           <label class="form-label">直播间地址 <span class="text-danger">*</span></label>
@@ -59,119 +43,40 @@
 </div>
 
 <script>
-async function loadRooms() {
-  const res = await fetch('/api/rooms');
-  const json = await res.json();
-  const tbody = document.getElementById('roomsBody');
-  const empty = document.getElementById('emptyMsg');
-  tbody.innerHTML = '';
-  if (!json.data || json.data.length === 0) {
-    empty.style.display = '';
-    return;
-  }
-  empty.style.display = 'none';
-  json.data.forEach(r => {
-    const statusBadge = {
-      idle: '<span class="badge bg-secondary">空闲</span>',
-      recording: '<span class="badge bg-success">录制中</span>',
-      paused: '<span class="badge bg-warning text-dark">已暂停</span>',
-    }[r.status] || r.status;
-
-    const segLabel = r.segment_duration ? (r.segment_duration >= 3600 ? Math.round(r.segment_duration / 3600) + 'h' : r.segment_duration + 's') : '-';
-
-    const actions = [];
-    if (r.status === 'idle') {
-      actions.push(`<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}" data-url="${r.room_url}" data-name="${r.room_name || ''}" data-template="${r.filename_template || ''}" data-segment="${r.segment_duration || 0}">编辑</button>`);
-      actions.push(`<button class="btn btn-sm btn-outline-danger deleteBtn" data-id="${r.id}">删除</button>`);
-    }
-    if (r.status === 'recording') {
-      actions.push(`<button class="btn btn-sm btn-outline-warning pauseBtn" data-id="${r.id}">暂停</button>`);
-      actions.push(`<button class="btn btn-sm btn-outline-danger stopBtn" data-id="${r.id}">停止</button>`);
-    }
-    if (r.status === 'paused') {
-      actions.push(`<button class="btn btn-sm btn-outline-success resumeBtn" data-id="${r.id}">恢复</button>`);
-      actions.push(`<button class="btn btn-sm btn-outline-danger stopBtn" data-id="${r.id}">停止</button>`);
-    }
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td>${r.room_name || '-'}</td>
-      <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url}</a></td>
-      <td>${statusBadge}</td>
-      <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
-      <td>${segLabel}</td>
-      <td class="text-nowrap">${actions.join(' ')}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
 async function apiAction(url, method, body) {
-  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  const json = await res.json();
-  if (!res.ok) alert(json.message || '操作失败');
-  return json;
-}
-
-document.addEventListener('click', async e => {
-  const btn = e.target.closest('[class*="Btn"]');
-  if (!btn) return;
-  const id = btn.dataset.id;
-
-  if (btn.classList.contains('deleteBtn')) {
-    if (!confirm('确定删除此直播间？')) return;
-    await apiAction(`/api/rooms/${id}`, 'DELETE');
-    loadRooms();
-  } else if (btn.classList.contains('pauseBtn')) {
-    await apiAction(`/api/rooms/${id}/pause`, 'POST');
-    loadRooms();
-  } else if (btn.classList.contains('resumeBtn')) {
-    await apiAction(`/api/rooms/${id}/resume`, 'POST');
-    loadRooms();
-  } else if (btn.classList.contains('stopBtn')) {
-    if (!confirm('确定停止录制？')) return;
-    await apiAction(`/api/rooms/${id}/stop`, 'POST');
-    loadRooms();
-  } else if (btn.classList.contains('editBtn')) {
-    document.getElementById('modalTitle').textContent = '编辑直播间';
-    document.getElementById('editId').value = btn.dataset.id;
-    document.getElementById('inputUrl').value = btn.dataset.url;
-    document.getElementById('inputUrl').disabled = true;
-    document.getElementById('inputName').value = btn.dataset.name;
-    document.getElementById('inputTemplate').value = btn.dataset.template;
-    document.getElementById('inputSegment').value = btn.dataset.segment || 0;
-    new bootstrap.Modal(document.getElementById('createModal')).show();
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    alert(json.message || '操作失败');
   }
-});
+  return res;
+}
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
   const id = document.getElementById('editId').value;
   const url = document.getElementById('inputUrl').value.trim();
   const name = document.getElementById('inputName').value.trim();
   const tmpl = document.getElementById('inputTemplate').value.trim();
-
   const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
 
   if (!url && !id) return alert('直播间地址必填');
 
-  if (id) {
-    await apiAction(`/api/rooms/${id}`, 'PUT', { room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
-  } else {
-    await apiAction('/api/rooms', 'POST', { room_url: url, room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
-  }
+  const res = id
+    ? await apiAction(`/api/rooms/${id}`, 'PUT', { room_name: name, filename_template: tmpl || undefined, segment_duration: segment })
+    : await apiAction('/api/rooms', 'POST', { room_url: url, room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
 
-  bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
-  document.getElementById('editId').value = '';
-  document.getElementById('inputUrl').disabled = false;
-  document.getElementById('inputUrl').value = '';
-  document.getElementById('inputName').value = '';
-  document.getElementById('inputTemplate').value = '';
-  document.getElementById('inputSegment').value = 0;
-  loadRooms();
+  if (res.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('roomModal')).hide();
+    resetForm();
+    htmx.trigger('#roomsBody', 'load');
+  }
 });
 
-document.getElementById('createModal').addEventListener('hidden.bs.modal', () => {
+function resetForm() {
   document.getElementById('modalTitle').textContent = '新增直播间';
   document.getElementById('editId').value = '';
   document.getElementById('inputUrl').disabled = false;
@@ -179,7 +84,27 @@ document.getElementById('createModal').addEventListener('hidden.bs.modal', () =>
   document.getElementById('inputName').value = '';
   document.getElementById('inputTemplate').value = '';
   document.getElementById('inputSegment').value = 0;
-});
+}
 
-loadRooms();
+document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.editBtn');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  fetch(`/api/rooms/${id}`)
+    .then(r => r.json())
+    .then(json => {
+      if (!json.data) return;
+      const r = json.data;
+      document.getElementById('modalTitle').textContent = '编辑直播间';
+      document.getElementById('editId').value = r.id;
+      document.getElementById('inputUrl').value = r.room_url;
+      document.getElementById('inputUrl').disabled = true;
+      document.getElementById('inputName').value = r.room_name || '';
+      document.getElementById('inputTemplate').value = r.filename_template || '';
+      document.getElementById('inputSegment').value = r.segment_duration || 0;
+      new bootstrap.Modal(document.getElementById('roomModal')).show();
+    });
+});
 </script>

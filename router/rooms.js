@@ -9,6 +9,11 @@ async function delRoomCache(roomUrl) {
   } catch (_) {}
 }
 
+async function renderRoomsHtml(res) {
+  const result = await pool.query('SELECT * FROM rooms ORDER BY id DESC');
+  res.render('partials/_rooms_table', { rooms: result.rows, layout: false });
+}
+
 // GET /api/rooms — 直播间列表
 router.get('/rooms', async (req, res) => {
   try {
@@ -46,9 +51,11 @@ router.post('/rooms', async (req, res) => {
       [room_url, room_name || '', filename_template || null, segment_duration ?? null]
     );
     await delRoomCache(result.rows[0].room_url);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.status(201).json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 创建失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('创建失败');
     res.status(500).json({ status: 'Error', message: '创建失败' });
   }
 });
@@ -87,9 +94,11 @@ router.put('/rooms/:id', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
     await delRoomCache(result.rows[0].room_url);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 更新失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('更新失败');
     res.status(500).json({ status: 'Error', message: '更新失败' });
   }
 });
@@ -107,9 +116,11 @@ router.delete('/rooms/:id', async (req, res) => {
     }
     await delRoomCache(room.rows[0].room_url);
     await pool.query('DELETE FROM rooms WHERE id = $1', [id]);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
     console.error('[rooms] 删除失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('删除失败');
     res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
@@ -138,9 +149,11 @@ router.post('/rooms/:id/pause', async (req, res) => {
       [id]
     );
     await delRoomCache(r.room_url);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已暂停录制' });
   } catch (err) {
     console.error('[rooms] 暂停失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('暂停失败');
     res.status(500).json({ status: 'Error', message: '暂停失败' });
   }
 });
@@ -169,9 +182,11 @@ router.post('/rooms/:id/resume', async (req, res) => {
       [id]
     );
     await delRoomCache(r.room_url);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已恢复录制' });
   } catch (err) {
     console.error('[rooms] 恢复失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('恢复失败');
     res.status(500).json({ status: 'Error', message: '恢复失败' });
   }
 });
@@ -205,9 +220,11 @@ router.post('/rooms/:id/stop', async (req, res) => {
       [r.room_url]
     );
     await delRoomCache(r.room_url);
+    if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已停止录制' });
   } catch (err) {
     console.error('[rooms] 停止失败:', err);
+    if (req.headers['hx-request']) return res.status(500).send('停止失败');
     res.status(500).json({ status: 'Error', message: '停止失败' });
   }
 });

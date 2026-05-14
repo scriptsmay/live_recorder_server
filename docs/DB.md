@@ -80,6 +80,8 @@
 | total_size | BIGINT | DEFAULT 0 | 总大小（字节） |
 | output_dir | VARCHAR(1024) | DEFAULT '' | 输出目录 |
 | caption | VARCHAR(1024) | DEFAULT '' | 直播描述/备注 |
+| retry_count | INTEGER | DEFAULT 0 | 崩溃恢复重试次数 |
+| deleted_at | TIMESTAMP | | 软删除时间 |
 | created_at | TIMESTAMP | DEFAULT NOW() | |
 
 ### recordings — 录制文件

@@ -4,6 +4,7 @@ const path = require('path');
 const dayjs = require('dayjs');
 
 const router = express.Router();
+const pool = require('../db/index');
 
 // 日志目录
 const logsDir = path.join(__dirname, '../logs');
@@ -33,6 +34,11 @@ router.get('/upload_records', (req, res) => {
 
 router.get('/recordings', (req, res) => {
   res.render('recordings', { title: '录制历史' });
+});
+
+router.get('/_/rooms/table', async (req, res) => {
+  const result = await pool.query('SELECT * FROM rooms ORDER BY id DESC');
+  res.render('partials/_rooms_table', { rooms: result.rows, layout: false });
 });
 
 router.get('/apiview', (req, res) => {
