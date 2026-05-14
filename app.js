@@ -98,7 +98,8 @@ async function tryResumeSession(session) {
   }
   ffmpegArgs.push(outputPath);
 
-  const { fd: logFd, logPath: ffmpegLogPath } = createProcLog('ffmpeg', session.id);
+  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog('ffmpeg', session.id);
+  logCommand('ffmpeg', ffmpegArgs);
 
   const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', logFd] });
 

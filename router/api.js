@@ -368,8 +368,9 @@ router.post('/notify/live_download', async (req, res) => {
   }
   ffmpegArgs.push(outputFilePattern);
 
-  const { fd: logFd, logPath, rename: renameLog } = createProcLog('ffmpeg');
+  const { fd: logFd, logPath, rename: renameLog, logCommand } = createProcLog('ffmpeg');
   console.log(`[任务启动] ffmpeg 日志: ${logPath}`);
+  logCommand('ffmpeg', ffmpegArgs);
 
   const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', logFd] });
 

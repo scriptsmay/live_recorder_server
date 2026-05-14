@@ -171,15 +171,16 @@ async function executeUpload(session, tmpl) {
   if (tags) args.push('--tag', tags);
   if (tmpl.copyright) args.push('--copyright', String(tmpl.copyright));
   if (source) args.push('--source', source);
-  if (tmpl.is_only_self) args.push('--is-only-self');
+  if (tmpl.is_only_self) args.push('--is-only-self', String(tmpl.is_only_self));
   if (tmpl.cover) args.push('--cover', tmpl.cover);
   if (tmpl.dtime) args.push('--dtime', String(tmpl.dtime));
   args.push(...files);
 
   notify.uploadStart(session.room_name, tmpl.name, files.length);
 
-  const { stream: logStream, logPath } = createProcLog('biliup', recordId);
+  const { stream: logStream, logPath, logCommand } = createProcLog('biliup', recordId);
   console.log(`[投稿] biliup 日志: ${logPath}`);
+  logCommand(biliupPath, args);
 
   const proc = spawn(biliupPath, args, { cwd: process.env.BILIUP_WORK_DIR || process.env.HOME });
 
