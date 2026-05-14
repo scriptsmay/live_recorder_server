@@ -71,6 +71,7 @@ router.post('/notify/live_download', async (req, res) => {
   }
 
   const { url, title } = req.body;
+  console.log(`[INFO] 接收到录制请求，URL: ${url}, 标题: ${title}`);
 
   // 如果该 URL 已经在录制中，直接返回成功，不重复开启 ffmpeg
   if (activeTasks.has(url)) {
@@ -79,8 +80,8 @@ router.post('/notify/live_download', async (req, res) => {
       .status(400)
       .json({ status: 'Already recording', message: '请勿重复开启' });
   }
-  // 提取核心标题（去掉时间戳，只保留 "AUTO_KSG无言..."）
-  const roomKey = title.split('_').slice(0, 2).join('_');
+  // 提取核心标题作为锁定标识，防止同一直播间多次录制
+  const roomKey = title;
   if (recordingTitles.has(roomKey)) {
     console.log(`[拒绝] 直播间 ${roomKey} 已经在录制中，不再开启新进程`);
     return res.status(400).json({
@@ -88,11 +89,15 @@ router.post('/notify/live_download', async (req, res) => {
       message: `[拒绝] 直播间 ${roomKey} 已经在录制中，不再开启新进程`,
     });
   }
+  console.log(`[开始] 直播间 ${roomKey} 开始录制`);
   recordingTitles.add(roomKey);
   activeTasks.add(url);
 
   const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss');
-  const safeTitle = title.replace(/[^a-z0-9-_ ]/gi, '');
+  const safeTitle = title
+    .replace(/[\\/:\*\?"<>\|\x00-\x1F\x7F]/g, '') // 删掉非法字符
+    .replace(/\s+/g, '_') // 连在一起的空格换成一个下划线
+    .replace(/^_+|_+$/g, ''); // 去掉首尾多余的下划线
   // 2. 使用 path.join 生成绝对路径
   const outputFilePath = path.join(
     DOWNLOAD_DIR,
