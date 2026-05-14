@@ -621,6 +621,11 @@ router.put('/recording_files/:id/associate', async (req, res) => {
       [session_id, ss.room_url, id]
     );
     await pool.query(
+      `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')`,
+      [session_id, ss.total_segments || 0, ss.room_url, fp.file_path, fileSize, fp.started_at]
+    );
+    await pool.query(
       `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
       [fileSize, session_id]
     );
