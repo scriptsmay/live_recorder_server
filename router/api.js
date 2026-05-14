@@ -314,6 +314,13 @@ router.post('/notify/live_download', async (req, res) => {
     });
   }
 
+  // 关闭可能残留的旧会话（ffmpeg 异常退出时 session 状态未更新）
+  await pool.query(
+    `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted'
+     WHERE room_url = $1 AND status = 'recording'`,
+    [room.room_url]
+  );
+
   console.log(
     `[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`
   );
@@ -400,6 +407,19 @@ router.post('/notify/live_download', async (req, res) => {
       .json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
+  // 非分段模式：预写入录制文件记录
+  if (!useSegment) {
+    try {
+      await pool.query(
+        `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
+         VALUES ($1, $2, $3, $4, 'recording')`,
+        [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
+      );
+    } catch (dbErr) {
+      console.warn('[api] recording_files 写入失败:', dbErr.message);
+    }
+  }
+
   await setActiveTask(roomKey, {
     pid: ffmpeg.pid,
     outputPath: outputFilePattern,
@@ -459,6 +479,11 @@ router.post('/notify/live_download', async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
             [sessionId, i, room.room_url, filePath, fileSize, segStart, segEnd]
           );
+          await pool.query(
+            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+            [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
+          );
         }
 
         if (sessionId) {
@@ -502,6 +527,11 @@ router.post('/notify/live_download', async (req, res) => {
              SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2
              WHERE id = $3`,
             [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+          );
+          await pool.query(
+            `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+             WHERE session_id = $2 AND file_path = $3`,
+            [fileSize, sessionId, outputFilePattern]
           );
         }
       }

@@ -12,7 +12,7 @@
 <p class="text-muted text-center" id="emptyMsg">暂无录制会话</p>
 
 <script>
-  async function loadSessions(roomUrl) {
+  async function loadSessions(roomUrl) { // returns promise for chaining
     const [sessRes, uploadRes] = await Promise.all([
       fetch(
         '/api/sessions?limit=50' +
@@ -135,7 +135,7 @@
               <td>${r.segment_index}</td>
               <td><small>${r.file_path || '-'}</small></td>
               <td>${r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</td>
-              <td>${r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : '<span class="badge bg-danger">中断</span>'}</td>
+              <td>${r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>'}</td>
             </tr>
           `
             )
@@ -187,7 +187,7 @@
         alert(json.message);
         return;
       }
-      loadSessions(document.getElementById('roomFilter').value);
+      loadSessions(document.getElementById('roomFilter').value).then(() => loadTemplates());
       return;
     }
     const btn = e.target.closest('.uploadBtn');
@@ -232,6 +232,5 @@
   });
 
   loadRoomFilter();
-  loadSessions('');
-  loadTemplates();
+  loadSessions('').then(() => loadTemplates());
 </script>

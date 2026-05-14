@@ -341,6 +341,26 @@ router.get('/sessions/:id', async (req, res) => {
       `SELECT * FROM recordings WHERE session_id = $1 ORDER BY segment_index ASC`,
       [id]
     );
+    // 对于录制中但 DB 尚无分片记录的会话，尝试从房间的 output_path 定位文件
+    if (recordings.rows.length === 0) {
+      const room = await pool.query(
+        `SELECT output_path FROM rooms WHERE room_url = $1`,
+        [session.rows[0].room_url]
+      );
+      if (room.rows.length && room.rows[0].output_path) {
+        const fp = room.rows[0].output_path;
+        try {
+          const stat = require('fs').statSync(fp);
+          recordings.rows.push({
+            session_id: parseInt(id),
+            segment_index: 0,
+            file_path: fp,
+            file_size: stat.size,
+            status: 'recording',
+          });
+        } catch (_) {}
+      }
+    }
     res.json({ status: 'ok', data: { session: session.rows[0], recordings: recordings.rows } });
   } catch (err) {
     console.error('[sessions] 查询失败:', err);

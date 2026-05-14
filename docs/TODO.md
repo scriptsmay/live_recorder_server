@@ -1,5 +1,19 @@
 # TODO
 
+## 0. recording_files 文件跟踪表（已实现）
+
+新增 `recording_files` 表独立跟踪录制文件在磁盘上的生命周期。
+
+- 非分段录制：ffmpeg 启动时 INSERT `recording`，完成时 UPDATE `completed`
+- 分段录制：ffmpeg 退出时为每段 INSERT `completed`
+- 启动扫描 `scanRecordingFiles()` 遍历 `VIDEO_DOWNLOAD_DIR`，标记 `missing` / `orphaned`
+- 三条路径同步更新该表：启动清理、看门狗、新录制关闭旧会话
+- 投稿时回退到 `recording_files` 查找文件
+
+详见 `docs/DB.md`。
+
+
+
 ## 1. 浏览器扩展 1 分钟轮询优化（已实现）
 
 浏览器扩展（`chrome_live_listener`）每分钟轮询时不再一律 POST `live_download`，

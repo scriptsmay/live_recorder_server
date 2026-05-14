@@ -133,11 +133,23 @@ async function executeUpload(session, tmpl) {
   const tags = renderTemplate(tmpl.tags || '', vars);
   const source = renderTemplate(tmpl.source || '{room_url}', vars);
 
-  const recs = await pool.query(
-    `SELECT * FROM recordings WHERE session_id = $1 AND status = 'completed' ORDER BY segment_index ASC`,
+  let recs = await pool.query(
+    `SELECT * FROM recordings WHERE session_id = $1 AND status IN ('completed', 'interrupted') ORDER BY segment_index ASC`,
     [session.id]
   );
-  const files = recs.rows.map(r => r.file_path).filter(Boolean);
+  let files = recs.rows.map(r => r.file_path).filter(Boolean);
+
+  // 回退到 recording_files（会话异常中断时 recordings 可能无数据）
+  if (files.length === 0) {
+    const fallback = await pool.query(
+      `SELECT DISTINCT file_path, file_size FROM recording_files
+       WHERE session_id = $1 AND status IN ('recording', 'interrupted', 'completed')
+       ORDER BY file_path`,
+      [session.id]
+    );
+    files = fallback.rows.map(r => r.file_path).filter(Boolean);
+  }
+
   if (files.length === 0) { console.log(`[自动投稿] 会话 ${session.id} 无文件，跳过`); return; }
 
   const totalSize = files.reduce((sum, f) => {

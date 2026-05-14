@@ -11,6 +11,7 @@ cookies.json
 .env.test.local
 .env.production
 .env.production.local
+*.log
 .next
 .out
 .vercel

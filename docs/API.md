@@ -125,10 +125,57 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
   "data": {
     "room_id": 1,
     "room_url": "https://live.example.com/room1",
-    "filename": "主播名_20260514_143022.mp4",
+    "session_id": 42,
     "path": "/data/videos/主播名_20260514_143022.mp4"
   }
 }
+```
+
+### GET /api/notify/status
+
+查询直播间录制状态（轻量只读，不会创建房间）。
+
+**参数（Query）：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| url | string | 是 | 直播间地址（`room_url`） |
+
+**示例：**
+
+```bash
+curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1'
+```
+
+**返回（空闲）：**
+
+```json
+{
+  "exists": true,
+  "data": {
+    "status": "idle",
+    "room": { "id": 1, "room_url": "https://live.example.com/room1", "room_name": "主播名" }
+  }
+}
+```
+
+**返回（录制中）：**
+
+```json
+{
+  "exists": true,
+  "data": {
+    "status": "recording",
+    "room": { "id": 1, "room_url": "https://live.example.com/room1", "room_name": "主播名" },
+    "session": { "id": 42, "started_at": "2026-05-14T14:30:22.000Z" }
+  }
+}
+```
+
+**返回（不存在）：**
+
+```json
+{ "exists": false }
 ```
 
 ---

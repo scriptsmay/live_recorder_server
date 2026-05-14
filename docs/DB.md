@@ -100,6 +100,41 @@
 | ended_at | TIMESTAMP | | 结束时间 |
 | status | VARCHAR(20) | DEFAULT 'recording' | `completed` / `interrupted` |
 
+### recording_files — 磁盘文件跟踪
+
+记录录制文件在磁盘上的完整生命周期，支持启动时扫描比对磁盘实际状态。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | SERIAL | PRIMARY KEY | 自增主键 |
+| session_id | INTEGER | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL） |
+| room_url | VARCHAR(512) | FK → rooms(room_url) ON DELETE SET NULL | 关联直播间 |
+| file_path | VARCHAR(1024) | NOT NULL | 文件绝对路径 |
+| file_name | VARCHAR(512) | | 文件名 |
+| file_size | BIGINT | DEFAULT 0 | 文件大小（字节） |
+| status | VARCHAR(20) | DEFAULT 'pending' | 状态流转见下 |
+| started_at | TIMESTAMP | DEFAULT NOW() | 写入时间 |
+| completed_at | TIMESTAMP | | 完成时间 |
+| checked_at | TIMESTAMP | DEFAULT NOW() | 上次磁盘校验时间 |
+| created_at | TIMESTAMP | DEFAULT NOW() | 创建时间 |
+
+**状态流转：**
+
+```
+pending ──→ recording ──→ completed
+                 │              │
+                 ├──→ interrupted  （ffmpeg 崩溃/手动停止）
+                 │
+                 └──→ missing      （启动扫描发现文件不存在）
+                         
+orphaned  ←────────────────────── （启动扫描发现磁盘上有未跟踪文件）
+```
+
+- 非分段录制：ffmpeg 启动后 INSERT `recording`，关闭后 UPDATE `completed`
+- 分段录制：ffmpeg 关闭后为每段 INSERT `completed`
+- 启动时 `scanRecordingFiles()` 遍历 `VIDEO_DOWNLOAD_DIR`，标记缺失/发现孤文件
+- 清理/看门狗同步将记录标记为 `interrupted`
+
 ### upload_templates — 投稿模板
 
 投稿参数模板，支持变量替换。

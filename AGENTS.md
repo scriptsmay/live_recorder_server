@@ -18,7 +18,7 @@
 ## 数据库
 
 - 启动时自动迁移建表（`db/migrate.js`），详见 `docs/DB.md`
-- 表：`rooms`（直播间状态与配置）、`recordings`（录制历史）
+- 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）
 - 连接信息从 `.env` 的 `DB_*` 变量读取
 - Redis 缓存直播间数据，写操作后自动失效
 
@@ -27,6 +27,7 @@
 ### API
 
 - `POST /api/notify/live_download` —— 调用 ffmpeg 录制直播流；关联 `rooms` 表，支持自定义文件名模板
+- `GET /api/notify/status` —— 轻量查询直播间录制状态，不创建房间
 - `GET/POST /api/rooms` —— 直播间列表 / 创建（upsert）
 - `GET/PUT/DELETE /api/rooms/:id` —— 直播间详情 / 更新 / 删除
 - `POST /api/rooms/:id/pause` —— 暂停录制（SIGSTOP）

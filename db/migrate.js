@@ -116,6 +116,22 @@ async function migrate() {
     `);
     await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS bv_id VARCHAR(50) DEFAULT ''`);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS recording_files (
+        id            SERIAL PRIMARY KEY,
+        session_id    INTEGER REFERENCES recording_sessions(id) ON DELETE SET NULL,
+        room_url      VARCHAR(512) REFERENCES rooms(room_url) ON DELETE SET NULL,
+        file_path     VARCHAR(1024) NOT NULL,
+        file_name     VARCHAR(512) DEFAULT '',
+        file_size     BIGINT DEFAULT 0,
+        status        VARCHAR(20) DEFAULT 'pending',
+        started_at    TIMESTAMP DEFAULT NOW(),
+        completed_at  TIMESTAMP,
+        checked_at    TIMESTAMP DEFAULT NOW(),
+        created_at    TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {

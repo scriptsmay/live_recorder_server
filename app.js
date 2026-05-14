@@ -242,6 +242,23 @@ async function cleanupStaleRecordings() {
     if (recResult.rows.length > 0) {
       console.log(`[清理] ${recResult.rows.length} 条录制记录已标为中断`);
     }
+
+    // 清理 recording_files 中残留在 recording 状态的行
+    const fileResult = await pool.query(
+      `UPDATE recording_files SET status = 'interrupted', checked_at = NOW()
+       WHERE status = 'recording'
+       RETURNING id, file_path`
+    );
+    for (const row of fileResult.rows) {
+      let size = 0;
+      try { const s = fs.statSync(row.file_path); size = s.size; } catch (_) {}
+      if (size > 0) {
+        await pool.query('UPDATE recording_files SET file_size = $1 WHERE id = $2', [size, row.id]);
+      }
+    }
+    if (fileResult.rows.length > 0) {
+      console.log(`[清理] ${fileResult.rows.length} 条文件记录已标为中断`);
+    }
   } catch (err) {
     console.error('[清理] 启动时清理失败:', err.message);
   }
@@ -266,6 +283,62 @@ async function cleanupStaleRedis() {
   } catch (err) {
     if (err.message && err.message.includes('in progress')) return;
     console.error('[清理] Redis 清理失败:', err.message);
+  }
+}
+
+async function scanRecordingFiles() {
+  const VIDEO_DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!VIDEO_DOWNLOAD_DIR) return;
+  if (!fs.existsSync(VIDEO_DOWNLOAD_DIR)) return;
+
+  try {
+    const tracked = await pool.query(`SELECT id, file_path, status FROM recording_files WHERE status NOT IN ('missing', 'deleted')`);
+    const trackedSet = new Map();
+    for (const row of tracked.rows) trackedSet.set(row.file_path, row);
+
+    const diskFiles = new Set();
+    const walkDir = (dir) => {
+      let entries;
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        const fp = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walkDir(fp); continue; }
+        if (/\.(mp4|flv|ts|mkv|avi|mov)$/i.test(entry.name)) diskFiles.add(fp);
+      }
+    };
+    walkDir(VIDEO_DOWNLOAD_DIR);
+
+    // 标记 tracked 但磁盘上不存在的文件
+    let missingCount = 0;
+    for (const [fp, row] of trackedSet) {
+      if (!diskFiles.has(fp)) {
+        await pool.query(
+          `UPDATE recording_files SET status = 'missing', file_size = 0, checked_at = NOW() WHERE id = $1`,
+          [row.id]
+        );
+        missingCount++;
+      }
+    }
+
+    // 发现磁盘上未被 tracking 的文件（孤⽂件）
+    let orphanCount = 0;
+    for (const fp of diskFiles) {
+      if (!trackedSet.has(fp)) {
+        const stat = fs.statSync(fp);
+        await pool.query(
+          `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
+           VALUES ($1, $2, $3, 'orphaned', NOW())`,
+          [fp, path.basename(fp), stat.size]
+        );
+        orphanCount++;
+      }
+    }
+
+    if (missingCount > 0 || orphanCount > 0) {
+      console.log(`[文件扫描] 完成: ${missingCount} 缺失, ${orphanCount} 孤⽂件`);
+    }
+  } catch (err) {
+    console.error('[文件扫描] 失败:', err.message);
   }
 }
 
@@ -338,6 +411,11 @@ async function checkStaleRecordings() {
             `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted', total_size = $1 WHERE id = $2`,
             [fileSize, room.session_id]
           );
+          await pool.query(
+            `UPDATE recording_files SET status = 'interrupted', checked_at = NOW()
+             WHERE session_id = $1 AND status = 'recording'`,
+            [room.session_id]
+          );
         }
         console.log(`[看门狗] 清理完成: ${room.room_name || room.room_url}`);
       }
@@ -354,6 +432,7 @@ async function startup() {
   await migrate();
   await cleanupStaleRecordings();
   await cleanupStaleRedis();
+  await scanRecordingFiles();
 }
 
 startup()
