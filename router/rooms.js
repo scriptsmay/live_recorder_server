@@ -30,19 +30,20 @@ router.get('/rooms', async (req, res) => {
 // POST /api/rooms — 新增直播间
 router.post('/rooms', async (req, res) => {
   try {
-    const { room_url, room_name, filename_template } = req.body;
+    const { room_url, room_name, filename_template, segment_duration } = req.body;
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: 'room_url 必填' });
     }
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, filename_template)
-       VALUES ($1, $2, $3)
+      `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (room_url) DO UPDATE SET
          room_name = COALESCE($2, rooms.room_name),
          filename_template = COALESCE($3, rooms.filename_template),
+         segment_duration = COALESCE($4, rooms.segment_duration),
          updated_at = NOW()
        RETURNING *`,
-      [room_url, room_name || '', filename_template || null]
+      [room_url, room_name || '', filename_template || null, segment_duration ?? null]
     );
     await delRoomCache(result.rows[0].room_url);
     res.status(201).json({ status: 'ok', data: result.rows[0] });
@@ -71,15 +72,16 @@ router.get('/rooms/:id', async (req, res) => {
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { room_name, filename_template } = req.body;
+    const { room_name, filename_template, segment_duration } = req.body;
     const result = await pool.query(
       `UPDATE rooms
        SET room_name = COALESCE($1, room_name),
            filename_template = COALESCE($2, filename_template),
+           segment_duration = COALESCE($3, segment_duration, 0),
            updated_at = NOW()
-       WHERE id = $3
+       WHERE id = $4
        RETURNING *`,
-      [room_name, filename_template, id]
+      [room_name, filename_template, segment_duration != null ? segment_duration : null, id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
@@ -253,6 +255,58 @@ router.delete('/recordings/:id', async (req, res) => {
   } catch (err) {
     console.error('[recordings] 删除失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });
+  }
+});
+
+// GET /api/sessions — 录制会话列表
+router.get('/sessions', async (req, res) => {
+  try {
+    const { room_url, limit } = req.query;
+    let query = `
+      SELECT s.*, rm.room_name
+      FROM recording_sessions s
+      LEFT JOIN rooms rm ON s.room_url = rm.room_url
+    `;
+    const params = [];
+    if (room_url) {
+      query += ` WHERE s.room_url = $1`;
+      params.push(room_url);
+    }
+    query += ' ORDER BY s.id DESC';
+    if (limit) {
+      query += ` LIMIT $${params.length + 1}`;
+      params.push(parseInt(limit, 10));
+    }
+    const result = await pool.query(query, params);
+    res.json({ status: 'ok', data: result.rows });
+  } catch (err) {
+    console.error('[sessions] 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+// GET /api/sessions/:id — 会话详情（包含所有分片文件）
+router.get('/sessions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await pool.query(
+      `SELECT s.*, rm.room_name
+       FROM recording_sessions s
+       LEFT JOIN rooms rm ON s.room_url = rm.room_url
+       WHERE s.id = $1`,
+      [id]
+    );
+    if (session.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '会话不存在' });
+    }
+    const recordings = await pool.query(
+      `SELECT * FROM recordings WHERE session_id = $1 ORDER BY segment_index ASC`,
+      [id]
+    );
+    res.json({ status: 'ok', data: { session: session.rows[0], recordings: recordings.rows } });
+  } catch (err) {
+    console.error('[sessions] 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
   }
 });
 

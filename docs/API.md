@@ -40,6 +40,7 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 | room_url | string | 是 | 直播间地址（唯一标识） |
 | room_name | string | 否 | 直播间名称 |
 | filename_template | string | 否 | 文件名模板，默认 `{room_name}_{datetime}` |
+| segment_duration | integer | 否 | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件 |
 
 **示例：**
 
@@ -67,6 +68,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 |------|------|------|------|
 | room_name | string | 否 | 直播间名称 |
 | filename_template | string | 否 | 文件名模板 |
+| segment_duration | integer | 否 | 分段录制时长（秒） |
 
 ---
 
@@ -152,3 +154,12 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 ```
 主播名_{YYYY}-{MM}-{DD}_{HH}-{mm}-{ss}
 ```
+
+**分段录制时**，文件名使用 strftime 格式，每个分片独立命名：
+
+| 模板 | 第一段文件名 | 第二段文件名 |
+|------|-------------|-------------|
+| `{room_name}_{datetime}` | `KSG无言_20260514_143022.mp4` | `KSG无言_20260514_153022.mp4` |
+| `{YYYY}-{MM}-{DD}_{HH}-{mm}-{ss}` | `2026-05-14_14-30-22.mp4` | `2026-05-14_15-30-22.mp4` |
+
+不再使用序号 `_000` / `_001`，每个文件都有独立的时间戳。

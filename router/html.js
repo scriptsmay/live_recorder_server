@@ -12,11 +12,15 @@ const config = require('../config/config');
 
 // 当访问根路径时，重定向
 router.get('/', (req, res) => {
-  res.redirect('/apiview');
+  res.redirect('/rooms');
 });
 
 router.get('/rooms', (req, res) => {
   res.render('rooms', { title: '直播间管理' });
+});
+
+router.get('/sessions', (req, res) => {
+  res.render('sessions', { title: '录制会话' });
 });
 
 router.get('/recordings', (req, res) => {

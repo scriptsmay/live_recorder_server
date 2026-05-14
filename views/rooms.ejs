@@ -12,6 +12,7 @@
         <th>直播间地址</th>
         <th>状态</th>
         <th>文件名模板</th>
+        <th>分段时间</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -39,9 +40,14 @@
           <input type="text" class="form-control" id="inputName" placeholder="主播名" />
         </div>
         <div class="mb-3">
-          <label class="form-label">文件名模板（留空则默认为<code>{room_name}_{datetime}</code>）</label>
+          <label class="form-label">文件名模板</label>
           <input type="text" class="form-control" id="inputTemplate" placeholder="{room_name}_{datetime}" />
           <div class="form-text">支持：<code>{room_name}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{ss}</code></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">分段录制时长（秒，0 表示不分段）</label>
+          <input type="number" class="form-control" id="inputSegment" min="0" step="60" value="0" />
+          <div class="form-text">设为 3600 即每 1 小时自动分割为一个文件</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -71,9 +77,11 @@ async function loadRooms() {
       paused: '<span class="badge bg-warning text-dark">已暂停</span>',
     }[r.status] || r.status;
 
+    const segLabel = r.segment_duration ? (r.segment_duration >= 3600 ? Math.round(r.segment_duration / 3600) + 'h' : r.segment_duration + 's') : '-';
+
     const actions = [];
     if (r.status === 'idle') {
-      actions.push(`<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}" data-url="${r.room_url}" data-name="${r.room_name || ''}" data-template="${r.filename_template || ''}">编辑</button>`);
+      actions.push(`<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}" data-url="${r.room_url}" data-name="${r.room_name || ''}" data-template="${r.filename_template || ''}" data-segment="${r.segment_duration || 0}">编辑</button>`);
       actions.push(`<button class="btn btn-sm btn-outline-danger deleteBtn" data-id="${r.id}">删除</button>`);
     }
     if (r.status === 'recording') {
@@ -92,6 +100,7 @@ async function loadRooms() {
       <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url.length > 40 ? r.room_url.slice(0, 40) + '…' : r.room_url}</a></td>
       <td>${statusBadge}</td>
       <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
+      <td>${segLabel}</td>
       <td class="text-nowrap">${actions.join(' ')}</td>
     `;
     tbody.appendChild(tr);
@@ -131,6 +140,7 @@ document.addEventListener('click', async e => {
     document.getElementById('inputUrl').disabled = true;
     document.getElementById('inputName').value = btn.dataset.name;
     document.getElementById('inputTemplate').value = btn.dataset.template;
+    document.getElementById('inputSegment').value = btn.dataset.segment || 0;
     new bootstrap.Modal(document.getElementById('createModal')).show();
   }
 });
@@ -141,12 +151,14 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const name = document.getElementById('inputName').value.trim();
   const tmpl = document.getElementById('inputTemplate').value.trim();
 
+  const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
+
   if (!url && !id) return alert('直播间地址必填');
 
   if (id) {
-    await apiAction(`/api/rooms/${id}`, 'PUT', { room_name: name, filename_template: tmpl || undefined });
+    await apiAction(`/api/rooms/${id}`, 'PUT', { room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
   } else {
-    await apiAction('/api/rooms', 'POST', { room_url: url, room_name: name, filename_template: tmpl || undefined });
+    await apiAction('/api/rooms', 'POST', { room_url: url, room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
   }
 
   bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
@@ -155,6 +167,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   document.getElementById('inputUrl').value = '';
   document.getElementById('inputName').value = '';
   document.getElementById('inputTemplate').value = '';
+  document.getElementById('inputSegment').value = 0;
   loadRooms();
 });
 
@@ -165,6 +178,7 @@ document.getElementById('createModal').addEventListener('hidden.bs.modal', () =>
   document.getElementById('inputUrl').value = '';
   document.getElementById('inputName').value = '';
   document.getElementById('inputTemplate').value = '';
+  document.getElementById('inputSegment').value = 0;
 });
 
 loadRooms();

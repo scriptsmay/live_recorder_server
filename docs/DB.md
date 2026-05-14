@@ -61,26 +61,44 @@
 | filename_template | VARCHAR(255) | DEFAULT '{room_name}_{datetime}' | 文件名模板 |
 | output_path | VARCHAR(1024) | DEFAULT '' | 最新录制文件路径 |
 | ffmpeg_pid | INTEGER | | ffmpeg 进程 ID（用于暂停/恢复） |
+| segment_duration | INTEGER | DEFAULT 0 | 分段录制时长（秒），0 表示不分段 |
 | created_at | TIMESTAMP | DEFAULT NOW() | 创建时间 |
 | updated_at | TIMESTAMP | DEFAULT NOW() | 更新时间 |
 
-### recordings — 录制历史
+### recording_sessions — 录制会话
 
-记录每次录制的详情。
+每次连续直播录制创建一个会话，包含一个或多个分片文件。
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | SERIAL | PRIMARY KEY | 自增主键 |
 | room_url | VARCHAR(512) | FK → rooms(room_url) ON DELETE CASCADE | 关联直播间 |
+| started_at | TIMESTAMP | DEFAULT NOW() | 会话开始时间 |
+| ended_at | TIMESTAMP | | 会话结束时间 |
+| status | VARCHAR(20) | DEFAULT 'recording' | `recording` / `completed` / `interrupted` |
+| total_segments | INTEGER | DEFAULT 0 | 分片文件数 |
+| total_size | BIGINT | DEFAULT 0 | 总大小（字节） |
+| output_dir | VARCHAR(1024) | DEFAULT '' | 输出目录 |
+| created_at | TIMESTAMP | DEFAULT NOW() | |
+
+### recordings — 录制文件
+
+记录每个分片文件的详情。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | SERIAL | PRIMARY KEY | 自增主键 |
+| session_id | INTEGER | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话 |
+| segment_index | INTEGER | DEFAULT 0 | 分片序号 |
+| room_url | VARCHAR(512) | FK → rooms(room_url) ON DELETE CASCADE | 关联直播间 |
 | file_path | VARCHAR(1024) | DEFAULT '' | 文件路径 |
 | file_size | BIGINT | DEFAULT 0 | 文件大小（字节） |
-| duration_seconds | INTEGER | DEFAULT 0 | 录制时长 |
 | started_at | TIMESTAMP | DEFAULT NOW() | 开始时间 |
 | ended_at | TIMESTAMP | | 结束时间 |
-| status | VARCHAR(20) | DEFAULT 'recording' | 状态：`recording` / `completed` / `interrupted` |
+| status | VARCHAR(20) | DEFAULT 'recording' | `completed` / `interrupted` |
 
 ---
 
 ## 迁移
 
-应用启动时 `db/migrate.js` 自动执行建表（`CREATE TABLE IF NOT EXISTS`），无需手动操作。
+应用启动时 `db/migrate.js` 自动执行建表（`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS`），无需手动操作。

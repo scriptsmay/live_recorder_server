@@ -86,6 +86,15 @@ async function cleanupStaleRecordings() {
     if (recResult.rows.length > 0) {
       console.log(`[清理] ${recResult.rows.length} 条录制记录已标为中断`);
     }
+
+    const sessResult = await pool.query(
+      `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted'
+       WHERE status = 'recording'
+       RETURNING id`
+    );
+    if (sessResult.rows.length > 0) {
+      console.log(`[清理] ${sessResult.rows.length} 条录制会话已标为中断`);
+    }
   } catch (err) {
     console.error('[清理] 启动时清理失败:', err.message);
   }
