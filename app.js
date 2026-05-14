@@ -61,7 +61,7 @@ app.use('/api', uploadRouter);
 // ──────────────────────────────────────────────
 // 4. 启动前清理与恢复
 // ──────────────────────────────────────────────
-const MAX_RESUME_RETRIES = 0; // 快手流地址过期快，不做 ffmpeg 重连
+const MAX_RESUME_RETRIES = 3;
 const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_FILE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -84,7 +84,8 @@ async function tryResumeSession(session) {
     outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
   }
 
-  const ffmpegArgs = ['-i', session.room_url, '-c', 'copy', '-fflags', '+genpts',
+  const streamUrl = session.stream_url || session.room_url;
+  const ffmpegArgs = ['-i', streamUrl, '-c', 'copy', '-fflags', '+genpts',
     '-timeout', '2147483647',
     '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '60'];
 

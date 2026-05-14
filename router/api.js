@@ -388,14 +388,15 @@ router.post('/notify/live_download', async (req, res) => {
     await delRoomCache(room.room_url);
 
     const session = await pool.query(
-      `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption)
-       VALUES ($1, $2, $3, 'recording', $4)
+      `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
+       VALUES ($1, $2, $3, 'recording', $4, $5)
        RETURNING id`,
       [
         room.room_url,
         sessionStart,
         path.dirname(outputFilePattern),
         caption || '',
+        url,
       ]
     );
     sessionId = session.rows[0].id;
