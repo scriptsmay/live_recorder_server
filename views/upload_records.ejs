@@ -20,6 +20,20 @@
   <p class="text-muted text-center" id="emptyRec">暂无投稿记录</p>
 </div>
 
+<div class="modal fade" id="outputModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">输出 - #<span id="outputRecId"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <pre class="mb-0" style="font-size:12px; white-space:pre-wrap; word-break:break-all; max-height:70vh; overflow-y:auto;" id="outputContent"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 async function loadRecords() {
   const res = await fetch('/api/upload_records?limit=100');
@@ -48,7 +62,7 @@ async function loadRecords() {
       <td>${r.bv_id ? '<code>' + r.bv_id + '</code>' : '-'}</td>
       <td><small>${r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-')}</small></td>
       <td>
-        <button class="btn btn-sm btn-outline-info viewOutputBtn" data-output='${(r.output || "").replace(/'/g, "&#39;").replace(/\n/g, "\\n")}'>输出</button>
+        <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="${r.id}" data-output="${encodeURIComponent(r.output || '')}">输出</button>
         <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button>
       </td>`;
     tbody.appendChild(tr);
@@ -64,7 +78,10 @@ document.addEventListener('click', async e => {
     loadRecords();
   }
   if (btn.classList.contains('viewOutputBtn')) {
-    alert(btn.dataset.output || '(无输出)');
+    const output = decodeURIComponent(btn.dataset.output) || '(无输出)';
+    document.getElementById('outputRecId').textContent = btn.dataset.id;
+    document.getElementById('outputContent').textContent = output;
+    new bootstrap.Modal(document.getElementById('outputModal')).show();
   }
 });
 
