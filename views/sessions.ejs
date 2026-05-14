@@ -46,6 +46,7 @@ async function loadSessions(roomUrl) {
         <div>${statusBadge}</div>
       </div>
       <div class="card-body">
+        ${s.caption ? `<div class="mb-2"><small class="text-muted">📺 ${s.caption}</small></div>` : ''}
         <div class="row mb-2">
           <div class="col-md-3"><small>开始: ${s.started_at ? new Date(s.started_at).toLocaleString() : '-'}</small></div>
           <div class="col-md-3"><small>结束: ${s.ended_at ? new Date(s.ended_at).toLocaleString() : '-'}</small></div>

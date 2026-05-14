@@ -105,7 +105,8 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | url | string | 是 | 直播流 URL（m3u8 / rtmp 等） |
-| title | string | 是 | 直播标题 |
+| title | string | 是 | 直播标题（用于直播间名称） |
+| caption | string | 否 | 直播描述/备注，存储到录制会话中 |
 | room_url | string | 否 | 直播间地址。不传则用 `url` 作为标识 |
 
 **示例：**

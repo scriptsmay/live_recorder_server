@@ -7,6 +7,8 @@ const config = require('../config/config');
 const dayjs = require('dayjs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const { findAndAutoUpload } = require('./upload');
+const notify = require('../lib/notify');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -31,7 +33,11 @@ async function getRoomCache(roomUrl) {
 
 async function setRoomCache(room) {
   try {
-    await redis.setEx(redisKey(room.room_url), ROOM_CACHE_TTL, JSON.stringify(room));
+    await redis.setEx(
+      redisKey(room.room_url),
+      ROOM_CACHE_TTL,
+      JSON.stringify(room)
+    );
   } catch (_) {}
 }
 
@@ -52,7 +58,11 @@ async function isActiveTask(roomKey) {
 
 async function setActiveTask(roomKey, data) {
   try {
-    await redis.setEx(activeTaskKey(roomKey), ACTIVE_TASK_TTL, JSON.stringify(data));
+    await redis.setEx(
+      activeTaskKey(roomKey),
+      ACTIVE_TASK_TTL,
+      JSON.stringify(data)
+    );
   } catch (_) {}
 }
 
@@ -89,24 +99,30 @@ function generateFilename(template, roomName) {
 }
 
 function templateToStrftime(template, roomName) {
-  const roomNameSafe = sanitizeFilename(roomName || 'unknown').replace(/%/g, '%%');
-  return template
-    .replace(/{room_name}/g, roomNameSafe)
-    .replace(/{datetime}/g, '%Y%m%d_%H%M%S')
-    .replace(/{YYYY}/g, '%Y')
-    .replace(/{MM}/g, '%m')
-    .replace(/{DD}/g, '%d')
-    .replace(/{HH}/g, '%H')
-    .replace(/{mm}/g, '%M')
-    .replace(/{ss}/g, '%S')
-    + '.mp4';
+  const roomNameSafe = sanitizeFilename(roomName || 'unknown').replace(
+    /%/g,
+    '%%'
+  );
+  return (
+    template
+      .replace(/{room_name}/g, roomNameSafe)
+      .replace(/{datetime}/g, '%Y%m%d_%H%M%S')
+      .replace(/{YYYY}/g, '%Y')
+      .replace(/{MM}/g, '%m')
+      .replace(/{DD}/g, '%d')
+      .replace(/{HH}/g, '%H')
+      .replace(/{mm}/g, '%M')
+      .replace(/{ss}/g, '%S') + '.mp4'
+  );
 }
 
 async function getOrCreateRoom(roomUrl, roomName) {
   const cached = await getRoomCache(roomUrl);
   if (cached) return cached;
 
-  const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
+  const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [
+    roomUrl,
+  ]);
   if (exist.rows.length > 0) {
     const room = exist.rows[0];
     await setRoomCache(room);
@@ -138,13 +154,85 @@ router.get('/', (req, res) => {
           method: 'POST',
           params: [
             { name: 'url', description: '直播流URL', required: true },
-            { name: 'title', description: '直播标题', required: true },
-            { name: 'room_url', description: '直播间地址（唯一标识）', required: true },
+            {
+              name: 'title',
+              description: '直播标题（用于直播间名称）',
+              required: true,
+            },
+            {
+              name: 'caption',
+              description: '直播描述/备注（可选）',
+              required: false,
+            },
+            {
+              name: 'room_url',
+              description: '直播间地址（唯一标识）',
+              required: true,
+            },
           ],
         },
       ],
     },
   });
+});
+
+/**
+ * POST /api/notify/feishu_webhook 飞书机器人Webhook
+ * @param {*} req body { title: '标题', content: '内容' }
+ * @param {*} res
+ */
+router.post('/notify/feishu_webhook', async (req, res) => {
+  try {
+    let { title = '', content = '' } = req.query;
+    console.log('[DEBUG]request data:----->', req.body);
+    if (req.body.title) {
+      title = req.body.title;
+    }
+    if (req.body.content) {
+      content = req.body.content;
+    }
+    if (!title) {
+      return res.status(400).json({
+        error: '缺少必填参数 title',
+      });
+    }
+
+    const sendContent = `${title}\n${content}\n${dayjs().format('YYYY-MM-DD HH:mm:ss')}`;
+    // 转发请求
+    const response = await axios({
+      url: config.MESSAGE_FEISHU_WEBHOOK,
+      method: 'post',
+      data: {
+        msg_type: 'text',
+        content: {
+          text: sendContent,
+        },
+      },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // 将目标服务的响应返回给客户端
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('转发请求时出错:', error);
+
+    // 错误处理
+    if (error.response) {
+      // 目标服务器返回了错误响应
+      res.status(error.response.status).json({
+        error: '转发请求失败',
+        details: error.response.data,
+      });
+    } else {
+      // 其他类型的错误
+      res.status(500).json({
+        error: '内部服务器错误',
+        details: error.message,
+      });
+    }
+  }
 });
 
 router.post('/notify/live_download', async (req, res) => {
@@ -164,11 +252,13 @@ router.post('/notify/live_download', async (req, res) => {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
   }
 
-  const { url, title, room_url } = req.body;
+  const { url, title, caption, room_url } = req.body;
   const roomKey = room_url || url;
 
   if (await isActiveTask(roomKey)) {
-    return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
+    return res
+      .status(400)
+      .json({ status: 'Already recording', message: '请勿重复开启' });
   }
 
   let room;
@@ -186,7 +276,9 @@ router.post('/notify/live_download', async (req, res) => {
     });
   }
 
-  console.log(`[开始] 直播间 ${roomKey} 开始录制`);
+  console.log(
+    `[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`
+  );
 
   const template = room.filename_template || '{room_name}_{datetime}';
   const segmentDuration = room.segment_duration || 0;
@@ -203,15 +295,29 @@ router.post('/notify/live_download', async (req, res) => {
     outputFilePattern = path.join(DOWNLOAD_DIR, filename);
   }
   console.log(`[任务启动] 文件名模板: ${template}`);
-  console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
+  console.log(
+    `[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`
+  );
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
   const ffmpegArgs = ['-i', url, '-c', 'copy', '-fflags', '+genpts'];
   if (useSegment) {
-    segmentListPath = path.join(DOWNLOAD_DIR, `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
-    ffmpegArgs.push('-f', 'segment', '-segment_time', String(segmentDuration),
-      '-reset_timestamps', '1', '-strftime', '1',
-      '-segment_list', segmentListPath);
+    segmentListPath = path.join(
+      DOWNLOAD_DIR,
+      `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
+    );
+    ffmpegArgs.push(
+      '-f',
+      'segment',
+      '-segment_time',
+      String(segmentDuration),
+      '-reset_timestamps',
+      '1',
+      '-strftime',
+      '1',
+      '-segment_list',
+      segmentListPath
+    );
   }
   ffmpegArgs.push(outputFilePattern);
 
@@ -231,19 +337,32 @@ router.post('/notify/live_download', async (req, res) => {
     await delRoomCache(room.room_url);
 
     const session = await pool.query(
-      `INSERT INTO recording_sessions (room_url, started_at, output_dir, status)
-       VALUES ($1, $2, $3, 'recording')
+      `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption)
+       VALUES ($1, $2, $3, 'recording', $4)
        RETURNING id`,
-      [room.room_url, sessionStart, path.dirname(outputFilePattern)]
+      [
+        room.room_url,
+        sessionStart,
+        path.dirname(outputFilePattern),
+        caption || '',
+      ]
     );
     sessionId = session.rows[0].id;
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
     ffmpeg.kill();
-    return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
+    return res
+      .status(500)
+      .json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
-  await setActiveTask(roomKey, { pid: ffmpeg.pid, outputPath: outputFilePattern, roomId: room.id, sessionId, startTime: Date.now() });
+  await setActiveTask(roomKey, {
+    pid: ffmpeg.pid,
+    outputPath: outputFilePattern,
+    roomId: room.id,
+    sessionId,
+    startTime: Date.now(),
+  });
 
   ffmpeg.on('close', async (code) => {
     await delActiveTask(roomKey);
@@ -260,24 +379,36 @@ router.post('/notify/live_download', async (req, res) => {
         const segmentFiles = [];
         if (segmentListPath && fs.existsSync(segmentListPath)) {
           const content = fs.readFileSync(segmentListPath, 'utf-8');
-          const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+          const lines = content
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean);
           for (const line of lines) {
-            segmentFiles.push(path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line));
+            segmentFiles.push(
+              path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line)
+            );
           }
-          try { fs.unlinkSync(segmentListPath); } catch (_) {}
+          try {
+            fs.unlinkSync(segmentListPath);
+          } catch (_) {}
         }
 
         let totalSize = 0;
         for (let i = 0; i < segmentFiles.length; i++) {
           const filePath = segmentFiles[i];
           let fileSize = 0;
-          try { fileSize = fs.statSync(filePath).size; } catch (_) {}
+          try {
+            fileSize = fs.statSync(filePath).size;
+          } catch (_) {}
           totalSize += fileSize;
 
-          const segStart = new Date(sessionStart.getTime() + i * segmentDuration * 1000);
-          const segEnd = i < segmentFiles.length - 1
-            ? new Date(segStart.getTime() + segmentDuration * 1000)
-            : new Date();
+          const segStart = new Date(
+            sessionStart.getTime() + i * segmentDuration * 1000
+          );
+          const segEnd =
+            i < segmentFiles.length - 1
+              ? new Date(segStart.getTime() + segmentDuration * 1000)
+              : new Date();
 
           await pool.query(
             `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
@@ -291,17 +422,27 @@ router.post('/notify/live_download', async (req, res) => {
             `UPDATE recording_sessions
              SET ended_at = NOW(), status = $1, total_segments = $2, total_size = $3
              WHERE id = $4`,
-            [code === 0 ? 'completed' : 'interrupted', segmentFiles.length, totalSize, sessionId]
+            [
+              code === 0 ? 'completed' : 'interrupted',
+              segmentFiles.length,
+              totalSize,
+              sessionId,
+            ]
           );
         }
-        console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+        console.log(
+          `[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`
+        );
       } else {
         let fileSize = 0;
         try {
           const stat = fs.statSync(outputFilePattern);
           fileSize = stat.size;
         } catch (statErr) {
-          console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
+          console.warn(
+            `[api] 无法获取文件大小: ${outputFilePattern}`,
+            statErr.message
+          );
         }
 
         const result = await pool.query(
@@ -320,10 +461,31 @@ router.post('/notify/live_download', async (req, res) => {
           );
         }
       }
+
+      if (code === 0 && sessionId) {
+        try {
+          const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [sessionId]);
+          const segs = sess.rows[0]?.total_segments || 0;
+          const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
+          notify.recordingComplete(room.room_name, segs, mb, sessionId);
+        } catch (_) {}
+
+        const completedSession = {
+          id: sessionId,
+          room_url: room.room_url,
+          room_name: room.room_name,
+          started_at: sessionStart,
+        };
+        findAndAutoUpload(completedSession).catch((err) =>
+          console.error('[自动投稿] 异常:', err.message)
+        );
+      }
     } catch (dbErr) {
       console.error('[api] 录制结束数据库更新失败:', dbErr);
     }
   });
+
+  notify.recordingStart(room.room_name || title, caption);
 
   res.status(200).json({
     status: 'Recording started',

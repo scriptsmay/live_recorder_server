@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
+const notify = require('../lib/notify');
 
 function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] !== undefined ? vars[key] : `{${key}}`);
@@ -43,14 +44,15 @@ router.get('/upload_templates', async (req, res) => {
 
 router.post('/upload_templates', async (req, res) => {
   try {
-    const { name, room_url, title_template, desc_template, tid, tags, line, copyright, source, cover } = req.body;
+    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime } = req.body;
     if (!name) return res.status(400).json({ status: 'Error', message: '模板名称必填' });
     const result = await pool.query(
-      `INSERT INTO upload_templates (name, room_url, title_template, desc_template, tid, tags, line, copyright, source, cover)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO upload_templates (name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [name, room_url || null, title_template || '{room_name} 直播录像 {date}',
-       desc_template || '', tid || 171, tags || '', line || 'bda2',
-       copyright ?? 2, source || '', cover || '']
+       desc_template || '', tid || 171, tags || '',
+       copyright ?? 2, source || '', cover || '',
+       is_only_self ?? 0, cookies_path || '', dtime || 0]
     );
     res.status(201).json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
@@ -62,12 +64,13 @@ router.post('/upload_templates', async (req, res) => {
 router.put('/upload_templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, room_url, title_template, desc_template, tid, tags, line, copyright, source, cover } = req.body;
+    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime } = req.body;
     const result = await pool.query(
       `UPDATE upload_templates SET name=$1, room_url=$2, title_template=$3, desc_template=$4,
-       tid=$5, tags=$6, line=$7, copyright=$8, source=$9, cover=$10, updated_at=NOW()
-       WHERE id=$11 RETURNING *`,
-      [name, room_url || null, title_template, desc_template, tid, tags, line, copyright, source, cover, id]
+       tid=$5, tags=$6, copyright=$7, source=$8, cover=$9, is_only_self=$10, cookies_path=$11, dtime=$12, updated_at=NOW()
+       WHERE id=$13 RETURNING *`,
+      [name, room_url || null, title_template, desc_template, tid, tags, copyright, source || '', cover,
+       is_only_self ?? 0, cookies_path || '', dtime || 0, id]
     );
     if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     res.json({ status: 'ok', data: result.rows[0] });
@@ -119,7 +122,102 @@ router.delete('/upload_records/:id', async (req, res) => {
   }
 });
 
-// ─── 执行上传 ─────────────────────────────────
+// ─── 执行上传（可复用） ─────────────────────────
+
+async function executeUpload(session, tmpl) {
+  const room = { room_url: session.room_url, room_name: session.room_name };
+  const vars = getTemplateVars(room, session);
+  const title = renderTemplate(tmpl.title_template, vars);
+  const desc = renderTemplate(tmpl.desc_template || '', vars);
+  const tags = renderTemplate(tmpl.tags || '', vars);
+  const source = renderTemplate(tmpl.source || '{room_url}', vars);
+
+  const recs = await pool.query(
+    `SELECT * FROM recordings WHERE session_id = $1 AND status = 'completed' ORDER BY segment_index ASC`,
+    [session.id]
+  );
+  const files = recs.rows.map(r => r.file_path).filter(Boolean);
+  if (files.length === 0) { console.log(`[自动投稿] 会话 ${session.id} 无文件，跳过`); return; }
+
+  const totalSize = files.reduce((sum, f) => {
+    try { return sum + require('fs').statSync(f).size; } catch { return sum; }
+  }, 0);
+
+  const record = await pool.query(
+    `INSERT INTO upload_records (session_id, template_id, room_url, title, status, file_count, total_size)
+     VALUES ($1,$2,$3,$4,'uploading',$5,$6) RETURNING id`,
+    [session.id, tmpl.id, session.room_url, title, files.length, totalSize]
+  );
+  const recordId = record.rows[0].id;
+
+  const biliupPath = process.env.BILIUP_PATH || 'biliup';
+  const args = ['-u', tmpl.cookies_path, 'upload'];
+  if (title) args.push('--title', title);
+  if (desc) args.push('--desc', desc);
+  if (tmpl.tid) args.push('--tid', String(tmpl.tid));
+  if (tags) args.push('--tag', tags);
+  if (tmpl.copyright) args.push('--copyright', String(tmpl.copyright));
+  if (source) args.push('--source', source);
+  if (tmpl.is_only_self) args.push('--is-only-self');
+  if (tmpl.cover) args.push('--cover', tmpl.cover);
+  if (tmpl.dtime) args.push('--dtime', String(tmpl.dtime));
+  args.push(...files);
+
+  notify.uploadStart(session.room_name, tmpl.name, files.length);
+
+  const proc = spawn(biliupPath, args, { cwd: process.env.BILIUP_WORK_DIR || process.env.HOME });
+
+  let output = '';
+  proc.stdout.on('data', (d) => { output += d.toString(); });
+  proc.stderr.on('data', (d) => { output += d.toString(); });
+
+  proc.on('error', async () => {
+    await pool.query(
+      `UPDATE upload_records SET status='failed', error_message=$1, output=$2, completed_at=NOW() WHERE id=$3`,
+      ['进程启动失败', output, recordId]
+    );
+    notify.send('❌ 投稿失败', `模板：${tmpl.name}\n错误：进程启动失败`);
+  });
+
+  proc.on('close', async (code) => {
+    const cmdStr = `${biliupPath} ${args.join(' ')}`;
+    const bvMatch = output.match(/BV[\w]+/);
+    const bvId = bvMatch ? bvMatch[0] : '';
+    if (code === 0) {
+      await pool.query(
+        `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
+        [cmdStr, output, bvId, recordId]
+      );
+      notify.uploadComplete(session.room_name, title, bvId);
+    } else {
+      await pool.query(
+        `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
+        [cmdStr, output, `exit code ${code}`, recordId]
+      );
+      notify.send('❌ 投稿失败', `模板：${tmpl.name}\n标题：${title}\n错误：exit code ${code}`);
+    }
+  });
+
+  await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
+  console.log(`[自动投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
+}
+
+async function findAndAutoUpload(session) {
+  try {
+    const tmpls = await pool.query(
+      `SELECT * FROM upload_templates WHERE room_url = $1 OR room_url IS NULL ORDER BY room_url NULLS LAST LIMIT 1`,
+      [session.room_url]
+    );
+    if (tmpls.rows.length === 0) return;
+    const tmpl = tmpls.rows[0];
+    if (!tmpl.cookies_path) { console.log(`[自动投稿] 模板 ${tmpl.id} 未配置 cookies_path，跳过`); return; }
+    await executeUpload(session, tmpl);
+  } catch (err) {
+    console.error('[自动投稿] 失败:', err.message);
+  }
+}
+
+// ─── 手动投稿 ─────────────────────────────────
 
 router.post('/sessions/:id/upload', async (req, res) => {
   try {
@@ -139,77 +237,14 @@ router.post('/sessions/:id/upload', async (req, res) => {
     if (tmplResult.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     const tmpl = tmplResult.rows[0];
 
-    const recs = await pool.query(
-      `SELECT * FROM recordings WHERE session_id = $1 AND status = 'completed' ORDER BY segment_index ASC`,
-      [session.id]
-    );
-    if (recs.rows.length === 0) return res.status(400).json({ status: 'Error', message: '会话无已完成的分片文件' });
+    if (!tmpl.cookies_path) return res.status(400).json({ status: 'Error', message: '模板未配置账户文件(cookies_path)' });
 
-    const files = recs.rows.map(r => r.file_path).filter(Boolean);
-    if (files.length === 0) return res.status(400).json({ status: 'Error', message: '无有效文件路径' });
-
-    const room = { room_url: session.room_url, room_name: session.room_name };
-    const vars = getTemplateVars(room, session);
-    const title = renderTemplate(tmpl.title_template, vars);
-    const desc = renderTemplate(tmpl.desc_template || '', vars);
-    const tags = renderTemplate(tmpl.tags || '', vars);
-
-    const totalSize = files.reduce((sum, f) => { try { return sum + require('fs').statSync(f).size; } catch { return sum; } }, 0);
-
-    const record = await pool.query(
-      `INSERT INTO upload_records (session_id, template_id, room_url, title, status, file_count, total_size)
-       VALUES ($1,$2,$3,$4,'uploading',$5,$6) RETURNING id`,
-      [session.id, template_id, session.room_url, title, files.length, totalSize]
-    );
-    const recordId = record.rows[0].id;
-
-    const args = ['upload'];
-    if (title) args.push('--title', title);
-    if (desc) args.push('--desc', desc);
-    if (tmpl.tid) args.push('--tid', String(tmpl.tid));
-    if (tags) args.push('--tag', tags);
-    if (tmpl.line) args.push('--line', tmpl.line);
-    if (tmpl.copyright) args.push('--copyright', String(tmpl.copyright));
-    if (tmpl.source) args.push('--source', tmpl.source);
-    if (tmpl.cover) args.push('--cover', tmpl.cover);
-    args.push(...files);
-
-    const biliupPath = process.env.BILIUP_PATH || 'biliup';
-    const proc = spawn(biliupPath, args, { cwd: process.env.BILIUP_WORK_DIR || process.env.HOME });
-
-    let output = '';
-    proc.stdout.on('data', (d) => { output += d.toString(); });
-    proc.stderr.on('data', (d) => { output += d.toString(); });
-
-    proc.on('error', async (err) => {
-      await pool.query(
-        `UPDATE upload_records SET status='failed', error_message=$1, output=$2, completed_at=NOW() WHERE id=$3`,
-        [err.message, output, recordId]
-      );
-    });
-
-    proc.on('close', async (code) => {
-      const cmdStr = `${biliupPath} ${args.join(' ')}`;
-      if (code === 0) {
-        await pool.query(
-          `UPDATE upload_records SET status='success', command=$1, output=$2, completed_at=NOW() WHERE id=$3`,
-          [cmdStr, output, recordId]
-        );
-      } else {
-        await pool.query(
-          `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
-          [cmdStr, output, `exit code ${code}`, recordId]
-        );
-      }
-    });
-
-    await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
-
-    res.json({ status: 'ok', message: '上传已启动', data: { record_id: recordId, title, file_count: files.length } });
+    await executeUpload(session, tmpl);
+    res.json({ status: 'ok', message: '上传已启动', data: { record_id: null, title: '', file_count: 0 } });
   } catch (err) {
     console.error('[upload] 上传失败:', err);
     res.status(500).json({ status: 'Error', message: err.message });
   }
 });
 
-module.exports = router;
+module.exports = { router, findAndAutoUpload };

@@ -47,14 +47,15 @@
           <label class="form-label">简介模板</label>
           <textarea class="form-control" id="inputTmplDesc" rows="2"></textarea>
         </div>
+        <div class="mb-3">
+          <label class="form-label">账户文件 (cookies.json) <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="inputCookiesPath" placeholder="/path/to/cookies.json" />
+          <div class="form-text">biliup 登录后生成的 cookies 文件，必填绝对路径</div>
+        </div>
         <div class="row">
           <div class="col-md-3 mb-3">
             <label class="form-label">分区 TID</label>
             <input type="number" class="form-control" id="inputTmplTid" value="171" />
-          </div>
-          <div class="col-md-3 mb-3">
-            <label class="form-label">上传线路</label>
-            <input type="text" class="form-control" id="inputTmplLine" value="bda2" />
           </div>
           <div class="col-md-3 mb-3">
             <label class="form-label">版权</label>
@@ -64,17 +65,32 @@
             </select>
           </div>
           <div class="col-md-3 mb-3">
-            <label class="form-label">来源</label>
-            <input type="text" class="form-control" id="inputTmplSource" />
+            <label class="form-label">转载来源</label>
+            <input type="text" class="form-control" id="inputTmplSource" value="{room_url}" />
+            <div class="form-text">支持模板变量，默认 <code>{room_url}</code></div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">仅自己可见</label>
+            <select class="form-select" id="inputIsOnlySelf">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">标签（逗号分隔）</label>
-          <input type="text" class="form-control" id="inputTmplTags" placeholder="直播,游戏" />
-        </div>
-        <div class="mb-3">
-          <label class="form-label">封面路径</label>
-          <input type="text" class="form-control" id="inputTmplCover" placeholder="可选" />
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">标签（逗号分隔）</label>
+            <input type="text" class="form-control" id="inputTmplTags" placeholder="直播,游戏" />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">封面路径</label>
+            <input type="text" class="form-control" id="inputTmplCover" placeholder="可选" />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">延迟发布 (dtime)</label>
+            <input type="number" class="form-control" id="inputDtime" value="0" placeholder="10位时间戳" />
+            <div class="form-text">10 位 Unix 时间戳，需大于当前时间 4 小时</div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -147,12 +163,14 @@ document.addEventListener('click', async e => {
     document.getElementById('inputTmplRoom').value = t.room_url || '';
     document.getElementById('inputTmplTitle').value = t.title_template;
     document.getElementById('inputTmplDesc').value = t.desc_template || '';
+    document.getElementById('inputCookiesPath').value = t.cookies_path || '';
     document.getElementById('inputTmplTid').value = t.tid || 171;
-    document.getElementById('inputTmplLine').value = t.line || 'bda2';
     document.getElementById('inputTmplCopyright').value = t.copyright || 2;
-    document.getElementById('inputTmplSource').value = t.source || '';
+    document.getElementById('inputTmplSource').value = t.source || '{room_url}';
+    document.getElementById('inputIsOnlySelf').value = t.is_only_self || 0;
     document.getElementById('inputTmplTags').value = t.tags || '';
     document.getElementById('inputTmplCover').value = t.cover || '';
+    document.getElementById('inputDtime').value = t.dtime || 0;
     new bootstrap.Modal(document.getElementById('tmplModal')).show();
   }
 });
@@ -164,12 +182,14 @@ document.getElementById('saveTmplBtn').addEventListener('click', async () => {
     room_url: document.getElementById('inputTmplRoom').value || null,
     title_template: document.getElementById('inputTmplTitle').value.trim(),
     desc_template: document.getElementById('inputTmplDesc').value.trim(),
+    cookies_path: document.getElementById('inputCookiesPath').value.trim(),
     tid: parseInt(document.getElementById('inputTmplTid').value, 10) || 171,
-    line: document.getElementById('inputTmplLine').value.trim() || 'bda2',
     copyright: parseInt(document.getElementById('inputTmplCopyright').value, 10) || 2,
-    source: document.getElementById('inputTmplSource').value.trim(),
+    source: document.getElementById('inputTmplSource').value.trim() || '{room_url}',
+    is_only_self: parseInt(document.getElementById('inputIsOnlySelf').value, 10) || 0,
     tags: document.getElementById('inputTmplTags').value.trim(),
     cover: document.getElementById('inputTmplCover').value.trim(),
+    dtime: parseInt(document.getElementById('inputDtime').value, 10) || 0,
   };
   if (id) {
     await apiAction(`/api/upload_templates/${id}`, 'PUT', body);
@@ -189,12 +209,14 @@ function resetTmplForm() {
   document.getElementById('inputTmplRoom').value = '';
   document.getElementById('inputTmplTitle').value = '{room_name} 直播录像 {date}';
   document.getElementById('inputTmplDesc').value = '';
+  document.getElementById('inputCookiesPath').value = '';
   document.getElementById('inputTmplTid').value = 171;
-  document.getElementById('inputTmplLine').value = 'bda2';
   document.getElementById('inputTmplCopyright').value = 2;
-  document.getElementById('inputTmplSource').value = '';
+  document.getElementById('inputTmplSource').value = '{room_url}';
+  document.getElementById('inputIsOnlySelf').value = 0;
   document.getElementById('inputTmplTags').value = '';
   document.getElementById('inputTmplCover').value = '';
+  document.getElementById('inputDtime').value = 0;
 }
 
 loadRoomSelect();

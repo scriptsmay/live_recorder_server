@@ -79,6 +79,7 @@
 | total_segments | INTEGER | DEFAULT 0 | 分片文件数 |
 | total_size | BIGINT | DEFAULT 0 | 总大小（字节） |
 | output_dir | VARCHAR(1024) | DEFAULT '' | 输出目录 |
+| caption | VARCHAR(1024) | DEFAULT '' | 直播描述/备注 |
 | created_at | TIMESTAMP | DEFAULT NOW() | |
 
 ### recordings — 录制文件
@@ -110,10 +111,12 @@
 | desc_template | TEXT | | 简介模板 |
 | tid | INTEGER | DEFAULT 171 | B站分区 ID |
 | tags | VARCHAR(1024) | | 标签，逗号分隔 |
-| line | VARCHAR(50) | DEFAULT 'bda2' | 上传线路 |
 | copyright | INTEGER | DEFAULT 2 | 1-自制 2-转载 |
-| source | VARCHAR(1024) | | 转载来源 |
+| source | VARCHAR(1024) | DEFAULT `{room_url}` | 转载来源（支持模板变量） |
 | cover | VARCHAR(1024) | | 封面路径 |
+| is_only_self | INTEGER | DEFAULT 0 | 仅自己可见，0-关闭 1-开启 |
+| cookies_path | VARCHAR(1024) | | biliup 账户文件绝对路径（必填） |
+| dtime | INTEGER | DEFAULT 0 | 延迟发布时间，10 位 Unix 时间戳 |
 | created_at / updated_at | TIMESTAMP | | |
 
 **模板变量：** `{room_name}` `{room_url}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`
@@ -135,6 +138,7 @@
 | error_message | TEXT | | 错误信息 |
 | file_count | INTEGER | | 文件数 |
 | total_size | BIGINT | | 总大小 |
+| bv_id | VARCHAR(50) | DEFAULT '' | B站 BV 号，投稿成功后从输出中提取 |
 | started_at / completed_at / created_at | TIMESTAMP | | |
 
 ---

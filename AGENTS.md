@@ -29,14 +29,25 @@
 - `POST /api/rooms/:id/resume` —— 恢复录制（SIGCONT）
 - `POST /api/rooms/:id/stop` —— 停止录制（SIGTERM）
 
+### 投稿
+- `GET/POST /api/upload_templates` —— 投稿模板列表 / 创建
+- `PUT/DELETE /api/upload_templates/:id` —— 更新 / 删除模板
+- `POST /api/sessions/:id/upload` —— 对录制会话执行投稿（需指定模板ID）
+- `GET/DELETE /api/upload_records` —— 投稿记录查询 / 删除
+
 ### 页面
 - `GET /apiview` —— 从 `/` 重定向
 - `GET /logs` —— 查看/删除服务器日志
+- `GET /templates` —— 投稿模板管理
+- `GET /upload_records` —— 投稿记录
+- `GET /sessions` —— 录制会话（含投稿按钮）
 
 ## 关键环境变量
 - `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建
 - `PORT` —— 默认 1123
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
+- `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
+- `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`
 
 ## 注意事项
 - .env 已被 gitignore —— **切勿提交凭据**（本仓库中的 Lark、Redis、Gotify、数据库密码均为真实值）

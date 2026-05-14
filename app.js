@@ -17,7 +17,7 @@ const redis = require('./db/redis');
 const htmlRouter = require('./router/html');
 const apiRouter = require('./router/api');
 const roomsRouter = require('./router/rooms');
-const uploadRouter = require('./router/upload');
+const { router: uploadRouter } = require('./router/upload');
 
 // ──────────────────────────────────────────────
 // 2. Express 配置
