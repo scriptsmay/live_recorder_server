@@ -1,0 +1,202 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>投稿模板</h2>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#tmplModal">+ 新增模板</button>
+</div>
+
+<table class="table table-hover align-middle" id="tmplTable">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>名称</th>
+      <th>关联直播间</th>
+      <th>标题模板</th>
+      <th>分区</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="tmplBody"></tbody>
+</table>
+<p class="text-muted text-center" id="emptyTmpl">暂无模板</p>
+
+<!-- 编辑弹窗 -->
+<div class="modal fade" id="tmplModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="tmplModalTitle">新增投稿模板</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editTmplId" />
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">模板名称 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="inputTmplName" placeholder="默认模板" />
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">关联直播间（可选）</label>
+            <select class="form-select" id="inputTmplRoom"></select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">标题模板</label>
+          <input type="text" class="form-control" id="inputTmplTitle" value="{room_name} 直播录像 {date}" />
+          <div class="form-text">支持 <code>{room_name}</code> <code>{date}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">简介模板</label>
+          <textarea class="form-control" id="inputTmplDesc" rows="2"></textarea>
+        </div>
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <label class="form-label">分区 TID</label>
+            <input type="number" class="form-control" id="inputTmplTid" value="171" />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">上传线路</label>
+            <input type="text" class="form-control" id="inputTmplLine" value="bda2" />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">版权</label>
+            <select class="form-select" id="inputTmplCopyright">
+              <option value="1">自制</option>
+              <option value="2" selected>转载</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">来源</label>
+            <input type="text" class="form-control" id="inputTmplSource" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">标签（逗号分隔）</label>
+          <input type="text" class="form-control" id="inputTmplTags" placeholder="直播,游戏" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">封面路径</label>
+          <input type="text" class="form-control" id="inputTmplCover" placeholder="可选" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="saveTmplBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadTemplates() {
+  const res = await fetch('/api/upload_templates');
+  const json = await res.json();
+  const tbody = document.getElementById('tmplBody');
+  const empty = document.getElementById('emptyTmpl');
+  tbody.innerHTML = '';
+  if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  json.data.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.id}</td>
+      <td>${t.name}</td>
+      <td><small>${t.room_name || t.room_url || '-'}</small></td>
+      <td><code>${t.title_template || '-'}</code></td>
+      <td>${t.tid || '-'}</td>
+      <td class="text-nowrap">
+        <button class="btn btn-sm btn-outline-primary editTmplBtn"
+          data='${JSON.stringify(t).replace(/'/g, '&#39;')}'>编辑</button>
+        <button class="btn btn-sm btn-outline-danger deleteTmplBtn" data-id="${t.id}">删除</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function apiAction(url, method, body) {
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const json = await res.json();
+  if (!res.ok) { alert(json.message || '操作失败'); throw new Error(json.message); }
+  return json;
+}
+
+async function loadRoomSelect() {
+  const res = await fetch('/api/rooms');
+  const json = await res.json();
+  const sel = document.getElementById('inputTmplRoom');
+  sel.innerHTML = '<option value="">不限</option>';
+  if (json.data) json.data.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.room_url;
+    opt.textContent = r.room_name || r.room_url;
+    sel.appendChild(opt);
+  });
+}
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[class*="TmplBtn"]');
+  if (!btn) return;
+  if (btn.classList.contains('deleteTmplBtn')) {
+    if (!confirm('确定删除此模板？')) return;
+    await apiAction(`/api/upload_templates/${btn.dataset.id}`, 'DELETE');
+    loadTemplates();
+  }
+  if (btn.classList.contains('editTmplBtn')) {
+    const t = JSON.parse(btn.getAttribute('data'));
+    document.getElementById('editTmplId').value = t.id;
+    document.getElementById('tmplModalTitle').textContent = '编辑投稿模板';
+    document.getElementById('inputTmplName').value = t.name;
+    document.getElementById('inputTmplRoom').value = t.room_url || '';
+    document.getElementById('inputTmplTitle').value = t.title_template;
+    document.getElementById('inputTmplDesc').value = t.desc_template || '';
+    document.getElementById('inputTmplTid').value = t.tid || 171;
+    document.getElementById('inputTmplLine').value = t.line || 'bda2';
+    document.getElementById('inputTmplCopyright').value = t.copyright || 2;
+    document.getElementById('inputTmplSource').value = t.source || '';
+    document.getElementById('inputTmplTags').value = t.tags || '';
+    document.getElementById('inputTmplCover').value = t.cover || '';
+    new bootstrap.Modal(document.getElementById('tmplModal')).show();
+  }
+});
+
+document.getElementById('saveTmplBtn').addEventListener('click', async () => {
+  const id = document.getElementById('editTmplId').value;
+  const body = {
+    name: document.getElementById('inputTmplName').value.trim() || '未命名',
+    room_url: document.getElementById('inputTmplRoom').value || null,
+    title_template: document.getElementById('inputTmplTitle').value.trim(),
+    desc_template: document.getElementById('inputTmplDesc').value.trim(),
+    tid: parseInt(document.getElementById('inputTmplTid').value, 10) || 171,
+    line: document.getElementById('inputTmplLine').value.trim() || 'bda2',
+    copyright: parseInt(document.getElementById('inputTmplCopyright').value, 10) || 2,
+    source: document.getElementById('inputTmplSource').value.trim(),
+    tags: document.getElementById('inputTmplTags').value.trim(),
+    cover: document.getElementById('inputTmplCover').value.trim(),
+  };
+  if (id) {
+    await apiAction(`/api/upload_templates/${id}`, 'PUT', body);
+  } else {
+    await apiAction('/api/upload_templates', 'POST', body);
+  }
+  bootstrap.Modal.getInstance(document.getElementById('tmplModal')).hide();
+  resetTmplForm();
+  loadTemplates();
+});
+
+document.getElementById('tmplModal').addEventListener('hidden.bs.modal', resetTmplForm);
+function resetTmplForm() {
+  document.getElementById('editTmplId').value = '';
+  document.getElementById('tmplModalTitle').textContent = '新增投稿模板';
+  document.getElementById('inputTmplName').value = '';
+  document.getElementById('inputTmplRoom').value = '';
+  document.getElementById('inputTmplTitle').value = '{room_name} 直播录像 {date}';
+  document.getElementById('inputTmplDesc').value = '';
+  document.getElementById('inputTmplTid').value = 171;
+  document.getElementById('inputTmplLine').value = 'bda2';
+  document.getElementById('inputTmplCopyright').value = 2;
+  document.getElementById('inputTmplSource').value = '';
+  document.getElementById('inputTmplTags').value = '';
+  document.getElementById('inputTmplCover').value = '';
+}
+
+loadRoomSelect();
+loadTemplates();
+</script>

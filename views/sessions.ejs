@@ -53,6 +53,12 @@ async function loadSessions(roomUrl) {
           <div class="col-md-3"><small>大小: ${totalSize}</small></div>
         </div>
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="${s.id}">查看文件</button>
+        ${s.status === 'completed' ? `
+        <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="${s.id}">
+          <option value="">选择模板投稿</option>
+        </select>
+        <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="${s.id}" disabled>投稿</button>
+        ` : ''}
         <div class="mt-2 d-none filesContainer" id="files_${s.id}">
           <div class="spinner-border spinner-border-sm"><span class="visually-hidden">加载中...</span></div>
         </div>
@@ -91,6 +97,54 @@ async function loadSessions(roomUrl) {
   });
 }
 
+async function loadTemplates() {
+  const res = await fetch('/api/upload_templates');
+  const json = await res.json();
+  if (!json.data) return;
+  document.querySelectorAll('.uploadTmplSelect').forEach(sel => {
+    const currentUrl = sel.closest('.card')?.querySelector('.card-header small')?.textContent?.trim() || '';
+    sel.innerHTML = '<option value="">选择模板投稿</option>';
+    json.data.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name + (t.room_url ? ' [' + (t.room_name || t.room_url) + ']' : '');
+      sel.appendChild(opt);
+    });
+  });
+}
+
+document.addEventListener('change', e => {
+  const sel = e.target.closest('.uploadTmplSelect');
+  if (!sel) return;
+  const btn = sel.parentElement.querySelector('.uploadBtn');
+  btn.disabled = !sel.value;
+});
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.uploadBtn');
+  if (!btn || btn.disabled) return;
+  if (!confirm('确认投稿？')) return;
+  const sessionId = btn.dataset.sessionId;
+  const sel = btn.parentElement.querySelector('.uploadTmplSelect');
+  const templateId = sel.value;
+  btn.disabled = true;
+  btn.textContent = '投稿中...';
+  const res = await fetch(`/api/sessions/${sessionId}/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template_id: parseInt(templateId) }),
+  });
+  const json = await res.json();
+  if (res.ok) {
+    btn.textContent = '已提交';
+    btn.className = 'btn btn-sm btn-success';
+  } else {
+    alert(json.message || '投稿失败');
+    btn.disabled = false;
+    btn.textContent = '投稿';
+  }
+});
+
 async function loadRoomFilter() {
   const res = await fetch('/api/rooms');
   const json = await res.json();
@@ -110,4 +164,5 @@ document.getElementById('roomFilter').addEventListener('change', e => {
 
 loadRoomFilter();
 loadSessions('');
+loadTemplates();
 </script>

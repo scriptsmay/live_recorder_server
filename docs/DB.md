@@ -97,6 +97,46 @@
 | ended_at | TIMESTAMP | | 结束时间 |
 | status | VARCHAR(20) | DEFAULT 'recording' | `completed` / `interrupted` |
 
+### upload_templates — 投稿模板
+
+投稿参数模板，支持变量替换。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | SERIAL | PRIMARY KEY | |
+| name | VARCHAR(255) | NOT NULL | 模板名称 |
+| room_url | VARCHAR(512) | FK → rooms(room_url) ON DELETE SET NULL | 关联直播间（可选） |
+| title_template | VARCHAR(1024) | | 标题模板，默认 `{room_name} 直播录像 {date}` |
+| desc_template | TEXT | | 简介模板 |
+| tid | INTEGER | DEFAULT 171 | B站分区 ID |
+| tags | VARCHAR(1024) | | 标签，逗号分隔 |
+| line | VARCHAR(50) | DEFAULT 'bda2' | 上传线路 |
+| copyright | INTEGER | DEFAULT 2 | 1-自制 2-转载 |
+| source | VARCHAR(1024) | | 转载来源 |
+| cover | VARCHAR(1024) | | 封面路径 |
+| created_at / updated_at | TIMESTAMP | | |
+
+**模板变量：** `{room_name}` `{room_url}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`
+
+### upload_records — 投稿记录
+
+每次投稿操作的执行记录。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | SERIAL | PRIMARY KEY | |
+| session_id | INTEGER | FK → recording_sessions(id) | 关联录制会话 |
+| template_id | INTEGER | FK → upload_templates(id) | 使用的模板 |
+| room_url | VARCHAR(512) | | 直播间地址 |
+| title | VARCHAR(512) | | 实际投稿标题 |
+| status | VARCHAR(20) | DEFAULT 'pending' | `pending` `uploading` `success` `failed` |
+| command | TEXT | | 实际执行的命令 |
+| output | TEXT | | 命令输出 |
+| error_message | TEXT | | 错误信息 |
+| file_count | INTEGER | | 文件数 |
+| total_size | BIGINT | | 总大小 |
+| started_at / completed_at / created_at | TIMESTAMP | | |
+
 ---
 
 ## 迁移

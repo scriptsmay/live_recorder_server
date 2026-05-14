@@ -17,6 +17,7 @@ const redis = require('./db/redis');
 const htmlRouter = require('./router/html');
 const apiRouter = require('./router/api');
 const roomsRouter = require('./router/rooms');
+const uploadRouter = require('./router/upload');
 
 // ──────────────────────────────────────────────
 // 2. Express 配置
@@ -52,6 +53,7 @@ app.use((req, res, next) => {
 app.use('/', htmlRouter);
 app.use('/api', apiRouter);
 app.use('/api', roomsRouter);
+app.use('/api', uploadRouter);
 
 // ──────────────────────────────────────────────
 // 4. 启动前清理

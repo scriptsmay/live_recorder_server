@@ -23,6 +23,14 @@ router.get('/sessions', (req, res) => {
   res.render('sessions', { title: '录制会话' });
 });
 
+router.get('/templates', (req, res) => {
+  res.render('templates', { title: '投稿模板' });
+});
+
+router.get('/upload_records', (req, res) => {
+  res.render('upload_records', { title: '投稿记录' });
+});
+
 router.get('/recordings', (req, res) => {
   res.render('recordings', { title: '录制历史' });
 });

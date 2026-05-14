@@ -58,6 +58,43 @@ async function migrate() {
       ALTER TABLE recordings ADD COLUMN IF NOT EXISTS segment_index INTEGER DEFAULT 0
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS upload_templates (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL DEFAULT '',
+        room_url VARCHAR(512) REFERENCES rooms(room_url) ON DELETE SET NULL,
+        title_template VARCHAR(1024) NOT NULL DEFAULT '{room_name} 直播录像 {date}',
+        desc_template TEXT DEFAULT '',
+        tid INTEGER DEFAULT 171,
+        tags VARCHAR(1024) DEFAULT '',
+        line VARCHAR(50) DEFAULT 'bda2',
+        copyright INTEGER DEFAULT 2,
+        source VARCHAR(1024) DEFAULT '',
+        cover VARCHAR(1024) DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS upload_records (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES recording_sessions(id) ON DELETE SET NULL,
+        template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL,
+        room_url VARCHAR(512),
+        title VARCHAR(512) DEFAULT '',
+        status VARCHAR(20) DEFAULT 'pending',
+        command TEXT DEFAULT '',
+        output TEXT DEFAULT '',
+        error_message TEXT DEFAULT '',
+        file_count INTEGER DEFAULT 0,
+        total_size BIGINT DEFAULT 0,
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {
