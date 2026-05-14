@@ -1,0 +1,70 @@
+html {
+  font-size: 14px;
+}
+
+body {
+  background-color: #f8f9fa;
+  font-size: 14px;
+  font-family:
+    'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans CJK SC', 'HanHei SC',
+    '方正兰亭黑_GB18030', '方正兰亭黑_GBK', system-ui, ui-sans-serif,
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji', emoji;
+}
+ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+li {
+  margin: 5px 0;
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+a {
+  text-decoration: none;
+}
+
+.card {
+  transition: transform 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.card-img-top {
+  height: 140px;
+  object-fit: cover;
+}
+
+.card-text-duration {
+  position: absolute;
+  right: 10px;
+  top: 110px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+li {
+  margin: 5px 0;
+}
+
+pre {
+  background-color: #f4f4f4;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.list-group-item {
+  word-break: break-all;
+}

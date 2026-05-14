@@ -1,0 +1,43 @@
+<!-- Bootstrap 导航栏 -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light bg-gradient mb-3">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">直播视频下载监听服务</a>
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarNav"
+      aria-controls="navbarNav"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a
+            class="nav-link <%= path === '/apiview' ? 'active' : '' %>"
+            href="/apiview"
+            >API</a
+          >
+        </li>
+
+        <li class="nav-item">
+          <a
+            class="nav-link <%= path === '/logs' ? 'active' : '' %>"
+            href="/logs"
+            >日志</a
+          >
+        </li>
+        <li class="nav-item">
+          <a
+            class="nav-link <%= path === '/tasks' ? 'active' : '' %>"
+            href="/tasks"
+            >[TODO]任务</a
+          >
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>

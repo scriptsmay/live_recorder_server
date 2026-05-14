@@ -1,0 +1,39 @@
+{
+  "name": "live_recorder_server",
+  "version": "1.0.0",
+  "description": "express server",
+  "keywords": [
+    "express"
+  ],
+  "homepage": "https://github.com/scriptsmay/live_recorder_server#readme",
+  "bugs": {
+    "url": "https://github.com/scriptsmay/live_recorder_server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scriptsmay/live_recorder_server.git"
+  },
+  "license": "ISC",
+  "author": "scriptsmay",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "pm2 start ecosystem.config.js --env production",
+    "dev": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop live_recorder_server && pm2 delete live_recorder_server",
+    "restart": "pm2 restart live_recorder_server",
+    "logs": "pm2 logs live_recorder_server"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cors": "^2.8.6",
+    "dayjs": "^1.11.20",
+    "dotenv": "^17.4.2",
+    "ejs": "^5.0.2",
+    "express": "^5.2.1",
+    "express-ejs-layouts": "^2.5.1",
+    "morgan": "^1.10.1",
+    "redis": "^5.12.1"
+  }
+}

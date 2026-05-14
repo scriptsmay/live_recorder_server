@@ -1,0 +1,16 @@
+#表示是最顶层的配置文件，发现设为true时，才会停止查找.editorconfig文件
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.sh]
+format_command = shfmt -i 2 -sr
