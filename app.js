@@ -61,7 +61,7 @@ app.use('/api', uploadRouter);
 // ──────────────────────────────────────────────
 // 4. 启动前清理与恢复
 // ──────────────────────────────────────────────
-const MAX_RESUME_RETRIES = 3;
+const MAX_RESUME_RETRIES = 0; // 快手流地址过期快，不做 ffmpeg 重连
 const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_FILE_TIMEOUT_MS = 10 * 60 * 1000;
 
