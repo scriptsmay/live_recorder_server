@@ -156,12 +156,53 @@ DownloaderFactory.getActiveDownloader()
 
 ---
 
-## 四、看门狗
+## 四、看门狗 (`lib/watchdog.js`)
+
+看门狗是独立模块，单实例运行。职责边界如下：
 
 ### 运行周期
 
-- 读取 `settings.watchdog_interval`（默认 30 秒）
+- `watchdog.start()` → 100ms 后首次执行 → 之后每 `watchdog_interval`（默认 30s）循环
 - 最少 10 秒，防止设置错误
+- 同一时间只有 1 个定时器在跑（模块级 `watchdogTimer` 变量控制）
+
+### 属于看门狗（`lib/watchdog.js`）
+
+| 函数 | 触发 | 职责 |
+|------|------|------|
+| `checkStaleRecordings()` | 每周期 | 检查录制进程是否存活、文件是否僵死，清理死录制 |
+| `scanActiveSegments()` | 每周期 | 扫描活跃录制目录，将新完成的 `.flv`/`.mp4` 写入 recording_files |
+| `cleanupFragmentFiles()` | 每周期 | 删除下载目录中小于 `filtering_threshold` 且超过 2 分钟的碎片文件 |
+| `runFileScan()` | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件 |
+
+### 不属于看门狗（但在 `app.js` 启动时运行）
+
+| 函数 | 所在文件 | 触发 | 职责 |
+|------|---------|------|------|
+| `cleanupStaleRecordings()` | `app.js` | 启动 | 杀孤儿进程、重命名 `.part`、追踪遗留文件、尝试恢复会话 |
+| `cleanupStaleRedis()` | `app.js` | 启动 | 清理 Redis 过期 `active_task:*` |
+| `scanRecordingFiles()` | `lib/scan-files.js` | 启动 / API | 真正的文件扫描逻辑，`watchdog.runFileScan()` 和 `POST /api/scan_files` 共用 |
+
+### 周期性执行链
+
+```
+watchdog.start()
+  └─ setTimeout(runWatchdog, 100)
+       ├─ checkStaleRecordings()    ← 进程 + 文件僵死检查
+       ├─ scanActiveSegments()      ← 实时追踪已完成分片
+       ├─ cleanupFragmentFiles()    ← 碎片文件清理
+       └─ setTimeout(runWatchdog, interval)  ← 下次周期
+```
+
+### 启动时执行链（非周期）
+
+```
+startup()
+  ├─ migrate()                      ← DB 迁移
+  ├─ cleanupStaleRecordings()       ← 杀孤儿进程 + 重命名 .part + 追踪遗留文件
+  ├─ cleanupStaleRedis()            ← 清理 Redis 过期 key
+  └─ watchdog.runFileScan()         ← 扫描下载目录，标记孤文件 / 缺失
+```
 
 ### checkStaleRecordings()
 
@@ -179,10 +220,18 @@ DownloaderFactory.getActiveDownloader()
 
 ### scanActiveSegments()
 
-- 在每次看门狗周期中运行
 - 扫描所有活跃录制房间的输出目录
 - 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + recordings + 更新 session 合计
+- 小于 `filtering_threshold` 的碎片跳过不追踪
 - 最大延迟 30 秒（一个看门狗周期）
+
+### cleanupFragmentFiles()
+
+- 扫描整个 `VIDEO_DOWNLOAD_DIR`
+- 找到小于 `filtering_threshold` 的 `.flv`/`.mp4` 文件
+- 跳过创建不足 2 分钟的新文件（防止误删刚完成的分片）
+- 删除磁盘文件 + 关联的 `recordings` + `recording_files` 记录
+- 更新 session 合计
 
 ---
 
