@@ -17,6 +17,7 @@
   <tbody id="tmplBody"></tbody>
 </table>
 <p class="text-muted text-center" id="emptyTmpl">暂无模板</p>
+<%- include('partials/_pagination', { prefix: 'tmpl', hideFirst: true }) %>
 
 <!-- 编辑弹窗 -->
 <div class="modal fade" id="tmplModal" tabindex="-1">
@@ -120,7 +121,9 @@ async function loadTemplates() {
   tbody.innerHTML = '';
   if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
   empty.style.display = 'none';
-  json.data.forEach(t => {
+  setupPagination('tmpl', json.data, (pageData) => {
+    tbody.innerHTML = '';
+    pageData.forEach(t => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${t.id}</td>
@@ -136,6 +139,7 @@ async function loadTemplates() {
         <button class="btn btn-sm btn-outline-danger deleteTmplBtn" data-id="${t.id}">删除</button>
       </td>`;
     tbody.appendChild(tr);
+  });
   });
 }
 

@@ -10,6 +10,7 @@
 
 <div id="sessionList"></div>
 <p class="text-muted text-center" id="emptyMsg">暂无录制会话</p>
+<%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
 
 <script>
   async function loadSessions(roomUrl) {
@@ -40,7 +41,9 @@
     }
     empty.style.display = 'none';
 
-    for (const s of sessJson.data) {
+    setupPagination('sess', sessJson.data, (pageData) => {
+      container.innerHTML = '';
+      for (const s of pageData) {
       const statusBadge =
         {
           recording: '<span class="badge bg-primary">录制中</span>',
@@ -103,6 +106,7 @@
     `;
       container.appendChild(card);
     }
+    });
 
     document.querySelectorAll('.toggleFiles').forEach((btn) => {
       btn.addEventListener('click', async (e) => {

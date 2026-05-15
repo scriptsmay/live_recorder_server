@@ -19,6 +19,7 @@
   </table>
   <p class="text-muted text-center" id="emptyRec">暂无投稿记录</p>
 </div>
+<%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
 
 <div class="modal fade" id="filesModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -59,7 +60,9 @@ async function loadRecords() {
   tbody.innerHTML = '';
   if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
   empty.style.display = 'none';
-  json.data.forEach(r => {
+  setupPagination('rec', json.data, (pageData) => {
+    tbody.innerHTML = '';
+    pageData.forEach(r => {
     const badge = {
       pending: '<span class="badge bg-secondary">等待</span>',
       uploading: '<span class="badge bg-primary">上传中</span>',
@@ -82,6 +85,7 @@ async function loadRecords() {
         <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button>
       </td>`;
     tbody.appendChild(tr);
+  });
   });
 }
 

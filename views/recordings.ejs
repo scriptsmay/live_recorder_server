@@ -26,6 +26,7 @@
   </table>
   <p class="text-muted text-center" id="emptyRecMsg">暂无录制记录</p>
 </div>
+<%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
 
 <script>
 async function loadRecordings(roomUrl) {
@@ -41,7 +42,9 @@ async function loadRecordings(roomUrl) {
     return;
   }
   empty.style.display = 'none';
-  json.data.forEach(r => {
+  setupPagination('rec', json.data, (pageData) => {
+    tbody.innerHTML = '';
+    pageData.forEach(r => {
     const statusBadge = {
       recording: '<span class="badge bg-primary">录制中</span>',
       completed: '<span class="badge bg-success">已完成</span>',
@@ -60,6 +63,7 @@ async function loadRecordings(roomUrl) {
       <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button></td>
     `;
     tbody.appendChild(tr);
+  });
   });
 }
 

@@ -1,0 +1,40 @@
+<div class="d-flex justify-content-between align-items-center mt-2" id="<%= prefix %>_pagination" style="<%= hideFirst ? 'display:none' : '' %>">
+  <small class="text-muted" id="<%= prefix %>_info">共 0 条</small>
+  <nav>
+    <ul class="pagination pagination-sm mb-0">
+      <li class="page-item disabled" id="<%= prefix %>_prev">
+        <a class="page-link" href="#" data-page="prev">上一页</a>
+      </li>
+      <li class="page-item disabled" id="<%= prefix %>_next">
+        <a class="page-link" href="#" data-page="next">下一页</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+<script>
+function setupPagination(prefix, data, renderFn, pageSize) {
+  pageSize = pageSize || 10;
+  let page = 1;
+  const total = data.length;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const wrap = document.getElementById(prefix + '_pagination');
+  const info = document.getElementById(prefix + '_info');
+  const prev = document.getElementById(prefix + '_prev');
+  const next = document.getElementById(prefix + '_next');
+  const renderPage = (p) => {
+    page = p;
+    const start = (page - 1) * pageSize;
+    const end = Math.min(start + pageSize, total);
+    renderFn(data.slice(start, end));
+    info.textContent = total > 0 ? `第 ${start + 1}-${end} 条，共 ${total} 条` : '共 0 条';
+    prev.classList.toggle('disabled', page <= 1);
+    next.classList.toggle('disabled', page >= totalPages);
+    wrap.style.display = '';
+  };
+  if (total <= pageSize) wrap.style.display = 'none';
+  prev.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); if (page > 1) renderPage(page - 1); });
+  next.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); if (page < totalPages) renderPage(page + 1); });
+  renderPage(1);
+}
+</script>

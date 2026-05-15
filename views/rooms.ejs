@@ -3,7 +3,26 @@
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roomModal">+ 新增直播间</button>
 </div>
 
-<div id="roomsBody" hx-get="/_/rooms/table" hx-trigger="load" hx-swap="innerHTML"></div>
+<div class="table-responsive">
+  <table class="table table-hover align-middle" id="roomsTable">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>名称</th>
+        <th>直播间地址</th>
+        <th>状态</th>
+        <th>通知</th>
+        <th>监听</th>
+        <th>文件名模板</th>
+        <th>分段时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="roomsBody"></tbody>
+  </table>
+  <p class="text-muted text-center" id="emptyRooms">暂无直播间数据</p>
+</div>
+<%- include('partials/_pagination', { prefix: 'room', hideFirst: true }) %>
 
 <!-- 创建/编辑 Modal -->
 <div class="modal fade" id="roomModal" tabindex="-1">
@@ -66,6 +85,41 @@ async function apiAction(url, method, body) {
   return res;
 }
 
+async function loadRooms() {
+  const res = await fetch('/api/rooms');
+  const json = await res.json();
+  const tbody = document.getElementById('roomsBody');
+  const empty = document.getElementById('emptyRooms');
+  tbody.innerHTML = '';
+  if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  setupPagination('room', json.data, (pageData) => {
+    tbody.innerHTML = '';
+    pageData.forEach(r => {
+      const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status;
+      const seg = r.segment_duration;
+      tbody.innerHTML += `<tr>
+        <td>${r.id}</td>
+        <td>${r.room_name || '-'}</td>
+        <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url}</a></td>
+        <td>${statusBadge}</td>
+        <td>${r.notification_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
+        <td>${r.monitoring_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
+        <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
+        <td>${seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-'}</td>
+        <td class="text-nowrap">
+          ${r.status === 'idle' ? `<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}">编辑</button>
+          <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="${r.id}">删除</button>` : ''}
+          ${r.status === 'recording' ? `<button class="btn btn-sm btn-outline-warning actBtn" data-id="${r.id}" data-action="pause">暂停</button>
+          <button class="btn btn-sm btn-outline-danger actBtn" data-id="${r.id}" data-action="stop">停止</button>` : ''}
+          ${r.status === 'paused' ? `<button class="btn btn-sm btn-outline-success actBtn" data-id="${r.id}" data-action="resume">恢复</button>
+          <button class="btn btn-sm btn-outline-danger actBtn" data-id="${r.id}" data-action="stop">停止</button>` : ''}
+        </td>
+      </tr>`;
+    });
+  });
+}
+
 document.getElementById('saveBtn').addEventListener('click', async () => {
   const id = document.getElementById('editId').value;
   const url = document.getElementById('inputUrl').value.trim();
@@ -85,7 +139,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   if (res.ok) {
     bootstrap.Modal.getInstance(document.getElementById('roomModal')).hide();
     resetForm();
-    htmx.ajax('GET', '/_/rooms/table', { target: '#roomsBody', swap: 'innerHTML' });
+    loadRooms();
   }
 });
 
@@ -105,23 +159,41 @@ document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetFo
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('.editBtn');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  fetch(`/api/rooms/${id}`)
-    .then(r => r.json())
-    .then(json => {
-      if (!json.data) return;
-      const r = json.data;
-      document.getElementById('modalTitle').textContent = '编辑直播间';
-      document.getElementById('editId').value = r.id;
-      document.getElementById('inputUrl').value = r.room_url;
-      document.getElementById('inputUrl').disabled = true;
-      document.getElementById('inputName').value = r.room_name || '';
-      document.getElementById('inputTemplate').value = r.filename_template || '';
-      document.getElementById('inputSegment').value = r.segment_duration || 0;
-      document.getElementById('inputNotify').checked = r.notification_enabled !== false;
-      document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
-      new bootstrap.Modal(document.getElementById('roomModal')).show();
-    });
+  if (btn) {
+    const id = btn.dataset.id;
+    fetch(`/api/rooms/${id}`)
+      .then(r => r.json())
+      .then(json => {
+        if (!json.data) return;
+        const r = json.data;
+        document.getElementById('modalTitle').textContent = '编辑直播间';
+        document.getElementById('editId').value = r.id;
+        document.getElementById('inputUrl').value = r.room_url;
+        document.getElementById('inputUrl').disabled = true;
+        document.getElementById('inputName').value = r.room_name || '';
+        document.getElementById('inputTemplate').value = r.filename_template || '';
+        document.getElementById('inputSegment').value = r.segment_duration || 0;
+        document.getElementById('inputNotify').checked = r.notification_enabled !== false;
+        document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
+        new bootstrap.Modal(document.getElementById('roomModal')).show();
+      });
+    return;
+  }
+  const actBtn = e.target.closest('.actBtn');
+  if (actBtn) {
+    const id = actBtn.dataset.id;
+    const action = actBtn.dataset.action;
+    const confirmMsg = { stop: '确定停止录制？', delete: '确定删除此直播间？' }[action];
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => { if (r.ok) loadRooms(); });
+    return;
+  }
+  const delBtn = e.target.closest('.delRoomBtn');
+  if (delBtn) {
+    if (!confirm('确定删除此直播间？')) return;
+    apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => { if (r.ok) loadRooms(); });
+  }
 });
+
+loadRooms();
 </script>

@@ -19,6 +19,7 @@
 </ul>
 
 <div id="fileList"><div class="text-center text-muted py-4">加载中...</div></div>
+<%- include('partials/_pagination', { prefix: 'file', hideFirst: true }) %>
 
 <div class="modal fade" id="sessionModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -66,7 +67,9 @@
       container.innerHTML = '<p class="text-muted text-center py-4">无文件</p>';
       return;
     }
-    for (const f of json.data) {
+    setupPagination('file', json.data, (pageData) => {
+      container.innerHTML = '';
+      for (const f of pageData) {
       const card = document.createElement('div');
       card.className = 'card mb-2';
       card.innerHTML = `
@@ -86,6 +89,7 @@
         </div>`;
       container.appendChild(card);
     }
+    });
     document.querySelectorAll('.associateOpenBtn').forEach(btn => {
       btn.addEventListener('click', () => openSessionModal(btn.dataset.fileId, btn.dataset.fileName));
     });
