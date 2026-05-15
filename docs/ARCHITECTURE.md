@@ -27,6 +27,8 @@
 
 ## 一、会话生命周期
 
+**会话的文件列表以 `recording_files` 表为数据源**（而非 `recordings` 表）。`recording_files` 跟踪实际磁盘文件，`recordings` 仅为元数据表供流媒体播放等下游使用。
+
 ```
                       ┌── 新录制请求 ──────────────────┐
                       │                                │
@@ -37,6 +39,9 @@
               │              │
               │  看门狗实时   │── 每 30s ──→ scanActiveSegments()
               │  追踪分片     │             写入 recording_files + recordings
+              │              │
+              │  GET /api    │── 会话详情直接查询 recording_files
+              │  /sessions   │   （不查 recordings 表）
               └──────┬───────┘
                      │
         ┌────────────┼────────────┐
@@ -168,20 +173,20 @@ DownloaderFactory.getActiveDownloader()
 
 ### 属于看门狗（`lib/watchdog.js`）
 
-| 函数 | 触发 | 职责 |
-|------|------|------|
-| `checkStaleRecordings()` | 每周期 | 检查录制进程是否存活、文件是否僵死，清理死录制 |
-| `scanActiveSegments()` | 每周期 | 扫描活跃录制目录，将新完成的 `.flv`/`.mp4` 写入 recording_files |
-| `cleanupFragmentFiles()` | 每周期 | 删除下载目录中小于 `filtering_threshold` 且超过 2 分钟的碎片文件 |
-| `runFileScan()` | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件 |
+| 函数                     | 触发        | 职责                                                             |
+| ------------------------ | ----------- | ---------------------------------------------------------------- |
+| `checkStaleRecordings()` | 每周期      | 检查录制进程是否存活、文件是否僵死，清理死录制                   |
+| `scanActiveSegments()`   | 每周期      | 扫描活跃录制目录，将新完成的 `.flv`/`.mp4` 写入 recording_files  |
+| `cleanupFragmentFiles()` | 每周期      | 删除下载目录中小于 `filtering_threshold` 且超过 2 分钟的碎片文件 |
+| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件  |
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 
-| 函数 | 所在文件 | 触发 | 职责 |
-|------|---------|------|------|
-| `cleanupStaleRecordings()` | `app.js` | 启动 | 杀孤儿进程、重命名 `.part`、追踪遗留文件、尝试恢复会话 |
-| `cleanupStaleRedis()` | `app.js` | 启动 | 清理 Redis 过期 `active_task:*` |
-| `scanRecordingFiles()` | `lib/scan-files.js` | 启动 / API | 真正的文件扫描逻辑，`watchdog.runFileScan()` 和 `POST /api/scan_files` 共用 |
+| 函数                       | 所在文件            | 触发       | 职责                                                                        |
+| -------------------------- | ------------------- | ---------- | --------------------------------------------------------------------------- |
+| `cleanupStaleRecordings()` | `app.js`            | 启动       | 杀孤儿进程、重命名 `.part`、追踪遗留文件、尝试恢复会话                      |
+| `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                                             |
+| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 真正的文件扫描逻辑，`watchdog.runFileScan()` 和 `POST /api/scan_files` 共用 |
 
 ### 周期性执行链
 

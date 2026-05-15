@@ -16,18 +16,42 @@
 </div>
 
 <script>
+let flvPlayer = null;
+
 function openVideoPlayer(src, title) {
   const modal = document.getElementById('videoPlayerModal');
   const video = document.getElementById('videoPlayer');
   const titleEl = document.getElementById('videoPlayerTitle');
   if (title) titleEl.textContent = title;
-  video.src = src;
-  video.load();
+
+  // 清理旧播放器
+  if (flvPlayer) {
+    flvPlayer.destroy();
+    flvPlayer = null;
+  }
+  video.src = '';
+  video.style.display = '';
+
+  if (src.endsWith('.flv') && flvjs.isSupported()) {
+    video.style.display = 'none';
+    flvPlayer = flvjs.createPlayer({ type: 'flv', url: src });
+    flvPlayer.attachMediaElement(video);
+    flvPlayer.load();
+    flvPlayer.play();
+  } else {
+    video.src = src;
+    video.load();
+  }
+
   const bsModal = new bootstrap.Modal(modal);
   bsModal.show();
   modal.addEventListener('hidden.bs.modal', function stopVideo() {
     video.pause();
     video.src = '';
+    if (flvPlayer) {
+      flvPlayer.destroy();
+      flvPlayer = null;
+    }
     modal.removeEventListener('hidden.bs.modal', stopVideo);
   }, { once: true });
 }

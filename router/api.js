@@ -595,6 +595,12 @@ router.post('/notify/live_download', async (req, res) => {
              VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
             [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
           );
+          await pool.query(
+            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+             ON CONFLICT (file_path) DO NOTHING`,
+            [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern), fileSize]
+          );
         }
 
         if (sessionId) {
@@ -730,7 +736,11 @@ router.put('/recording_files/:id/associate', async (req, res) => {
 // GET /api/recordings/:id/stream — 流式播放录制文件
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
-    const result = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [req.params.id]);
+    const { id } = req.params;
+    let result = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      result = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+    }
     if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
     const filePath = result.rows[0].file_path;
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ status: 'Error', message: '文件不存在' });

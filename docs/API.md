@@ -189,6 +189,51 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 ---
 
+### GET /api/sessions/:id
+
+查询录制会话详情（包含该会话的所有文件记录，以 `recording_files` 表为数据源）。
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/sessions/25
+```
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "session": {
+      "id": 25,
+      "room_url": "https://live.example.com/room1",
+      "status": "completed",
+      "total_segments": 3,
+      "total_size": 524288000
+    },
+    "recordings": [
+      {
+        "id": 101,
+        "session_id": 25,
+        "file_path": "/data/videos/主播名_20260514_143022.mp4",
+        "file_size": 262144000,
+        "status": "completed",
+        "file_exists": true
+      }
+    ]
+  }
+}
+```
+
+**说明：**
+
+- `recordings` 数组内容实际来自 `recording_files` 表，字段映射后返回（含 `segment_index: 0` 和 `ended_at`）
+- 若该会话尚无文件记录但有 `rooms.output_path`（录制中），则自动从磁盘读取文件信息
+- 受 `filtering_threshold` 设置影响，小于阈值的文件会被过滤
+
+---
+
 ### GET /api/recording_files
 
 查询录制文件跟踪记录。
@@ -199,6 +244,17 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 | ---------- | ------- | ---- | ------------------------------------------------------------------------------------------ |
 | status     | string  | 否   | 按状态筛选：`pending` / `recording` / `completed` / `interrupted` / `missing` / `orphaned` |
 | session_id | integer | 否   | 按会话 ID 筛选                                                                             |
+
+### GET /api/recordings/:id/stream
+
+流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。
+查询优先级：先查 `recordings` 表，未命中则查 `recording_files` 表。
+
+**返回：**
+
+视频流（`video/mp4` / `video/x-flv` / `video/mp2t` 等，根据文件扩展名自动判断 MIME 类型）。
+
+---
 
 ### PUT /api/recording_files/:id/associate
 

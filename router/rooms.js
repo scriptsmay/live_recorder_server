@@ -419,31 +419,44 @@ router.get('/sessions/:id', async (req, res) => {
     if (session.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    let recQuery = 'SELECT * FROM recordings WHERE session_id = $1';
-    const recParams = [id];
+    // 以 recording_files（磁盘文件跟踪）作为会话文件列表的数据源
+    let rfQuery = 'SELECT * FROM recording_files WHERE session_id = $1';
+    const rfParams = [id];
     if (minSize > 0) {
-      recQuery += ' AND file_size >= $2';
-      recParams.push(minSize);
+      rfQuery += ' AND file_size >= $2';
+      rfParams.push(minSize);
     }
-    recQuery += ' ORDER BY segment_index ASC';
-    const recordings = await pool.query(recQuery, recParams);
-    // 对于录制中但 DB 尚无分片记录的会话，尝试从房间的 output_path 定位文件
-    if (recordings.rows.length === 0) {
+    rfQuery += ' ORDER BY id ASC';
+    const rfResult = await pool.query(rfQuery, rfParams);
+
+    // 对于录制中但尚无文件记录的会话，尝试从房间 output_path 定位
+    if (rfResult.rows.length === 0) {
       const room = await pool.query(`SELECT output_path FROM rooms WHERE room_url = $1`, [session.rows[0].room_url]);
       if (room.rows.length && room.rows[0].output_path) {
         const fp = room.rows[0].output_path;
         try {
           const stat = require('fs').statSync(fp);
-          recordings.rows.push({
+          rfResult.rows.push({
+            id: null,
             session_id: parseInt(id),
-            segment_index: 0,
+            room_url: session.rows[0].room_url,
             file_path: fp,
+            file_name: path.basename(fp),
             file_size: stat.size,
             status: 'recording',
+            started_at: null,
+            completed_at: null,
           });
         } catch (_) {}
       }
     }
+
+    const recordings = { rows: rfResult.rows.map((f) => ({
+      ...f,
+      segment_index: 0,
+      ended_at: f.completed_at,
+    })) };
+
     for (const rec of recordings.rows) {
       try {
         require('fs').accessSync(rec.file_path, require('fs').constants.F_OK);

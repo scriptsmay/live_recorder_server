@@ -158,6 +158,13 @@ async function tryResumeSession(session) {
         );
 
         await pool.query(
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+           VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+           ON CONFLICT (file_path) DO NOTHING`,
+          [session.id, session.room_url, outputPath, path.basename(outputPath), fileSize]
+        );
+
+        await pool.query(
           `UPDATE recording_sessions SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2 WHERE id = $3`,
           [status, fileSize, session.id]
         );
@@ -258,13 +265,13 @@ async function cleanupStaleRecordings() {
         let lastSession = null;
         try {
           const sess = await pool.query(
-            `SELECT id FROM recording_sessions WHERE room_url = $1 ORDER BY id DESC LIMIT 1`,
+            `SELECT id, started_at FROM recording_sessions WHERE room_url = $1 ORDER BY id DESC LIMIT 1`,
             [row.room_url]
           );
-          if (sess.rows.length) lastSession = sess.rows[0].id;
+          if (sess.rows.length) lastSession = sess.rows[0];
         } catch (_) {}
 
-        // 将 untracked .flv/.mp4 写入 recording_files
+        // 将 untracked .flv/.mp4 写入两张表
         for (const f of fs.readdirSync(dir)) {
           if (!/\.(mp4|flv)$/i.test(f)) continue;
           const fp = path.join(dir, f);
@@ -274,11 +281,22 @@ async function cleanupStaleRecordings() {
           try {
             size = fs.statSync(fp).size;
           } catch (_) {}
+          const sessionId = lastSession ? lastSession.id : null;
+          const sessionStart = lastSession ? lastSession.started_at : null;
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-            [lastSession, row.room_url, fp, f, size]
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+             ON CONFLICT (file_path) DO NOTHING`,
+            [sessionId, row.room_url, fp, f, size]
           );
+          if (sessionId && sessionStart) {
+            await pool.query(
+              `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+               VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')
+               ON CONFLICT (file_path) DO NOTHING`,
+              [sessionId, row.room_url, fp, size, sessionStart]
+            );
+          }
           console.log(`[清理] 孤文件已追踪: ${f} (${size} bytes)`);
         }
       } catch (_) {}
