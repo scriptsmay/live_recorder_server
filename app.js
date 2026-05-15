@@ -4,12 +4,12 @@
 require('dotenv').config({ path: '.env.dev', quiet: true });
 require('dotenv').config({ quiet: true });
 
-// 给 console.log 加时间戳
-const origLog = console.log;
-console.log = (...args) => {
-  const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  origLog(`[${ts}]`, ...args);
-};
+// 给 console 加时间戳
+const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+['log', 'warn', 'error'].forEach((method) => {
+  const orig = console[method];
+  console[method] = (...args) => orig(`[${ts()}]`, ...args);
+});
 
 const path = require('path');
 const fs = require('fs');
