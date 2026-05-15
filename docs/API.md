@@ -82,15 +82,15 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 ### POST /api/rooms/:id/pause
 
-暂停录制（向 ffmpeg 进程发送 `SIGSTOP`）。
+暂停录制（向录制进程发送 `SIGSTOP`，适用于所有下载引擎）。
 
 ### POST /api/rooms/:id/resume
 
-恢复录制（向 ffmpeg 进程发送 `SIGCONT`）。
+恢复录制（向录制进程发送 `SIGCONT`，适用于所有下载引擎）。
 
 ### POST /api/rooms/:id/stop
 
-停止录制（向 ffmpeg 进程发送 `SIGTERM`，标记录制结束）。
+停止录制（向录制进程发送 `SIGTERM`，标记录制结束）。
 
 ---
 
@@ -170,6 +170,7 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
   "exists": true,
   "data": {
     "status": "recording",
+    "downloader": "ffmpeg",
     "room": {
       "id": 1,
       "room_url": "https://live.example.com/room1",

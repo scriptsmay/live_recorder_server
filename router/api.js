@@ -1,4 +1,3 @@
-const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -12,6 +11,7 @@ const { findAndAutoUpload } = require('./upload');
 const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
 const { scanRecordingFiles } = require('../lib/scan-files');
+const { getActiveDownloader } = require('../lib/downloaders/DownloaderFactory');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -238,8 +238,14 @@ router.get('/notify/status', async (req, res) => {
     }
 
     const room = result.rows[0];
+    let downloaderEngine = 'ffmpeg';
+    try {
+      const dl = await getActiveDownloader();
+      downloaderEngine = dl.name;
+    } catch (_) {}
     const data = {
       room: { id: room.id, room_url: room.room_url, room_name: room.room_name },
+      downloader: downloaderEngine,
     };
 
     if (room.monitoring_enabled === false) {
@@ -359,51 +365,22 @@ router.post('/notify/live_download', async (req, res) => {
   console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
-  const ffmpegArgs = [
-    '-i',
-    url,
-    '-c',
-    'copy',
-    '-fflags',
-    '+genpts',
-    '-timeout',
-    '2147483647',
-    '-reconnect',
-    '1',
-    '-reconnect_at_eof',
-    '1',
-    '-reconnect_streamed',
-    '1',
-    '-reconnect_delay_max',
-    '60',
-  ];
+  const downloader = await getActiveDownloader();
+
   if (useSegment) {
     segmentListPath = path.join(DOWNLOAD_DIR, `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
-    ffmpegArgs.push(
-      '-f',
-      'segment',
-      '-segment_time',
-      String(segmentDuration),
-      '-reset_timestamps',
-      '1',
-      '-strftime',
-      '1',
-      '-segment_list',
-      segmentListPath
-    );
   }
-  ffmpegArgs.push(outputFilePattern);
 
-  const { fd: logFd, logPath, rename: renameLog, logCommand } = createProcLog('ffmpeg');
-  console.log(`[任务启动] ffmpeg 日志: ${logPath}`);
-  logCommand('ffmpeg', ffmpegArgs);
+  const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
 
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
-    stdio: ['ignore', 'ignore', logFd],
-  });
+  const { fd: logFd, logPath, rename: renameLog, logCommand } = createProcLog(downloader.name);
+  console.log(`[任务启动] 下载引擎: ${downloader.name}, 日志: ${logPath}`);
+  logCommand(downloader.name, dlArgs);
 
-  ffmpeg.on('error', (err) => {
-    console.error('FFmpeg 启动失败:', err);
+  const dlProcess = downloader.spawn(dlArgs, logFd);
+
+  dlProcess.on('error', (err) => {
+    console.error(`${downloader.name} 启动失败:`, err);
   });
 
   let sessionId = null;
@@ -411,7 +388,7 @@ router.post('/notify/live_download', async (req, res) => {
   try {
     await pool.query(
       `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
-      [outputFilePattern, ffmpeg.pid, room.id]
+      [outputFilePattern, dlProcess.pid, room.id]
     );
     await delRoomCache(room.room_url);
 
@@ -425,7 +402,7 @@ router.post('/notify/live_download', async (req, res) => {
     renameLog(sessionId);
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
-    ffmpeg.kill();
+    dlProcess.kill();
     return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
@@ -443,14 +420,15 @@ router.post('/notify/live_download', async (req, res) => {
   }
 
   await setActiveTask(roomKey, {
-    pid: ffmpeg.pid,
+    pid: dlProcess.pid,
     outputPath: outputFilePattern,
     roomId: room.id,
     sessionId,
     startTime: Date.now(),
+    downloader: downloader.name,
   });
 
-  ffmpeg.on('close', async (code) => {
+  dlProcess.on('close', async (code) => {
     await delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/ffmpeg_${sessionId}.log)`);
 
@@ -710,4 +688,5 @@ module.exports = {
   delActiveTask,
   delRoomCache,
   activeTaskKey,
+  getActiveDownloader,
 };

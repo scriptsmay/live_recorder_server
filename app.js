@@ -4,7 +4,7 @@
 require('dotenv').config({ quiet: true });
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { execSync } = require('child_process');
 
 const express = require('express');
 const cors = require('cors');
@@ -30,6 +30,7 @@ const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
 const { scanRecordingFiles } = require('./lib/scan-files');
+const { getActiveDownloader } = require('./lib/downloaders/DownloaderFactory');
 
 // ──────────────────────────────────────────────
 // 2. Express 配置
@@ -101,45 +102,21 @@ async function tryResumeSession(session) {
   }
 
   const streamUrl = session.stream_url || session.room_url;
-  const ffmpegArgs = [
-    '-i',
-    streamUrl,
-    '-c',
-    'copy',
-    '-fflags',
-    '+genpts',
-    '-timeout',
-    '2147483647',
-    '-reconnect',
-    '1',
-    '-reconnect_at_eof',
-    '1',
-    '-reconnect_streamed',
-    '1',
-    '-reconnect_delay_max',
-    '60',
-  ];
 
-  if (useSegment) {
-    ffmpegArgs.push(
-      '-f',
-      'segment',
-      '-segment_time',
-      String(segmentDuration),
-      '-reset_timestamps',
-      '1',
-      '-strftime',
-      '1'
-    );
+  let downloader;
+  try {
+    downloader = await getActiveDownloader();
+  } catch (_) {
+    const FFmpegDownloader = require('./lib/downloaders/FFmpegDownloader');
+    downloader = new FFmpegDownloader();
   }
-  ffmpegArgs.push(outputPath);
 
-  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog('ffmpeg', session.id);
-  logCommand('ffmpeg', ffmpegArgs);
+  const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
 
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
-    stdio: ['ignore', 'ignore', logFd],
-  });
+  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
+  logCommand(downloader.name, dlArgs);
+
+  const ffmpeg = downloader.spawn(dlArgs, logFd);
 
   let sessionFinalized = false;
 
@@ -228,7 +205,6 @@ async function cleanupStaleRecordings() {
   try {
     // 清理上一轮可能的孤儿 ffmpeg 进程（避免 PM2 watch 重启导致状态不同步）
     try {
-      const { execSync } = require('child_process');
       execSync('pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null', { stdio: 'ignore' });
     } catch (_) {}
 

@@ -13,6 +13,7 @@ module.exports = {
       ignore_watch: ['node_modules', 'logs', 'backups', '.git', '*.log'],
       env: {
         NODE_ENV: 'development',
+        PORT: 3000,
       },
       env_production: {
         NODE_ENV: 'production',

@@ -23,6 +23,13 @@
         title: '录制设置',
         items: [
           {
+            key: 'downloader',
+            label: '下载插件',
+            desc: '选择录制的下载引擎',
+            type: 'select',
+            options: ['ffmpeg', 'stream-gears'],
+          },
+          {
             key: 'pool_size',
             label: '下载线程池大小',
             desc: '限制最大同时录制数',
@@ -139,6 +146,7 @@
 
   async function saveSettings() {
     const keys = [
+      'downloader',
       'pool_size',
       'watchdog_interval',
       'watchdog_timeout',
