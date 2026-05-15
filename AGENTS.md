@@ -39,6 +39,14 @@ kill $(lsof -ti :3001)               # 停止开发服务
 lsof -i :3001                        # 检查端口占用
 ```
 
+**主动重启后建议清理脏数据：**
+
+```bash
+node scripts/cleanup-dev.js
+```
+
+该脚本会：杀死孤儿进程 → 重命名 `.part` → 清除孤文件 DB 记录 → 中断遗留会话 → 追踪遗留文件到 recording_files。具体实现见 `scripts/cleanup-dev.js`。
+
 - 录制进程日志（ffmpeg/stream-gears 输出）在 `logs/` 目录
 - 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
 - Redis DB 编号：`2`（生产使用 `1`）

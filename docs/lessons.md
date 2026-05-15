@@ -76,7 +76,7 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 - 发现 `.flv.part` → 重命名为 `.flv`
 - 发现 `.flv`/`.mp4` 且不在 `recording_files` 中 → 插入为 `completed`
 
-#### 6. 启动清理不处理 stream-gears 残留 (`app.js`)
+#### 6. 启动清理不处理 stream-gears 残留 (`app.js` + `scripts/cleanup-dev.js`)
 
 **症状**：服务重启 / 进程崩溃后，`.flv.part` 文件永远留在磁盘上。
 
