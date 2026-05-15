@@ -525,7 +525,8 @@ async function scanActiveSegments() {
         } catch (_) {}
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
-           VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+           VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+           ON CONFLICT (file_path) DO NOTHING`,
           [room.session_id, room.room_url, fp, f, size]
         );
         await pool.query(
