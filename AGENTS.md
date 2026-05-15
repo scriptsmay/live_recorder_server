@@ -141,6 +141,10 @@ lsof -i :3001                        # 检查端口占用
   - 向 `GET /api/notify/status` 查询录制状态
   - 两端 API 契约变更时需同步修改
 
+## 踩坑记录
+
+开发中遇到的典型问题及解决方案见 [docs/lessons.md](docs/lessons.md)。
+
 ## TODO 计划
 
 查看文档[TODO.md](docs/TODO.md)

@@ -1,0 +1,111 @@
+# 开发踩坑记录
+
+## 下载引擎集成后的一系列连锁问题
+
+### 背景
+
+将 stream-gears（Rust 编写的 Python 库）通过 factory 模式集成到项目后，出现了一系列相互关联的 Bug，核心症状是**录制文件变成孤文件（orphaned）**以及**会话续播失败**。
+
+### 问题链
+
+```
+SIGTERM → Rust Drop 不执行 → .flv.part 未重命名为 .flv
+  → close handler 扫描目录找不到 .flv → 无 recording_files 记录 → 孤文件
+  → 续播时 close handler 再跑一次 → recording_files 重复 INSERT
+  → 文件名正则写错 (.* 里的 . 被转义) → 永远匹配不到文件
+  → 启动时只清理 ffmpeg 进程，不管 stream-gears 的 .part 文件
+```
+
+### 逐层修复
+
+#### 1. 文件名扫描 Regex 错误 (`router/api.js`)
+
+**症状**：close handler 中非 ffmpeg 下载器的分段文件扫描永远返回空列表。
+
+**原因**：
+```js
+// 错误：.replace(/\./g, '\\.') 连 .* 里的 . 也转义了
+const regex = new RegExp('^' + pattern.replace(/\./g, '\\.') + '$');
+// 结果：/^KSG小屿_\.*\.*\.*_\.*\.*\.*\.flv$/ → 匹配零个或多个字面点号
+```
+
+**修复**：只对扩展名的 `.` 转义，`.*` 通配符保持原样：
+```js
+const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
+const ext = path.extname(base);
+const regex = new RegExp('^' + prefix + ext.replace(/\./g, '\\.') + '$');
+```
+
+#### 2. 续播时 recording_files 重复 INSERT (`router/api.js`)
+
+**症状**：每次 close handler 跑都往 `recording_files` 插一遍相同文件。
+
+**修复**：插入前检查 `recording_files` 是否已有该文件路径，有则跳过。
+
+#### 3. 会话续播匹配不到 interrupted 状态的会话 (`router/api.js`)
+
+**症状**：进程异常退出后状态为 `interrupted`，续播只查 `status = 'completed'`，永远匹配不到。
+
+**修复**：改为 `status IN ('completed', 'interrupted')`。
+
+#### 4. resumeCount 变量赋值为 total_segments 而非 session ID (`router/api.js`)
+
+**症状**：`UPDATE recording_sessions WHERE id = total_segments`（例如 id=0），永远更新不到任何行。
+
+**原因**：
+```js
+// 错误：存了 total_segments 值
+resumeCount = recent.rows[0].total_segments || 0;
+// 后续用 resumeCount 当 sessionId
+UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
+```
+
+**修复**：改为存 `recent.rows[0].id`。
+
+#### 5. 停止录制后文件变孤文件 (`router/rooms.js`)
+
+**症状**：点击"停止录制"后，已下载的文件没有 `recording_files` 记录。
+
+**原因**：stream-gears 的 Rust `FlvFile::Drop` 在收到 SIGTERM 后可能来不及执行（`.part → .flv` 重命名不跑）。而 close handler（`dlProcess.on('close')`）是异步的，rooms.js 的 stop 处理不等它完成就返回了。close handler 扫描不到 `.flv` 文件（因为 .part 没被重命名），所以没有创建 recording_files 记录。
+
+**修复**：stop 处理中杀死进程后，同步扫描输出目录：
+- 发现 `.flv.part` → 重命名为 `.flv`
+- 发现 `.flv`/`.mp4` 且不在 `recording_files` 中 → 插入为 `completed`
+
+#### 6. 启动清理不处理 stream-gears 残留 (`app.js`)
+
+**症状**：服务重启 / 进程崩溃后，`.flv.part` 文件永远留在磁盘上。
+
+**原因**：`cleanupStaleRecordings()` 只 `pkill -f "ffmpeg"`，不处理 Python/stream-gears 进程，也不扫 `.part` 文件。
+
+**修复**：在清理循环中：
+- 遍历每个脏房间的 `output_path` 目录
+- 重命名 `.flv.part` → `.flv`
+- 将 untracked 的 `.flv`/`.mp4` 写入 `recording_files`
+
+#### 7. Redis stale active_task 残留
+
+**症状**：`POST /api/notify/live_download` 返回 `"Already recording"`，但房间实际已空闲。
+
+**原因**：手动删 DB 或意外中断后，`active_task:{roomKey}` 留在 Redis 中。`isActiveTask()` 检查 Redis 返回 true，拒绝新录制。
+
+**修复**：`cleanupStaleRedis()` 在启动时自动清理（检查房间状态，不是 `recording` 则删 key）。
+
+#### 8. stream-gears 生成 download.log
+
+**症状**：项目根目录出现 `download.log`。
+
+**原因**：stream-gears 的 Rust 代码硬编码了 `tracing_appender::rolling::never("", "download.log")`。
+
+**处理**：加入 `.gitignore`。
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **不要依赖异步 close handler 做关键持久化** | 进程被 SIGTERM 后 close handler 可能不跑或跑不完，关键数据写入应在同步路径完成 |
+| **外部进程的信号处理要了解** | Rust 的 `Drop` 在 SIGTERM 下可能不执行，Python 进程同理 |
+| **Regex 构造要逐层验证** | 两个 replace 叠加时中间结果的 `.` 会被转义器错杀 |
+| **变量名语义要准确** | `resumeCount` 存的是 ID 不是 count，误导后续维护 |
+| **启动清理要覆盖所有下载引擎** | 不能只针对 ffmpeg |
+| **Redis 状态要有兜底清理** | `cleanupStaleRedis` 在启动时扫一遍 |
