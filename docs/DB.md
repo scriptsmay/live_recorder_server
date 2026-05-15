@@ -160,7 +160,7 @@ orphaned  ←────────────────────── 
 | after_upload            | VARCHAR(20)   | DEFAULT 'none'                          | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件 |
 | created_at / updated_at | TIMESTAMP     |                                         |                                                                          |
 
-**模板变量：** `{room_name}` `{room_url}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`
+**模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`
 
 ### upload_records — 投稿记录
 

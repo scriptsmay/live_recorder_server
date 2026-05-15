@@ -43,6 +43,7 @@ function getTemplateVars(room, session) {
   return {
     room_name: room.room_name || room.room_url || 'unknown',
     room_url: room.room_url || '',
+    caption: session.caption || '',
     date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     datetime: `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`,
     YYYY: String(date.getFullYear()),
