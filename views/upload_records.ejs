@@ -20,6 +20,22 @@
   <p class="text-muted text-center" id="emptyRec">暂无投稿记录</p>
 </div>
 
+<div class="modal fade" id="filesModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">投稿文件 - #<span id="filesRecId"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="filesContent">
+          <div class="text-center text-muted py-3">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="outputModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -56,7 +72,7 @@ async function loadRecords() {
       <td>${r.id}</td>
       <td><small>${r.title || '-'}${r.template_name ? '<br><span class="text-muted small">' + r.template_name + '</span>' : ''}</small></td>
       <td>${r.template_name || '-'}</td>
-      <td>${r.file_count}</td>
+      <td><button class="btn btn-sm btn-link p-0 viewFilesBtn" data-session-id="${r.session_id || ''}" data-id="${r.id}">${r.file_count}</button></td>
       <td>${size}</td>
       <td>${badge}</td>
       <td>${r.bv_id ? '<a href="https://www.bilibili.com/video/' + r.bv_id + '" target="_blank" rel="noopener"><code>' + r.bv_id + '</code></a>' : '-'}</td>
@@ -82,6 +98,38 @@ document.addEventListener('click', async e => {
     document.getElementById('outputRecId').textContent = btn.dataset.id;
     document.getElementById('outputContent').textContent = output;
     new bootstrap.Modal(document.getElementById('outputModal')).show();
+  }
+  if (btn.classList.contains('viewFilesBtn')) {
+    const sessionId = btn.dataset.sessionId;
+    const recId = btn.dataset.id;
+    const content = document.getElementById('filesContent');
+    const title = document.getElementById('filesRecId');
+    title.textContent = recId;
+    content.innerHTML = '<div class="text-center text-muted py-3">加载中...</div>';
+    new bootstrap.Modal(document.getElementById('filesModal')).show();
+    if (!sessionId) {
+      content.innerHTML = '<div class="text-muted text-center py-3">无关联会话</div>';
+      return;
+    }
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`);
+      const json = await res.json();
+      const recs = json.data?.recordings;
+      if (!recs || recs.length === 0) {
+        content.innerHTML = '<div class="text-muted text-center py-3">无文件记录</div>';
+        return;
+      }
+      let html = '<table class="table table-sm mb-0"><thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th></tr></thead><tbody>';
+      recs.forEach(r => {
+        const sz = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
+        const st = r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>';
+        html += `<tr><td>${r.segment_index}</td><td><small>${r.file_path || '-'}</small></td><td>${sz}</td><td>${st}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      content.innerHTML = html;
+    } catch (err) {
+      content.innerHTML = '<div class="alert alert-danger mb-0">加载失败</div>';
+    }
   }
 });
 
