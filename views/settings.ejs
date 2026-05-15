@@ -10,99 +10,181 @@
 </div>
 
 <script>
-async function loadSettings() {
-  const res = await fetch('/api/settings');
-  const json = await res.json();
-  if (!json.data) return;
-  const settings = json.data;
+  async function loadSettings() {
+    const res = await fetch('/api/settings');
+    const json = await res.json();
+    if (!json.data) return;
+    const settings = json.data;
 
-  let html = '<div class="row">';
+    let html = '<div class="row">';
 
-  const groups = [
-    {
-      title: '录制设置',
-      items: [
-        { key: 'pool_size', label: '下载线程池大小', desc: '限制最大同时录制数', type: 'number', attrs: 'min="1" max="20"' },
-        { key: 'watchdog_interval', label: '录制状态检查间隔（秒）', desc: '看门狗检查周期', type: 'number', attrs: 'min="10" max="600"' },
-        { key: 'watchdog_timeout', label: '录制状态检查超时（秒）', desc: '超过此时长无活动则标记为完成', type: 'number', attrs: 'min="10" max="3600"' },
-        { key: 'filtering_threshold', label: '碎片过滤（MB）', desc: '小于此大小的视频文件将被过滤删除', type: 'number', attrs: 'min="0" step="1"' },
-        { key: 'delay', label: '下播延迟检测（秒）', desc: '检测到主播下播后延迟确认时间', type: 'number', attrs: 'min="0" max="3600"' },
-      ],
-    },
-    {
-      title: '上传设置',
-      items: [
-        { key: 'submit_api', label: '提交接口', desc: 'biliup --submit 选项，留空为自动选择', type: 'select', options: ['', 'app', 'web', 'b-cut-android'] },
-        { key: 'lines', label: '上传线路', desc: 'b站上传线路选择，留空为自动', type: 'select', options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'] },
-        { key: 'threads', label: '上传并发', desc: '单文件并发上传数', type: 'number', attrs: 'min="1" max="16"' },
-        { key: 'pool2_size', label: '上传线程池大小', desc: '负责上传事件的线程池大小', type: 'number', attrs: 'min="1" max="20"' },
-        { key: 'max_upload_limit', label: '上传重试次数限制', desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3', type: 'number', attrs: 'min="1" max="999"' },
-      ],
-    },
-  ];
+    const groups = [
+      {
+        title: '录制设置',
+        items: [
+          {
+            key: 'pool_size',
+            label: '下载线程池大小',
+            desc: '限制最大同时录制数',
+            type: 'number',
+            attrs: 'min="1" max="20"',
+          },
+          {
+            key: 'watchdog_interval',
+            label: '录制状态检查间隔（秒）',
+            desc: '看门狗检查周期',
+            type: 'number',
+            attrs: 'min="10" max="600"',
+          },
+          {
+            key: 'watchdog_timeout',
+            label: '录制状态检查超时（秒）',
+            desc: '超过此时长无活动则标记为完成',
+            type: 'number',
+            attrs: 'min="10" max="3600"',
+          },
+          {
+            key: 'filtering_threshold',
+            label: '碎片过滤（MB）',
+            desc: '小于此大小的视频文件将被过滤删除',
+            type: 'number',
+            attrs: 'min="0" step="1"',
+          },
+          {
+            key: 'delay',
+            label: '下播延迟检测（秒）',
+            desc: '检测到主播下播后延迟确认时间',
+            type: 'number',
+            attrs: 'min="0" max="3600"',
+          },
+        ],
+      },
+      {
+        title: '上传设置',
+        items: [
+          {
+            key: 'submit_api',
+            label: '提交接口',
+            desc: 'biliup --submit 选项，留空为自动选择',
+            type: 'select',
+            options: ['', 'app', 'web', 'b-cut-android'],
+          },
+          {
+            key: 'lines',
+            label: '上传线路',
+            desc: 'b站上传线路选择，留空为自动',
+            type: 'select',
+            options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'],
+          },
+          {
+            key: 'threads',
+            label: '上传并发',
+            desc: '单文件并发上传数',
+            type: 'number',
+            attrs: 'min="1" max="16"',
+          },
+          {
+            key: 'pool2_size',
+            label: '上传线程池大小',
+            desc: '负责上传事件的线程池大小',
+            type: 'number',
+            attrs: 'min="1" max="20"',
+          },
+          {
+            key: 'max_upload_limit',
+            label: '上传重试次数限制',
+            desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3',
+            type: 'number',
+            attrs: 'min="1" max="999"',
+          },
+        ],
+      },
+    ];
 
-  for (const group of groups) {
-    html += '<div class="col-md-6 mb-4">';
-    html += `<div class="card"><div class="card-header"><h5 class="mb-0">${group.title}</h5></div><div class="card-body">`;
-    for (const item of group.items) {
-      const val = settings.find(s => s.key === item.key)?.value || '';
-      if (item.type === 'select') {
-        const opts = item.options.map(o =>
-          `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`
-        ).join('');
-        html += `<div class="mb-3">
+    for (const group of groups) {
+      html += '<div class="col-md-6 mb-4">';
+      html += `<div class="card"><div class="card-header"><h5 class="mb-0">${group.title}</h5></div><div class="card-body">`;
+      for (const item of group.items) {
+        const val = settings.find((s) => s.key === item.key)?.value || '';
+        if (item.type === 'select') {
+          const opts = item.options
+            .map(
+              (o) =>
+                `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`
+            )
+            .join('');
+          html += `<div class="mb-3">
           <label class="form-label" for="set_${item.key}">${item.label}</label>
           <select class="form-select" id="set_${item.key}">${opts}</select>
           <div class="form-text">${item.desc}</div>
         </div>`;
-      } else {
-        html += `<div class="mb-3">
+        } else {
+          html += `<div class="mb-3">
           <label class="form-label" for="set_${item.key}">${item.label}</label>
           <input type="${item.type}" class="form-control" id="set_${item.key}" value="${val}" ${item.attrs} />
           <div class="form-text">${item.desc}</div>
         </div>`;
+        }
       }
+      html += '</div></div></div>';
     }
-    html += '</div></div></div>';
+
+    html += '</div>';
+
+    html +=
+      '<div class="text-end mt-3"><button class="btn btn-primary" onclick="saveSettings()">保存设置</button></div>';
+
+    document.getElementById('settingsBody').innerHTML = html;
   }
 
-  html += '</div>';
+  async function saveSettings() {
+    const keys = [
+      'pool_size',
+      'watchdog_interval',
+      'watchdog_timeout',
+      'filtering_threshold',
+      'delay',
+      'submit_api',
+      'lines',
+      'threads',
+      'pool2_size',
+      'max_upload_limit',
+    ];
 
-  html += '<div class="text-end mt-3"><button class="btn btn-primary" onclick="saveSettings()">保存设置</button></div>';
+    const btn = document.querySelector('#settingsBody .btn-primary');
+    btn.disabled = true;
+    btn.textContent = '保存中...';
 
-  document.getElementById('settingsBody').innerHTML = html;
-}
+    let ok = true;
+    for (const key of keys) {
+      const el = document.getElementById(`set_${key}`);
+      if (!el) continue;
+      const res = await fetch(`/api/settings/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: el.value }),
+      });
+      if (!res.ok) ok = false;
+    }
 
-async function saveSettings() {
-  const keys = ['pool_size', 'watchdog_interval', 'watchdog_timeout', 'filtering_threshold', 'delay',
-    'submit_api', 'lines', 'threads', 'pool2_size', 'max_upload_limit'];
-
-  const btn = document.querySelector('#settingsBody .btn-primary');
-  btn.disabled = true;
-  btn.textContent = '保存中...';
-
-  let ok = true;
-  for (const key of keys) {
-    const el = document.getElementById(`set_${key}`);
-    if (!el) continue;
-    const res = await fetch(`/api/settings/${key}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: el.value }),
-    });
-    if (!res.ok) ok = false;
+    if (ok) {
+      btn.textContent = '已保存';
+      btn.className = 'btn btn-success';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '保存设置';
+        btn.className = 'btn btn-primary';
+      }, 2000);
+    } else {
+      btn.textContent = '保存失败';
+      btn.className = 'btn btn-danger';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '保存设置';
+        btn.className = 'btn btn-primary';
+      }, 3000);
+    }
   }
 
-  if (ok) {
-    btn.textContent = '已保存';
-    btn.className = 'btn btn-success';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '保存设置'; btn.className = 'btn btn-primary'; }, 2000);
-  } else {
-    btn.textContent = '保存失败';
-    btn.className = 'btn btn-danger';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '保存设置'; btn.className = 'btn btn-primary'; }, 3000);
-  }
-}
-
-loadSettings();
+  loadSettings();
 </script>
