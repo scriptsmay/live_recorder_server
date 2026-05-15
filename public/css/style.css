@@ -52,6 +52,10 @@ img {
   height: auto;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .page-wrap {
   background: #ffffff;
   border-radius: 16px;
