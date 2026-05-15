@@ -559,8 +559,16 @@ async function scanActiveSegments() {
       if (!fs.existsSync(dir)) continue;
       let segIndex = room.total_segments || 0;
       const files = fs.readdirSync(dir);
+      // 去重（文件系统可能返回重复条目）
+      const seen = new Set();
+      const uniqueFiles = files.filter((f) => {
+        const k = f.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
       const videoRe = /\.(flv|mp4)$/i;
-      for (const f of files) {
+      for (const f of uniqueFiles) {
         if (!videoRe.test(f)) continue;
         const fp = path.join(dir, f);
 
@@ -617,8 +625,20 @@ async function cleanupFragmentFiles() {
   const thresholdBytes = thresholdMB * 1024 * 1024;
 
   try {
-    const files = fs.readdirSync(dir);
-    for (const f of files) {
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch (_) {
+      return;
+    }
+    const seen = new Set();
+    const uniqueFiles = files.filter((f) => {
+      const k = f.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    for (const f of uniqueFiles) {
       if (!/\.(flv|mp4)$/i.test(f)) continue;
       const fp = path.join(dir, f);
       let size;
