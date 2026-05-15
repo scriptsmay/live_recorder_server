@@ -36,6 +36,7 @@ async function loadSettings() {
         { key: 'lines', label: '上传线路', desc: 'bda, bda2, ws, qn, bldsa, tx, txa（留空=自动）', type: 'text', attrs: '' },
         { key: 'threads', label: '上传并发', desc: '单文件并发上传数', type: 'number', attrs: 'min="1" max="16"' },
         { key: 'pool2_size', label: '上传线程池大小', desc: '负责上传事件的线程池大小', type: 'number', attrs: 'min="1" max="20"' },
+        { key: 'max_upload_limit', label: '上传重试次数限制', desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3', type: 'number', attrs: 'min="1" max="999"' },
       ],
     },
   ];
@@ -63,7 +64,7 @@ async function loadSettings() {
 
 async function saveSettings() {
   const keys = ['pool_size', 'watchdog_interval', 'watchdog_timeout', 'filtering_threshold', 'delay',
-    'submit_api', 'lines', 'threads', 'pool2_size'];
+    'submit_api', 'lines', 'threads', 'pool2_size', 'max_upload_limit'];
 
   const btn = document.querySelector('#settingsBody .btn-primary');
   btn.disabled = true;

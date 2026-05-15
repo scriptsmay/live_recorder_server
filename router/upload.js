@@ -7,6 +7,27 @@ const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
 const { afterUpload } = require('../lib/backup');
 
+const uploadCountMap = new Map();
+
+async function getUploadLimit() {
+  try {
+    const r = await pool.query("SELECT value FROM settings WHERE key = 'max_upload_limit'");
+    if (r.rows.length) return parseInt(r.rows[0].value, 10) || 99;
+  } catch (_) {}
+  return 99;
+}
+
+async function checkUploadLimit(sessionId) {
+  const limit = await getUploadLimit();
+  const count = uploadCountMap.get(sessionId) || 0;
+  if (count >= limit) {
+    console.log(`[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count}/${limit})，跳过`);
+    return false;
+  }
+  uploadCountMap.set(sessionId, count + 1);
+  return true;
+}
+
 function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] !== undefined ? vars[key] : `{${key}}`);
 }
@@ -230,6 +251,7 @@ async function executeUpload(session, tmpl) {
 
 async function findAndAutoUpload(session) {
   try {
+    if (!(await checkUploadLimit(session.id))) return;
     const tmpls = await pool.query(
       `SELECT * FROM upload_templates WHERE room_url = $1 OR room_url IS NULL ORDER BY room_url NULLS LAST LIMIT 1`,
       [session.room_url]
@@ -255,6 +277,10 @@ router.post('/sessions/:id/upload', async (req, res) => {
     );
     if (sessionResult.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
     const session = sessionResult.rows[0];
+
+    if (!(await checkUploadLimit(session.id))) {
+      return res.status(429).json({ status: 'Error', message: '该会话已达上传次数上限' });
+    }
 
     const { template_id } = req.body;
     if (!template_id) return res.status(400).json({ status: 'Error', message: '请指定投稿模板' });
