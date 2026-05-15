@@ -361,7 +361,7 @@ router.post('/notify/live_download', async (req, res) => {
       );
       if (recent.rows.length > 0) {
         reuseSession = true;
-        resumeCount = recent.rows[0].total_segments || 0;
+        resumeCount = recent.rows[0].id;
         console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
       }
     }

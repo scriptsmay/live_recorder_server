@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const pool = require('../db/index');
 const redis = require('../db/redis');
@@ -229,6 +230,40 @@ router.post('/rooms/:id/stop', async (req, res) => {
        WHERE room_url = $1 AND status = 'recording'`,
       [r.room_url]
     );
+
+    // 同步扫描已下载文件（不依赖异步的 close handler），防止进程未清理时文件变孤文件
+    if (r.output_path) {
+      const outputDir = path.dirname(r.output_path);
+      const fs = require('fs');
+      const files = fs.readdirSync(outputDir);
+      const videoExtRe = /\.(mp4|flv|ts|mkv|avi|mov)$/i;
+      for (const f of files) {
+        const fp = path.join(outputDir, f);
+        // stream-gears 遗留的 .part 文件：重命名为最终格式
+        if (f.endsWith('.flv.part')) {
+          const finalPath = fp.replace(/\.part$/, '');
+          try {
+            fs.renameSync(fp, finalPath);
+            console.log(`[rooms] .part 文件已重命名: ${finalPath}`);
+          } catch (_) {}
+          continue;
+        }
+        if (!videoExtRe.test(f)) continue;
+        const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
+        if (existing.rows.length === 0) {
+          let size = 0;
+          try {
+            size = fs.statSync(fp).size;
+          } catch (_) {}
+          await pool.query(
+            `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
+             VALUES ($1, $2, $3, 'completed', NOW())`,
+            [fp, f, size]
+          );
+        }
+      }
+    }
+
     await delRoomCache(r.room_url);
     if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已停止录制' });
