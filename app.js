@@ -548,12 +548,14 @@ async function scanActiveSegments() {
            ON CONFLICT (file_path) DO NOTHING`,
           [room.session_id, room.room_url, fp, f, size]
         );
-        await pool.query(
+        const ins = await pool.query(
           `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')
-           ON CONFLICT (file_path) DO NOTHING`,
+           ON CONFLICT (file_path) DO NOTHING
+           RETURNING id`,
           [room.session_id, segIndex, room.room_url, fp, size]
         );
+        if (ins.rows.length === 0) continue; // 重复跳过
         await pool.query(
           `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
           [size, room.session_id]
