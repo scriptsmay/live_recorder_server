@@ -170,7 +170,7 @@ async function migrate() {
     for (const [key, value] of defaultSettings) {
       await client.query(
         `INSERT INTO settings (key, value) VALUES ($1, $2)
-         ON CONFLICT (key) DO UPDATE SET value = COALESCE(NULLIF(EXCLUDED.value, ''), settings.value)`,
+         ON CONFLICT (key) DO NOTHING`,
         [key, value]
       );
     }
