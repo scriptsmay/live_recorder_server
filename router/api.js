@@ -521,28 +521,33 @@ router.post('/notify/live_download', async (req, res) => {
         }
 
         let totalSize = 0;
-        for (let i = 0; i < segmentFiles.length; i++) {
-          const filePath = segmentFiles[i];
+        let segIndex = 0;
+        for (const filePath of segmentFiles) {
+          // 跳过已在 recording_files 中追踪的文件（续播场景）
+          const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
+          if (tracked.rows.length > 0) continue;
+
           let fileSize = 0;
           try {
             fileSize = fs.statSync(filePath).size;
           } catch (_) {}
           totalSize += fileSize;
 
-          const segStart = new Date(sessionStart.getTime() + i * segmentDuration * 1000);
+          const segStart = new Date(sessionStart.getTime() + segIndex * segmentDuration * 1000);
           const segEnd =
-            i < segmentFiles.length - 1 ? new Date(segStart.getTime() + segmentDuration * 1000) : new Date();
+            segIndex < segmentFiles.length - 1 ? new Date(segStart.getTime() + segmentDuration * 1000) : new Date();
 
           await pool.query(
             `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
-            [sessionId, i, room.room_url, filePath, fileSize, segStart, segEnd]
+            [sessionId, segIndex, room.room_url, filePath, fileSize, segStart, segEnd]
           );
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
              VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
             [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
           );
+          segIndex++;
         }
 
         if (sessionId) {
