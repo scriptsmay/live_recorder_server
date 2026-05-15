@@ -329,7 +329,8 @@ async function executeUpload(session, tmpl) {
         files,
         session.id,
         tmpl.name,
-        recordId
+        recordId,
+        session.room_name
       );
       if (postResult) {
         output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
