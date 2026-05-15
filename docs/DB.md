@@ -155,6 +155,7 @@ orphaned  ←────────────────────── 
 | is_only_self | INTEGER | DEFAULT 0 | 仅自己可见，0-关闭 1-开启 |
 | cookies_path | VARCHAR(1024) | | biliup 账户文件绝对路径（必填） |
 | dtime | INTEGER | DEFAULT 0 | 延迟发布时间，10 位 Unix 时间戳 |
+| after_upload | VARCHAR(20) | DEFAULT 'none' | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件 |
 | created_at / updated_at | TIMESTAMP | | |
 
 **模板变量：** `{room_name}` `{room_url}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`

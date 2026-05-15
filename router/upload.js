@@ -5,6 +5,7 @@ const router = express.Router();
 const pool = require('../db/index');
 const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
+const { afterUpload } = require('../lib/backup');
 
 function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] !== undefined ? vars[key] : `{${key}}`);
@@ -45,15 +46,16 @@ router.get('/upload_templates', async (req, res) => {
 
 router.post('/upload_templates', async (req, res) => {
   try {
-    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime } = req.body;
+    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime, after_upload } = req.body;
     if (!name) return res.status(400).json({ status: 'Error', message: '模板名称必填' });
     const result = await pool.query(
-      `INSERT INTO upload_templates (name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      `INSERT INTO upload_templates (name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime, after_upload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [name, room_url || null, title_template || '{room_name} 直播录像 {date}',
        desc_template || '', tid || 171, tags || '',
        copyright ?? 2, source || '', cover || '',
-       is_only_self ?? 0, cookies_path || '', dtime || 0]
+       is_only_self ?? 0, cookies_path || '', dtime || 0,
+       after_upload || 'none']
     );
     res.status(201).json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
@@ -65,13 +67,13 @@ router.post('/upload_templates', async (req, res) => {
 router.put('/upload_templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime } = req.body;
+    const { name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime, after_upload } = req.body;
     const result = await pool.query(
       `UPDATE upload_templates SET name=$1, room_url=$2, title_template=$3, desc_template=$4,
-       tid=$5, tags=$6, copyright=$7, source=$8, cover=$9, is_only_self=$10, cookies_path=$11, dtime=$12, updated_at=NOW()
-       WHERE id=$13 RETURNING *`,
+       tid=$5, tags=$6, copyright=$7, source=$8, cover=$9, is_only_self=$10, cookies_path=$11, dtime=$12, after_upload=$13, updated_at=NOW()
+       WHERE id=$14 RETURNING *`,
       [name, room_url || null, title_template, desc_template, tid, tags, copyright, source || '', cover,
-       is_only_self ?? 0, cookies_path || '', dtime || 0, id]
+       is_only_self ?? 0, cookies_path || '', dtime || 0, after_upload || 'none', id]
     );
     if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     res.json({ status: 'ok', data: result.rows[0] });
@@ -206,6 +208,12 @@ async function executeUpload(session, tmpl) {
         [cmdStr, output, bvId, recordId]
       );
       notify.uploadComplete(session.room_name, title, bvId);
+
+      const postResult = await afterUpload(tmpl.after_upload, files, session.id, tmpl.name, recordId);
+      if (postResult) {
+        output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
+        await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [output, recordId]);
+      }
     } else {
       await pool.query(
         `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,

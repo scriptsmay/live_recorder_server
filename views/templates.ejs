@@ -91,6 +91,15 @@
             <input type="number" class="form-control" id="inputDtime" value="0" placeholder="10位时间戳" />
             <div class="form-text">10 位 Unix 时间戳，需大于当前时间 4 小时</div>
           </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">投稿后处理</label>
+            <select class="form-select" id="inputAfterUpload">
+              <option value="none">无操作</option>
+              <option value="backup">备份到NAS</option>
+              <option value="delete">删除本地文件</option>
+            </select>
+            <div class="form-text">投稿成功后对视频文件的处理方式</div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -171,6 +180,7 @@ document.addEventListener('click', async e => {
     document.getElementById('inputTmplTags').value = t.tags || '';
     document.getElementById('inputTmplCover').value = t.cover || '';
     document.getElementById('inputDtime').value = t.dtime || 0;
+    document.getElementById('inputAfterUpload').value = t.after_upload || 'none';
     new bootstrap.Modal(document.getElementById('tmplModal')).show();
   }
 });
@@ -190,6 +200,7 @@ document.getElementById('saveTmplBtn').addEventListener('click', async () => {
     tags: document.getElementById('inputTmplTags').value.trim(),
     cover: document.getElementById('inputTmplCover').value.trim(),
     dtime: parseInt(document.getElementById('inputDtime').value, 10) || 0,
+    after_upload: document.getElementById('inputAfterUpload').value || 'none',
   };
   if (id) {
     await apiAction(`/api/upload_templates/${id}`, 'PUT', body);
@@ -217,6 +228,7 @@ function resetTmplForm() {
   document.getElementById('inputTmplTags').value = '';
   document.getElementById('inputTmplCover').value = '';
   document.getElementById('inputDtime').value = 0;
+  document.getElementById('inputAfterUpload').value = 'none';
 }
 
 loadRoomSelect();
