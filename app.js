@@ -254,7 +254,9 @@ async function cleanupStaleRecordings() {
           const exists = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
           if (exists.rows.length > 0) continue;
           let size = 0;
-          try { size = fs.statSync(fp).size; } catch (_) {}
+          try {
+            size = fs.statSync(fp).size;
+          } catch (_) {}
           await pool.query(
             `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
              VALUES ($1, $2, $3, 'completed', NOW())`,
@@ -417,7 +419,8 @@ async function checkStaleRecordings() {
           try {
             const files = fs.readdirSync(outputDir);
             for (const f of files) {
-              if (!f.endsWith('.mp4') && !f.endsWith('.flv') && !f.startsWith('.segments_')) continue;
+              if (!f.endsWith('.mp4') && !f.endsWith('.flv') && !f.endsWith('.part') && !f.startsWith('.segments_'))
+                continue;
               const stat = fs.statSync(path.join(outputDir, f));
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
