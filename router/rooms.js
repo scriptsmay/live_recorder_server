@@ -395,6 +395,11 @@ router.post('/sessions/:id/delete', async (req, res) => {
 router.get('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    let minSize = 0;
+    try {
+      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
+      if (ps.rows.length) minSize = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
+    } catch (_) {}
     const session = await pool.query(
       `SELECT s.*, rm.room_name
        FROM recording_sessions s
@@ -405,9 +410,14 @@ router.get('/sessions/:id', async (req, res) => {
     if (session.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    const recordings = await pool.query(`SELECT * FROM recordings WHERE session_id = $1 ORDER BY segment_index ASC`, [
-      id,
-    ]);
+    let recQuery = 'SELECT * FROM recordings WHERE session_id = $1';
+    const recParams = [id];
+    if (minSize > 0) {
+      recQuery += ' AND file_size >= $2';
+      recParams.push(minSize);
+    }
+    recQuery += ' ORDER BY segment_index ASC';
+    const recordings = await pool.query(recQuery, recParams);
     // 对于录制中但 DB 尚无分片记录的会话，尝试从房间的 output_path 定位文件
     if (recordings.rows.length === 0) {
       const room = await pool.query(`SELECT output_path FROM rooms WHERE room_url = $1`, [session.rows[0].room_url]);
