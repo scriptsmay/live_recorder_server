@@ -2,7 +2,10 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+require('dotenv').config({
+  path: path.join(__dirname, '..', '.env'),
+  quiet: true,
+});
 
 const BACKUP_DIR = path.join(__dirname, '..', 'backups');
 const RETENTION_DAYS = 7;
@@ -44,7 +47,7 @@ async function backup() {
   } catch (_) {}
 
   // 清理旧备份
-  const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.gz'));
+  const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.gz'));
   const now = Date.now();
   for (const f of files) {
     const fp = path.join(BACKUP_DIR, f);
@@ -63,24 +66,30 @@ async function nodeDump(filePath) {
   const pool = new (require('pg').Pool)(dbConfig);
   const stream = fs.createWriteStream(filePath);
   const tables = [
-    'rooms', 'recording_sessions', 'recordings', 'recording_files',
-    'upload_templates', 'upload_records',
+    'rooms',
+    'recording_sessions',
+    'recordings',
+    'recording_files',
+    'upload_templates',
+    'upload_records',
   ];
 
   for (const table of tables) {
     const { rows } = await pool.query(`SELECT * FROM ${table} ORDER BY id`);
     if (rows.length === 0) continue;
     const cols = Object.keys(rows[0]);
-    const colList = cols.map(c => `"${c}"`).join(', ');
+    const colList = cols.map((c) => `"${c}"`).join(', ');
 
     for (const row of rows) {
-      const vals = cols.map(c => {
+      const vals = cols.map((c) => {
         const v = row[c];
         if (v === null) return 'NULL';
         if (typeof v === 'number') return String(v);
         return `'${String(v).replace(/'/g, "''")}'`;
       });
-      stream.write(`INSERT INTO "${table}" (${colList}) VALUES (${vals.join(', ')});\n`);
+      stream.write(
+        `INSERT INTO "${table}" (${colList}) VALUES (${vals.join(', ')});\n`
+      );
     }
     stream.write(`\n`);
   }
@@ -89,7 +98,7 @@ async function nodeDump(filePath) {
   pool.end();
 }
 
-backup().catch(err => {
+backup().catch((err) => {
   console.error('[备份] 失败:', err.message);
   process.exit(1);
 });

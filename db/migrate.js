@@ -94,11 +94,21 @@ async function migrate() {
       )
     `);
 
-    await client.query(`ALTER TABLE upload_templates DROP COLUMN IF EXISTS line`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS is_only_self INTEGER DEFAULT 0`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS cookies_path VARCHAR(1024) DEFAULT ''`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS dtime INTEGER DEFAULT 0`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS after_upload VARCHAR(20) DEFAULT 'none'`);
+    await client.query(
+      `ALTER TABLE upload_templates DROP COLUMN IF EXISTS line`
+    );
+    await client.query(
+      `ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS is_only_self INTEGER DEFAULT 0`
+    );
+    await client.query(
+      `ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS cookies_path VARCHAR(1024) DEFAULT ''`
+    );
+    await client.query(
+      `ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS dtime INTEGER DEFAULT 0`
+    );
+    await client.query(
+      `ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS after_upload VARCHAR(20) DEFAULT 'none'`
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS upload_records (
@@ -119,7 +129,9 @@ async function migrate() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS bv_id VARCHAR(50) DEFAULT ''`);
+    await client.query(
+      `ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS bv_id VARCHAR(50) DEFAULT ''`
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS recording_files (

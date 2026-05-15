@@ -1,0 +1,6 @@
+node_modules
+public
+logs
+backups
+*.log
+package-lock.json

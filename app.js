@@ -16,7 +16,15 @@ const pool = require('./db/index');
 const redis = require('./db/redis');
 
 const htmlRouter = require('./router/html');
-const { router: apiRouter, generateFilename, templateToStrftime, setActiveTask, delActiveTask, delRoomCache, activeTaskKey } = require('./router/api');
+const {
+  router: apiRouter,
+  generateFilename,
+  templateToStrftime,
+  setActiveTask,
+  delActiveTask,
+  delRoomCache,
+  activeTaskKey,
+} = require('./router/api');
 const roomsRouter = require('./router/rooms');
 const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
@@ -67,7 +75,9 @@ const MAX_RESUME_RETRIES = 3;
 
 async function getSetting(key, def) {
   try {
-    const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+    const r = await pool.query('SELECT value FROM settings WHERE key = $1', [
+      key,
+    ]);
     if (r.rows.length) return r.rows[0].value;
   } catch (_) {}
   return def;
@@ -89,28 +99,56 @@ async function tryResumeSession(session) {
   } else {
     const base = generateFilename(template, session.room_name || '');
     const parsed = path.parse(base);
-    outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
+    outputPath = path.join(
+      DOWNLOAD_DIR,
+      `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`
+    );
   }
 
   const streamUrl = session.stream_url || session.room_url;
-  const ffmpegArgs = ['-i', streamUrl, '-c', 'copy', '-fflags', '+genpts',
-    '-timeout', '2147483647',
-    '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '60'];
+  const ffmpegArgs = [
+    '-i',
+    streamUrl,
+    '-c',
+    'copy',
+    '-fflags',
+    '+genpts',
+    '-timeout',
+    '2147483647',
+    '-reconnect',
+    '1',
+    '-reconnect_at_eof',
+    '1',
+    '-reconnect_streamed',
+    '1',
+    '-reconnect_delay_max',
+    '60',
+  ];
 
   if (useSegment) {
     ffmpegArgs.push(
-      '-f', 'segment',
-      '-segment_time', String(segmentDuration),
-      '-reset_timestamps', '1',
-      '-strftime', '1'
+      '-f',
+      'segment',
+      '-segment_time',
+      String(segmentDuration),
+      '-reset_timestamps',
+      '1',
+      '-strftime',
+      '1'
     );
   }
   ffmpegArgs.push(outputPath);
 
-  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog('ffmpeg', session.id);
+  const {
+    fd: logFd,
+    logPath: ffmpegLogPath,
+    logCommand,
+  } = createProcLog('ffmpeg', session.id);
   logCommand('ffmpeg', ffmpegArgs);
 
-  const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', logFd] });
+  const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
+    stdio: ['ignore', 'ignore', logFd],
+  });
 
   let sessionFinalized = false;
 
@@ -119,7 +157,9 @@ async function tryResumeSession(session) {
     sessionFinalized = true;
 
     await delActiveTask(activeTaskKey(session.room_url));
-    console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
+    console.log(
+      `[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`
+    );
 
     try {
       await pool.query(
@@ -129,7 +169,10 @@ async function tryResumeSession(session) {
       await delRoomCache(session.room_url);
 
       let fileSize = 0;
-      try { const stat = fs.statSync(outputPath); fileSize = stat.size; } catch (_) {}
+      try {
+        const stat = fs.statSync(outputPath);
+        fileSize = stat.size;
+      } catch (_) {}
 
       await pool.query(
         `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
@@ -149,15 +192,21 @@ async function tryResumeSession(session) {
 
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve(), 2000);
-    ffmpeg.on('error', (err) => { clearTimeout(timer); reject(err); });
+    ffmpeg.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     ffmpeg.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== null && code !== 0) reject(new Error(`ffmpeg exited with code ${code}`));
+      if (code !== null && code !== 0)
+        reject(new Error(`ffmpeg exited with code ${code}`));
       else resolve();
     });
   });
 
-  try { process.kill(ffmpeg.pid, 0); } catch (_) {
+  try {
+    process.kill(ffmpeg.pid, 0);
+  } catch (_) {
     throw new Error('ffmpeg exited during initialization');
   }
 
@@ -180,7 +229,9 @@ async function tryResumeSession(session) {
     [(retryCount || 0) + 1, session.id]
   );
 
-  console.log(`[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`);
+  console.log(
+    `[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`
+  );
 }
 
 async function cleanupStaleRecordings() {
@@ -188,7 +239,10 @@ async function cleanupStaleRecordings() {
     // 清理上一轮可能的孤儿 ffmpeg 进程（避免 PM2 watch 重启导致状态不同步）
     try {
       const { execSync } = require('child_process');
-      execSync('pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null', { stdio: 'ignore' });
+      execSync(
+        'pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null',
+        { stdio: 'ignore' }
+      );
     } catch (_) {}
 
     const staleRooms = await pool.query(
@@ -196,14 +250,22 @@ async function cleanupStaleRecordings() {
     );
     for (const row of staleRooms.rows) {
       if (row.ffmpeg_pid) {
-        try { process.kill(row.ffmpeg_pid, 'SIGTERM'); } catch (_) {}
+        try {
+          process.kill(row.ffmpeg_pid, 'SIGTERM');
+        } catch (_) {}
       }
-      console.log(`[清理] 直播间 ${row.room_name || row.room_url} (ID:${row.id}) 状态已重置为 idle`);
+      console.log(
+        `[清理] 直播间 ${row.room_name || row.room_url} (ID:${row.id}) 状态已重置为 idle`
+      );
     }
-    const kpids = staleRooms.rows.map(r => r.ffmpeg_pid).filter(Boolean);
+    const kpids = staleRooms.rows.map((r) => r.ffmpeg_pid).filter(Boolean);
     if (kpids.length > 0) {
       setTimeout(() => {
-        for (const pid of kpids) { try { process.kill(pid, 'SIGKILL'); } catch (_) {} }
+        for (const pid of kpids) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch (_) {}
+        }
       }, 3000);
     }
     await pool.query(
@@ -221,7 +283,9 @@ async function cleanupStaleRecordings() {
     for (const session of sessions.rows) {
       const retryCount = session.retry_count || 0;
       if (retryCount >= MAX_RESUME_RETRIES) {
-        console.log(`[清理] 会话 ${session.id} 已达最大重试次数(${MAX_RESUME_RETRIES})，标记为中断`);
+        console.log(
+          `[清理] 会话 ${session.id} 已达最大重试次数(${MAX_RESUME_RETRIES})，标记为中断`
+        );
         await pool.query(
           `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`,
           [session.id]
@@ -229,7 +293,9 @@ async function cleanupStaleRecordings() {
         continue;
       }
 
-      console.log(`[恢复] 尝试恢复会话 ${session.id} (第 ${retryCount + 1}/${MAX_RESUME_RETRIES} 次)`);
+      console.log(
+        `[恢复] 尝试恢复会话 ${session.id} (第 ${retryCount + 1}/${MAX_RESUME_RETRIES} 次)`
+      );
       try {
         await tryResumeSession(session);
         console.log(`[恢复] 会话 ${session.id} 恢复成功`);
@@ -265,10 +331,16 @@ async function cleanupStaleRecordings() {
     for (const row of recResult.rows) {
       let fileSize = 0;
       if (row.file_path) {
-        try { const stat = fs.statSync(row.file_path); fileSize = stat.size; } catch (_) {}
+        try {
+          const stat = fs.statSync(row.file_path);
+          fileSize = stat.size;
+        } catch (_) {}
       }
       if (fileSize > 0) {
-        await pool.query('UPDATE recordings SET file_size = $1 WHERE id = $2', [fileSize, row.id]);
+        await pool.query('UPDATE recordings SET file_size = $1 WHERE id = $2', [
+          fileSize,
+          row.id,
+        ]);
       }
     }
     if (recResult.rows.length > 0) {
@@ -283,9 +355,15 @@ async function cleanupStaleRecordings() {
     );
     for (const row of fileResult.rows) {
       let size = 0;
-      try { const s = fs.statSync(row.file_path); size = s.size; } catch (_) {}
+      try {
+        const s = fs.statSync(row.file_path);
+        size = s.size;
+      } catch (_) {}
       if (size > 0) {
-        await pool.query('UPDATE recording_files SET file_size = $1 WHERE id = $2', [size, row.id]);
+        await pool.query(
+          'UPDATE recording_files SET file_size = $1 WHERE id = $2',
+          [size, row.id]
+        );
       }
     }
     if (fileResult.rows.length > 0) {
@@ -303,7 +381,10 @@ async function cleanupStaleRedis() {
     let deleted = 0;
     for (const key of keys) {
       const roomKey = key.replace('active_task:', '');
-      const room = await pool.query('SELECT status FROM rooms WHERE room_url = $1', [roomKey]);
+      const room = await pool.query(
+        'SELECT status FROM rooms WHERE room_url = $1',
+        [roomKey]
+      );
       if (room.rows.length === 0 || room.rows[0].status !== 'recording') {
         await redis.del(key);
         deleted++;
@@ -331,7 +412,8 @@ async function runFileScan() {
 
 async function checkStaleRecordings() {
   try {
-    const STALE_FILE_TIMEOUT_MS = (parseInt(await getSetting('watchdog_timeout', '60'), 10)) * 1000;
+    const STALE_FILE_TIMEOUT_MS =
+      parseInt(await getSetting('watchdog_timeout', '60'), 10) * 1000;
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.ffmpeg_pid, r.output_path, r.segment_duration,
               rs.id AS session_id
@@ -343,7 +425,10 @@ async function checkStaleRecordings() {
     for (const room of rooms) {
       let processAlive = false;
       if (room.ffmpeg_pid) {
-        try { process.kill(room.ffmpeg_pid, 0); processAlive = true; } catch (_) {}
+        try {
+          process.kill(room.ffmpeg_pid, 0);
+          processAlive = true;
+        } catch (_) {}
       }
 
       let fileStale = false;
@@ -361,13 +446,19 @@ async function checkStaleRecordings() {
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
           } catch (_) {}
-          if (latestMtime > 0 && Date.now() - latestMtime > STALE_FILE_TIMEOUT_MS) {
+          if (
+            latestMtime > 0 &&
+            Date.now() - latestMtime > STALE_FILE_TIMEOUT_MS
+          ) {
             fileStale = true;
           }
         } else {
           try {
             const stat = fs.statSync(room.output_path);
-            if (stat.isFile() && Date.now() - stat.mtimeMs > STALE_FILE_TIMEOUT_MS) {
+            if (
+              stat.isFile() &&
+              Date.now() - stat.mtimeMs > STALE_FILE_TIMEOUT_MS
+            ) {
               fileStale = true;
             }
           } catch (_) {}
@@ -375,12 +466,18 @@ async function checkStaleRecordings() {
       }
 
       if (!processAlive || fileStale) {
-        console.log(`[看门狗] 僵死录制: ${room.room_name || room.room_url} (pid=${room.ffmpeg_pid}, 进程=${processAlive}, 文件过时=${fileStale})`);
+        console.log(
+          `[看门狗] 僵死录制: ${room.room_name || room.room_url} (pid=${room.ffmpeg_pid}, 进程=${processAlive}, 文件过时=${fileStale})`
+        );
 
         if (processAlive && room.ffmpeg_pid) {
-          try { process.kill(room.ffmpeg_pid, 'SIGTERM'); } catch (_) {}
+          try {
+            process.kill(room.ffmpeg_pid, 'SIGTERM');
+          } catch (_) {}
           setTimeout(() => {
-            try { process.kill(room.ffmpeg_pid, 'SIGKILL'); } catch (_) {}
+            try {
+              process.kill(room.ffmpeg_pid, 'SIGKILL');
+            } catch (_) {}
           }, 5000);
         }
 
@@ -393,7 +490,10 @@ async function checkStaleRecordings() {
         if (room.session_id) {
           let fileSize = 0;
           if (room.output_path) {
-            try { const stat = fs.statSync(room.output_path); fileSize = stat.size; } catch (_) {}
+            try {
+              const stat = fs.statSync(room.output_path);
+              fileSize = stat.size;
+            } catch (_) {}
           }
           await pool.query(
             `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted', total_size = $1 WHERE id = $2`,

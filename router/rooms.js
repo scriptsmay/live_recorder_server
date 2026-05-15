@@ -35,9 +35,18 @@ router.get('/rooms', async (req, res) => {
 // POST /api/rooms — 新增直播间
 router.post('/rooms', async (req, res) => {
   try {
-    const { room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
+    const {
+      room_url,
+      room_name,
+      filename_template,
+      segment_duration,
+      notification_enabled,
+      monitoring_enabled,
+    } = req.body;
     if (!room_url) {
-      return res.status(400).json({ status: 'Error', message: 'room_url 必填' });
+      return res
+        .status(400)
+        .json({ status: 'Error', message: 'room_url 必填' });
     }
     const result = await pool.query(
       `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled)
@@ -50,9 +59,14 @@ router.post('/rooms', async (req, res) => {
          monitoring_enabled = COALESCE($6, rooms.monitoring_enabled),
          updated_at = NOW()
        RETURNING *`,
-      [room_url, room_name || '', filename_template || null, segment_duration ?? null,
-       notification_enabled !== undefined ? notification_enabled : true,
-       monitoring_enabled !== undefined ? monitoring_enabled : true]
+      [
+        room_url,
+        room_name || '',
+        filename_template || null,
+        segment_duration ?? null,
+        notification_enabled !== undefined ? notification_enabled : true,
+        monitoring_enabled !== undefined ? monitoring_enabled : true,
+      ]
     );
     await delRoomCache(result.rows[0].room_url);
     if (req.headers['hx-request']) return renderRoomsHtml(res);
@@ -83,7 +97,13 @@ router.get('/rooms/:id', async (req, res) => {
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
+    const {
+      room_name,
+      filename_template,
+      segment_duration,
+      notification_enabled,
+      monitoring_enabled,
+    } = req.body;
     const result = await pool.query(
       `UPDATE rooms
        SET room_name = COALESCE($1, room_name),
@@ -94,9 +114,14 @@ router.put('/rooms/:id', async (req, res) => {
            updated_at = NOW()
        WHERE id = $6
        RETURNING *`,
-      [room_name, filename_template, segment_duration != null ? segment_duration : null,
-       notification_enabled !== undefined ? notification_enabled : null,
-       monitoring_enabled !== undefined ? monitoring_enabled : null, id]
+      [
+        room_name,
+        filename_template,
+        segment_duration != null ? segment_duration : null,
+        notification_enabled !== undefined ? notification_enabled : null,
+        monitoring_enabled !== undefined ? monitoring_enabled : null,
+        id,
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
@@ -120,7 +145,9 @@ router.delete('/rooms/:id', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
     if (room.rows[0].status !== 'idle') {
-      return res.status(400).json({ status: 'Error', message: '直播间录制中，无法删除' });
+      return res
+        .status(400)
+        .json({ status: 'Error', message: '直播间录制中，无法删除' });
     }
     await delRoomCache(room.rows[0].room_url);
     await pool.query('DELETE FROM rooms WHERE id = $1', [id]);
@@ -143,7 +170,9 @@ router.post('/rooms/:id/pause', async (req, res) => {
     }
     const r = room.rows[0];
     if (r.status !== 'recording') {
-      return res.status(400).json({ status: 'Error', message: '当前状态不可暂停' });
+      return res
+        .status(400)
+        .json({ status: 'Error', message: '当前状态不可暂停' });
     }
     if (r.ffmpeg_pid) {
       try {
@@ -176,7 +205,9 @@ router.post('/rooms/:id/resume', async (req, res) => {
     }
     const r = room.rows[0];
     if (r.status !== 'paused') {
-      return res.status(400).json({ status: 'Error', message: '当前状态不可恢复' });
+      return res
+        .status(400)
+        .json({ status: 'Error', message: '当前状态不可恢复' });
     }
     if (r.ffmpeg_pid) {
       try {
@@ -272,9 +303,14 @@ router.get('/recordings', async (req, res) => {
 router.delete('/recordings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM recordings WHERE id = $1 RETURNING id', [id]);
+    const result = await pool.query(
+      'DELETE FROM recordings WHERE id = $1 RETURNING id',
+      [id]
+    );
     if (result.rows.length === 0) {
-      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
+      return res
+        .status(404)
+        .json({ status: 'Error', message: '录制记录不存在' });
     }
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
@@ -323,7 +359,10 @@ router.post('/sessions/:id/delete', async (req, res) => {
       `UPDATE recording_sessions SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
       [id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在或已删除' });
+    if (result.rows.length === 0)
+      return res
+        .status(404)
+        .json({ status: 'Error', message: '会话不存在或已删除' });
     res.json({ status: 'ok', message: '已标记删除' });
   } catch (err) {
     console.error('[sessions] 删除失败:', err);
@@ -369,7 +408,10 @@ router.get('/sessions/:id', async (req, res) => {
         } catch (_) {}
       }
     }
-    res.json({ status: 'ok', data: { session: session.rows[0], recordings: recordings.rows } });
+    res.json({
+      status: 'ok',
+      data: { session: session.rows[0], recordings: recordings.rows },
+    });
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
