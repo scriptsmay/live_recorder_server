@@ -203,6 +203,51 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 ---
 
+## 全局设置
+
+### GET /api/settings
+
+查询所有全局设置项。
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/settings
+```
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    { "id": 1, "key": "pool_size", "value": "3" },
+    { "id": 2, "key": "watchdog_interval", "value": "30" }
+  ],
+  "map": { "pool_size": "3", "watchdog_interval": "30" }
+}
+```
+
+### PUT /api/settings/:key
+
+更新指定设置项的值。
+
+**请求体：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| value | string | 是 | 设置值 |
+
+**示例：**
+
+```bash
+curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
+  -H 'Content-Type: application/json' \
+  -d '{"value": "5"}'
+```
+
+---
+
 ## 文件名模板
 
 默认模板：`{room_name}_{datetime}`

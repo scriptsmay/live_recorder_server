@@ -35,20 +35,24 @@ router.get('/rooms', async (req, res) => {
 // POST /api/rooms — 新增直播间
 router.post('/rooms', async (req, res) => {
   try {
-    const { room_url, room_name, filename_template, segment_duration } = req.body;
+    const { room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: 'room_url 必填' });
     }
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (room_url) DO UPDATE SET
          room_name = COALESCE($2, rooms.room_name),
          filename_template = COALESCE($3, rooms.filename_template),
          segment_duration = COALESCE($4, rooms.segment_duration),
+         notification_enabled = COALESCE($5, rooms.notification_enabled),
+         monitoring_enabled = COALESCE($6, rooms.monitoring_enabled),
          updated_at = NOW()
        RETURNING *`,
-      [room_url, room_name || '', filename_template || null, segment_duration ?? null]
+      [room_url, room_name || '', filename_template || null, segment_duration ?? null,
+       notification_enabled !== undefined ? notification_enabled : true,
+       monitoring_enabled !== undefined ? monitoring_enabled : true]
     );
     await delRoomCache(result.rows[0].room_url);
     if (req.headers['hx-request']) return renderRoomsHtml(res);
@@ -79,16 +83,20 @@ router.get('/rooms/:id', async (req, res) => {
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { room_name, filename_template, segment_duration } = req.body;
+    const { room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
     const result = await pool.query(
       `UPDATE rooms
        SET room_name = COALESCE($1, room_name),
            filename_template = COALESCE($2, filename_template),
            segment_duration = COALESCE($3, segment_duration, 0),
+           notification_enabled = COALESCE($4, rooms.notification_enabled),
+           monitoring_enabled = COALESCE($5, rooms.monitoring_enabled),
            updated_at = NOW()
-       WHERE id = $4
+       WHERE id = $6
        RETURNING *`,
-      [room_name, filename_template, segment_duration != null ? segment_duration : null, id]
+      [room_name, filename_template, segment_duration != null ? segment_duration : null,
+       notification_enabled !== undefined ? notification_enabled : null,
+       monitoring_enabled !== undefined ? monitoring_enabled : null, id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });

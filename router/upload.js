@@ -178,7 +178,7 @@ async function executeUpload(session, tmpl) {
   if (tmpl.dtime) args.push('--dtime', String(tmpl.dtime));
   args.push(...files);
 
-  notify.uploadStart(session.room_name, tmpl.name, files.length);
+  notify.uploadStart(session.room_name, tmpl.name, files.length, session.room_url);
 
   const { stream: logStream, logPath, logCommand } = createProcLog('biliup', recordId);
   console.log(`[投稿] biliup 日志: ${logPath}`);
@@ -207,8 +207,9 @@ async function executeUpload(session, tmpl) {
         `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
         [cmdStr, output, bvId, recordId]
       );
-      notify.uploadComplete(session.room_name, title, bvId);
+      notify.uploadComplete(session.room_name, title, bvId, session.room_url);
 
+      await new Promise(r => setTimeout(r, 10000));
       const postResult = await afterUpload(tmpl.after_upload, files, session.id, tmpl.name, recordId);
       if (postResult) {
         output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;

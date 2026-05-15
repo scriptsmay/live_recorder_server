@@ -20,6 +20,7 @@ const htmlRouter = require('./router/html');
 const { router: apiRouter, sanitizeFilename, generateFilename, templateToStrftime, setActiveTask, delActiveTask, delRoomCache, activeTaskKey } = require('./router/api');
 const roomsRouter = require('./router/rooms');
 const { router: uploadRouter } = require('./router/upload');
+const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
 const { scanRecordingFiles } = require('./lib/scan-files');
 
@@ -58,13 +59,20 @@ app.use('/', htmlRouter);
 app.use('/api', apiRouter);
 app.use('/api', roomsRouter);
 app.use('/api', uploadRouter);
+app.use('/api', settingsRouter);
 
 // ──────────────────────────────────────────────
 // 4. 启动前清理与恢复
 // ──────────────────────────────────────────────
 const MAX_RESUME_RETRIES = 3;
-const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
-const STALE_FILE_TIMEOUT_MS = 10 * 60 * 1000;
+
+async function getSetting(key, def) {
+  try {
+    const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+    if (r.rows.length) return r.rows[0].value;
+  } catch (_) {}
+  return def;
+}
 
 async function tryResumeSession(session) {
   const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -105,36 +113,12 @@ async function tryResumeSession(session) {
 
   const ffmpeg = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', logFd] });
 
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => resolve(), 2000);
-    ffmpeg.on('error', (err) => { clearTimeout(timer); reject(err); });
-    ffmpeg.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== null && code !== 0) reject(new Error(`ffmpeg exited with code ${code}`));
-      else resolve();
-    });
-  });
-
-  await pool.query(
-    `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
-    [outputPath, ffmpeg.pid, session.room_id]
-  );
-  await delRoomCache(session.room_url);
-
-  await setActiveTask(activeTaskKey(session.room_url), {
-    pid: ffmpeg.pid,
-    outputPath,
-    roomId: session.room_id,
-    sessionId: session.id,
-    startTime: Date.now(),
-  });
-
-  await pool.query(
-    `UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`,
-    [(retryCount || 0) + 1, session.id]
-  );
+  let sessionFinalized = false;
 
   ffmpeg.on('close', async (code) => {
+    if (sessionFinalized) return;
+    sessionFinalized = true;
+
     await delActiveTask(activeTaskKey(session.room_url));
     console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
 
@@ -163,6 +147,39 @@ async function tryResumeSession(session) {
       console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
     }
   });
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(), 2000);
+    ffmpeg.on('error', (err) => { clearTimeout(timer); reject(err); });
+    ffmpeg.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== null && code !== 0) reject(new Error(`ffmpeg exited with code ${code}`));
+      else resolve();
+    });
+  });
+
+  try { process.kill(ffmpeg.pid, 0); } catch (_) {
+    throw new Error('ffmpeg exited during initialization');
+  }
+
+  await pool.query(
+    `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
+    [outputPath, ffmpeg.pid, session.room_id]
+  );
+  await delRoomCache(session.room_url);
+
+  await setActiveTask(activeTaskKey(session.room_url), {
+    pid: ffmpeg.pid,
+    outputPath,
+    roomId: session.room_id,
+    sessionId: session.id,
+    startTime: Date.now(),
+  });
+
+  await pool.query(
+    `UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`,
+    [(retryCount || 0) + 1, session.id]
+  );
 
   console.log(`[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`);
 }
@@ -219,6 +236,13 @@ async function cleanupStaleRecordings() {
         console.log(`[恢复] 会话 ${session.id} 恢复成功`);
       } catch (err) {
         console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
+        const check = await pool.query(
+          `SELECT status FROM recording_sessions WHERE id = $1`,
+          [session.id]
+        );
+        if (check.rows.length > 0 && check.rows[0].status !== 'recording') {
+          continue;
+        }
         const newCount = retryCount + 1;
         if (newCount >= MAX_RESUME_RETRIES) {
           await pool.query(
@@ -308,6 +332,7 @@ async function runFileScan() {
 
 async function checkStaleRecordings() {
   try {
+    const STALE_FILE_TIMEOUT_MS = (parseInt(await getSetting('watchdog_timeout', '60'), 10)) * 1000;
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.ffmpeg_pid, r.output_path, r.segment_duration,
               rs.id AS session_id
@@ -399,14 +424,18 @@ async function startup() {
   await runFileScan();
 }
 
+async function scheduleWatchdog() {
+  const intervalSec = parseInt(await getSetting('watchdog_interval', '30'), 10);
+  await checkStaleRecordings();
+  setTimeout(scheduleWatchdog, Math.max(intervalSec, 10) * 1000);
+}
+
 startup()
   .then(() => {
     app.listen(port, () => {
       console.log(`Server running on http://localhost:${port}`);
     });
-    checkStaleRecordings();
-    setInterval(checkStaleRecordings, WATCHDOG_INTERVAL_MS);
-    console.log(`[看门狗] 已启动，每 ${WATCHDOG_INTERVAL_MS / 1000 / 60} 分钟检查僵死录制`);
+    scheduleWatchdog();
   })
   .catch((err) => {
     console.error('[启动失败] 数据库迁移出错:', err);

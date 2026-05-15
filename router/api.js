@@ -252,7 +252,10 @@ router.get('/notify/status', async (req, res) => {
     const room = result.rows[0];
     const data = { room: { id: room.id, room_url: room.room_url, room_name: room.room_name } };
 
-    if (room.status === 'recording' || room.status === 'paused') {
+    if (room.monitoring_enabled === false) {
+      data.status = 'monitoring_paused';
+      data.monitoring_paused = true;
+    } else if (room.status === 'recording' || room.status === 'paused') {
       const session = await pool.query(
         `SELECT id, started_at FROM recording_sessions
          WHERE room_url = $1 AND status = 'recording'
@@ -300,12 +303,33 @@ router.post('/notify/live_download', async (req, res) => {
       .json({ status: 'Already recording', message: '请勿重复开启' });
   }
 
+  let poolSize = 3;
+  try {
+    const ps = await pool.query("SELECT value FROM settings WHERE key = 'pool_size'");
+    if (ps.rows.length) poolSize = parseInt(ps.rows[0].value, 10) || 3;
+  } catch (_) {}
+  let activeKeys = [];
+  try { activeKeys = await redis.keys('active_task:*'); } catch (_) {}
+  if (activeKeys.length >= poolSize) {
+    return res.status(429).json({
+      status: 'Pool full',
+      message: `下载线程池已满 (${activeKeys.length}/${poolSize})，请等待其他录制完成`,
+    });
+  }
+
   let room;
   try {
     room = await getOrCreateRoom(roomKey, title);
   } catch (dbErr) {
     console.error('[api] 数据库操作失败:', dbErr);
     return res.status(500).json({ status: 'Error', message: '数据库操作失败' });
+  }
+
+  if (room.monitoring_enabled === false) {
+    return res.status(400).json({
+      status: 'Monitoring paused',
+      message: `直播间 ${room.room_name || room.room_url} 已暂停监听`,
+    });
   }
 
   if (room.status === 'recording' || room.status === 'paused') {
@@ -544,7 +568,7 @@ router.post('/notify/live_download', async (req, res) => {
           const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [sessionId]);
           const segs = sess.rows[0]?.total_segments || 0;
           const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
-          notify.recordingComplete(room.room_name, segs, mb, sessionId);
+          notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
         } catch (_) {}
 
         const completedSession = {
@@ -562,7 +586,7 @@ router.post('/notify/live_download', async (req, res) => {
     }
   });
 
-  notify.recordingStart(room.room_name || title, caption);
+  notify.recordingStart(room.room_name || title, caption, room.room_url);
 
   res.status(200).json({
     status: 'Recording started',

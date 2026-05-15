@@ -45,6 +45,10 @@ router.get('/files', (req, res) => {
   res.render('files', { title: '文件管理' });
 });
 
+router.get('/settings', (req, res) => {
+  res.render('settings', { title: '全局设置' });
+});
+
 router.get('/apiview', (req, res) => {
   res.render('apiview', {
     siteUrl: config.SITE_URL,

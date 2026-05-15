@@ -62,6 +62,8 @@
 | output_path | VARCHAR(1024) | DEFAULT '' | 最新录制文件路径 |
 | ffmpeg_pid | INTEGER | | ffmpeg 进程 ID（用于暂停/恢复） |
 | segment_duration | INTEGER | DEFAULT 0 | 分段录制时长（秒），0 表示不分段 |
+| notification_enabled | BOOLEAN | DEFAULT TRUE | 通知开关，关闭后不发送录制/投稿通知 |
+| monitoring_enabled | BOOLEAN | DEFAULT TRUE | 监听开关，关闭后 API 触发时不启动 ffmpeg |
 | created_at | TIMESTAMP | DEFAULT NOW() | 创建时间 |
 | updated_at | TIMESTAMP | DEFAULT NOW() | 更新时间 |
 
@@ -182,6 +184,34 @@ orphaned  ←────────────────────── 
 
 ---
 
+### settings — 全局设置
+
+KV 结构的全局配置表。
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | SERIAL | PRIMARY KEY | |
+| key | VARCHAR(255) | UNIQUE NOT NULL | 设置键名 |
+| value | TEXT | DEFAULT '' | 设置值 |
+| created_at | TIMESTAMP | DEFAULT NOW() | |
+| updated_at | TIMESTAMP | DEFAULT NOW() | |
+
+**默认设置项：**
+
+| 键 | 默认值 | 说明 |
+|----|--------|------|
+| `pool_size` | `3` | 下载线程池大小，限制最大同时录制数 |
+| `watchdog_interval` | `30` | 看门狗检查间隔（秒） |
+| `watchdog_timeout` | `60` | 录制状态检查超时（秒），超过则标记为完成 |
+| `filtering_threshold` | `10` | 碎片过滤阈值（MB），小于此大小的文件将被过滤 |
+| `delay` | `60` | 下播延迟检测（秒） |
+| `submit_api` | `` | biliup --submit 选项，留空为自动 |
+| `lines` | `` | 上传线路，留空为自动 |
+| `threads` | `3` | 单文件并发上传数 |
+| `pool2_size` | `3` | 上传线程池大小 |
+
+---
+
 ## 迁移
 
-应用启动时 `db/migrate.js` 自动执行建表（`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS`），无需手动操作。
+应用启动时 `db/migrate.js` 自动执行建表（`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS` + 默认设置 INSERT），无需手动操作。

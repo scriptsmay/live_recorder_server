@@ -59,7 +59,7 @@ async function loadRecords() {
       <td>${r.file_count}</td>
       <td>${size}</td>
       <td>${badge}</td>
-      <td>${r.bv_id ? '<code>' + r.bv_id + '</code>' : '-'}</td>
+      <td>${r.bv_id ? '<a href="https://www.bilibili.com/video/' + r.bv_id + '" target="_blank" rel="noopener"><code>' + r.bv_id + '</code></a>' : '-'}</td>
       <td><small>${r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-')}</small></td>
       <td>
         <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="${r.id}" data-output="${encodeURIComponent(r.output || '')}">输出</button>

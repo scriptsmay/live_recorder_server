@@ -137,6 +137,43 @@ async function migrate() {
       )
     `);
 
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT TRUE
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS monitoring_enabled BOOLEAN DEFAULT TRUE
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(255) UNIQUE NOT NULL,
+        value TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    const defaultSettings = [
+      ['pool_size', '3'],
+      ['watchdog_interval', '30'],
+      ['watchdog_timeout', '60'],
+      ['filtering_threshold', '10'],
+      ['delay', '60'],
+      ['submit_api', ''],
+      ['lines', ''],
+      ['threads', '3'],
+      ['pool2_size', '3'],
+    ];
+    for (const [key, value] of defaultSettings) {
+      await client.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = COALESCE(NULLIF(EXCLUDED.value, ''), settings.value)`,
+        [key, value]
+      );
+    }
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {

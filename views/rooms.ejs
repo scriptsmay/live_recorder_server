@@ -33,6 +33,16 @@
           <input type="number" class="form-control" id="inputSegment" min="0" step="60" value="0" />
           <div class="form-text">设为 3600 即每 1 小时自动分割为一个文件</div>
         </div>
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="inputNotify" checked />
+          <label class="form-check-label" for="inputNotify">启用通知</label>
+          <div class="form-text">关闭后，开始录制、投稿通知将不会发送</div>
+        </div>
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="inputMonitor" checked />
+          <label class="form-check-label" for="inputMonitor">启用监听</label>
+          <div class="form-text">关闭后，即使收到录制通知也不会启动 ffmpeg 下载</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -62,12 +72,15 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const name = document.getElementById('inputName').value.trim();
   const tmpl = document.getElementById('inputTemplate').value.trim();
   const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
+  const notify = document.getElementById('inputNotify').checked;
+  const monitor = document.getElementById('inputMonitor').checked;
 
   if (!url && !id) return alert('直播间地址必填');
 
+  const body = { room_name: name, filename_template: tmpl || undefined, segment_duration: segment, notification_enabled: notify, monitoring_enabled: monitor };
   const res = id
-    ? await apiAction(`/api/rooms/${id}`, 'PUT', { room_name: name, filename_template: tmpl || undefined, segment_duration: segment })
-    : await apiAction('/api/rooms', 'POST', { room_url: url, room_name: name, filename_template: tmpl || undefined, segment_duration: segment });
+    ? await apiAction(`/api/rooms/${id}`, 'PUT', body)
+    : await apiAction('/api/rooms', 'POST', { room_url: url, ...body });
 
   if (res.ok) {
     bootstrap.Modal.getInstance(document.getElementById('roomModal')).hide();
@@ -84,6 +97,8 @@ function resetForm() {
   document.getElementById('inputName').value = '';
   document.getElementById('inputTemplate').value = '';
   document.getElementById('inputSegment').value = 0;
+  document.getElementById('inputNotify').checked = true;
+  document.getElementById('inputMonitor').checked = true;
 }
 
 document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
@@ -104,6 +119,8 @@ document.addEventListener('click', e => {
       document.getElementById('inputName').value = r.room_name || '';
       document.getElementById('inputTemplate').value = r.filename_template || '';
       document.getElementById('inputSegment').value = r.segment_duration || 0;
+      document.getElementById('inputNotify').checked = r.notification_enabled !== false;
+      document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
       new bootstrap.Modal(document.getElementById('roomModal')).show();
     });
 });
