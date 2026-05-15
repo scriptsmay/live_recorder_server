@@ -52,6 +52,7 @@
         ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB'
         : '-';
       const uploads = uploadMap[s.id] || [];
+      const hasSuccessUpload = uploads.some(u => u.status === 'success');
       const uploadBadges = uploads
         .map((u) => {
           const b =
@@ -85,7 +86,7 @@
         ${uploadBadges ? `<div class="mb-2">${uploadBadges}</div>` : ''}
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="${s.id}">查看文件</button>
         ${
-          (s.status === 'completed' || s.status === 'interrupted') && s.total_segments > 0
+          !hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted') && s.total_segments > 0
             ? `
         <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="${s.id}">
           <option value="">选择模板投稿</option>
