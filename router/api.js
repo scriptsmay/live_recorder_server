@@ -354,7 +354,7 @@ router.post('/notify/live_download', async (req, res) => {
     if (delay > 0) {
       const recent = await pool.query(
         `SELECT id, total_segments, total_size FROM recording_sessions
-         WHERE room_url = $1 AND status = 'completed'
+         WHERE room_url = $1 AND status IN ('completed', 'interrupted')
            AND ended_at > NOW() - INTERVAL '1 second' * $2
          ORDER BY ended_at DESC LIMIT 1`,
         [room.room_url, delay]
