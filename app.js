@@ -168,23 +168,31 @@ async function tryResumeSession(session) {
       );
       await delRoomCache(session.room_url);
 
-      let fileSize = 0;
-      try {
-        const stat = fs.statSync(outputPath);
-        fileSize = stat.size;
-      } catch (_) {}
-
-      await pool.query(
-        `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-         VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
-        [session.id, session.room_url, outputPath, fileSize, session.started_at]
-      );
-
       const status = code === 0 ? 'completed' : 'interrupted';
-      await pool.query(
-        `UPDATE recording_sessions SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2 WHERE id = $3`,
-        [status, fileSize, session.id]
-      );
+
+      if (useSegment) {
+        await pool.query(
+          `UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`,
+          [status, session.id]
+        );
+      } else {
+        let fileSize = 0;
+        try {
+          const stat = fs.statSync(outputPath);
+          fileSize = stat.size;
+        } catch (_) {}
+
+        await pool.query(
+          `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+           VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
+          [session.id, session.room_url, outputPath, fileSize, session.started_at]
+        );
+
+        await pool.query(
+          `UPDATE recording_sessions SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2 WHERE id = $3`,
+          [status, fileSize, session.id]
+        );
+      }
     } catch (dbErr) {
       console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
     }
