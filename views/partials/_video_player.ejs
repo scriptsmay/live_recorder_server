@@ -7,7 +7,7 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-0 d-flex justify-content-center">
-        <video id="videoPlayer" class="w-100" controls autoplay style="max-height: 80vh;">
+        <video id="videoPlayer" class="w-100" controls autoplay muted style="max-height: 80vh;">
           <p class="text-white p-3">你的浏览器不支持视频播放</p>
         </video>
       </div>
@@ -18,7 +18,7 @@
 <script>
 let flvPlayer = null;
 
-function openVideoPlayer(src, title) {
+function openVideoPlayer(src, title, ext) {
   const modal = document.getElementById('videoPlayerModal');
   const video = document.getElementById('videoPlayer');
   const titleEl = document.getElementById('videoPlayerTitle');
@@ -32,12 +32,21 @@ function openVideoPlayer(src, title) {
   video.src = '';
   video.style.display = '';
 
-  if (src.endsWith('.flv') && flvjs.isSupported()) {
-    video.style.display = 'none';
-    flvPlayer = flvjs.createPlayer({ type: 'flv', url: src });
+  if ((ext === 'flv') && flvjs.isSupported()) {
+    flvPlayer = flvjs.createPlayer({
+      type: 'flv', url: src, isLive: false,
+      lazyLoad: false,
+      enableStashBuffer: false,
+      seekType: 'range',
+    });
+    flvPlayer.on(flvjs.Events.ERROR, (errType, errDetail) => {
+      console.error('[flv.js]', errType, errDetail);
+    });
     flvPlayer.attachMediaElement(video);
     flvPlayer.load();
-    flvPlayer.play();
+    flvPlayer.play().catch(function (e) {
+      if (e.name !== 'AbortError') console.error('[flv.js] play error:', e);
+    });
   } else {
     video.src = src;
     video.load();
