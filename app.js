@@ -262,6 +262,16 @@ async function cleanupStaleRecordings() {
           } catch (_) {}
         }
 
+        // 查找该房间最近的会话
+        let lastSession = null;
+        try {
+          const sess = await pool.query(
+            `SELECT id FROM recording_sessions WHERE room_url = $1 ORDER BY id DESC LIMIT 1`,
+            [row.room_url]
+          );
+          if (sess.rows.length) lastSession = sess.rows[0].id;
+        } catch (_) {}
+
         // 将 untracked .flv/.mp4 写入 recording_files
         for (const f of fs.readdirSync(dir)) {
           if (!/\.(mp4|flv)$/i.test(f)) continue;
@@ -273,9 +283,9 @@ async function cleanupStaleRecordings() {
             size = fs.statSync(fp).size;
           } catch (_) {}
           await pool.query(
-            `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
-             VALUES ($1, $2, $3, 'completed', NOW())`,
-            [fp, f, size]
+            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+            [lastSession, row.room_url, fp, f, size]
           );
           console.log(`[清理] 孤文件已追踪: ${f} (${size} bytes)`);
         }

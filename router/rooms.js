@@ -237,6 +237,15 @@ router.post('/rooms/:id/stop', async (req, res) => {
       const fs = require('fs');
       const files = fs.readdirSync(outputDir);
       const videoExtRe = /\.(mp4|flv|ts|mkv|avi|mov)$/i;
+      // 查找最近的会话关联文件
+      let activeSession = null;
+      try {
+        const sess = await pool.query(
+          `SELECT id FROM recording_sessions WHERE room_url = $1 ORDER BY id DESC LIMIT 1`,
+          [r.room_url]
+        );
+        if (sess.rows.length) activeSession = sess.rows[0].id;
+      } catch (_) {}
       for (const f of files) {
         const fp = path.join(outputDir, f);
         // stream-gears 遗留的 .part 文件：重命名并追踪
@@ -254,9 +263,9 @@ router.post('/rooms/:id/stop', async (req, res) => {
               sz = fs.statSync(finalPath).size;
             } catch (_) {}
             await pool.query(
-              `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
-               VALUES ($1, $2, $3, 'completed', NOW())`,
-              [finalPath, path.basename(finalPath), sz]
+              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
+               VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+              [activeSession, r.room_url, finalPath, path.basename(finalPath), sz]
             );
           }
           continue;
@@ -269,9 +278,9 @@ router.post('/rooms/:id/stop', async (req, res) => {
             size = fs.statSync(fp).size;
           } catch (_) {}
           await pool.query(
-            `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
-             VALUES ($1, $2, $3, 'completed', NOW())`,
-            [fp, f, size]
+            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+            [activeSession, r.room_url, fp, f, size]
           );
         }
       }
