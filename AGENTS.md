@@ -6,8 +6,29 @@
 - `npm run stop` → 停止服务
 - `npm run logs` → 查看 PM2 日志
 - `npm run restart` → PM2 生命周期管理
-- ⚠️ **禁止使用 `npm run dev`**（watch 模式会导致频繁重启引发房间状态竞争问题）
-- 需要重启时执行 `npm run stop && npm run start`
+- `npm run dev` → nodemon 开发模式（端口 3001），**不会影响 PM2 生产进程**
+- 需要重启 PM2 时执行 `npm run stop && npm run start`
+
+### 开发环境隔离
+
+`npm run dev` 会自动加载 `.env.dev`，覆盖 `.env` 中的以下配置：
+
+| 配置     | 生产 (.env)          | 开发 (.env.dev)        |
+| -------- | -------------------- | ---------------------- |
+| 端口     | `1123`               | `3001`（命令行指定）   |
+| 数据库   | `ks_live_recorder`   | `ks_live_recorder_dev` |
+| Redis DB | `1`                  | `2`                    |
+| 下载目录 | `VIDEO_DOWNLOAD_DIR` | `./dev_downloads`      |
+
+**首次使用前需创建开发数据库：**
+
+```sql
+CREATE DATABASE ks_live_recorder_dev;
+```
+
+（表结构会在启动时自动迁移创建）
+
+`dev_downloads/` 和 `dev_biliup/` 目录在项目根目录下自动创建，已加入 `.gitignore`。
 
 ## 技术栈
 
@@ -72,7 +93,7 @@
 ## 关键环境变量
 
 - `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建
-- `PORT` —— 正式环境默认 1123 ，开发环境默认 3000
+- `PORT` —— 正式环境默认 1123 ，开发环境默认 3001
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
 - `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`

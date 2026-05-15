@@ -21,14 +21,5 @@ module.exports = {
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
-    {
-      name: 'daily-db-backup',
-      script: './scripts/backup-db.js',
-      cron_restart: '0 2 * * *', // 每天凌晨 2 点
-      autorestart: false,
-      instances: 1,
-      watch: false,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss',
-    },
   ],
 };

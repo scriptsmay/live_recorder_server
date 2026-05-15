@@ -5,6 +5,7 @@ package-lock.json
 cookies.json
 .env
 .env.local
+.env.dev
 .env.development
 .env.development.local
 .env.test
@@ -25,6 +26,10 @@ yarn.lock
 pnpm-lock.yaml
 .pnp.cjs
 .DS_Store
+
+# development directories
+dev_downloads/
+dev_biliup/
 
 # database backups
 backups/

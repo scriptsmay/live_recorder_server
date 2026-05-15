@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // 1. 依赖
 // ──────────────────────────────────────────────
+require('dotenv').config({ path: '.env.dev', quiet: true });
 require('dotenv').config({ quiet: true });
 const path = require('path');
 const fs = require('fs');
