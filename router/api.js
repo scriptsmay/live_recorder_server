@@ -74,7 +74,7 @@ function sanitizeFilename(name) {
     .replace(/^_+|_+$/g, '');
 }
 
-function generateFilename(template, roomName) {
+function generateFilename(template, roomName, ext = '.mp4') {
   const now = dayjs();
   const vars = {
     room_name: sanitizeFilename(roomName || 'unknown'),
@@ -90,10 +90,10 @@ function generateFilename(template, roomName) {
   for (const [key, value] of Object.entries(vars)) {
     result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
   }
-  return sanitizeFilename(result) + '.mp4';
+  return sanitizeFilename(result) + ext;
 }
 
-function templateToStrftime(template, roomName) {
+function templateToStrftime(template, roomName, ext = '.mp4') {
   const roomNameSafe = sanitizeFilename(roomName || 'unknown').replace(/%/g, '%%');
   return (
     template
@@ -104,7 +104,7 @@ function templateToStrftime(template, roomName) {
       .replace(/{DD}/g, '%d')
       .replace(/{HH}/g, '%H')
       .replace(/{mm}/g, '%M')
-      .replace(/{ss}/g, '%S') + '.mp4'
+      .replace(/{ss}/g, '%S') + ext
   );
 }
 
@@ -347,25 +347,26 @@ router.post('/notify/live_download', async (req, res) => {
 
   console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
+  const downloader = await getActiveDownloader();
+
   const template = room.filename_template || '{room_name}_{datetime}';
   const segmentDuration = room.segment_duration || 0;
   const useSegment = segmentDuration > 0;
+  const ext = downloader.getExtension();
 
   let outputFilePattern;
   let segmentListPath;
 
   if (useSegment) {
-    const strftimeName = templateToStrftime(template, room.room_name || title);
+    const strftimeName = templateToStrftime(template, room.room_name || title, ext);
     outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
   } else {
-    const filename = generateFilename(template, room.room_name || title);
+    const filename = generateFilename(template, room.room_name || title, ext);
     outputFilePattern = path.join(DOWNLOAD_DIR, filename);
   }
   console.log(`[任务启动] 文件名模板: ${template}`);
   console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
-
-  const downloader = await getActiveDownloader();
 
   if (useSegment) {
     segmentListPath = path.join(DOWNLOAD_DIR, `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);

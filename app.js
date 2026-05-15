@@ -87,23 +87,6 @@ async function tryResumeSession(session) {
   const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
   if (!DOWNLOAD_DIR) throw new Error('VIDEO_DOWNLOAD_DIR 未设置');
 
-  const segmentDuration = session.segment_duration || 0;
-  const useSegment = segmentDuration > 0;
-  const template = session.filename_template || '{room_name}_{datetime}';
-  const retryCount = session.retry_count || 0;
-
-  let outputPath;
-  if (useSegment) {
-    const strftimeName = templateToStrftime(template, session.room_name || '');
-    outputPath = path.join(DOWNLOAD_DIR, strftimeName);
-  } else {
-    const base = generateFilename(template, session.room_name || '');
-    const parsed = path.parse(base);
-    outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
-  }
-
-  const streamUrl = session.stream_url || session.room_url;
-
   let downloader;
   try {
     downloader = await getActiveDownloader();
@@ -111,6 +94,24 @@ async function tryResumeSession(session) {
     const FFmpegDownloader = require('./lib/downloaders/FFmpegDownloader');
     downloader = new FFmpegDownloader();
   }
+
+  const segmentDuration = session.segment_duration || 0;
+  const useSegment = segmentDuration > 0;
+  const template = session.filename_template || '{room_name}_{datetime}';
+  const retryCount = session.retry_count || 0;
+  const ext = downloader.getExtension();
+
+  let outputPath;
+  if (useSegment) {
+    const strftimeName = templateToStrftime(template, session.room_name || '', ext);
+    outputPath = path.join(DOWNLOAD_DIR, strftimeName);
+  } else {
+    const base = generateFilename(template, session.room_name || '', ext);
+    const parsed = path.parse(base);
+    outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
+  }
+
+  const streamUrl = session.stream_url || session.room_url;
 
   const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
 
@@ -382,7 +383,7 @@ async function checkStaleRecordings() {
           try {
             const files = fs.readdirSync(outputDir);
             for (const f of files) {
-              if (!f.endsWith('.mp4') && !f.startsWith('.segments_')) continue;
+              if (!f.endsWith('.mp4') && !f.endsWith('.flv') && !f.startsWith('.segments_')) continue;
               const stat = fs.statSync(path.join(outputDir, f));
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
