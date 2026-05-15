@@ -520,6 +520,11 @@ router.post('/notify/live_download', async (req, res) => {
           } catch (_) {}
         }
 
+        let thresholdBytes = 0;
+        try {
+          const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
+          if (ps.rows.length) thresholdBytes = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
+        } catch (_) {}
         let totalSize = 0;
         let newFileCount = 0;
         for (const filePath of segmentFiles) {
@@ -530,6 +535,8 @@ router.post('/notify/live_download', async (req, res) => {
           try {
             fileSize = fs.statSync(filePath).size;
           } catch (_) {}
+          // 跳过碎片
+          if (fileSize < thresholdBytes && fileSize > 0) continue;
           totalSize += fileSize;
 
           await pool.query(

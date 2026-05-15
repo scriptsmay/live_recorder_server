@@ -500,8 +500,19 @@ async function startup() {
   await runFileScan();
 }
 
+async function getFilteringThreshold() {
+  try {
+    const r = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
+    if (r.rows.length) return parseInt(r.rows[0].value, 10) || 10;
+  } catch (_) {}
+  return 10;
+}
+
 async function scanActiveSegments() {
   try {
+    const thresholdMB = await getFilteringThreshold();
+    const thresholdBytes = thresholdMB * 1024 * 1024;
+
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.output_path,
               rs.id AS session_id, rs.total_segments
@@ -524,6 +535,13 @@ async function scanActiveSegments() {
         try {
           size = fs.statSync(fp).size;
         } catch (_) {}
+        // 跳过碎片（小于碎片过滤阈值）
+        if (size < thresholdBytes && size > 0) {
+          console.log(
+            `[分段追踪] ${room.room_name || room.room_url}: ${f} 碎片(${(size / 1024 / 1024).toFixed(1)}MB < ${thresholdMB}MB)，跳过`
+          );
+          continue;
+        }
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
            VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
