@@ -566,10 +566,49 @@ async function scanActiveSegments() {
   }
 }
 
+async function cleanupFragmentFiles() {
+  const dir = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!dir || !fs.existsSync(dir)) return;
+  const thresholdMB = await getFilteringThreshold();
+  const thresholdBytes = thresholdMB * 1024 * 1024;
+
+  try {
+    const files = fs.readdirSync(dir);
+    for (const f of files) {
+      if (!/\.(flv|mp4)$/i.test(f)) continue;
+      const fp = path.join(dir, f);
+      let size;
+      try {
+        size = fs.statSync(fp).size;
+      } catch (_) {
+        continue;
+      }
+      if (size >= thresholdBytes) continue;
+
+      // 从 DB 删除关联记录并更新会话合计
+      const rec = await pool.query('DELETE FROM recordings WHERE file_path = $1 RETURNING session_id, file_size', [fp]);
+      if (rec.rows.length > 0) {
+        await pool.query(
+          `UPDATE recording_sessions SET total_segments = GREATEST(total_segments - 1, 0), total_size = GREATEST(total_size - $1, 0) WHERE id = $2`,
+          [rec.rows[0].file_size || 0, rec.rows[0].session_id]
+        );
+      }
+      await pool.query('DELETE FROM recording_files WHERE file_path = $1', [fp]);
+      try {
+        fs.unlinkSync(fp);
+        console.log(`[碎片清理] 已删除: ${f} (${(size / 1024).toFixed(0)}KB)`);
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.error('[碎片清理] 失败:', err.message);
+  }
+}
+
 async function scheduleWatchdog() {
   const intervalSec = parseInt(await getSetting('watchdog_interval', '30'), 10);
   await checkStaleRecordings();
   await scanActiveSegments();
+  await cleanupFragmentFiles();
   setTimeout(scheduleWatchdog, Math.max(intervalSec, 10) * 1000);
 }
 
