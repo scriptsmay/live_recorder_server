@@ -19,7 +19,7 @@
   "main": "index.js",
   "scripts": {
     "start": "pm2 start ecosystem.config.js --env production",
-    "dev": "PORT=3001 NODE_ENV=development npx nodemon app.js",
+    "dev": "PORT=3001 NODE_ENV=development npx nodemon --ignore dev_downloads/ --ignore dev_biliup/ --ignore logs/ --ignore backups/ app.js",
     "stop": "pm2 stop live_recorder_server && pm2 delete live_recorder_server",
     "restart": "pm2 restart live_recorder_server",
     "logs": "pm2 logs live_recorder_server",
