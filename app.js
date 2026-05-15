@@ -4,12 +4,14 @@
 require('dotenv').config({ path: '.env.dev', quiet: true });
 require('dotenv').config({ quiet: true });
 
-// 给 console 加时间戳
-const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
-['log', 'warn', 'error'].forEach((method) => {
-  const orig = console[method];
-  console[method] = (...args) => orig(`[${ts()}]`, ...args);
-});
+// 开发环境给 console 加时间戳（PM2 生产日志自带时间）
+if (process.env.NODE_ENV === 'development') {
+  const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  ['log', 'warn', 'error'].forEach((method) => {
+    const orig = console[method];
+    console[method] = (...args) => orig(`[${ts()}]`, ...args);
+  });
+}
 
 const path = require('path');
 const fs = require('fs');
