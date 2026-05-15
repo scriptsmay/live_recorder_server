@@ -508,8 +508,10 @@ router.post('/notify/live_download', async (req, res) => {
           try {
             const dir = path.dirname(outputFilePattern);
             const base = path.basename(outputFilePattern);
-            const pattern = base.replace(/%[YmdHMS]/g, '.*');
-            const regex = new RegExp('^' + pattern.replace(/\./g, '\\.') + '$');
+            // strftime 占位符 -> .* 通配符；仅尾部扩展名的 . 做字面转义
+            const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
+            const ext = path.extname(base);
+            const regex = new RegExp('^' + prefix + ext.replace(/\./g, '\\.') + '$');
             const files = fs.readdirSync(dir);
             segmentFiles = files
               .filter((f) => regex.test(f))
