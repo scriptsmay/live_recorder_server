@@ -3,6 +3,14 @@
 // ──────────────────────────────────────────────
 require('dotenv').config({ path: '.env.dev', quiet: true });
 require('dotenv').config({ quiet: true });
+
+// 给 console.log 加时间戳
+const origLog = console.log;
+console.log = (...args) => {
+  const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  origLog(`[${ts}]`, ...args);
+};
+
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -508,11 +516,25 @@ async function getFilteringThreshold() {
   return 10;
 }
 
+/**
+ * 扫描并追踪处于活跃录制状态的房间分段文件。
+ *
+ * 该函数执行以下主要逻辑：
+ * 1. 获取文件大小过滤阈值。
+ * 2. 查询所有状态为“录制中且输出路径非空”的房间及其关联的录制会话。
+ * 3. 遍历每个房间的 output_path 目录，查找未追踪的视频文件（.flv 或 .mp4）。
+ * 4. 对符合条件的文件进行大小校验，跳过小于阈值的碎片文件。
+ * 5. 将有效文件记录插入 recording_files 和 recordings 表，并更新会话的统计信息。
+ *
+ * @async
+ * @returns {Promise<void>}
+ */
 async function scanActiveSegments() {
   try {
     const thresholdMB = await getFilteringThreshold();
     const thresholdBytes = thresholdMB * 1024 * 1024;
 
+    // 查询所有正在录制且配置了输出路径的房间及其对应的录制会话ID和当前分段总数
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.output_path,
               rs.id AS session_id, rs.total_segments
@@ -529,12 +551,15 @@ async function scanActiveSegments() {
       for (const f of files) {
         if (!videoRe.test(f)) continue;
         const fp = path.join(dir, f);
+
+        // 检查文件是否已被追踪，若已存在则跳过
         const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
         if (tracked.rows.length > 0) continue;
         let size = 0;
         try {
           size = fs.statSync(fp).size;
         } catch (_) {}
+
         // 跳过碎片（小于碎片过滤阈值）
         if (size < thresholdBytes && size > 0) {
           console.log(
@@ -542,12 +567,16 @@ async function scanActiveSegments() {
           );
           continue;
         }
+
+        // 将新发现的有效视频文件记录到 recording_files 表中
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
            VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
            ON CONFLICT (file_path) DO NOTHING`,
           [room.session_id, room.room_url, fp, f, size]
         );
+
+        // 将分段信息插入 recordings 表，若插入成功则更新会话的分段计数和总大小
         const ins = await pool.query(
           `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')
