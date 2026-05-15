@@ -30,6 +30,19 @@ CREATE DATABASE ks_live_recorder_dev;
 
 `dev_downloads/` 和 `dev_biliup/` 目录在项目根目录下自动创建，已加入 `.gitignore`。
 
+### 开发环境管理命令
+
+```bash
+npm run dev                          # 前台启动（日志直接看终端）
+tail -f /tmp/dev-server.log          # 后台启动时实时查看日志
+kill $(lsof -ti :3001)               # 停止开发服务
+lsof -i :3001                        # 检查端口占用
+```
+
+- 录制进程日志（ffmpeg/stream-gears 输出）在 `logs/` 目录
+- 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
+- Redis DB 编号：`2`（生产使用 `1`）
+
 ## 技术栈
 
 - Express 5（CommonJS）、EJS 模板、morgan、cors
