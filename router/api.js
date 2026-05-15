@@ -345,6 +345,28 @@ router.post('/notify/live_download', async (req, res) => {
     [room.room_url]
   );
 
+  // 下播延迟检测：如果上次会话刚结束，续到同一个会话
+  let reuseSession = false;
+  let resumeCount = 0;
+  try {
+    const ps = await pool.query("SELECT value FROM settings WHERE key = 'delay'");
+    const delay = parseInt(ps.rows[0]?.value, 10) || 60;
+    if (delay > 0) {
+      const recent = await pool.query(
+        `SELECT id, total_segments, total_size FROM recording_sessions
+         WHERE room_url = $1 AND status = 'completed'
+           AND ended_at > NOW() - INTERVAL '1 second' * $2
+         ORDER BY ended_at DESC LIMIT 1`,
+        [room.room_url, delay]
+      );
+      if (recent.rows.length > 0) {
+        reuseSession = true;
+        resumeCount = recent.rows[0].total_segments || 0;
+        console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
+      }
+    }
+  } catch (_) {}
+
   console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
   const downloader = await getActiveDownloader();
@@ -393,13 +415,24 @@ router.post('/notify/live_download', async (req, res) => {
     );
     await delRoomCache(room.room_url);
 
-    const session = await pool.query(
-      `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
-       VALUES ($1, $2, $3, 'recording', $4, $5)
-       RETURNING id`,
-      [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
-    );
-    sessionId = session.rows[0].id;
+    if (reuseSession) {
+      const recent = await pool.query(
+        `UPDATE recording_sessions SET status = 'recording', ended_at = NULL WHERE id = $1
+         RETURNING id`,
+        [resumeCount]
+      );
+      sessionId = recent.rows[0]?.id || null;
+    }
+
+    if (!sessionId) {
+      const session = await pool.query(
+        `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
+         VALUES ($1, $2, $3, 'recording', $4, $5)
+         RETURNING id`,
+        [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
+      );
+      sessionId = session.rows[0].id;
+    }
     renameLog(sessionId);
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
@@ -493,11 +526,16 @@ router.post('/notify/live_download', async (req, res) => {
         }
 
         if (sessionId) {
+          // 复用会话时累加 total_segments/total_size
+          const segCount = reuseSession ? `total_segments + ${segmentFiles.length}` : String(segmentFiles.length);
+          const sizeTotal = reuseSession ? `total_size + ${totalSize}` : String(totalSize);
           await pool.query(
             `UPDATE recording_sessions
-             SET ended_at = NOW(), status = $1, total_segments = $2, total_size = $3
-             WHERE id = $4`,
-            [code === 0 ? 'completed' : 'interrupted', segmentFiles.length, totalSize, sessionId]
+             SET ended_at = NOW(), status = $1,
+                 total_segments = ${segCount},
+                 total_size = ${sizeTotal}
+             WHERE id = $2`,
+            [code === 0 ? 'completed' : 'interrupted', sessionId]
           );
         }
         console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
@@ -517,11 +555,14 @@ router.post('/notify/live_download', async (req, res) => {
         );
 
         if (sessionId) {
+          const sizeTotal = reuseSession ? `total_size + ${fileSize}` : String(fileSize);
           await pool.query(
             `UPDATE recording_sessions
-             SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2
-             WHERE id = $3`,
-            [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+             SET ended_at = NOW(), status = $1,
+                 total_segments = total_segments + 1,
+                 total_size = ${sizeTotal}
+             WHERE id = $2`,
+            [code === 0 ? 'completed' : 'interrupted', sessionId]
           );
           await pool.query(
             `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
