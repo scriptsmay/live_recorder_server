@@ -256,6 +256,24 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 ---
 
+### DELETE /api/recording_files/missing
+
+一键删除所有缺失（`missing`）文件记录。
+
+**示例：**
+
+```bash
+curl -X DELETE http://127.0.0.1:1123/api/recording_files/missing
+```
+
+**返回：**
+
+```json
+{ "status": "ok", "message": "已删除 5 条缺失记录" }
+```
+
+---
+
 ### PUT /api/recording_files/:id/associate
 
 将孤文件（`orphaned`）关联到录制会话。

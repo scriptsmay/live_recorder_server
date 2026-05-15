@@ -733,6 +733,17 @@ router.put('/recording_files/:id/associate', async (req, res) => {
   }
 });
 
+// DELETE /api/recording_files/missing — 一键删除所有缺失文件记录
+router.delete('/recording_files/missing', async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM recording_files WHERE status = 'missing'");
+    res.json({ status: 'ok', message: `已删除 ${result.rowCount} 条缺失记录` });
+  } catch (err) {
+    console.error('[api] 清空缺失记录失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
+  }
+});
+
 // GET /api/recordings/:id/stream — 流式播放录制文件
 router.get('/recordings/:id/stream', async (req, res) => {
   try {

@@ -16,6 +16,9 @@
   <li class="nav-item">
     <button class="nav-link" data-status="missing">缺失</button>
   </li>
+  <li class="nav-item ms-auto">
+    <button class="btn btn-sm btn-outline-danger d-none" id="clearMissingBtn" onclick="clearMissing()">一键清空</button>
+  </li>
 </ul>
 
 <div id="fileList"><div class="text-center text-muted py-4">加载中...</div></div>
@@ -58,6 +61,7 @@
 
   async function loadFiles(status) {
     currentStatus = status;
+    document.getElementById('clearMissingBtn').classList.toggle('d-none', status !== 'missing');
     await fetch('/api/scan_files', { method: 'POST' }).catch(() => {});
     const res = await fetch(`/api/recording_files?status=${status}`);
     const json = await res.json();
@@ -154,6 +158,28 @@
       const q = e.target.value.toLowerCase();
       renderSessions(sessions.filter(s => String(s.id).includes(q) || (s.room_name || '').toLowerCase().includes(q) || (s.room_url || '').toLowerCase().includes(q)));
     };
+  }
+
+  async function clearMissing() {
+    if (!confirm('确定删除所有缺失文件记录？此操作不可恢复。')) return;
+    const btn = document.getElementById('clearMissingBtn');
+    btn.disabled = true;
+    btn.textContent = '删除中...';
+    try {
+      const res = await fetch('/api/recording_files/missing', { method: 'DELETE' });
+      const json = await res.json();
+      if (res.ok) {
+        loadFiles('missing');
+      } else {
+        alert(json.message || '删除失败');
+        btn.disabled = false;
+        btn.textContent = '一键清空';
+      }
+    } catch (_) {
+      alert('删除失败');
+      btn.disabled = false;
+      btn.textContent = '一键清空';
+    }
   }
 
   document.querySelectorAll('#fileTabs .nav-link').forEach(tab => {
