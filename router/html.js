@@ -68,8 +68,47 @@ router.get('/upload_records', (req, res) => {
   res.render('upload_records', { title: '投稿记录' });
 });
 
-router.get('/recordings', (req, res) => {
-  res.render('recordings', { title: '录制历史' });
+router.get('/recordings', async (req, res) => {
+  try {
+    const roomFilter = req.query.room_url || '';
+    let thresholdBytes = 0;
+    try {
+      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
+      if (ps.rows.length) thresholdBytes = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
+    } catch (_) {}
+    const params = [];
+    const conditions = [];
+    if (thresholdBytes > 0) {
+      conditions.push(`r.file_size >= $${params.length + 1}`);
+      params.push(thresholdBytes);
+    }
+    if (roomFilter) {
+      conditions.push(`r.room_url = $${params.length + 1}`);
+      params.push(roomFilter);
+    }
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+    const [recResult, roomsResult] = await Promise.all([
+      pool.query(
+        `SELECT r.*, rm.room_name
+         FROM recordings r
+         LEFT JOIN rooms rm ON r.room_url = rm.room_url
+         ${where}
+         ORDER BY r.id DESC
+         LIMIT 200`,
+        params
+      ),
+      pool.query('SELECT room_url, room_name FROM rooms ORDER BY id DESC'),
+    ]);
+    res.render('recordings', {
+      title: '录制历史',
+      recordings: recResult.rows,
+      rooms: roomsResult.rows,
+      roomFilter,
+    });
+  } catch (err) {
+    console.error('[html] 录制历史页加载失败:', err);
+    res.status(500).render('recordings', { title: '录制历史', recordings: [], rooms: [], roomFilter: '' });
+  }
 });
 
 router.get('/_/rooms/table', async (req, res) => {

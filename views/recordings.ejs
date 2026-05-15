@@ -4,6 +4,9 @@
   <div class="col-md-4">
     <select class="form-select" id="roomFilter">
       <option value="">全部直播间</option>
+      <% rooms.forEach(r => { %>
+        <option value="<%= r.room_url %>" <%= r.room_url === roomFilter ? 'selected' : '' %>><%= r.room_name || r.room_url %></option>
+      <% }) %>
     </select>
   </div>
 </div>
@@ -22,79 +25,57 @@
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="recordingsBody"></tbody>
+    <tbody id="recordingsBody">
+      <% if (recordings.length === 0) { %>
+        <tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>
+      <% } %>
+    </tbody>
   </table>
-  <p class="text-muted text-center" id="emptyRecMsg">暂无录制记录</p>
 </div>
 <%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
 
 <script>
-async function loadRecordings(roomUrl) {
-  let url = '/api/recordings?limit=200';
-  if (roomUrl) url += '&room_url=' + encodeURIComponent(roomUrl);
-  const res = await fetch(url);
-  const json = await res.json();
-  const tbody = document.getElementById('recordingsBody');
-  const empty = document.getElementById('emptyRecMsg');
-  tbody.innerHTML = '';
-  if (!json.data || json.data.length === 0) {
-    empty.style.display = '';
-    return;
+  const recordingsData = <%- JSON.stringify(recordings) %>;
+  const roomsData = <%- JSON.stringify(rooms) %>;
+
+  function renderRecordings(data) {
+    const tbody = document.getElementById('recordingsBody');
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(r => {
+      const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status;
+      const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
+      const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-');
+      return '<tr>' +
+        '<td>' + r.id + '</td>' +
+        '<td>' + roomDisplay + '</td>' +
+        '<td><small>' + (r.file_path || '-') + '</small></td>' +
+        '<td>' + size + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td><small>' + (r.started_at ? new Date(r.started_at).toLocaleString() : '-') + '</small></td>' +
+        '<td><small>' + (r.ended_at ? new Date(r.ended_at).toLocaleString() : '-') + '</small></td>' +
+        '<td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="' + r.id + '">删除</button></td>' +
+        '</tr>';
+    }).join('');
   }
-  empty.style.display = 'none';
-  setupPagination('rec', json.data, (pageData) => {
-    tbody.innerHTML = '';
-    pageData.forEach(r => {
-    const statusBadge = {
-      recording: '<span class="badge bg-primary">录制中</span>',
-      completed: '<span class="badge bg-success">已完成</span>',
-      interrupted: '<span class="badge bg-danger">中断</span>',
-    }[r.status] || r.status;
-    const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td>${r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : r.room_url || '-'}</td>
-      <td><small>${r.file_path || '-'}</small></td>
-      <td>${size}</td>
-      <td>${statusBadge}</td>
-      <td><small>${r.started_at ? new Date(r.started_at).toLocaleString() : '-'}</small></td>
-      <td><small>${r.ended_at ? new Date(r.ended_at).toLocaleString() : '-'}</small></td>
-      <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button></td>
-    `;
-    tbody.appendChild(tr);
+
+  setupPagination('rec', recordingsData, renderRecordings);
+
+  document.getElementById('roomFilter').addEventListener('change', e => {
+    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '/recordings';
+    window.location.href = url;
   });
+
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.deleteRecBtn');
+    if (!btn) return;
+    if (!confirm('确定删除此录制记录？')) return;
+    const id = btn.dataset.id;
+    const res = await fetch('/api/recordings/' + id, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) return alert(json.message || '删除失败');
+    window.location.reload();
   });
-}
-
-async function loadRoomFilter() {
-  const res = await fetch('/api/rooms');
-  const json = await res.json();
-  const sel = document.getElementById('roomFilter');
-  if (!json.data) return;
-  json.data.forEach(r => {
-    const opt = document.createElement('option');
-    opt.value = r.room_url;
-    opt.textContent = r.room_name || r.room_url;
-    sel.appendChild(opt);
-  });
-}
-
-document.getElementById('roomFilter').addEventListener('change', e => {
-  loadRecordings(e.target.value);
-});
-
-document.addEventListener('click', async e => {
-  const btn = e.target.closest('.deleteRecBtn');
-  if (!btn) return;
-  if (!confirm('确定删除此录制记录？')) return;
-  const id = btn.dataset.id;
-  const res = await fetch(`/api/recordings/${id}`, { method: 'DELETE' });
-  const json = await res.json();
-  if (!res.ok) return alert(json.message || '删除失败');
-  loadRecordings(document.getElementById('roomFilter').value);
-});
-
-loadRoomFilter();
-loadRecordings('');
 </script>
