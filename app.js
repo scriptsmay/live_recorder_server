@@ -205,9 +205,14 @@ async function tryResumeSession(session) {
 
 async function cleanupStaleRecordings() {
   try {
-    // 清理上一轮可能的孤儿 ffmpeg 进程（避免 PM2 watch 重启导致状态不同步）
+    // 清理上一轮可能的孤儿 ffmpeg / stream-gears 进程
     try {
-      execSync('pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null', { stdio: 'ignore' });
+      execSync(
+        'pkill -f "ffmpeg -i" 2>/dev/null; '
+        + 'pkill -f "ffmpeg.*-segment_time" 2>/dev/null; '
+        + 'pkill -f "stream_gears_wrapper" 2>/dev/null',
+        { stdio: 'ignore' }
+      );
     } catch (_) {}
 
     const staleRooms = await pool.query(
