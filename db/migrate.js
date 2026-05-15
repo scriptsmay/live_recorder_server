@@ -136,6 +136,22 @@ async function migrate() {
         created_at    TIMESTAMP DEFAULT NOW()
       )
     `);
+    await client
+      .query(
+        `
+      DELETE FROM recording_files WHERE id IN (
+        SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY id DESC) rn FROM recording_files) sub WHERE rn > 1
+      )
+    `
+      )
+      .catch(() => {});
+    await client
+      .query(
+        `
+      ALTER TABLE recording_files ADD CONSTRAINT recording_files_file_path_key UNIQUE (file_path)
+    `
+      )
+      .catch(() => {});
 
     await client.query(`
       ALTER TABLE rooms ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT TRUE
