@@ -408,6 +408,14 @@ router.get('/sessions/:id', async (req, res) => {
         } catch (_) {}
       }
     }
+    for (const rec of recordings.rows) {
+      try {
+        require('fs').accessSync(rec.file_path, require('fs').constants.F_OK);
+        rec.file_exists = true;
+      } catch (_) {
+        rec.file_exists = false;
+      }
+    }
     res.json({
       status: 'ok',
       data: { session: session.rows[0], recordings: recordings.rows },
