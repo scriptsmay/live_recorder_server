@@ -40,7 +40,6 @@ const roomsRouter = require('./router/rooms');
 const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
-const { scanRecordingFiles } = require('./lib/scan-files');
 const { getActiveDownloader } = require('./lib/downloaders/DownloaderFactory');
 const watchdog = require('./lib/watchdog');
 
@@ -396,22 +395,11 @@ async function cleanupStaleRedis() {
   }
 }
 
-async function runFileScan() {
-  try {
-    const r = await scanRecordingFiles(true);
-    if (r.missing > 0 || r.orphaned > 0) {
-      console.log(`[文件扫描] 完成: ${r.missing} 缺失, ${r.orphaned} 孤⽂件`);
-    }
-  } catch (err) {
-    console.error('[文件扫描] 失败:', err.message);
-  }
-}
-
 async function startup() {
   await migrate();
   await cleanupStaleRecordings();
   await cleanupStaleRedis();
-  await runFileScan();
+  await watchdog.runFileScan();
 }
 
 startup()
