@@ -34,3 +34,4 @@ dev_biliup/
 # database backups
 backups/
 __pycache__/
+download.log
