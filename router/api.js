@@ -386,6 +386,15 @@ router.post('/notify/live_download', async (req, res) => {
     const filename = generateFilename(template, room.room_name || title, ext);
     outputFilePattern = path.join(DOWNLOAD_DIR, filename);
   }
+  if (reuseSession && !useSegment && room.output_path) {
+    // 非分段续播：复用上一次的输出文件，避免碎片
+    const prevOutput = room.output_path;
+    if (fs.existsSync(path.dirname(prevOutput))) {
+      console.log(`[续播] 复用上次文件路径: ${prevOutput}`);
+      outputFilePattern = prevOutput;
+    }
+  }
+
   console.log(`[任务启动] 文件名模板: ${template}`);
   console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
@@ -440,14 +449,23 @@ router.post('/notify/live_download', async (req, res) => {
     return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
-  // 非分段模式：预写入录制文件记录
+  // 非分段模式：预写入录制文件记录（续播时更新已有记录）
   if (!useSegment) {
     try {
-      await pool.query(
-        `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
-         VALUES ($1, $2, $3, $4, 'recording')`,
-        [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
-      );
+      const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [outputFilePattern]);
+      if (existing.rows.length > 0) {
+        await pool.query(
+          `UPDATE recording_files SET status = 'recording', session_id = $1, checked_at = NOW()
+           WHERE id = $2`,
+          [sessionId, existing.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
+           VALUES ($1, $2, $3, $4, 'recording')`,
+          [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
+        );
+      }
     } catch (dbErr) {
       console.warn('[api] recording_files 写入失败:', dbErr.message);
     }
@@ -548,11 +566,26 @@ router.post('/notify/live_download', async (req, res) => {
           console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
         }
 
-        await pool.query(
-          `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-           VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
-          [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
-        );
+        // 续播时更新已有 recordings 记录，避免重复插入
+        const existingRec = reuseSession
+          ? await pool.query('SELECT id FROM recordings WHERE session_id = $1 AND file_path = $2', [
+              sessionId,
+              outputFilePattern,
+            ])
+          : null;
+
+        if (existingRec?.rows.length > 0) {
+          await pool.query(
+            `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
+            [fileSize, existingRec.rows[0].id]
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+             VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
+            [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
+          );
+        }
 
         if (sessionId) {
           const sizeTotal = reuseSession ? `total_size + ${fileSize}` : String(fileSize);
