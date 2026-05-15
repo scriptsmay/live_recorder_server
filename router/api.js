@@ -430,7 +430,7 @@ router.post('/notify/live_download', async (req, res) => {
 
   dlProcess.on('close', async (code) => {
     await delActiveTask(roomKey);
-    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/ffmpeg_${sessionId}.log)`);
+    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${downloader.name}_${sessionId}.log)`);
 
     try {
       await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
@@ -439,7 +439,7 @@ router.post('/notify/live_download', async (req, res) => {
       await delRoomCache(room.room_url);
 
       if (useSegment) {
-        const segmentFiles = [];
+        let segmentFiles = [];
         if (segmentListPath && fs.existsSync(segmentListPath)) {
           const content = fs.readFileSync(segmentListPath, 'utf-8');
           const lines = content
@@ -451,6 +451,18 @@ router.post('/notify/live_download', async (req, res) => {
           }
           try {
             fs.unlinkSync(segmentListPath);
+          } catch (_) {}
+        } else if (downloader.name !== 'ffmpeg' && outputFilePattern) {
+          try {
+            const dir = path.dirname(outputFilePattern);
+            const base = path.basename(outputFilePattern);
+            const pattern = base.replace(/%[YmdHMS]/g, '.*');
+            const regex = new RegExp('^' + pattern.replace(/\./g, '\\.') + '$');
+            const files = fs.readdirSync(dir);
+            segmentFiles = files
+              .filter((f) => regex.test(f))
+              .sort()
+              .map((f) => path.join(dir, f));
           } catch (_) {}
         }
 
