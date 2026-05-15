@@ -541,12 +541,14 @@ router.post('/notify/live_download', async (req, res) => {
 
           await pool.query(
             `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')`,
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
+             ON CONFLICT (file_path) DO NOTHING`,
             [sessionId, newFileCount, room.room_url, filePath, fileSize, sessionStart]
           );
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+             ON CONFLICT (file_path) DO NOTHING`,
             [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
           );
           newFileCount++;
