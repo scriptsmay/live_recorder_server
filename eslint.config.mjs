@@ -3,13 +3,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: [
-      'node_modules/',
-      'public/',
-      'backups/',
-      'logs/',
-      'eslint.config.mjs',
-    ],
+    ignores: ['node_modules/', 'public/', 'backups/', 'logs/', 'eslint.config.mjs'],
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
@@ -19,10 +13,7 @@ export default [
       sourceType: 'commonjs',
     },
     rules: {
-      'no-unused-vars': [
-        'error',
-        { caughtErrors: 'none', argsIgnorePattern: '^_' },
-      ],
+      'no-unused-vars': ['error', { caughtErrors: 'none', argsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': 'off',
       'no-constant-condition': ['error', { checkLoops: false }],

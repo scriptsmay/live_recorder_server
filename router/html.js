@@ -1,7 +1,6 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const dayjs = require('dayjs');
 
 const router = express.Router();
 const pool = require('../db/index');
@@ -9,7 +8,6 @@ const pool = require('../db/index');
 // 日志目录
 const logsDir = path.join(__dirname, '../logs');
 const { LOG_ERR_HTML } = require('../config/template');
-const config = require('../config/config');
 const md = require('../lib/markdown');
 
 // 当访问根路径时，重定向

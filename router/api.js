@@ -36,11 +36,7 @@ async function getRoomCache(roomUrl) {
 
 async function setRoomCache(room) {
   try {
-    await redis.setEx(
-      redisKey(room.room_url),
-      ROOM_CACHE_TTL,
-      JSON.stringify(room)
-    );
+    await redis.setEx(redisKey(room.room_url), ROOM_CACHE_TTL, JSON.stringify(room));
   } catch (_) {}
 }
 
@@ -61,11 +57,7 @@ async function isActiveTask(roomKey) {
 
 async function setActiveTask(roomKey, data) {
   try {
-    await redis.setEx(
-      activeTaskKey(roomKey),
-      ACTIVE_TASK_TTL,
-      JSON.stringify(data)
-    );
+    await redis.setEx(activeTaskKey(roomKey), ACTIVE_TASK_TTL, JSON.stringify(data));
   } catch (_) {}
 }
 
@@ -102,10 +94,7 @@ function generateFilename(template, roomName) {
 }
 
 function templateToStrftime(template, roomName) {
-  const roomNameSafe = sanitizeFilename(roomName || 'unknown').replace(
-    /%/g,
-    '%%'
-  );
+  const roomNameSafe = sanitizeFilename(roomName || 'unknown').replace(/%/g, '%%');
   return (
     template
       .replace(/{room_name}/g, roomNameSafe)
@@ -123,9 +112,7 @@ async function getOrCreateRoom(roomUrl, roomName) {
   const cached = await getRoomCache(roomUrl);
   if (cached) return cached;
 
-  const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [
-    roomUrl,
-  ]);
+  const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
   if (exist.rows.length > 0) {
     const room = exist.rows[0];
     await setRoomCache(room);
@@ -245,9 +232,7 @@ router.get('/notify/status', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [
-      url,
-    ]);
+    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [url]);
     if (result.rows.length === 0) {
       return res.json({ exists: false });
     }
@@ -306,16 +291,12 @@ router.post('/notify/live_download', async (req, res) => {
   const roomKey = room_url || url;
 
   if (await isActiveTask(roomKey)) {
-    return res
-      .status(400)
-      .json({ status: 'Already recording', message: '请勿重复开启' });
+    return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
   }
 
   let poolSize = 3;
   try {
-    const ps = await pool.query(
-      "SELECT value FROM settings WHERE key = 'pool_size'"
-    );
+    const ps = await pool.query("SELECT value FROM settings WHERE key = 'pool_size'");
     if (ps.rows.length) poolSize = parseInt(ps.rows[0].value, 10) || 3;
   } catch (_) {}
   let activeKeys = [];
@@ -358,9 +339,7 @@ router.post('/notify/live_download', async (req, res) => {
     [room.room_url]
   );
 
-  console.log(
-    `[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`
-  );
+  console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
   const template = room.filename_template || '{room_name}_{datetime}';
   const segmentDuration = room.segment_duration || 0;
@@ -377,9 +356,7 @@ router.post('/notify/live_download', async (req, res) => {
     outputFilePattern = path.join(DOWNLOAD_DIR, filename);
   }
   console.log(`[任务启动] 文件名模板: ${template}`);
-  console.log(
-    `[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`
-  );
+  console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
   console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
   const ffmpegArgs = [
@@ -401,10 +378,7 @@ router.post('/notify/live_download', async (req, res) => {
     '60',
   ];
   if (useSegment) {
-    segmentListPath = path.join(
-      DOWNLOAD_DIR,
-      `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
-    );
+    segmentListPath = path.join(DOWNLOAD_DIR, `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
     ffmpegArgs.push(
       '-f',
       'segment',
@@ -420,12 +394,7 @@ router.post('/notify/live_download', async (req, res) => {
   }
   ffmpegArgs.push(outputFilePattern);
 
-  const {
-    fd: logFd,
-    logPath,
-    rename: renameLog,
-    logCommand,
-  } = createProcLog('ffmpeg');
+  const { fd: logFd, logPath, rename: renameLog, logCommand } = createProcLog('ffmpeg');
   console.log(`[任务启动] ffmpeg 日志: ${logPath}`);
   logCommand('ffmpeg', ffmpegArgs);
 
@@ -450,22 +419,14 @@ router.post('/notify/live_download', async (req, res) => {
       `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
        VALUES ($1, $2, $3, 'recording', $4, $5)
        RETURNING id`,
-      [
-        room.room_url,
-        sessionStart,
-        path.dirname(outputFilePattern),
-        caption || '',
-        url,
-      ]
+      [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
     );
     sessionId = session.rows[0].id;
     renameLog(sessionId);
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
     ffmpeg.kill();
-    return res
-      .status(500)
-      .json({ status: 'Error', message: '更新数据库状态失败' });
+    return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
   }
 
   // 非分段模式：预写入录制文件记录
@@ -474,12 +435,7 @@ router.post('/notify/live_download', async (req, res) => {
       await pool.query(
         `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
          VALUES ($1, $2, $3, $4, 'recording')`,
-        [
-          sessionId,
-          room.room_url,
-          outputFilePattern,
-          path.basename(outputFilePattern),
-        ]
+        [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
       );
     } catch (dbErr) {
       console.warn('[api] recording_files 写入失败:', dbErr.message);
@@ -496,15 +452,12 @@ router.post('/notify/live_download', async (req, res) => {
 
   ffmpeg.on('close', async (code) => {
     await delActiveTask(roomKey);
-    console.log(
-      `[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/ffmpeg_${sessionId}.log)`
-    );
+    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/ffmpeg_${sessionId}.log)`);
 
     try {
-      await pool.query(
-        `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
-        [room.id]
-      );
+      await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+        room.id,
+      ]);
       await delRoomCache(room.room_url);
 
       if (useSegment) {
@@ -516,9 +469,7 @@ router.post('/notify/live_download', async (req, res) => {
             .map((l) => l.trim())
             .filter(Boolean);
           for (const line of lines) {
-            segmentFiles.push(
-              path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line)
-            );
+            segmentFiles.push(path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line));
           }
           try {
             fs.unlinkSync(segmentListPath);
@@ -534,13 +485,9 @@ router.post('/notify/live_download', async (req, res) => {
           } catch (_) {}
           totalSize += fileSize;
 
-          const segStart = new Date(
-            sessionStart.getTime() + i * segmentDuration * 1000
-          );
+          const segStart = new Date(sessionStart.getTime() + i * segmentDuration * 1000);
           const segEnd =
-            i < segmentFiles.length - 1
-              ? new Date(segStart.getTime() + segmentDuration * 1000)
-              : new Date();
+            i < segmentFiles.length - 1 ? new Date(segStart.getTime() + segmentDuration * 1000) : new Date();
 
           await pool.query(
             `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
@@ -550,13 +497,7 @@ router.post('/notify/live_download', async (req, res) => {
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
              VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-            [
-              sessionId,
-              room.room_url,
-              filePath,
-              path.basename(filePath),
-              fileSize,
-            ]
+            [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
           );
         }
 
@@ -565,27 +506,17 @@ router.post('/notify/live_download', async (req, res) => {
             `UPDATE recording_sessions
              SET ended_at = NOW(), status = $1, total_segments = $2, total_size = $3
              WHERE id = $4`,
-            [
-              code === 0 ? 'completed' : 'interrupted',
-              segmentFiles.length,
-              totalSize,
-              sessionId,
-            ]
+            [code === 0 ? 'completed' : 'interrupted', segmentFiles.length, totalSize, sessionId]
           );
         }
-        console.log(
-          `[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`
-        );
+        console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
       } else {
         let fileSize = 0;
         try {
           const stat = fs.statSync(outputFilePattern);
           fileSize = stat.size;
         } catch (statErr) {
-          console.warn(
-            `[api] 无法获取文件大小: ${outputFilePattern}`,
-            statErr.message
-          );
+          console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
         }
 
         await pool.query(
@@ -611,19 +542,12 @@ router.post('/notify/live_download', async (req, res) => {
 
       if (code === 0 && sessionId) {
         try {
-          const sess = await pool.query(
-            'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
-            [sessionId]
-          );
+          const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
+            sessionId,
+          ]);
           const segs = sess.rows[0]?.total_segments || 0;
           const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
-          notify.recordingComplete(
-            room.room_name,
-            segs,
-            mb,
-            sessionId,
-            room.room_url
-          );
+          notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
         } catch (_) {}
 
         const completedSession = {
@@ -632,9 +556,7 @@ router.post('/notify/live_download', async (req, res) => {
           room_name: room.room_name,
           started_at: sessionStart,
         };
-        findAndAutoUpload(completedSession).catch((err) =>
-          console.error('[自动投稿] 异常:', err.message)
-        );
+        findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
       }
     } catch (dbErr) {
       console.error('[api] 录制结束数据库更新失败:', dbErr);
@@ -696,28 +618,14 @@ router.put('/recording_files/:id/associate', async (req, res) => {
   try {
     const { id } = req.params;
     const { session_id } = req.body;
-    if (!session_id)
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '缺少 session_id' });
+    if (!session_id) return res.status(400).json({ status: 'Error', message: '缺少 session_id' });
 
-    const file = await pool.query(
-      'SELECT * FROM recording_files WHERE id = $1',
-      [id]
-    );
-    if (file.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '文件不存在' });
-    if (file.rows[0].status !== 'orphaned')
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '仅孤文件可关联' });
+    const file = await pool.query('SELECT * FROM recording_files WHERE id = $1', [id]);
+    if (file.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    if (file.rows[0].status !== 'orphaned') return res.status(400).json({ status: 'Error', message: '仅孤文件可关联' });
 
-    const session = await pool.query(
-      'SELECT * FROM recording_sessions WHERE id = $1',
-      [session_id]
-    );
-    if (session.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '会话不存在' });
+    const session = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [session_id]);
+    if (session.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
 
     const fp = file.rows[0];
     const ss = session.rows[0];
@@ -730,14 +638,7 @@ router.put('/recording_files/:id/associate', async (req, res) => {
     await pool.query(
       `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')`,
-      [
-        session_id,
-        ss.total_segments || 0,
-        ss.room_url,
-        fp.file_path,
-        fileSize,
-        fp.started_at,
-      ]
+      [session_id, ss.total_segments || 0, ss.room_url, fp.file_path, fileSize, fp.started_at]
     );
     await pool.query(
       `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
@@ -754,15 +655,10 @@ router.put('/recording_files/:id/associate', async (req, res) => {
 // GET /api/recordings/:id/stream — 流式播放录制文件
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT file_path FROM recordings WHERE id = $1',
-      [req.params.id]
-    );
-    if (result.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    const result = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
     const filePath = result.rows[0].file_path;
-    if (!filePath || !fs.existsSync(filePath))
-      return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ status: 'Error', message: '文件不存在' });
 
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;

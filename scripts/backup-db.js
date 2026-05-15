@@ -65,14 +65,7 @@ async function backup() {
 async function nodeDump(filePath) {
   const pool = new (require('pg').Pool)(dbConfig);
   const stream = fs.createWriteStream(filePath);
-  const tables = [
-    'rooms',
-    'recording_sessions',
-    'recordings',
-    'recording_files',
-    'upload_templates',
-    'upload_records',
-  ];
+  const tables = ['rooms', 'recording_sessions', 'recordings', 'recording_files', 'upload_templates', 'upload_records'];
 
   for (const table of tables) {
     const { rows } = await pool.query(`SELECT * FROM ${table} ORDER BY id`);
@@ -87,9 +80,7 @@ async function nodeDump(filePath) {
         if (typeof v === 'number') return String(v);
         return `'${String(v).replace(/'/g, "''")}'`;
       });
-      stream.write(
-        `INSERT INTO "${table}" (${colList}) VALUES (${vals.join(', ')});\n`
-      );
+      stream.write(`INSERT INTO "${table}" (${colList}) VALUES (${vals.join(', ')});\n`);
     }
     stream.write(`\n`);
   }

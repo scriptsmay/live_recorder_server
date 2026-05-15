@@ -35,18 +35,10 @@ router.get('/rooms', async (req, res) => {
 // POST /api/rooms — 新增直播间
 router.post('/rooms', async (req, res) => {
   try {
-    const {
-      room_url,
-      room_name,
-      filename_template,
-      segment_duration,
-      notification_enabled,
-      monitoring_enabled,
-    } = req.body;
+    const { room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } =
+      req.body;
     if (!room_url) {
-      return res
-        .status(400)
-        .json({ status: 'Error', message: 'room_url 必填' });
+      return res.status(400).json({ status: 'Error', message: 'room_url 必填' });
     }
     const result = await pool.query(
       `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled)
@@ -97,13 +89,7 @@ router.get('/rooms/:id', async (req, res) => {
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      room_name,
-      filename_template,
-      segment_duration,
-      notification_enabled,
-      monitoring_enabled,
-    } = req.body;
+    const { room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
     const result = await pool.query(
       `UPDATE rooms
        SET room_name = COALESCE($1, room_name),
@@ -145,9 +131,7 @@ router.delete('/rooms/:id', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
     if (room.rows[0].status !== 'idle') {
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '直播间录制中，无法删除' });
+      return res.status(400).json({ status: 'Error', message: '直播间录制中，无法删除' });
     }
     await delRoomCache(room.rows[0].room_url);
     await pool.query('DELETE FROM rooms WHERE id = $1', [id]);
@@ -170,9 +154,7 @@ router.post('/rooms/:id/pause', async (req, res) => {
     }
     const r = room.rows[0];
     if (r.status !== 'recording') {
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '当前状态不可暂停' });
+      return res.status(400).json({ status: 'Error', message: '当前状态不可暂停' });
     }
     if (r.ffmpeg_pid) {
       try {
@@ -181,10 +163,7 @@ router.post('/rooms/:id/pause', async (req, res) => {
         console.error('[rooms] SIGSTOP 失败:', killErr.message);
       }
     }
-    await pool.query(
-      `UPDATE rooms SET status = 'paused', updated_at = NOW() WHERE id = $1`,
-      [id]
-    );
+    await pool.query(`UPDATE rooms SET status = 'paused', updated_at = NOW() WHERE id = $1`, [id]);
     await delRoomCache(r.room_url);
     if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已暂停录制' });
@@ -205,9 +184,7 @@ router.post('/rooms/:id/resume', async (req, res) => {
     }
     const r = room.rows[0];
     if (r.status !== 'paused') {
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '当前状态不可恢复' });
+      return res.status(400).json({ status: 'Error', message: '当前状态不可恢复' });
     }
     if (r.ffmpeg_pid) {
       try {
@@ -216,10 +193,7 @@ router.post('/rooms/:id/resume', async (req, res) => {
         console.error('[rooms] SIGCONT 失败:', killErr.message);
       }
     }
-    await pool.query(
-      `UPDATE rooms SET status = 'recording', updated_at = NOW() WHERE id = $1`,
-      [id]
-    );
+    await pool.query(`UPDATE rooms SET status = 'recording', updated_at = NOW() WHERE id = $1`, [id]);
     await delRoomCache(r.room_url);
     if (req.headers['hx-request']) return renderRoomsHtml(res);
     res.json({ status: 'ok', message: '已恢复录制' });
@@ -249,10 +223,7 @@ router.post('/rooms/:id/stop', async (req, res) => {
         console.error('[rooms] SIGTERM 失败:', killErr.message);
       }
     }
-    await pool.query(
-      `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
-      [id]
-    );
+    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [id]);
     await pool.query(
       `UPDATE recordings SET ended_at = NOW(), status = 'interrupted'
        WHERE room_url = $1 AND status = 'recording'`,
@@ -303,14 +274,9 @@ router.get('/recordings', async (req, res) => {
 router.delete('/recordings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      'DELETE FROM recordings WHERE id = $1 RETURNING id',
-      [id]
-    );
+    const result = await pool.query('DELETE FROM recordings WHERE id = $1 RETURNING id', [id]);
     if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ status: 'Error', message: '录制记录不存在' });
+      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
     }
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
@@ -359,10 +325,7 @@ router.post('/sessions/:id/delete', async (req, res) => {
       `UPDATE recording_sessions SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
       [id]
     );
-    if (result.rows.length === 0)
-      return res
-        .status(404)
-        .json({ status: 'Error', message: '会话不存在或已删除' });
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在或已删除' });
     res.json({ status: 'ok', message: '已标记删除' });
   } catch (err) {
     console.error('[sessions] 删除失败:', err);
@@ -384,16 +347,12 @@ router.get('/sessions/:id', async (req, res) => {
     if (session.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    const recordings = await pool.query(
-      `SELECT * FROM recordings WHERE session_id = $1 ORDER BY segment_index ASC`,
-      [id]
-    );
+    const recordings = await pool.query(`SELECT * FROM recordings WHERE session_id = $1 ORDER BY segment_index ASC`, [
+      id,
+    ]);
     // 对于录制中但 DB 尚无分片记录的会话，尝试从房间的 output_path 定位文件
     if (recordings.rows.length === 0) {
-      const room = await pool.query(
-        `SELECT output_path FROM rooms WHERE room_url = $1`,
-        [session.rows[0].room_url]
-      );
+      const room = await pool.query(`SELECT output_path FROM rooms WHERE room_url = $1`, [session.rows[0].room_url]);
       if (room.rows.length && room.rows[0].output_path) {
         const fp = room.rows[0].output_path;
         try {

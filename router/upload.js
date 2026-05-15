@@ -10,9 +10,7 @@ const uploadCountMap = new Map();
 
 async function getUploadLimit() {
   try {
-    const r = await pool.query(
-      "SELECT value FROM settings WHERE key = 'max_upload_limit'"
-    );
+    const r = await pool.query("SELECT value FROM settings WHERE key = 'max_upload_limit'");
     if (r.rows.length) return parseInt(r.rows[0].value, 10) || 99;
   } catch (_) {}
   return 99;
@@ -22,9 +20,7 @@ async function checkUploadLimit(sessionId) {
   const limit = await getUploadLimit();
   const count = uploadCountMap.get(sessionId) || 0;
   if (count >= limit) {
-    console.log(
-      `[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count}/${limit})，跳过`
-    );
+    console.log(`[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count}/${limit})，跳过`);
     return false;
   }
   uploadCountMap.set(sessionId, count + 1);
@@ -32,9 +28,7 @@ async function checkUploadLimit(sessionId) {
 }
 
 function renderTemplate(template, vars) {
-  return template.replace(/\{(\w+)\}/g, (_, key) =>
-    vars[key] !== undefined ? vars[key] : `{${key}}`
-  );
+  return template.replace(/\{(\w+)\}/g, (_, key) => (vars[key] !== undefined ? vars[key] : `{${key}}`));
 }
 
 function getTemplateVars(room, session) {
@@ -88,8 +82,7 @@ router.post('/upload_templates', async (req, res) => {
       dtime,
       after_upload,
     } = req.body;
-    if (!name)
-      return res.status(400).json({ status: 'Error', message: '模板名称必填' });
+    if (!name) return res.status(400).json({ status: 'Error', message: '模板名称必填' });
     const result = await pool.query(
       `INSERT INTO upload_templates (name, room_url, title_template, desc_template, tid, tags, copyright, source, cover, is_only_self, cookies_path, dtime, after_upload)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
@@ -155,8 +148,7 @@ router.put('/upload_templates/:id', async (req, res) => {
         id,
       ]
     );
-    if (result.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '模板不存在' });
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[upload] 更新模板失败:', err);
@@ -166,12 +158,8 @@ router.put('/upload_templates/:id', async (req, res) => {
 
 router.delete('/upload_templates/:id', async (req, res) => {
   try {
-    const result = await pool.query(
-      'DELETE FROM upload_templates WHERE id=$1 RETURNING id',
-      [req.params.id]
-    );
-    if (result.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '模板不存在' });
+    const result = await pool.query('DELETE FROM upload_templates WHERE id=$1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
     console.error('[upload] 删除模板失败:', err);
@@ -201,12 +189,8 @@ router.get('/upload_records', async (req, res) => {
 
 router.delete('/upload_records/:id', async (req, res) => {
   try {
-    const result = await pool.query(
-      'DELETE FROM upload_records WHERE id=$1 RETURNING id',
-      [req.params.id]
-    );
-    if (result.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '记录不存在' });
+    const result = await pool.query('DELETE FROM upload_records WHERE id=$1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '记录不存在' });
     res.json({ status: 'ok', message: '已删除' });
   } catch (err) {
     console.error('[upload] 删除记录失败:', err);
@@ -274,18 +258,9 @@ async function executeUpload(session, tmpl) {
   if (tmpl.dtime) args.push('--dtime', String(tmpl.dtime));
   args.push(...files);
 
-  notify.uploadStart(
-    session.room_name,
-    tmpl.name,
-    files.length,
-    session.room_url
-  );
+  notify.uploadStart(session.room_name, tmpl.name, files.length, session.room_url);
 
-  const {
-    stream: logStream,
-    logPath,
-    logCommand,
-  } = createProcLog('biliup', recordId);
+  const { stream: logStream, logPath, logCommand } = createProcLog('biliup', recordId);
   console.log(`[投稿] biliup 日志: ${logPath}`);
   logCommand(biliupPath, args);
 
@@ -335,30 +310,19 @@ async function executeUpload(session, tmpl) {
       );
       if (postResult) {
         output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
-        await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [
-          output,
-          recordId,
-        ]);
+        await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [output, recordId]);
       }
     } else {
       await pool.query(
         `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
         [cmdStr, output, `exit code ${code}`, recordId]
       );
-      notify.send(
-        '❌ 投稿失败',
-        `模板：${tmpl.name}\n标题：${title}\n错误：exit code ${code}`
-      );
+      notify.send('❌ 投稿失败', `模板：${tmpl.name}\n标题：${title}\n错误：exit code ${code}`);
     }
   });
 
-  await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [
-    [biliupPath, ...args].join(' '),
-    recordId,
-  ]);
-  console.log(
-    `[自动投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`
-  );
+  await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
+  console.log(`[自动投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
 }
 
 async function findAndAutoUpload(session) {
@@ -390,34 +354,22 @@ router.post('/sessions/:id/upload', async (req, res) => {
        WHERE s.id = $1`,
       [req.params.id]
     );
-    if (sessionResult.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '会话不存在' });
+    if (sessionResult.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
     const session = sessionResult.rows[0];
 
     if (!(await checkUploadLimit(session.id))) {
-      return res
-        .status(429)
-        .json({ status: 'Error', message: '该会话已达上传次数上限' });
+      return res.status(429).json({ status: 'Error', message: '该会话已达上传次数上限' });
     }
 
     const { template_id } = req.body;
-    if (!template_id)
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '请指定投稿模板' });
+    if (!template_id) return res.status(400).json({ status: 'Error', message: '请指定投稿模板' });
 
-    const tmplResult = await pool.query(
-      'SELECT * FROM upload_templates WHERE id = $1',
-      [template_id]
-    );
-    if (tmplResult.rows.length === 0)
-      return res.status(404).json({ status: 'Error', message: '模板不存在' });
+    const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [template_id]);
+    if (tmplResult.rows.length === 0) return res.status(404).json({ status: 'Error', message: '模板不存在' });
     const tmpl = tmplResult.rows[0];
 
     if (!tmpl.cookies_path)
-      return res
-        .status(400)
-        .json({ status: 'Error', message: '模板未配置账户文件(cookies_path)' });
+      return res.status(400).json({ status: 'Error', message: '模板未配置账户文件(cookies_path)' });
 
     await executeUpload(session, tmpl);
     res.json({

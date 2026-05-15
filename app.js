@@ -75,9 +75,7 @@ const MAX_RESUME_RETRIES = 3;
 
 async function getSetting(key, def) {
   try {
-    const r = await pool.query('SELECT value FROM settings WHERE key = $1', [
-      key,
-    ]);
+    const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
     if (r.rows.length) return r.rows[0].value;
   } catch (_) {}
   return def;
@@ -99,10 +97,7 @@ async function tryResumeSession(session) {
   } else {
     const base = generateFilename(template, session.room_name || '');
     const parsed = path.parse(base);
-    outputPath = path.join(
-      DOWNLOAD_DIR,
-      `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`
-    );
+    outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
   }
 
   const streamUrl = session.stream_url || session.room_url;
@@ -139,11 +134,7 @@ async function tryResumeSession(session) {
   }
   ffmpegArgs.push(outputPath);
 
-  const {
-    fd: logFd,
-    logPath: ffmpegLogPath,
-    logCommand,
-  } = createProcLog('ffmpeg', session.id);
+  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog('ffmpeg', session.id);
   logCommand('ffmpeg', ffmpegArgs);
 
   const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
@@ -157,24 +148,21 @@ async function tryResumeSession(session) {
     sessionFinalized = true;
 
     await delActiveTask(activeTaskKey(session.room_url));
-    console.log(
-      `[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`
-    );
+    console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
 
     try {
-      await pool.query(
-        `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
-        [session.room_id]
-      );
+      await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+        session.room_id,
+      ]);
       await delRoomCache(session.room_url);
 
       const status = code === 0 ? 'completed' : 'interrupted';
 
       if (useSegment) {
-        await pool.query(
-          `UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`,
-          [status, session.id]
-        );
+        await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [
+          status,
+          session.id,
+        ]);
       } else {
         let fileSize = 0;
         try {
@@ -206,8 +194,7 @@ async function tryResumeSession(session) {
     });
     ffmpeg.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== null && code !== 0)
-        reject(new Error(`ffmpeg exited with code ${code}`));
+      if (code !== null && code !== 0) reject(new Error(`ffmpeg exited with code ${code}`));
       else resolve();
     });
   });
@@ -232,14 +219,9 @@ async function tryResumeSession(session) {
     startTime: Date.now(),
   });
 
-  await pool.query(
-    `UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`,
-    [(retryCount || 0) + 1, session.id]
-  );
+  await pool.query(`UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`, [(retryCount || 0) + 1, session.id]);
 
-  console.log(
-    `[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`
-  );
+  console.log(`[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`);
 }
 
 async function cleanupStaleRecordings() {
@@ -247,10 +229,7 @@ async function cleanupStaleRecordings() {
     // 清理上一轮可能的孤儿 ffmpeg 进程（避免 PM2 watch 重启导致状态不同步）
     try {
       const { execSync } = require('child_process');
-      execSync(
-        'pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null',
-        { stdio: 'ignore' }
-      );
+      execSync('pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null', { stdio: 'ignore' });
     } catch (_) {}
 
     const staleRooms = await pool.query(
@@ -262,9 +241,7 @@ async function cleanupStaleRecordings() {
           process.kill(row.ffmpeg_pid, 'SIGTERM');
         } catch (_) {}
       }
-      console.log(
-        `[清理] 直播间 ${row.room_name || row.room_url} (ID:${row.id}) 状态已重置为 idle`
-      );
+      console.log(`[清理] 直播间 ${row.room_name || row.room_url} (ID:${row.id}) 状态已重置为 idle`);
     }
     const kpids = staleRooms.rows.map((r) => r.ffmpeg_pid).filter(Boolean);
     if (kpids.length > 0) {
@@ -291,28 +268,20 @@ async function cleanupStaleRecordings() {
     for (const session of sessions.rows) {
       const retryCount = session.retry_count || 0;
       if (retryCount >= MAX_RESUME_RETRIES) {
-        console.log(
-          `[清理] 会话 ${session.id} 已达最大重试次数(${MAX_RESUME_RETRIES})，标记为中断`
-        );
-        await pool.query(
-          `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`,
-          [session.id]
-        );
+        console.log(`[清理] 会话 ${session.id} 已达最大重试次数(${MAX_RESUME_RETRIES})，标记为中断`);
+        await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
+          session.id,
+        ]);
         continue;
       }
 
-      console.log(
-        `[恢复] 尝试恢复会话 ${session.id} (第 ${retryCount + 1}/${MAX_RESUME_RETRIES} 次)`
-      );
+      console.log(`[恢复] 尝试恢复会话 ${session.id} (第 ${retryCount + 1}/${MAX_RESUME_RETRIES} 次)`);
       try {
         await tryResumeSession(session);
         console.log(`[恢复] 会话 ${session.id} 恢复成功`);
       } catch (err) {
         console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
-        const check = await pool.query(
-          `SELECT status FROM recording_sessions WHERE id = $1`,
-          [session.id]
-        );
+        const check = await pool.query(`SELECT status FROM recording_sessions WHERE id = $1`, [session.id]);
         if (check.rows.length > 0 && check.rows[0].status !== 'recording') {
           continue;
         }
@@ -323,10 +292,7 @@ async function cleanupStaleRecordings() {
             [newCount, session.id]
           );
         } else {
-          await pool.query(
-            `UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`,
-            [newCount, session.id]
-          );
+          await pool.query(`UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`, [newCount, session.id]);
         }
       }
     }
@@ -345,10 +311,7 @@ async function cleanupStaleRecordings() {
         } catch (_) {}
       }
       if (fileSize > 0) {
-        await pool.query('UPDATE recordings SET file_size = $1 WHERE id = $2', [
-          fileSize,
-          row.id,
-        ]);
+        await pool.query('UPDATE recordings SET file_size = $1 WHERE id = $2', [fileSize, row.id]);
       }
     }
     if (recResult.rows.length > 0) {
@@ -368,10 +331,7 @@ async function cleanupStaleRecordings() {
         size = s.size;
       } catch (_) {}
       if (size > 0) {
-        await pool.query(
-          'UPDATE recording_files SET file_size = $1 WHERE id = $2',
-          [size, row.id]
-        );
+        await pool.query('UPDATE recording_files SET file_size = $1 WHERE id = $2', [size, row.id]);
       }
     }
     if (fileResult.rows.length > 0) {
@@ -389,10 +349,7 @@ async function cleanupStaleRedis() {
     let deleted = 0;
     for (const key of keys) {
       const roomKey = key.replace('active_task:', '');
-      const room = await pool.query(
-        'SELECT status FROM rooms WHERE room_url = $1',
-        [roomKey]
-      );
+      const room = await pool.query('SELECT status FROM rooms WHERE room_url = $1', [roomKey]);
       if (room.rows.length === 0 || room.rows[0].status !== 'recording') {
         await redis.del(key);
         deleted++;
@@ -420,8 +377,7 @@ async function runFileScan() {
 
 async function checkStaleRecordings() {
   try {
-    const STALE_FILE_TIMEOUT_MS =
-      parseInt(await getSetting('watchdog_timeout', '60'), 10) * 1000;
+    const STALE_FILE_TIMEOUT_MS = parseInt(await getSetting('watchdog_timeout', '60'), 10) * 1000;
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.ffmpeg_pid, r.output_path, r.segment_duration,
               rs.id AS session_id
@@ -454,19 +410,13 @@ async function checkStaleRecordings() {
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
           } catch (_) {}
-          if (
-            latestMtime > 0 &&
-            Date.now() - latestMtime > STALE_FILE_TIMEOUT_MS
-          ) {
+          if (latestMtime > 0 && Date.now() - latestMtime > STALE_FILE_TIMEOUT_MS) {
             fileStale = true;
           }
         } else {
           try {
             const stat = fs.statSync(room.output_path);
-            if (
-              stat.isFile() &&
-              Date.now() - stat.mtimeMs > STALE_FILE_TIMEOUT_MS
-            ) {
+            if (stat.isFile() && Date.now() - stat.mtimeMs > STALE_FILE_TIMEOUT_MS) {
               fileStale = true;
             }
           } catch (_) {}
@@ -489,10 +439,9 @@ async function checkStaleRecordings() {
           }, 5000);
         }
 
-        await pool.query(
-          `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
-          [room.id]
-        );
+        await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+          room.id,
+        ]);
         await delRoomCache(room.room_url);
 
         if (room.session_id) {
