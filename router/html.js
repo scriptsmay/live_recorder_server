@@ -10,6 +10,7 @@ const pool = require('../db/index');
 const logsDir = path.join(__dirname, '../logs');
 const { LOG_ERR_HTML } = require('../config/template');
 const config = require('../config/config');
+const md = require('../lib/markdown');
 
 // 当访问根路径时，重定向
 router.get('/', (req, res) => {
@@ -50,9 +51,17 @@ router.get('/settings', (req, res) => {
 });
 
 router.get('/apiview', (req, res) => {
+  const mdPath = path.join(__dirname, '..', 'docs', 'API.md');
+  let content = '';
+  try {
+    const raw = fs.readFileSync(mdPath, 'utf-8');
+    content = md.render(raw);
+  } catch (_) {
+    content = '<div class="alert alert-danger">无法加载 API.md 文档</div>';
+  }
   res.render('apiview', {
-    siteUrl: config.SITE_URL,
-    now: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+    title: 'API 文档',
+    apiContent: content,
   });
 });
 
