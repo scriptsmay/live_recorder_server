@@ -12,12 +12,13 @@
  *   - 中断所有遗留的 recording 会话
  */
 
+const path = require('path');
+const fs = require('fs');
+const { execSync } = require('child_process');
+
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.dev'), quiet: true });
 require('dotenv').config({ quiet: true });
 
-const { execSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
 const pool = require('../db/index');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
