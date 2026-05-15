@@ -17,6 +17,15 @@
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
 - 无测试套件（test 脚本为占位）
 
+## 代码规范
+
+- **ESLint**（v9 flat config）：`npm run lint` 运行，配置见 `eslint.config.mjs`
+  - 允许空 catch 块、`_` 前缀未使用参数
+  - 排除 `public/`（minified bootstrap）、`node_modules/`、`logs/`、`backups/`
+- **Prettier**：`npm run format` 运行，配置见 `.prettierrc.json`，忽略规则见 `.prettierignore`
+  - 单引号、尾逗号 es5、每行 80 字符、2 空格缩进
+- 提交前建议执行 `npm run lint && npm run format`
+
 ## 数据库
 
 - 启动时自动迁移建表（`db/migrate.js`），详见 `docs/DB.md`
