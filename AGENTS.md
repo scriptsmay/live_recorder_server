@@ -134,6 +134,13 @@ lsof -i :3001                        # 检查端口占用
 - 全局设置存储于 `settings` 表，启动时自动插入默认值；`watchdog_interval` 修改后下次调度自动生效
 - `max_upload_limit` 为内存计数（`uploadCountMap`），重启服务后重置；自动投稿和手动投稿均受限制
 
+## 关联项目
+
+- **Chrome 扩展**（直播监听 + URL 推送）：`../chrome_live_listener/`
+  - 向 `POST /api/notify/live_download` 推送直播流 URL
+  - 向 `GET /api/notify/status` 查询录制状态
+  - 两端 API 契约变更时需同步修改
+
 ## TODO 计划
 
 查看文档[TODO.md](docs/TODO.md)
