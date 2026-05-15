@@ -32,8 +32,8 @@ async function loadSettings() {
     {
       title: '上传设置',
       items: [
-        { key: 'submit_api', label: '提交接口', desc: 'biliup --submit 选项（留空=自动）', type: 'text', attrs: '' },
-        { key: 'lines', label: '上传线路', desc: 'bda, bda2, ws, qn, bldsa, tx, txa（留空=自动）', type: 'text', attrs: '' },
+        { key: 'submit_api', label: '提交接口', desc: 'biliup --submit 选项，留空为自动选择', type: 'select', options: ['', 'app', 'web', 'b-cut-android'] },
+        { key: 'lines', label: '上传线路', desc: 'b站上传线路选择，留空为自动', type: 'select', options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'] },
         { key: 'threads', label: '上传并发', desc: '单文件并发上传数', type: 'number', attrs: 'min="1" max="16"' },
         { key: 'pool2_size', label: '上传线程池大小', desc: '负责上传事件的线程池大小', type: 'number', attrs: 'min="1" max="20"' },
         { key: 'max_upload_limit', label: '上传重试次数限制', desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3', type: 'number', attrs: 'min="1" max="999"' },
@@ -46,11 +46,22 @@ async function loadSettings() {
     html += `<div class="card"><div class="card-header"><h5 class="mb-0">${group.title}</h5></div><div class="card-body">`;
     for (const item of group.items) {
       const val = settings.find(s => s.key === item.key)?.value || '';
-      html += `<div class="mb-3">
-        <label class="form-label" for="set_${item.key}">${item.label}</label>
-        <input type="${item.type}" class="form-control" id="set_${item.key}" value="${val}" ${item.attrs} />
-        <div class="form-text">${item.desc}</div>
-      </div>`;
+      if (item.type === 'select') {
+        const opts = item.options.map(o =>
+          `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`
+        ).join('');
+        html += `<div class="mb-3">
+          <label class="form-label" for="set_${item.key}">${item.label}</label>
+          <select class="form-select" id="set_${item.key}">${opts}</select>
+          <div class="form-text">${item.desc}</div>
+        </div>`;
+      } else {
+        html += `<div class="mb-3">
+          <label class="form-label" for="set_${item.key}">${item.label}</label>
+          <input type="${item.type}" class="form-control" id="set_${item.key}" value="${val}" ${item.attrs} />
+          <div class="form-text">${item.desc}</div>
+        </div>`;
+      }
     }
     html += '</div></div></div>';
   }
