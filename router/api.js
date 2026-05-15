@@ -521,9 +521,8 @@ router.post('/notify/live_download', async (req, res) => {
         }
 
         let totalSize = 0;
-        let segIndex = 0;
+        let newFileCount = 0;
         for (const filePath of segmentFiles) {
-          // 跳过已在 recording_files 中追踪的文件（续播场景）
           const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
           if (tracked.rows.length > 0) continue;
 
@@ -533,26 +532,21 @@ router.post('/notify/live_download', async (req, res) => {
           } catch (_) {}
           totalSize += fileSize;
 
-          const segStart = new Date(sessionStart.getTime() + segIndex * segmentDuration * 1000);
-          const segEnd =
-            segIndex < segmentFiles.length - 1 ? new Date(segStart.getTime() + segmentDuration * 1000) : new Date();
-
           await pool.query(
             `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed')`,
-            [sessionId, segIndex, room.room_url, filePath, fileSize, segStart, segEnd]
+             VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')`,
+            [sessionId, newFileCount, room.room_url, filePath, fileSize, sessionStart]
           );
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
              VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
             [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
           );
-          segIndex++;
+          newFileCount++;
         }
 
         if (sessionId) {
-          // 复用会话时累加 total_segments/total_size
-          const segCount = reuseSession ? `total_segments + ${segmentFiles.length}` : String(segmentFiles.length);
+          const segCount = reuseSession ? `total_segments + ${newFileCount}` : String(newFileCount);
           const sizeTotal = reuseSession ? `total_size + ${totalSize}` : String(totalSize);
           await pool.query(
             `UPDATE recording_sessions

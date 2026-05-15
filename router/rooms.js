@@ -239,13 +239,26 @@ router.post('/rooms/:id/stop', async (req, res) => {
       const videoExtRe = /\.(mp4|flv|ts|mkv|avi|mov)$/i;
       for (const f of files) {
         const fp = path.join(outputDir, f);
-        // stream-gears 遗留的 .part 文件：重命名为最终格式
+        // stream-gears 遗留的 .part 文件：重命名并追踪
         if (f.endsWith('.flv.part')) {
           const finalPath = fp.replace(/\.part$/, '');
           try {
             fs.renameSync(fp, finalPath);
-            console.log(`[rooms] .part 文件已重命名: ${finalPath}`);
+            console.log(`[rooms] .part 已重命名: ${finalPath}`);
           } catch (_) {}
+          // 追踪结果文件
+          const exists = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [finalPath]);
+          if (exists.rows.length === 0) {
+            let sz = 0;
+            try {
+              sz = fs.statSync(finalPath).size;
+            } catch (_) {}
+            await pool.query(
+              `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
+               VALUES ($1, $2, $3, 'completed', NOW())`,
+              [finalPath, path.basename(finalPath), sz]
+            );
+          }
           continue;
         }
         if (!videoExtRe.test(f)) continue;

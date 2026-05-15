@@ -216,7 +216,7 @@ async function cleanupStaleRecordings() {
     } catch (_) {}
 
     const staleRooms = await pool.query(
-      `SELECT id, room_url, room_name, ffmpeg_pid FROM rooms WHERE status IN ('recording', 'paused')`
+      `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
     );
     for (const row of staleRooms.rows) {
       if (row.ffmpeg_pid) {
@@ -512,6 +512,7 @@ async function scanActiveSegments() {
     for (const room of rooms) {
       const dir = path.dirname(room.output_path);
       if (!fs.existsSync(dir)) continue;
+      let segIndex = room.total_segments || 0;
       const files = fs.readdirSync(dir);
       const videoRe = /\.(flv|mp4)$/i;
       for (const f of files) {
@@ -532,13 +533,14 @@ async function scanActiveSegments() {
         await pool.query(
           `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')`,
-          [room.session_id, room.total_segments || 0, room.room_url, fp, size]
+          [room.session_id, segIndex, room.room_url, fp, size]
         );
         await pool.query(
           `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
           [size, room.session_id]
         );
         console.log(`[分段追踪] ${room.room_name || room.room_url}: ${f} (${(size / 1024 / 1024).toFixed(1)}MB)`);
+        segIndex++;
       }
     }
   } catch (err) {
