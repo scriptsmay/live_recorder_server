@@ -79,6 +79,7 @@
 - 模块系统为 CommonJS（`require`，默认不使用 `import/export`）
 - ffmpeg 需单独安装，非 Node 依赖
 - 全局设置存储于 `settings` 表，启动时自动插入默认值；`watchdog_interval` 修改后下次调度自动生效
+- `max_upload_limit` 为内存计数（`uploadCountMap`），重启服务后重置；自动投稿和手动投稿均受限制
 
 ## TODO 计划
 
