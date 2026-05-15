@@ -654,12 +654,24 @@ async function cleanupFragmentFiles() {
   }
 }
 
-async function scheduleWatchdog() {
-  const intervalSec = parseInt(await getSetting('watchdog_interval', '30'), 10);
-  await checkStaleRecordings();
-  await scanActiveSegments();
-  await cleanupFragmentFiles();
-  setTimeout(scheduleWatchdog, Math.max(intervalSec, 10) * 1000);
+let watchdogTimer = null;
+
+function scheduleWatchdogOnce() {
+  if (watchdogTimer) clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(runWatchdog, 100);
+}
+
+async function runWatchdog() {
+  let intervalSec = 30;
+  try {
+    intervalSec = parseInt(await getSetting('watchdog_interval', '30'), 10);
+    await checkStaleRecordings();
+    await scanActiveSegments();
+    await cleanupFragmentFiles();
+  } catch (err) {
+    console.error('[看门狗] 异常:', err.message);
+  }
+  watchdogTimer = setTimeout(runWatchdog, Math.max(intervalSec, 10) * 1000);
 }
 
 startup()
@@ -667,7 +679,7 @@ startup()
     app.listen(port, () => {
       console.log(`Server running on http://localhost:${port}`);
     });
-    scheduleWatchdog();
+    scheduleWatchdogOnce();
   })
   .catch((err) => {
     console.error('[启动失败] 数据库迁移出错:', err);
