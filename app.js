@@ -231,8 +231,42 @@ async function cleanupStaleRecordings() {
         }
       }, 3000);
     }
+    // 清理 stream-gears 残留的 .flv.part 文件
+    for (const row of staleRooms.rows) {
+      try {
+        if (!row.output_path) continue;
+        const dir = path.dirname(row.output_path);
+        if (!fs.existsSync(dir)) continue;
+        const files = fs.readdirSync(dir);
+        for (const f of files) {
+          if (!f.endsWith('.flv.part')) continue;
+          const finalPath = path.join(dir, f.replace(/\.part$/, ''));
+          try {
+            fs.renameSync(path.join(dir, f), finalPath);
+            console.log(`[清理] .part 已恢复: ${finalPath}`);
+          } catch (_) {}
+        }
+
+        // 将 untracked .flv/.mp4 写入 recording_files
+        for (const f of fs.readdirSync(dir)) {
+          if (!/\.(mp4|flv)$/i.test(f)) continue;
+          const fp = path.join(dir, f);
+          const exists = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
+          if (exists.rows.length > 0) continue;
+          let size = 0;
+          try { size = fs.statSync(fp).size; } catch (_) {}
+          await pool.query(
+            `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
+             VALUES ($1, $2, $3, 'completed', NOW())`,
+            [fp, f, size]
+          );
+          console.log(`[清理] 孤文件已追踪: ${f} (${size} bytes)`);
+        }
+      } catch (_) {}
+    }
+
     await pool.query(
-      `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW()
+      `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, output_path = '', updated_at = NOW()
        WHERE status IN ('recording', 'paused')`
     );
 
