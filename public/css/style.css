@@ -58,8 +58,11 @@ img {
   box-shadow: 0 4px 24px var(--theme-shadow);
   margin-top: 16px;
   margin-bottom: 16px;
-  padding-top: 0 !important;
+  padding: 0 !important;
   overflow: hidden;
+}
+.page-main {
+  padding: 16px;
 }
 
 .navbar {
