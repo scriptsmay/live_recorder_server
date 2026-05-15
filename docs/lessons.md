@@ -123,3 +123,6 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 | **启动清理要覆盖所有下载引擎**              | 不能只针对 ffmpeg                                                              |
 | **看门狗要了解下载引擎的工作模式**          | stream-gears 用 `.part` 文件，ffmpeg 直接写 `.mp4`，mtime 检查不能只看最终文件 |
 | **Redis 状态要有兜底清理**                  | `cleanupStaleRedis` 在启动时扫一遍                                             |
+| **FLV 不能靠浏览器原生播放**                | 需集成 flv.js（MSE），且 stream URL 不带 `.flv` 后缀，需单独传扩展名判断       |
+| **两张表的数据源要统一**                    | `recording_files` 是文件主表，`recordings` 是元数据表，流媒体端点也要查两者     |
+| **nodemon 默认不监听 .ejs**                 | 改模板文件不会自动重启，需加 `--ext js,mjs,cjs,json,ejs`                       |
