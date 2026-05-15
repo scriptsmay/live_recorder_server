@@ -291,6 +291,12 @@ router.post('/rooms/:id/stop', async (req, res) => {
 router.get('/recordings', async (req, res) => {
   try {
     const { room_url, limit } = req.query;
+    let thresholdBytes = 0;
+    try {
+      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
+      if (ps.rows.length) thresholdBytes = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
+    } catch (_) {}
+
     let query = `
       SELECT r.*, rm.room_name
       FROM recordings r
@@ -298,6 +304,10 @@ router.get('/recordings', async (req, res) => {
     `;
     const params = [];
     const conditions = [];
+    if (thresholdBytes > 0) {
+      conditions.push(`r.file_size >= $${params.length + 1}`);
+      params.push(thresholdBytes);
+    }
     if (room_url) {
       conditions.push(`r.room_url = $${params.length + 1}`);
       params.push(room_url);
