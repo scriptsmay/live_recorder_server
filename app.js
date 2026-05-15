@@ -208,9 +208,9 @@ async function cleanupStaleRecordings() {
     // 清理上一轮可能的孤儿 ffmpeg / stream-gears 进程
     try {
       execSync(
-        'pkill -f "ffmpeg -i" 2>/dev/null; '
-        + 'pkill -f "ffmpeg.*-segment_time" 2>/dev/null; '
-        + 'pkill -f "stream_gears_wrapper" 2>/dev/null',
+        'pkill -f "ffmpeg -i" 2>/dev/null; ' +
+          'pkill -f "ffmpeg.*-segment_time" 2>/dev/null; ' +
+          'pkill -f "stream_gears_wrapper" 2>/dev/null',
         { stdio: 'ignore' }
       );
     } catch (_) {}
@@ -500,9 +500,55 @@ async function startup() {
   await runFileScan();
 }
 
+async function scanActiveSegments() {
+  try {
+    const { rows: rooms } = await pool.query(
+      `SELECT r.id, r.room_url, r.room_name, r.output_path,
+              rs.id AS session_id, rs.total_segments
+       FROM rooms r
+       JOIN recording_sessions rs ON rs.room_url = r.room_url AND rs.status = 'recording'
+       WHERE r.status = 'recording' AND r.output_path != ''`
+    );
+    for (const room of rooms) {
+      const dir = path.dirname(room.output_path);
+      if (!fs.existsSync(dir)) continue;
+      const files = fs.readdirSync(dir);
+      const videoRe = /\.(flv|mp4)$/i;
+      for (const f of files) {
+        if (!videoRe.test(f)) continue;
+        const fp = path.join(dir, f);
+        const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
+        if (tracked.rows.length > 0) continue;
+        let size = 0;
+        try {
+          size = fs.statSync(fp).size;
+        } catch (_) {}
+        await pool.query(
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
+           VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
+          [room.session_id, room.room_url, fp, f, size]
+        );
+        await pool.query(
+          `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')`,
+          [room.session_id, room.total_segments || 0, room.room_url, fp, size]
+        );
+        await pool.query(
+          `UPDATE recording_sessions SET total_segments = total_segments + 1, total_size = total_size + $1 WHERE id = $2`,
+          [size, room.session_id]
+        );
+        console.log(`[分段追踪] ${room.room_name || room.room_url}: ${f} (${(size / 1024 / 1024).toFixed(1)}MB)`);
+      }
+    }
+  } catch (err) {
+    console.error('[分段追踪] 失败:', err.message);
+  }
+}
+
 async function scheduleWatchdog() {
   const intervalSec = parseInt(await getSetting('watchdog_interval', '30'), 10);
   await checkStaleRecordings();
+  await scanActiveSegments();
   setTimeout(scheduleWatchdog, Math.max(intervalSec, 10) * 1000);
 }
 
