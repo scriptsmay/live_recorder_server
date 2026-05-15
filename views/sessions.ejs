@@ -127,7 +127,7 @@
           }
           const table = document.createElement('table');
           table.className = 'table table-sm mb-0';
-          table.innerHTML = `<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th></tr></thead><tbody>
+          table.innerHTML = `<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody>
           ${json.data.recordings
             .map(
               (r) => `
@@ -136,6 +136,7 @@
               <td><small>${r.file_path || '-'}</small></td>
               <td>${r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</td>
               <td>${r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>'}</td>
+              <td>${r.file_path ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '">▶</button>' : ''}</td>
             </tr>
           `
             )
@@ -232,6 +233,17 @@
     loadSessions(e.target.value);
   });
 
+  document.addEventListener('click', (e) => {
+    const playBtn = e.target.closest('.playBtn');
+    if (playBtn) {
+      const id = playBtn.dataset.recordingId;
+      const filename = playBtn.dataset.filename || '视频预览';
+      openVideoPlayer(`/api/recordings/${id}/stream`, filename);
+    }
+  });
+
   loadRoomFilter();
   loadSessions('');
 </script>
+
+<%- include('partials/_video_player') %>

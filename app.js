@@ -169,6 +169,12 @@ async function tryResumeSession(session) {
 
 async function cleanupStaleRecordings() {
   try {
+    // 清理上一轮可能的孤儿 ffmpeg 进程（避免 PM2 watch 重启导致状态不同步）
+    try {
+      const { execSync } = require('child_process');
+      execSync('pkill -f "ffmpeg -i" 2>/dev/null; pkill -f "ffmpeg.*-segment_time" 2>/dev/null', { stdio: 'ignore' });
+    } catch (_) {}
+
     const staleRooms = await pool.query(
       `SELECT id, room_url, room_name, ffmpeg_pid FROM rooms WHERE status IN ('recording', 'paused')`
     );

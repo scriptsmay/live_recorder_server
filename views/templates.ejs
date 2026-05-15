@@ -130,6 +130,8 @@ async function loadTemplates() {
       <td class="text-nowrap">
         <button class="btn btn-sm btn-outline-primary editTmplBtn"
           data='${JSON.stringify(t).replace(/'/g, '&#39;')}'>编辑</button>
+        <button class="btn btn-sm btn-outline-success copyTmplBtn"
+          data='${JSON.stringify(t).replace(/'/g, '&#39;')}'>复制</button>
         <button class="btn btn-sm btn-outline-danger deleteTmplBtn" data-id="${t.id}">删除</button>
       </td>`;
     tbody.appendChild(tr);
@@ -162,6 +164,26 @@ document.addEventListener('click', async e => {
   if (btn.classList.contains('deleteTmplBtn')) {
     if (!confirm('确定删除此模板？')) return;
     await apiAction(`/api/upload_templates/${btn.dataset.id}`, 'DELETE');
+    loadTemplates();
+  }
+  if (btn.classList.contains('copyTmplBtn')) {
+    const t = JSON.parse(btn.getAttribute('data'));
+    const body = {
+      name: (t.name || '未命名') + ' (副本)',
+      room_url: t.room_url || null,
+      title_template: t.title_template || '{room_name} 直播录像 {date}',
+      desc_template: t.desc_template || '',
+      cookies_path: t.cookies_path || '',
+      tid: t.tid || 171,
+      copyright: t.copyright ?? 2,
+      source: t.source || '{room_url}',
+      is_only_self: t.is_only_self ?? 0,
+      tags: t.tags || '',
+      cover: t.cover || '',
+      dtime: t.dtime || 0,
+      after_upload: t.after_upload || 'none',
+    };
+    await apiAction('/api/upload_templates', 'POST', body);
     loadTemplates();
   }
   if (btn.classList.contains('editTmplBtn')) {

@@ -72,7 +72,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   if (res.ok) {
     bootstrap.Modal.getInstance(document.getElementById('roomModal')).hide();
     resetForm();
-    htmx.trigger('#roomsBody', 'load');
+    htmx.ajax('GET', '/_/rooms/table', { target: '#roomsBody', swap: 'innerHTML' });
   }
 });
 

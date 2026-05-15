@@ -651,6 +651,48 @@ router.put('/recording_files/:id/associate', async (req, res) => {
   }
 });
 
+// GET /api/recordings/:id/stream — 流式播放录制文件
+router.get('/recordings/:id/stream', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    const filePath = result.rows[0].file_path;
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ status: 'Error', message: '文件不存在' });
+
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap = { '.mp4': 'video/mp4', '.flv': 'video/x-flv', '.ts': 'video/mp2t', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime' };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      const stream = fs.createReadStream(filePath, { start, end });
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+      });
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    console.error('[api] 视频流失败:', err);
+    res.status(500).json({ status: 'Error', message: '流媒体失败' });
+  }
+});
+
 module.exports = {
   router,
   sanitizeFilename,

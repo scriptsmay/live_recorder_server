@@ -1,0 +1,34 @@
+<!-- 视频播放器弹窗（可复用组件） -->
+<div class="modal fade" id="videoPlayerModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title text-white text-truncate" id="videoPlayerTitle">视频预览</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0 d-flex justify-content-center">
+        <video id="videoPlayer" class="w-100" controls autoplay style="max-height: 80vh;">
+          <p class="text-white p-3">你的浏览器不支持视频播放</p>
+        </video>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openVideoPlayer(src, title) {
+  const modal = document.getElementById('videoPlayerModal');
+  const video = document.getElementById('videoPlayer');
+  const titleEl = document.getElementById('videoPlayerTitle');
+  if (title) titleEl.textContent = title;
+  video.src = src;
+  video.load();
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+  modal.addEventListener('hidden.bs.modal', function stopVideo() {
+    video.pause();
+    video.src = '';
+    modal.removeEventListener('hidden.bs.modal', stopVideo);
+  }, { once: true });
+}
+</script>
