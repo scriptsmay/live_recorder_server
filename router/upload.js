@@ -209,7 +209,9 @@ async function executeUpload(session, tmpl) {
   const source = renderTemplate(tmpl.source || '{room_url}', vars);
 
   let recs = await pool.query(
-    `SELECT * FROM recordings WHERE session_id = $1 AND status IN ('completed', 'interrupted') ORDER BY segment_index ASC`,
+    `SELECT DISTINCT ON (file_path) * FROM recordings
+     WHERE session_id = $1 AND status IN ('completed', 'interrupted')
+     ORDER BY file_path`,
     [session.id]
   );
   let files = recs.rows.map((r) => r.file_path).filter(Boolean);

@@ -136,22 +136,21 @@ async function migrate() {
         created_at    TIMESTAMP DEFAULT NOW()
       )
     `);
-    await client
-      .query(
-        `
-      DELETE FROM recording_files WHERE id IN (
-        SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY id DESC) rn FROM recording_files) sub WHERE rn > 1
-      )
-    `
-      )
-      .catch(() => {});
-    await client
-      .query(
-        `
-      ALTER TABLE recording_files ADD CONSTRAINT recording_files_file_path_key UNIQUE (file_path)
-    `
-      )
-      .catch(() => {});
+    // 添加唯一约束防止 recording_files / recordings 重复
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recording_files_file_path_key') THEN
+          ALTER TABLE recording_files ADD CONSTRAINT recording_files_file_path_key UNIQUE (file_path);
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recordings_file_path_key') THEN
+          ALTER TABLE recordings ADD CONSTRAINT recordings_file_path_key UNIQUE (file_path);
+        END IF;
+      END $$;
+    `);
 
     await client.query(`
       ALTER TABLE rooms ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT TRUE
