@@ -19,8 +19,45 @@ router.get('/rooms', (req, res) => {
   res.render('rooms', { title: '直播间管理' });
 });
 
-router.get('/sessions', (req, res) => {
-  res.render('sessions', { title: '录制会话' });
+router.get('/sessions', async (req, res) => {
+  try {
+    const roomFilter = req.query.room_url || '';
+    const whereClause = roomFilter ? 'WHERE s.deleted_at IS NULL AND s.room_url = $1' : 'WHERE s.deleted_at IS NULL';
+    const params = roomFilter ? [roomFilter] : [];
+    const [sessResult, uploadResult, roomsResult, tmplResult] = await Promise.all([
+      pool.query(
+        `
+        SELECT s.*, rm.room_name
+        FROM recording_sessions s
+        LEFT JOIN rooms rm ON s.room_url = rm.room_url
+        ${whereClause}
+        ORDER BY s.id DESC
+        LIMIT 50
+      `,
+        params
+      ),
+      pool.query('SELECT * FROM upload_records ORDER BY id DESC LIMIT 200'),
+      pool.query('SELECT room_url, room_name FROM rooms ORDER BY id DESC'),
+      pool.query('SELECT * FROM upload_templates ORDER BY id DESC'),
+    ]);
+
+    const uploadMap = {};
+    for (const u of uploadResult.rows) {
+      if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
+      uploadMap[u.session_id].push(u);
+    }
+
+    res.render('sessions', {
+      title: '录制会话',
+      sessions: sessResult.rows,
+      uploadMap,
+      rooms: roomsResult.rows,
+      templates: tmplResult.rows,
+    });
+  } catch (err) {
+    console.error('[html] 会话页加载失败:', err);
+    res.status(500).render('sessions', { title: '录制会话', sessions: [], uploadMap: {}, rooms: [], templates: [] });
+  }
 });
 
 router.get('/templates', (req, res) => {

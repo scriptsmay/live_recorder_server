@@ -4,175 +4,145 @@
   <div class="col-md-4">
     <select class="form-select" id="roomFilter">
       <option value="">全部直播间</option>
+      <% rooms.forEach(r => { %>
+        <option value="<%= r.room_url %>"><%= r.room_name || r.room_url %></option>
+      <% }) %>
     </select>
   </div>
 </div>
 
-<div id="sessionList"></div>
-<p class="text-muted text-center" id="emptyMsg">暂无录制会话</p>
-<%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
-
-<script>
-  async function loadSessions(roomUrl) {
-    const [sessRes, uploadRes] = await Promise.all([
-      fetch(
-        '/api/sessions?limit=50' +
-          (roomUrl ? '&room_url=' + encodeURIComponent(roomUrl) : '')
-      ),
-      fetch('/api/upload_records?limit=200'),
-    ]);
-    const sessJson = await sessRes.json();
-    const uploadJson = await uploadRes.json();
-
-    const uploadMap = {};
-    if (uploadJson.data) {
-      uploadJson.data.forEach((u) => {
-        if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
-        uploadMap[u.session_id].push(u);
-      });
-    }
-
-    const container = document.getElementById('sessionList');
-    const empty = document.getElementById('emptyMsg');
-    container.innerHTML = '';
-    if (!sessJson.data || sessJson.data.length === 0) {
-      empty.style.display = '';
-      return;
-    }
-    empty.style.display = 'none';
-
-    setupPagination('sess', sessJson.data, (pageData) => {
-      container.innerHTML = '';
-      for (const s of pageData) {
-      const statusBadge =
-        {
-          recording: '<span class="badge bg-primary">录制中</span>',
-          completed: '<span class="badge bg-success">已完成</span>',
-          interrupted: '<span class="badge bg-danger">中断</span>',
-        }[s.status] || s.status;
-
-      const totalSize = s.total_size
-        ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB'
-        : '-';
-      const uploads = uploadMap[s.id] || [];
-      const hasSuccessUpload = uploads.some(u => u.status === 'success');
-      const uploadBadges = uploads
-        .map((u) => {
-          const b =
-            {
-              uploading: 'badge bg-primary',
-              success: 'badge bg-success',
-              failed: 'badge bg-danger',
-            }[u.status] || 'badge bg-secondary';
-          return `<span class="${b} me-1" title="${u.status}">${u.bv_id ? 'BV ' + u.bv_id : u.status}</span>`;
-        })
-        .join('');
-
-      const card = document.createElement('div');
-      card.className = 'card mb-3';
-      card.innerHTML = `
+<div id="sessionList">
+<% if (sessions.length === 0) { %>
+  <p class="text-muted text-center">暂无录制会话</p>
+<% } else { %>
+  <% sessions.forEach(s => { %>
+    <% const uploads = uploadMap[s.id] || []; %>
+    <% const hasSuccessUpload = uploads.some(u => u.status === 'success'); %>
+    <% const statusBadge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[s.status] || s.status; %>
+    <% const totalSize = s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
+    <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
-          <strong>${s.room_name || s.room_url}</strong>
-          <small class="text-muted ms-2">${s.room_url || ''}</small>
+          <strong><%= s.room_name || s.room_url %></strong>
+          <small class="text-muted ms-2"><%= s.room_url || '' %></small>
         </div>
-        <div>${statusBadge}</div>
+        <div><%- statusBadge %></div>
       </div>
       <div class="card-body">
-        ${s.caption ? `<div class="mb-2"><small class="text-muted">📺 ${s.caption}</small></div>` : ''}
+        <% if (s.caption) { %><div class="mb-2"><small class="text-muted">📺 <%= s.caption %></small></div><% } %>
         <div class="row mb-2">
-          <div class="col-md-3"><small>开始: ${s.started_at ? new Date(s.started_at).toLocaleString() : '-'}</small></div>
-          <div class="col-md-3"><small>结束: ${s.ended_at ? new Date(s.ended_at).toLocaleString() : '-'}</small></div>
-          <div class="col-md-3"><small>分片: ${s.total_segments || 0} 段</small></div>
-          <div class="col-md-3"><small>大小: ${totalSize}</small></div>
+          <div class="col-md-3"><small>开始: <%= s.started_at ? new Date(s.started_at).toLocaleString() : '-' %></small></div>
+          <div class="col-md-3"><small>结束: <%= s.ended_at ? new Date(s.ended_at).toLocaleString() : '-' %></small></div>
+          <div class="col-md-3"><small>分片: <%= s.total_segments || 0 %> 段</small></div>
+          <div class="col-md-3"><small>大小: <%= totalSize %></small></div>
         </div>
-        ${uploadBadges ? `<div class="mb-2">${uploadBadges}</div>` : ''}
-        <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="${s.id}">查看文件</button>
-        ${
-          !hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted') && s.total_segments > 0
-            ? `
-        <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="${s.id}">
-          <option value="">选择模板投稿</option>
-        </select>
-        <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="${s.id}" disabled>投稿</button>
-        `
-            : ''
-        }
-        <button class="btn btn-sm btn-outline-danger float-end deleteSessionBtn" data-session-id="${s.id}">删除</button>
-        <div class="mt-2 d-none filesContainer" id="files_${s.id}">
+        <% if (uploads.length) { %>
+          <div class="mb-2">
+            <% uploads.forEach(u => { %>
+              <% const cls = { uploading: 'badge bg-primary', success: 'badge bg-success', failed: 'badge bg-danger' }[u.status] || 'badge bg-secondary'; %>
+              <span class="<%= cls %> me-1" title="<%= u.status %>"><%= u.bv_id ? 'BV ' + u.bv_id : u.status %></span>
+            <% }) %>
+          </div>
+        <% } %>
+        <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
+        <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted') && s.total_segments > 0) { %>
+          <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="<%= s.id %>">
+            <option value="">选择模板投稿</option>
+            <% templates.forEach(t => { %>
+              <option value="<%= t.id %>"><%= t.name %><%= t.room_url ? ' [' + (t.room_name || t.room_url) + ']' : '' %></option>
+            <% }) %>
+          </select>
+          <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="<%= s.id %>" disabled>投稿</button>
+        <% } %>
+        <button class="btn btn-sm btn-outline-danger float-end deleteSessionBtn" data-session-id="<%= s.id %>">删除</button>
+        <div class="mt-2 d-none filesContainer" id="files_<%= s.id %>">
           <div class="spinner-border spinner-border-sm"><span class="visually-hidden">加载中...</span></div>
         </div>
       </div>
-    `;
-      container.appendChild(card);
-    }
-    });
+    </div>
+  <% }) %>
+<% } %>
+</div>
 
-    document.querySelectorAll('.toggleFiles').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        const sid = e.target.dataset.sessionId;
-        const container = document.getElementById('files_' + sid);
-        container.classList.toggle('d-none');
-        if (
-          !container.classList.contains('d-none') &&
-          container.children.length === 1 &&
-          container.children[0].classList.contains('spinner-border')
-        ) {
-          const res = await fetch(`/api/sessions/${sid}`);
-          const json = await res.json();
-          container.innerHTML = '';
-          if (
-            !json.data ||
-            !json.data.recordings ||
-            json.data.recordings.length === 0
-          ) {
-            container.innerHTML =
-              '<small class="text-muted">无分片文件</small>';
-            return;
-          }
-          const table = document.createElement('table');
-          table.className = 'table table-sm mb-0';
-          table.innerHTML = `<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody>
-          ${json.data.recordings
-            .map(
-              (r) => `
-            <tr>
-              <td>${r.segment_index}</td>
-              <td><small>${r.file_path || '-'}</small></td>
-              <td>${r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</td>
-              <td>${r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>'}</td>
-              <td>${r.file_exists ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>'}</td>
-            </tr>
-          `
-            )
-            .join('')}</tbody>`;
-          container.appendChild(table);
+<%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
+
+<script>
+  document.getElementById('roomFilter')?.addEventListener('change', (e) => {
+    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
+    window.location.href = '/sessions' + url;
+  });
+
+  document.addEventListener('click', async (e) => {
+    const toggle = e.target.closest('.toggleFiles');
+    if (toggle) {
+      const sid = toggle.dataset.sessionId;
+      const container = document.getElementById('files_' + sid);
+      container.classList.toggle('d-none');
+      if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
+        const res = await fetch('/api/sessions/' + sid);
+        const json = await res.json();
+        container.innerHTML = '';
+        if (!json.data || !json.data.recordings || json.data.recordings.length === 0) {
+          container.innerHTML = '<small class="text-muted">无分片文件</small>';
+          return;
         }
-      });
-    });
-    loadTemplates();
-  }
+        const table = document.createElement('table');
+        table.className = 'table table-sm mb-0';
+        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+          json.data.recordings.map(r => '<tr>' +
+            '<td>' + r.segment_index + '</td>' +
+            '<td><small>' + (r.file_path || '-') + '</small></td>' +
+            '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
+            '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
+            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
+            '</tr>'
+          ).join('') + '</tbody>';
+        container.appendChild(table);
+      }
+      return;
+    }
 
-  async function loadTemplates() {
-    const res = await fetch('/api/upload_templates');
-    const json = await res.json();
-    if (!json.data) return;
-    document.querySelectorAll('.uploadTmplSelect').forEach((sel) => {
-      const currentUrl =
-        sel
-          .closest('.card')
-          ?.querySelector('.card-header small')
-          ?.textContent?.trim() || '';
-      sel.innerHTML = '<option value="">选择模板投稿</option>';
-      json.data.forEach((t) => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent =
-          t.name + (t.room_url ? ' [' + (t.room_name || t.room_url) + ']' : '');
-        sel.appendChild(opt);
+    const delBtn = e.target.closest('.deleteSessionBtn');
+    if (delBtn) {
+      if (!confirm('确定删除此会话？此操作不会删除实际文件。')) return;
+      const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId + '/delete', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) { alert(json.message); return; }
+      location.reload();
+      return;
+    }
+
+    const playBtn = e.target.closest('.playBtn');
+    if (playBtn) {
+      openVideoPlayer('/api/recordings/' + playBtn.dataset.recordingId + '/stream', playBtn.dataset.filename || '视频预览');
+      return;
+    }
+
+    const uploadBtn = e.target.closest('.uploadBtn');
+    if (uploadBtn && !uploadBtn.disabled) {
+      if (!confirm('确认投稿？')) return;
+      const sessionId = uploadBtn.dataset.sessionId;
+      const sel = uploadBtn.parentElement.querySelector('.uploadTmplSelect');
+      const templateId = sel.value;
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = '投稿中...';
+      const res = await fetch('/api/sessions/' + sessionId + '/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: parseInt(templateId) }),
       });
-    });
-  }
+      const json = await res.json();
+      if (res.ok) {
+        uploadBtn.textContent = '已提交';
+        uploadBtn.className = 'btn btn-sm btn-success';
+      } else {
+        alert(json.message || '投稿失败');
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '投稿';
+      }
+      return;
+    }
+  });
 
   document.addEventListener('change', (e) => {
     const sel = e.target.closest('.uploadTmplSelect');
@@ -180,75 +150,6 @@
     const btn = sel.parentElement.querySelector('.uploadBtn');
     btn.disabled = !sel.value;
   });
-
-  document.addEventListener('click', async (e) => {
-    const delBtn = e.target.closest('.deleteSessionBtn');
-    if (delBtn) {
-      if (!confirm('确定删除此会话？此操作不会删除实际文件。')) return;
-      const res = await fetch(
-        `/api/sessions/${delBtn.dataset.sessionId}/delete`,
-        { method: 'POST' }
-      );
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.message);
-        return;
-      }
-      loadSessions(document.getElementById('roomFilter').value);
-      return;
-    }
-    const btn = e.target.closest('.uploadBtn');
-    if (!btn || btn.disabled) return;
-    if (!confirm('确认投稿？')) return;
-    const sessionId = btn.dataset.sessionId;
-    const sel = btn.parentElement.querySelector('.uploadTmplSelect');
-    const templateId = sel.value;
-    btn.disabled = true;
-    btn.textContent = '投稿中...';
-    const res = await fetch(`/api/sessions/${sessionId}/upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template_id: parseInt(templateId) }),
-    });
-    const json = await res.json();
-    if (res.ok) {
-      btn.textContent = '已提交';
-      btn.className = 'btn btn-sm btn-success';
-    } else {
-      alert(json.message || '投稿失败');
-      btn.disabled = false;
-      btn.textContent = '投稿';
-    }
-  });
-
-  async function loadRoomFilter() {
-    const res = await fetch('/api/rooms');
-    const json = await res.json();
-    const sel = document.getElementById('roomFilter');
-    if (!json.data) return;
-    json.data.forEach((r) => {
-      const opt = document.createElement('option');
-      opt.value = r.room_url;
-      opt.textContent = r.room_name || r.room_url;
-      sel.appendChild(opt);
-    });
-  }
-
-  document.getElementById('roomFilter').addEventListener('change', (e) => {
-    loadSessions(e.target.value);
-  });
-
-  document.addEventListener('click', (e) => {
-    const playBtn = e.target.closest('.playBtn');
-    if (playBtn) {
-      const id = playBtn.dataset.recordingId;
-      const filename = playBtn.dataset.filename || '视频预览';
-      openVideoPlayer(`/api/recordings/${id}/stream`, filename);
-    }
-  });
-
-  loadRoomFilter();
-  loadSessions('');
 </script>
 
 <%- include('partials/_video_player') %>
