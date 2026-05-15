@@ -23,6 +23,7 @@ SIGTERM → Rust Drop 不执行 → .flv.part 未重命名为 .flv
 **症状**：close handler 中非 ffmpeg 下载器的分段文件扫描永远返回空列表。
 
 **原因**：
+
 ```js
 // 错误：.replace(/\./g, '\\.') 连 .* 里的 . 也转义了
 const regex = new RegExp('^' + pattern.replace(/\./g, '\\.') + '$');
@@ -30,6 +31,7 @@ const regex = new RegExp('^' + pattern.replace(/\./g, '\\.') + '$');
 ```
 
 **修复**：只对扩展名的 `.` 转义，`.*` 通配符保持原样：
+
 ```js
 const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
 const ext = path.extname(base);
@@ -53,6 +55,7 @@ const regex = new RegExp('^' + prefix + ext.replace(/\./g, '\\.') + '$');
 **症状**：`UPDATE recording_sessions WHERE id = total_segments`（例如 id=0），永远更新不到任何行。
 
 **原因**：
+
 ```js
 // 错误：存了 total_segments 值
 resumeCount = recent.rows[0].total_segments || 0;
@@ -69,6 +72,7 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 **原因**：stream-gears 的 Rust `FlvFile::Drop` 在收到 SIGTERM 后可能来不及执行（`.part → .flv` 重命名不跑）。而 close handler（`dlProcess.on('close')`）是异步的，rooms.js 的 stop 处理不等它完成就返回了。close handler 扫描不到 `.flv` 文件（因为 .part 没被重命名），所以没有创建 recording_files 记录。
 
 **修复**：stop 处理中杀死进程后，同步扫描输出目录：
+
 - 发现 `.flv.part` → 重命名为 `.flv`
 - 发现 `.flv`/`.mp4` 且不在 `recording_files` 中 → 插入为 `completed`
 
@@ -79,6 +83,7 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 **原因**：`cleanupStaleRecordings()` 只 `pkill -f "ffmpeg"`，不处理 Python/stream-gears 进程，也不扫 `.part` 文件。
 
 **修复**：在清理循环中：
+
 - 遍历每个脏房间的 `output_path` 目录
 - 重命名 `.flv.part` → `.flv`
 - 将 untracked 的 `.flv`/`.mp4` 写入 `recording_files`
@@ -99,13 +104,22 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 
 **处理**：加入 `.gitignore`。
 
+#### 9. 看门狗杀掉 stream-gears 进程 (`app.js`)
+
+**症状**：录制不断中断（`[null]` 退出码），分段文件全是 1133 字节（仅 FLV 头部，无媒体数据）。
+
+**原因**：看门狗（`checkStaleRecordings`）检查 `.flv`/`.mp4` 文件的 mtime 来判断录制是否僵死。stream-gears 在分段间隔内一直写 `.flv.part`，只在分段边界才重命名为 `.flv`。当 `segment_duration`（600s）远大于 `watchdog_timeout`（60s）时，看门狗跑完一轮后发现 60 秒内没有 `.flv` 变更 → 判定僵死 → SIGTERM 杀掉进程。
+
+**修复**：mtime 检查也包含 `.part` 后缀的文件。
+
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
+| 教训                                        | 说明                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
 | **不要依赖异步 close handler 做关键持久化** | 进程被 SIGTERM 后 close handler 可能不跑或跑不完，关键数据写入应在同步路径完成 |
-| **外部进程的信号处理要了解** | Rust 的 `Drop` 在 SIGTERM 下可能不执行，Python 进程同理 |
-| **Regex 构造要逐层验证** | 两个 replace 叠加时中间结果的 `.` 会被转义器错杀 |
-| **变量名语义要准确** | `resumeCount` 存的是 ID 不是 count，误导后续维护 |
-| **启动清理要覆盖所有下载引擎** | 不能只针对 ffmpeg |
-| **Redis 状态要有兜底清理** | `cleanupStaleRedis` 在启动时扫一遍 |
+| **外部进程的信号处理要了解**                | Rust 的 `Drop` 在 SIGTERM 下可能不执行，Python 进程同理                        |
+| **Regex 构造要逐层验证**                    | 两个 replace 叠加时中间结果的 `.` 会被转义器错杀                               |
+| **变量名语义要准确**                        | `resumeCount` 存的是 ID 不是 count，误导后续维护                               |
+| **启动清理要覆盖所有下载引擎**              | 不能只针对 ffmpeg                                                              |
+| **看门狗要了解下载引擎的工作模式**          | stream-gears 用 `.part` 文件，ffmpeg 直接写 `.mp4`，mtime 检查不能只看最终文件 |
+| **Redis 状态要有兜底清理**                  | `cleanupStaleRedis` 在启动时扫一遍                                             |
