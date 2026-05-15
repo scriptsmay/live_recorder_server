@@ -22,7 +22,8 @@
     "dev": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop live_recorder_server && pm2 delete live_recorder_server",
     "restart": "pm2 restart live_recorder_server",
-    "logs": "pm2 logs live_recorder_server"
+    "logs": "pm2 logs live_recorder_server",
+    "lint": "eslint ."
   },
   "dependencies": {
     "axios": "^1.16.1",
@@ -35,5 +36,10 @@
     "morgan": "^1.10.1",
     "pg": "^8.20.0",
     "redis": "^5.12.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0"
   }
 }

@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 const express = require('express');
 const router = express.Router();
 const config = require('../config/config');
@@ -541,10 +542,9 @@ router.post('/notify/live_download', async (req, res) => {
           );
         }
 
-        const result = await pool.query(
+        await pool.query(
           `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-           VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')
-           RETURNING id`,
+           VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
           [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
         );
 

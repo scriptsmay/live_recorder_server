@@ -11,13 +11,12 @@ const cors = require('cors');
 const morgan = require('morgan');
 const ejsLayouts = require('express-ejs-layouts');
 
-const dayjs = require('dayjs');
 const migrate = require('./db/migrate');
 const pool = require('./db/index');
 const redis = require('./db/redis');
 
 const htmlRouter = require('./router/html');
-const { router: apiRouter, sanitizeFilename, generateFilename, templateToStrftime, setActiveTask, delActiveTask, delRoomCache, activeTaskKey } = require('./router/api');
+const { router: apiRouter, generateFilename, templateToStrftime, setActiveTask, delActiveTask, delRoomCache, activeTaskKey } = require('./router/api');
 const roomsRouter = require('./router/rooms');
 const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
