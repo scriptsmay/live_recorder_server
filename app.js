@@ -587,6 +587,12 @@ async function cleanupFragmentFiles() {
         continue;
       }
       if (size >= thresholdBytes) continue;
+      // 只删除创建超过 2 分钟的文件，防止误删刚刚完成的新分片
+      try {
+        if (Date.now() - fs.statSync(fp).mtimeMs < 120000) continue;
+      } catch (_) {
+        continue;
+      }
 
       // 从 DB 删除关联记录并更新会话合计
       const rec = await pool.query('DELETE FROM recordings WHERE file_path = $1 RETURNING session_id, file_size', [fp]);
