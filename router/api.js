@@ -279,7 +279,14 @@ router.get('/notify/status', async (req, res) => {
 });
 
 router.post('/notify/live_download', async (req, res) => {
+  console.log('[api] 收到录制请求:', {
+    title: req.body?.title,
+    room_url: req.body?.room_url,
+    url: req.body?.url?.slice(0, 60),
+  });
+
   if (!req.body || !req.body.url || !req.body.title) {
+    console.log('[api] 录制请求被拒: 缺少必填参数 (body/url/title)');
     return res.status(400).json({
       status: 'Error',
       message: '请提供直播流URL和标题。',
@@ -299,6 +306,7 @@ router.post('/notify/live_download', async (req, res) => {
   const roomKey = room_url || url;
 
   if (await isActiveTask(roomKey)) {
+    console.log('[api] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
     return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
   }
 
@@ -327,6 +335,7 @@ router.post('/notify/live_download', async (req, res) => {
   }
 
   if (room.monitoring_enabled === false) {
+    console.log('[api] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
     return res.status(400).json({
       status: 'Monitoring paused',
       message: `直播间 ${room.room_name || room.room_url} 已暂停监听`,
@@ -334,6 +343,7 @@ router.post('/notify/live_download', async (req, res) => {
   }
 
   if (room.status === 'recording' || room.status === 'paused') {
+    console.log('[api] 录制请求被拒: 房间状态=' + room.status + ' (room=' + room.id + ')');
     return res.status(400).json({
       status: 'Already recording',
       message: `直播间 ${room.room_name || room.room_url} 已在录制中`,
