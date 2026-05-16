@@ -389,8 +389,13 @@ router.post('/notify/live_download', async (req, res) => {
   let segmentListPath;
 
   if (useSegment) {
-    const strftimeName = templateToStrftime(template, room.room_name || title, ext);
-    outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
+    if (downloader.name === 'ffmpeg') {
+      const strftimeName = templateToStrftime(template, room.room_name || title, ext);
+      outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
+    } else {
+      const baseName = generateFilename(template, room.room_name || title, '');
+      outputFilePattern = path.join(DOWNLOAD_DIR, baseName + ext);
+    }
   } else {
     const filename = generateFilename(template, room.room_name || title, ext);
     outputFilePattern = path.join(DOWNLOAD_DIR, filename);
@@ -536,16 +541,17 @@ router.post('/notify/live_download', async (req, res) => {
           try {
             const dir = path.dirname(outputFilePattern);
             const base = path.basename(outputFilePattern);
-            // strftime 占位符 -> .* 通配符；仅尾部扩展名的 . 做字面转义
             const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
             const ext = path.extname(base);
-            const regex = new RegExp('^' + prefix + ext.replace(/\./g, '\\.') + '$');
+            const regex = new RegExp('^' + prefix + '.*' + ext.replace(/\./g, '\\.') + '$');
             const files = fs.readdirSync(dir);
             segmentFiles = files
               .filter((f) => regex.test(f))
               .sort()
               .map((f) => path.join(dir, f));
-          } catch (_) {}
+          } catch (err) {
+            console.error('[api] stream-gears 分段文件扫描失败:', err.message);
+          }
         }
 
         let thresholdBytes = 0;
