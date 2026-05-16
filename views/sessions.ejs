@@ -5,7 +5,7 @@
     <select class="form-select" id="roomFilter">
       <option value="">全部直播间</option>
       <% rooms.forEach(r => { %>
-        <option value="<%= r.room_url %>"><%= r.room_name || r.room_url %></option>
+        <option value="<%= r.room_url %>" <%= currentRoomUrl === r.room_url ? 'selected' : '' %>><%= r.room_name || r.room_url %></option>
       <% }) %>
     </select>
   </div>
