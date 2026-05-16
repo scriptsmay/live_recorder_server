@@ -190,10 +190,10 @@ DownloaderFactory.getActiveDownloader()
 | 函数                     | 触发        | 职责                                                            |
 | ------------------------ | ----------- | --------------------------------------------------------------- |
 | `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                |
+| `scanActiveSegments()`   | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）      |
 | `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                     |
+| `syncMissingFiles()`     | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                  |
 | `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件  |
-
-> `scanActiveSegments()` 已从看门狗周期中移除（v2.0），原因：分段模式下 watchdog 提前标记未完成文件为 `completed`，导致 close handler 跳过更新，file_size 永久停留在扫描时的中间值。文件追踪改为仅在 close handler 中统一处理。
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 
@@ -209,11 +209,11 @@ DownloaderFactory.getActiveDownloader()
 watchdog.start()
   └─ setTimeout(runWatchdog, 100)
        ├─ checkStaleRecordings()    ← mtime 僵死检查
+       ├─ scanActiveSegments()      ← 追踪已完成分段（含 2 分钟稳定期）
        ├─ cleanupFragmentFiles()    ← 同步 fs 清理
+       ├─ syncMissingFiles()        ← 检测被删除文件
        └─ setTimeout(runWatchdog, interval)  ← 下次周期
 ```
-
-> `scanActiveSegments()` 已移除——见上表说明。
 
 ### 启动时执行链（非周期）
 
@@ -242,6 +242,7 @@ startup()
 
 - 同步 `fs.readdirSync` + `fs.statSync` 扫描所有活跃录制房间的输出目录
 - 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + recordings + 更新 session 合计
+- **mtime 稳定期**：文件最近 2 分钟内有修改则跳过（防止标记还在写入的当前分段）
 - 小于 `filtering_threshold` 的碎片跳过不追踪
 
 ### cleanupFragmentFiles()
