@@ -35,3 +35,4 @@ dev_biliup/
 backups/
 __pycache__/
 download.log
+data/
