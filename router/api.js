@@ -589,7 +589,7 @@ router.post('/notify/live_download', async (req, res) => {
                SET ended_at = NOW(), status = $1,
                    total_segments = total_segments + $2,
                    total_size = total_size + $3
-               WHERE id = $4`,
+               WHERE id = $4 AND status = 'recording'`,
               [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
             );
           } else {
@@ -598,7 +598,7 @@ router.post('/notify/live_download', async (req, res) => {
                SET ended_at = NOW(), status = $1,
                    total_segments = $2,
                    total_size = $3
-               WHERE id = $4`,
+               WHERE id = $4 AND status = 'recording'`,
               [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
             );
           }
@@ -647,7 +647,7 @@ router.post('/notify/live_download', async (req, res) => {
                SET ended_at = NOW(), status = $1,
                    total_segments = total_segments + 1,
                    total_size = total_size + $2
-               WHERE id = $3`,
+               WHERE id = $3 AND status = 'recording'`,
               [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
             );
           } else {
@@ -656,7 +656,7 @@ router.post('/notify/live_download', async (req, res) => {
                SET ended_at = NOW(), status = $1,
                    total_segments = 1,
                    total_size = $2
-               WHERE id = $3`,
+               WHERE id = $3 AND status = 'recording'`,
               [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
             );
           }

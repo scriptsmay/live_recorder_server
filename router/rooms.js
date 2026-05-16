@@ -217,6 +217,27 @@ router.post('/rooms/:id/stop', async (req, res) => {
     if (r.status === 'idle') {
       return res.status(400).json({ status: 'Error', message: '当前未在录制' });
     }
+
+    let activeSessionId = null;
+    try {
+      const sess = await pool.query(
+        `SELECT id FROM recording_sessions WHERE room_url = $1 AND status = 'recording' ORDER BY id DESC LIMIT 1`,
+        [r.room_url]
+      );
+      if (sess.rows.length) activeSessionId = sess.rows[0].id;
+    } catch (_) {}
+
+    if (activeSessionId) {
+      await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'completed' WHERE id = $1`, [
+        activeSessionId,
+      ]);
+    }
+    await pool.query(
+      `UPDATE recordings SET ended_at = NOW(), status = 'completed'
+       WHERE room_url = $1 AND status = 'recording'`,
+      [r.room_url]
+    );
+
     if (r.ffmpeg_pid) {
       try {
         process.kill(r.ffmpeg_pid, 'SIGTERM');
@@ -225,11 +246,6 @@ router.post('/rooms/:id/stop', async (req, res) => {
       }
     }
     await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [id]);
-    await pool.query(
-      `UPDATE recordings SET ended_at = NOW(), status = 'interrupted'
-       WHERE room_url = $1 AND status = 'recording'`,
-      [r.room_url]
-    );
 
     // 同步扫描已下载文件（不依赖异步的 close handler），防止进程未清理时文件变孤文件
     if (r.output_path) {
@@ -237,25 +253,14 @@ router.post('/rooms/:id/stop', async (req, res) => {
       const fs = require('fs');
       const files = fs.readdirSync(outputDir);
       const videoExtRe = /\.(mp4|flv|ts|mkv|avi|mov)$/i;
-      // 查找最近的会话关联文件
-      let activeSession = null;
-      try {
-        const sess = await pool.query(
-          `SELECT id FROM recording_sessions WHERE room_url = $1 ORDER BY id DESC LIMIT 1`,
-          [r.room_url]
-        );
-        if (sess.rows.length) activeSession = sess.rows[0].id;
-      } catch (_) {}
       for (const f of files) {
         const fp = path.join(outputDir, f);
-        // stream-gears 遗留的 .part 文件：重命名并追踪
         if (f.endsWith('.flv.part')) {
           const finalPath = fp.replace(/\.part$/, '');
           try {
             fs.renameSync(fp, finalPath);
             console.log(`[rooms] .part 已重命名: ${finalPath}`);
           } catch (_) {}
-          // 追踪结果文件
           const exists = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [finalPath]);
           if (exists.rows.length === 0) {
             let sz = 0;
@@ -265,7 +270,7 @@ router.post('/rooms/:id/stop', async (req, res) => {
             await pool.query(
               `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
                VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-              [activeSession, r.room_url, finalPath, path.basename(finalPath), sz]
+              [activeSessionId, r.room_url, finalPath, path.basename(finalPath), sz]
             );
           }
           continue;
@@ -280,7 +285,7 @@ router.post('/rooms/:id/stop', async (req, res) => {
           await pool.query(
             `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
              VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-            [activeSession, r.room_url, fp, f, size]
+            [activeSessionId, r.room_url, fp, f, size]
           );
         }
       }
@@ -451,11 +456,13 @@ router.get('/sessions/:id', async (req, res) => {
       }
     }
 
-    const recordings = { rows: rfResult.rows.map((f) => ({
-      ...f,
-      segment_index: 0,
-      ended_at: f.completed_at,
-    })) };
+    const recordings = {
+      rows: rfResult.rows.map((f) => ({
+        ...f,
+        segment_index: 0,
+        ended_at: f.completed_at,
+      })),
+    };
 
     for (const rec of recordings.rows) {
       try {
