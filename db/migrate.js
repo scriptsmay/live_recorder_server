@@ -203,6 +203,7 @@ async function runMigration() {
       ['pool2_size', '3'],
       ['max_upload_limit', '99'],
       ['downloader', 'ffmpeg'],
+      ['max_resume_retries', '3'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

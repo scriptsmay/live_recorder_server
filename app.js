@@ -86,7 +86,18 @@ app.use('/api', settingsRouter);
 // ──────────────────────────────────────────────
 // 4. 启动前清理与恢复
 // ──────────────────────────────────────────────
-const MAX_RESUME_RETRIES = 3;
+let _maxResumeRetries = null;
+
+async function getMaxResumeRetries() {
+  if (_maxResumeRetries !== null) return _maxResumeRetries;
+  try {
+    const r = await pool.query("SELECT value FROM settings WHERE key = 'max_resume_retries'");
+    _maxResumeRetries = (r.rows.length ? parseInt(r.rows[0].value, 10) : 3) || 3;
+  } catch (_) {
+    _maxResumeRetries = 3;
+  }
+  return _maxResumeRetries;
+}
 
 async function tryResumeSession(session) {
   const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -233,6 +244,7 @@ async function tryResumeSession(session) {
 }
 
 async function cleanupStaleRecordings() {
+  const MAX_RESUME_RETRIES = await getMaxResumeRetries();
   try {
     const staleRooms = await pool.query(
       `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
