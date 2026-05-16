@@ -108,8 +108,13 @@ async function tryResumeSession(session) {
 
   let outputPath;
   if (useSegment) {
-    const strftimeName = templateToStrftime(template, session.room_name || '', ext);
-    outputPath = path.join(DOWNLOAD_DIR, strftimeName);
+    if (downloader.name === 'ffmpeg') {
+      const strftimeName = templateToStrftime(template, session.room_name || '', ext);
+      outputPath = path.join(DOWNLOAD_DIR, strftimeName);
+    } else {
+      const baseName = generateFilename(template, session.room_name || '', '');
+      outputPath = path.join(DOWNLOAD_DIR, baseName + ext);
+    }
   } else {
     const base = generateFilename(template, session.room_name || '', ext);
     const parsed = path.parse(base);
