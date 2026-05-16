@@ -232,6 +232,15 @@ async function executeUpload(session, tmpl) {
     files = fallback.rows.map((r) => r.file_path).filter(Boolean);
   }
 
+  // 过滤掉磁盘上已不存在的文件
+  files = files.filter((fp) => {
+    try {
+      return require('fs').statSync(fp).isFile();
+    } catch {
+      return false;
+    }
+  });
+
   if (files.length === 0) {
     console.log(`[自动投稿] 会话 ${session.id} 无文件，跳过`);
     return;
