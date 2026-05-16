@@ -1,4 +1,4 @@
-# 直播录制自动化流程架构 (v1.3)
+# 直播录制自动化流程架构
 
 ## 整体流程
 
@@ -8,24 +8,20 @@
      │  POST /notify/live_download   │     spawn pipe stderr      │                         │
      │──────────────────────────────>│───────────────────────────>│                         │
      │                               │   stderr tee ──→ log       │    持续写入 .part        │
-     │                               │   stderr ──→ heartbeat     │<────────────────────────│
-     │                               │              tracker       │                         │
+     │                               │                            │<────────────────────────│
      │                               │                            │                         │
      │                               │   ─── 看门狗 (每 30s) ─── │                         │
-     │                               │   ① heartbeat 优先检测     │                         │
-     │                               │   ② mtime fallback         │                         │
-     │                               │   ③ Worker Pool 异步扫描   │                         │
-     │                               │   ④ checkDiskSpace()       │                         │
-     │                               │                            │                         │
-     │                               │   chokidar 事件驱动        │                         │
-     │                               │   (文件新增/变更/删除)     │                         │
-     │                               │   → recording_files 自动   │                         │
-     │                               │     追踪 (双锁防并发)      │                         │
+     │                               │   ① mtime 僵死检查         │                         │
+     │                               │   ② 同步 fs 扫描分片       │                         │
+     │                               │   ③ 碎片文件清理           │                         │
      │                               │                            │                         │
      │                               │   进程退出 (stop/崩溃/断流)│                         │
      │                               │<───────────────────────────│                         │
      │                               │   close handler            │                         │
-     │                               │   + clearHeartbeat()       │                         │
+     │                               │   (exitCode 安全兜底)      │                         │
+     │                               │                            │                         │
+     │                               │   若 stream-gears 报错      │                         │
+     │                               │   自动回退到 ffmpeg (同会话)│                         │
      │                               │                            │                         │
      │                               │   findAndAutoUpload()       ───────────────────────>│
      │                               │                            │                         │  biliup upload
@@ -154,7 +150,7 @@ DownloaderFactory.getActiveDownloader()
 - 分段模式：`-f segment -segment_time N`
 - 扩展名：`.mp4`
 - 停止信号：SIGTERM → 进程正常退出 → close handler
-- stderr pipe → 上层 tee 到日志文件 + 心跳解析器
+- stderr pipe → 上层 tee 到日志文件
 
 ### StreamGearsDownloader
 
@@ -165,7 +161,15 @@ DownloaderFactory.getActiveDownloader()
 - 扩展名：`.flv`
 - 写入策略：`{file_name}.flv.part` → Drop 时 rename → `{file_name}.flv`
 - **注意**：SIGTERM 时 Rust Drop 可能不执行，需兜底重命名
-- stdout/stderr pipe → 上层 tee 到日志文件 + 心跳解析器
+- stdout/stderr pipe → 上层 tee 到日志文件
+
+### 自动回退机制
+
+当 stream-gears 退出码 ≠ 0 且未重试过时，`finishSession` 不会中断会话，而是自动启动 ffmpeg 接替录制：
+- 复用同一 session_id、output_path、日志流
+- 更新房间 ffmpeg_pid 和 Redis active_task
+- `fallbackAttempted` 标志防止无限回退
+- 用户和 Chrome 扩展无感知
 
 ---
 
@@ -183,29 +187,27 @@ DownloaderFactory.getActiveDownloader()
 
 | 函数                     | 触发        | 职责                                                             |
 | ------------------------ | ----------- | ---------------------------------------------------------------- |
-| `checkDiskSpace()`       | 每周期      | `df -k` 检查磁盘剩余空间，`<1GB` 设 `disk:critical` Redis key    |
-| `checkStaleRecordings()` | 每周期      | 心跳优先 → mtime 降级 → `_markStale()` 清理死录制                |
-| `scanActiveSegments()`   | 每周期      | Worker Pool 异步扫描活跃目录，追踪新分片                          |
-| `cleanupFragmentFiles()` | 每周期      | Worker Pool 异步扫描，删除小于阈值碎片的文件                      |
+| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                |
+| `scanActiveSegments()`   | 每周期      | 同步 fs 扫描活跃目录，追踪新完成的 `.flv`/`.mp4`                 |
+| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                     |
 | `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件  |
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 
 | 函数                       | 所在文件            | 触发       | 职责                                                                 |
 | -------------------------- | ------------------- | ---------- | -------------------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话（**v1.3 移除 pkill**）   |
+| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                           |
 | `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                                      |
-| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | Worker Pool 异步扫描，`watchdog.runFileScan()` 和 API 共用            |
+| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用            |
 
 ### 周期性执行链
 
 ```
 watchdog.start()
   └─ setTimeout(runWatchdog, 100)
-       ├─ checkDiskSpace()          ← 磁盘空间监控
-       ├─ checkStaleRecordings()    ← 心跳 + mtime 僵死检查
-       ├─ scanActiveSegments()      ← Worker Pool 异步扫描
-       ├─ cleanupFragmentFiles()    ← Worker Pool 异步清理
+       ├─ checkStaleRecordings()    ← mtime 僵死检查
+       ├─ scanActiveSegments()      ← 同步 fs 扫描
+       ├─ cleanupFragmentFiles()    ← 同步 fs 清理
        └─ setTimeout(runWatchdog, interval)  ← 下次周期
 ```
 
@@ -213,83 +215,44 @@ watchdog.start()
 
 ```
 startup()
-  ├─ migrate()                      ← DB 迁移
-  ├─ cleanupStaleRecordings()       ← 重命名 .part + 追踪遗留文件 + 恢复会话 (无 pkill)
+  ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
+  ├─ cleanupStaleRecordings()       ← 重命名 .part + 追踪遗留文件 + 恢复会话
   ├─ cleanupStaleRedis()            ← 清理 Redis 过期 key
-  └─ watchdog.runFileScan()         ← Worker Pool 扫描下载目录
+  └─ watchdog.runFileScan()         ← 同步 fs 扫描下载目录
 ```
 
-### checkStaleRecordings() — v1.3 心跳优先策略
+### checkStaleRecordings()
 
 1. **进程存活检查**：`process.kill(pid, 0)`
-2. **心跳优先检测**（v1.3 新增）：
-   - 读取 `heartbeat-tracker` 中该房间的 `lastHeartbeatAt`
-   - 若 `now - lastHeartbeatAt > watchdog_timeout`（默认 **120s**）→ 僵死
-   - 若 stream-gears 连续 retry 超过 **3 分钟** → 链路已死，触发重连
-3. **mtime 降级**（v1.3 改为 fallback）：
-   - 仅当进程存活且无心跳数据时，回退到 mtime 检测
-   - 分段/非分段模式同 v1.2
-4. **清理条件**：进程死亡 或 心跳超时 或 文件僵死（mtime fallback）
-5. **清理动作**（`_markStale()` v1.3 统一提取）：
+2. **文件僵死检查**：
+   - 分段模式：取输出目录下所有 `.mp4`/`.flv`/`.part` 文件的最新 mtime
+   - 非分段模式：取 `output_path` 的 mtime
+   - 超过 `watchdog_timeout`（默认 60 秒）无变更 → 僵死
+3. **清理条件**：进程死亡 或 文件僵死
+4. **清理动作**：
    - 杀死进程（SIGTERM → 5s → SIGKILL）
    - 房间设为 idle，清理 Redis room/active_task cache
-   - `clearHeartbeat()` 清除心跳记录
    - 会话标为 interrupted，recording_files 标为 interrupted
 
-### scanActiveSegments() — v1.3 Worker Pool
+### scanActiveSegments()
 
-- 使用 `FSWorkerPool`（2 个 Worker Thread）异步扫描活跃房间目录
-- Worker 满时降级至 `find` 子进程
+- 同步 `fs.readdirSync` + `fs.statSync` 扫描所有活跃录制房间的输出目录
 - 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + recordings + 更新 session 合计
 - 小于 `filtering_threshold` 的碎片跳过不追踪
 
-### cleanupFragmentFiles() — v1.3 Worker Pool
+### cleanupFragmentFiles()
 
-- 使用 Worker Pool 异步扫描整个 `VIDEO_DOWNLOAD_DIR`
+- 同步 `fs.readdirSync` + `fs.statSync` 扫描整个 `VIDEO_DOWNLOAD_DIR`
 - 找到小于 `filtering_threshold` 的 `.flv`/`.mp4` 文件
-- 跳过创建不足 2 分钟的新文件（防止误删刚完成的分片）
+- 跳过创建不足 2 分钟的新文件（防止误删刚完成的分片），跳过刚由 `.part` 重命名而来的文件
 - 删除磁盘文件 + 关联的 `recordings` + `recording_files` 记录
 - 更新 session 合计
 
 ---
 
-## 五、v1.3 新增模块
+## 五、启动清理 (cleanupStaleRecordings)
 
-### lib/heartbeat-parser.js
-
-- 解析 FFmpeg stderr：`/frame=\d+\s+fps=[\d.]+\s+bitrate=[\d.]+kbits/`
-- 解析 Stream-Gears stderr：`/download speed|retry|flv tag/i`
-- 提供 `isRetry(chunk)` 检测重试状态
-- `RETRY_TIMEOUT_MS = 180000`（3 分钟重试超限阈值）
-
-### lib/heartbeat-tracker.js
-
-- 内存 `Map<roomKey, { lastHeartbeatAt, retryStartAt }>`
-- `updateHeartbeat(roomKey, chunk)` — 写入心跳时间戳 + 检测重试
-- `getHeartbeatInfo(roomKey)` — 返回 `{ age, inRetryLoop, shouldReconnect }`
-- `clearHeartbeat(roomKey)` — 录制结束时清理
-- 看门狗通过 `shouldReconnect` 判定 stream-gears 重试超限（3 分钟无有效数据）
-
-### lib/file-watcher.js
-
-- 基于 `chokidar` 的事件驱动文件监听，替换轮询
-- 监听事件：`add` → 插入 `recording_files`（双锁保护），`change` → 更新文件大小，`unlink` → 标记 missing
-- **防并发双锁**：`Map<sessionId, Set<filePath>>` 内存锁 + `Redis SETNX watch:file:{hash} 1 EX 10`
-- 仅在分段模式下启用（`watchRoom` / `unwatchRoom`）
-- 唯一责任人：**close handler** 拥有 `.part` → `.flv/mp4` 重命名权；**watchdog** 严禁 rename
-
-### lib/workers/fs-scanner.js + lib/fs-worker-pool.js
-
-- Worker Thread 池（默认 2 个 Worker），通过 `getWorkerPool()` 获取全局共享单例
-- 工作：接收主线程 `{ dir, filter }` 消息，递归遍历目录，`fs.statSync` 收集文件信息
-- **降级策略**：无空闲 Worker 时自动 fallback 至子进程 `find . -type f`
-- 用于 `scanRecordingFiles()`、`scanActiveSegments()`、`cleanupFragmentFiles()`
-
----
-
-## 六、启动清理 (cleanupStaleRecordings) — v1.3
-
-在 `startup()` 中运行，按顺序（**v1.3 移除 pkill**，依赖 `tini`/管道绑定回收子进程）：
+在 `startup()` 中运行，按顺序：
 
 1. **处理 .part 残留**：遍历脏房间输出目录，重命名 `.part` → `.flv`
 2. **追踪遗留文件**：将 untracked 的 `.flv`/`.mp4` 写入 `recording_files`
@@ -299,7 +262,7 @@ startup()
 
 ---
 
-## 七、投稿流程
+## 六、投稿流程
 
 ### 触发
 
@@ -321,7 +284,7 @@ startup()
 
 ---
 
-## 八、边界情况与容错
+## 七、边界情况与容错
 
 | 场景                                 | 处理方式                                        |
 | ------------------------------------ | ----------------------------------------------- |
@@ -333,9 +296,7 @@ startup()
 | 并发录制超过池大小                   | HTTP 429 "Pool full"                            |
 | Redis 残留 active_task               | cleanupStaleRedis 启动时清理                    |
 | DB 重复 recording_files               | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING |
-| VBR/黑屏 mtime 停滞误杀               | stderr 心跳解析优先，mtime 降级为 fallback       |
-| stream-gears 断线重试 5 分钟假活      | 连续 retry 超过 3 分钟 → 标记为 must reconnect   |
-| 并发扫描同一文件（EBUSY/重复入库）    | 内存 Map 锁 + Redis SETNX 10s 双保险             |
-| 主线程 fs 操作阻塞 Event Loop         | Worker Thread 池（2 Worker）+ find 子进程降级     |
+| stream-gears FLV 解析崩溃              | 自动回退到 ffmpeg，同一会话继续录制                |
+| stream URL 失效/过期                   | ffmpeg 重连机制自动处理（reconnect_streamed）      |
 | 磁盘空间不足                          | checkDiskSpace() 设 disk:critical，暂停新录制    |
 | 上传限流重启丢失                      | Redis INCR 持久化 + 24h 过期                      |

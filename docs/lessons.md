@@ -130,3 +130,4 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 | **WorkerPool 不要模块各自创建**             | 两个模块各自 `new FSWorkerPool(2)` → 4 个 Worker。应导出共享单例 `getWorkerPool()` |
 | **spawn 签名变更后要更新接口**              | `downloaders` 的 `spawn` 不再接收 `logFd`，但 `DownloaderInterface` 的参数名仍为 `_logFd`，误导性强 |
 | **SQL 中避免模板字符串拼接数值**            | `total_size = ${sizeTotal}` 依赖内部值但风格不一致，应用参数化查询分开 `SET` 赋值情形 |
+| **stream-gears FLV 解析受限**               | Rust 库 `httpflv.rs` 对某些快手 FLV 流解析失败（`parse tag data err`），需自动回退到 ffmpeg |
