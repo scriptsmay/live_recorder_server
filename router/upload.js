@@ -241,6 +241,9 @@ async function executeUpload(session, tmpl) {
     }
   });
 
+  // 转为绝对路径，避免 biliup cwd 不同导致路径错误
+  files = files.map((fp) => require('path').resolve(fp));
+
   if (files.length === 0) {
     console.log(`[自动投稿] 会话 ${session.id} 无文件，跳过`);
     return;
