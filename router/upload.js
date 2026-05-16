@@ -2,11 +2,10 @@ const { spawn } = require('child_process');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
+const redis = require('../db/redis');
 const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
 const { afterUpload } = require('../lib/backup');
-
-const uploadCountMap = new Map();
 
 async function getUploadLimit() {
   try {
@@ -18,13 +17,19 @@ async function getUploadLimit() {
 
 async function checkUploadLimit(sessionId) {
   const limit = await getUploadLimit();
-  const count = uploadCountMap.get(sessionId) || 0;
-  if (count >= limit) {
-    console.log(`[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count}/${limit})，跳过`);
-    return false;
+  try {
+    const count = await redis.incr(`upload_count:${sessionId}`);
+    if (count === 1) {
+      await redis.expire(`upload_count:${sessionId}`, 86400);
+    }
+    if (count > limit) {
+      console.log(`[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count - 1}/${limit})，跳过`);
+      return false;
+    }
+    return true;
+  } catch (_) {
+    return true;
   }
-  uploadCountMap.set(sessionId, count + 1);
-  return true;
 }
 
 function renderTemplate(template, vars) {
@@ -292,7 +297,7 @@ async function executeUpload(session, tmpl) {
 
   proc.on('close', async (code) => {
     const cmdStr = `${biliupPath} ${args.join(' ')}`;
-    const bvMatch = output.match(/BV[\w]+/);
+    const bvMatch = output.match(/BV[0-9A-Za-z]{10}/);
     const bvId = bvMatch ? bvMatch[0] : '';
     if (code === 0) {
       await pool.query(

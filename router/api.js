@@ -12,6 +12,8 @@ const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
 const { scanRecordingFiles } = require('../lib/scan-files');
 const { getActiveDownloader } = require('../lib/downloaders/DownloaderFactory');
+const { updateHeartbeat, clearHeartbeat } = require('../lib/heartbeat-tracker');
+const { watchRoom, unwatchRoom } = require('../lib/file-watcher');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -352,17 +354,24 @@ router.post('/notify/live_download', async (req, res) => {
     const ps = await pool.query("SELECT value FROM settings WHERE key = 'delay'");
     const delay = parseInt(ps.rows[0]?.value, 10) || 60;
     if (delay > 0) {
-      const recent = await pool.query(
-        `SELECT id, total_segments, total_size FROM recording_sessions
-         WHERE room_url = $1 AND status IN ('completed', 'interrupted')
-           AND ended_at > NOW() - INTERVAL '1 second' * $2
-         ORDER BY ended_at DESC LIMIT 1`,
-        [room.room_url, delay]
-      );
-      if (recent.rows.length > 0) {
-        reuseSession = true;
-        resumeCount = recent.rows[0].id;
-        console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
+      const lockKey = `lock:resume:${room.id}`;
+      const lockAcquired = await redis.set(lockKey, '1', { EX: 10, NX: true }).catch(() => null);
+      if (!lockAcquired) {
+        console.log(`[续播] ${room.room_name || room.room_url} 续播锁占用中，跳过`);
+      } else {
+        const recent = await pool.query(
+          `SELECT id, total_segments, total_size FROM recording_sessions
+           WHERE room_url = $1 AND status IN ('completed', 'interrupted')
+             AND ended_at > NOW() - INTERVAL '1 second' * $2
+           ORDER BY ended_at DESC LIMIT 1`,
+          [room.room_url, delay]
+        );
+        if (recent.rows.length > 0) {
+          reuseSession = true;
+          resumeCount = recent.rows[0].id;
+          console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
+        }
+        redis.del(lockKey).catch(() => {});
       }
     }
   } catch (_) {}
@@ -405,11 +414,24 @@ router.post('/notify/live_download', async (req, res) => {
 
   const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
 
-  const { fd: logFd, logPath, rename: renameLog, logCommand } = createProcLog(downloader.name);
+  const { stream: logStream, logPath, rename: renameLog, logCommand } = createProcLog(downloader.name);
   console.log(`[任务启动] 下载引擎: ${downloader.name}, 日志: ${logPath}`);
   logCommand(downloader.name, dlArgs);
 
-  const dlProcess = downloader.spawn(dlArgs, logFd);
+  const dlProcess = downloader.spawn(dlArgs);
+
+  if (dlProcess.stderr) {
+    dlProcess.stderr.on('data', (chunk) => {
+      logStream.write(chunk);
+      updateHeartbeat(roomKey, chunk);
+    });
+  }
+
+  if (dlProcess.stdout) {
+    dlProcess.stdout.on('data', (chunk) => {
+      logStream.write(chunk);
+    });
+  }
 
   dlProcess.on('error', (err) => {
     console.error(`${downloader.name} 启动失败:`, err);
@@ -480,7 +502,13 @@ router.post('/notify/live_download', async (req, res) => {
     downloader: downloader.name,
   });
 
+  if (useSegment) {
+    watchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
+  }
+
   dlProcess.on('close', async (code) => {
+    unwatchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
+    clearHeartbeat(roomKey);
     await delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${downloader.name}_${sessionId}.log)`);
 

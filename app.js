@@ -17,7 +17,6 @@ if (process.env.NODE_ENV === 'development') {
 
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 
 const express = require('express');
 const cors = require('cors');
@@ -43,6 +42,7 @@ const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
 const { getActiveDownloader } = require('./lib/downloaders/DownloaderFactory');
+const { updateHeartbeat } = require('./lib/heartbeat-tracker');
 const watchdog = require('./lib/watchdog');
 
 // ──────────────────────────────────────────────
@@ -119,10 +119,23 @@ async function tryResumeSession(session) {
 
   const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
 
-  const { fd: logFd, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
+  const { stream: logStream, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
   logCommand(downloader.name, dlArgs);
 
-  const ffmpeg = downloader.spawn(dlArgs, logFd);
+  const ffmpeg = downloader.spawn(dlArgs);
+
+  if (ffmpeg.stderr) {
+    ffmpeg.stderr.on('data', (chunk) => {
+      logStream.write(chunk);
+      updateHeartbeat(session.room_url, chunk);
+    });
+  }
+
+  if (ffmpeg.stdout) {
+    ffmpeg.stdout.on('data', (chunk) => {
+      logStream.write(chunk);
+    });
+  }
 
   let sessionFinalized = false;
 
@@ -216,16 +229,6 @@ async function tryResumeSession(session) {
 
 async function cleanupStaleRecordings() {
   try {
-    // 清理上一轮可能的孤儿 ffmpeg / stream-gears 进程
-    try {
-      execSync(
-        'pkill -f "ffmpeg -i" 2>/dev/null; ' +
-          'pkill -f "ffmpeg.*-segment_time" 2>/dev/null; ' +
-          'pkill -f "stream_gears_wrapper" 2>/dev/null',
-        { stdio: 'ignore' }
-      );
-    } catch (_) {}
-
     const staleRooms = await pool.query(
       `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
     );

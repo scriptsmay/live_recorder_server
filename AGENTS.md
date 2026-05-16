@@ -8,6 +8,7 @@
 - `npm run restart` → PM2 生命周期管理
 - `npm run dev` → nodemon 开发模式（端口 3001，监听 `js,mjs,cjs,json,ejs`），**不会影响 PM2 生产进程**
 - 需要重启 PM2 时执行 `npm run stop && npm run start`
+- **修改代码后必须更新文档 + 提交代码**：每次完成功能开发或修复后，先更新对应的 `docs/` 文档，再用 `git add`/`git commit` 提交。提交信息格式：`<type>: <description>`
 
 ### 开发环境隔离
 
@@ -140,7 +141,7 @@ node scripts/cleanup-dev.js
 - 模块系统为 CommonJS（`require`，默认不使用 `import/export`）
 - ffmpeg 需单独安装，非 Node 依赖
 - 全局设置存储于 `settings` 表，启动时自动插入默认值；`watchdog_interval` 修改后下次调度自动生效
-- `max_upload_limit` 为内存计数（`uploadCountMap`），重启服务后重置；自动投稿和手动投稿均受限制
+- `max_upload_limit` 为 Redis INCR 持久化计数（`upload_count:{sessionId}`），24h 过期；自动投稿和手动投稿均受限制
 
 ## 关联项目
 
