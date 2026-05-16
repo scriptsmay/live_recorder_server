@@ -280,8 +280,10 @@ async function executeUpload(session, tmpl) {
   console.log(`[投稿] biliup 日志: ${logPath}`);
   logCommand(biliupPath, args);
 
+  const uploadCwd = process.env.BILIUP_WORK_DIR || process.env.HOME || '.';
+  require('fs').mkdirSync(uploadCwd, { recursive: true });
   const proc = spawn(biliupPath, args, {
-    cwd: process.env.BILIUP_WORK_DIR || process.env.HOME,
+    cwd: uploadCwd,
   });
 
   let output = '';
