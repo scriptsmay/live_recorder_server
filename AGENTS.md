@@ -34,10 +34,12 @@ CREATE DATABASE ks_live_recorder_dev;
 ### 开发环境管理命令
 
 ```bash
-npm run dev                          # 前台启动（日志直接看终端）
+npm run dev                          # 前台启动（日志直接看终端，Ctrl+C 一次即停）
 tail -f /tmp/dev-server.log          # 后台启动时实时查看日志
 kill $(lsof -ti :3001)               # 停止开发服务
 lsof -i :3001                        # 检查端口占用
+ps aux | grep nodemon | grep -v grep # 检查是否有旧版 nodemon 孤儿进程
+pkill -f "nodemon.*app.js"           # 杀死所有旧版 nodemon 孤儿进程
 ```
 
 **主动重启后建议清理脏数据：**
@@ -71,7 +73,7 @@ node scripts/cleanup-dev.js
 
 ## 数据库
 
-- 启动时自动迁移建表（`db/migrate.js`），详见 `docs/DB.md`
+- 启动时自动迁移建表（`db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）
 - `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
