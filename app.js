@@ -143,7 +143,6 @@ async function tryResumeSession(session) {
     if (sessionFinalized) return;
     sessionFinalized = true;
 
-    clearHeartbeat(session.room_url);
     await delActiveTask(activeTaskKey(session.room_url));
     console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
 
