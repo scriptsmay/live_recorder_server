@@ -166,6 +166,7 @@ DownloaderFactory.getActiveDownloader()
 ### 自动回退机制
 
 当 stream-gears 退出码 ≠ 0 且未重试过时，`finishSession` 不会中断会话，而是自动启动 ffmpeg 接替录制：
+
 - 复用同一 session_id、output_path、日志流
 - 更新房间 ffmpeg_pid 和 Redis active_task
 - `fallbackAttempted` 标志防止无限回退
@@ -185,20 +186,20 @@ DownloaderFactory.getActiveDownloader()
 
 ### 属于看门狗（`lib/watchdog.js`）
 
-| 函数                     | 触发        | 职责                                                             |
-| ------------------------ | ----------- | ---------------------------------------------------------------- |
-| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                |
-| `scanActiveSegments()`   | 每周期      | 同步 fs 扫描活跃目录，追踪新完成的 `.flv`/`.mp4`                 |
-| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                     |
-| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件  |
+| 函数                     | 触发        | 职责                                                            |
+| ------------------------ | ----------- | --------------------------------------------------------------- |
+| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制               |
+| `scanActiveSegments()`   | 每周期      | 同步 fs 扫描活跃目录，追踪新完成的 `.flv`/`.mp4`                |
+| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                    |
+| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件 |
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 
-| 函数                       | 所在文件            | 触发       | 职责                                                                 |
-| -------------------------- | ------------------- | ---------- | -------------------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                           |
-| `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                                      |
-| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用            |
+| 函数                       | 所在文件            | 触发       | 职责                                                       |
+| -------------------------- | ------------------- | ---------- | ---------------------------------------------------------- |
+| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
+| `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                            |
+| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
 
 ### 周期性执行链
 
@@ -295,8 +296,8 @@ startup()
 | stream-gears 不可用                  | 自动回退到 ffmpeg                               |
 | 并发录制超过池大小                   | HTTP 429 "Pool full"                            |
 | Redis 残留 active_task               | cleanupStaleRedis 启动时清理                    |
-| DB 重复 recording_files               | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING |
-| stream-gears FLV 解析崩溃              | 自动回退到 ffmpeg，同一会话继续录制                |
-| stream URL 失效/过期                   | ffmpeg 重连机制自动处理（reconnect_streamed）      |
-| 磁盘空间不足                          | checkDiskSpace() 设 disk:critical，暂停新录制    |
-| 上传限流重启丢失                      | Redis INCR 持久化 + 24h 过期                      |
+| DB 重复 recording_files              | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING |
+| stream-gears FLV 解析崩溃            | 自动回退到 ffmpeg，同一会话继续录制             |
+| stream URL 失效/过期                 | ffmpeg 重连机制自动处理（reconnect_streamed）   |
+| 磁盘空间不足                         | checkDiskSpace() 设 disk:critical，暂停新录制   |
+| 上传限流重启丢失                     | Redis INCR 持久化 + 24h 过期                    |

@@ -113,7 +113,7 @@
 | id           | SERIAL        | PRIMARY KEY                                    | 自增主键                  |
 | session_id   | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL） |
 | room_url     | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                |
-| file_path    | VARCHAR(1024) | NOT NULL UNIQUE                                 | 文件绝对路径              |
+| file_path    | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径              |
 | file_name    | VARCHAR(512)  |                                                | 文件名                    |
 | file_size    | BIGINT        | DEFAULT 0                                      | 文件大小（字节）          |
 | status       | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下              |
@@ -137,16 +137,16 @@
 
 **写入时机：**
 
-| 场景                           | 写入方式                                             |
-| ------------------------------ | ---------------------------------------------------- |
-| 非分段录制完成                 | INSERT 为 `completed`（同时也写入 `recordings`）     |
-| 分段录制分片完成（看门狗）     | INSERT 为 `completed`（同时也写入 `recordings`）     |
-| 分段录制分片完成（进程退出）   | INSERT 为 `completed`（同时也写入 `recordings`）     |
-| 启动清理追踪遗留文件           | INSERT 为 `completed`（同时也写入 `recordings`）     |
-| 磁盘扫描发现未跟踪文件         | INSERT 为 `orphaned`                                 |
-| 手动关联孤文件到会话           | UPDATE 为 `completed`（同时也写入 `recordings`）     |
-| 看门狗超时判定录制中断         | UPDATE 为 `interrupted`                              |
-| 启动扫描发现文件已丢失         | UPDATE 为 `missing`                                  |
+| 场景                         | 写入方式                                         |
+| ---------------------------- | ------------------------------------------------ |
+| 非分段录制完成               | INSERT 为 `completed`（同时也写入 `recordings`） |
+| 分段录制分片完成（看门狗）   | INSERT 为 `completed`（同时也写入 `recordings`） |
+| 分段录制分片完成（进程退出） | INSERT 为 `completed`（同时也写入 `recordings`） |
+| 启动清理追踪遗留文件         | INSERT 为 `completed`（同时也写入 `recordings`） |
+| 磁盘扫描发现未跟踪文件       | INSERT 为 `orphaned`                             |
+| 手动关联孤文件到会话         | UPDATE 为 `completed`（同时也写入 `recordings`） |
+| 看门狗超时判定录制中断       | UPDATE 为 `interrupted`                          |
+| 启动扫描发现文件已丢失       | UPDATE 为 `missing`                              |
 
 ### upload_templates — 投稿模板
 

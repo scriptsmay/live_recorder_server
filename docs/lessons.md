@@ -114,20 +114,20 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 
 ### 经验总结
 
-| 教训                                        | 说明                                                                           |
-| ------------------------------------------- | ------------------------------------------------------------------------------ |
-| **不要依赖异步 close handler 做关键持久化** | 进程被 SIGTERM 后 close handler 可能不跑或跑不完，关键数据写入应在同步路径完成 |
-| **外部进程的信号处理要了解**                | Rust 的 `Drop` 在 SIGTERM 下可能不执行，Python 进程同理                        |
-| **Regex 构造要逐层验证**                    | 两个 replace 叠加时中间结果的 `.` 会被转义器错杀                               |
-| **变量名语义要准确**                        | `resumeCount` 存的是 ID 不是 count，误导后续维护                               |
-| **启动清理要覆盖所有下载引擎**              | 不能只针对 ffmpeg                                                              |
-| **看门狗要了解下载引擎的工作模式**          | stream-gears 用 `.part` 文件，ffmpeg 直接写 `.mp4`，mtime 检查不能只看最终文件 |
-| **Redis 状态要有兜底清理**                  | `cleanupStaleRedis` 在启动时扫一遍                                             |
-| **FLV 不能靠浏览器原生播放**                | 需集成 flv.js（MSE），且 stream URL 不带 `.flv` 后缀，需单独传扩展名判断       |
-| **两张表的数据源要统一**                    | `recording_files` 是文件主表，`recordings` 是元数据表，流媒体端点也要查两者     |
-| **nodemon 默认不监听 .ejs**                 | 改模板文件不会自动重启，需加 `--ext js,mjs,cjs,json,ejs`                       |
+| 教训                                        | 说明                                                                                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **不要依赖异步 close handler 做关键持久化** | 进程被 SIGTERM 后 close handler 可能不跑或跑不完，关键数据写入应在同步路径完成                                                                                                           |
+| **外部进程的信号处理要了解**                | Rust 的 `Drop` 在 SIGTERM 下可能不执行，Python 进程同理                                                                                                                                  |
+| **Regex 构造要逐层验证**                    | 两个 replace 叠加时中间结果的 `.` 会被转义器错杀                                                                                                                                         |
+| **变量名语义要准确**                        | `resumeCount` 存的是 ID 不是 count，误导后续维护                                                                                                                                         |
+| **启动清理要覆盖所有下载引擎**              | 不能只针对 ffmpeg                                                                                                                                                                        |
+| **看门狗要了解下载引擎的工作模式**          | stream-gears 用 `.part` 文件，ffmpeg 直接写 `.mp4`，mtime 检查不能只看最终文件                                                                                                           |
+| **Redis 状态要有兜底清理**                  | `cleanupStaleRedis` 在启动时扫一遍                                                                                                                                                       |
+| **FLV 不能靠浏览器原生播放**                | 需集成 flv.js（MSE），且 stream URL 不带 `.flv` 后缀，需单独传扩展名判断                                                                                                                 |
+| **两张表的数据源要统一**                    | `recording_files` 是文件主表，`recordings` 是元数据表，流媒体端点也要查两者                                                                                                              |
+| **nodemon 默认不监听 .ejs**                 | 改模板文件不会自动重启，需加 `--ext js,mjs,cjs,json,ejs`                                                                                                                                 |
 | **心跳解析器导出但未调用**                  | `parseHeartbeat()` 在 `heartbeat-parser.js` 中正确定义，但 `heartbeat-tracker.js` 中只导入了 `isRetry`，导致任何 stderr 输出都被当作心跳，应显式调用 `parseHeartbeat` 判断后才更新时间戳 |
-| **WorkerPool 不要模块各自创建**             | 两个模块各自 `new FSWorkerPool(2)` → 4 个 Worker。应导出共享单例 `getWorkerPool()` |
-| **spawn 签名变更后要更新接口**              | `downloaders` 的 `spawn` 不再接收 `logFd`，但 `DownloaderInterface` 的参数名仍为 `_logFd`，误导性强 |
-| **SQL 中避免模板字符串拼接数值**            | `total_size = ${sizeTotal}` 依赖内部值但风格不一致，应用参数化查询分开 `SET` 赋值情形 |
-| **stream-gears FLV 解析受限**               | Rust 库 `httpflv.rs` 对某些快手 FLV 流解析失败（`parse tag data err`），需自动回退到 ffmpeg |
+| **WorkerPool 不要模块各自创建**             | 两个模块各自 `new FSWorkerPool(2)` → 4 个 Worker。应导出共享单例 `getWorkerPool()`                                                                                                       |
+| **spawn 签名变更后要更新接口**              | `downloaders` 的 `spawn` 不再接收 `logFd`，但 `DownloaderInterface` 的参数名仍为 `_logFd`，误导性强                                                                                      |
+| **SQL 中避免模板字符串拼接数值**            | `total_size = ${sizeTotal}` 依赖内部值但风格不一致，应用参数化查询分开 `SET` 赋值情形                                                                                                    |
+| **stream-gears FLV 解析受限**               | Rust 库 `httpflv.rs` 对某些快手 FLV 流解析失败（`parse tag data err`），需自动回退到 ffmpeg                                                                                              |
