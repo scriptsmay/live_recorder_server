@@ -521,9 +521,46 @@ router.post('/notify/live_download', async (req, res) => {
     downloader: downloader.name,
   });
 
-  const finishSession = async (code) => {
+  let fallbackAttempted = false;
+
+  const finishSession = async (code, engine = downloader) => {
+    if (code !== 0 && engine.name === 'stream-gears' && !fallbackAttempted) {
+      fallbackAttempted = true;
+      console.log(`[api] stream-gears 退出 (code=${code}), 回退到 ffmpeg`);
+
+      const FFmpegDownloader = require('../lib/downloaders/FFmpegDownloader');
+      const fallbackDl = new FFmpegDownloader();
+      const fallbackArgs = fallbackDl.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
+      const fallbackProc = fallbackDl.spawn(fallbackArgs);
+
+      if (fallbackProc.stderr) {
+        fallbackProc.stderr.on('data', (chunk) => logStream.write(chunk));
+      }
+      if (fallbackProc.stdout) {
+        fallbackProc.stdout.on('data', (chunk) => logStream.write(chunk));
+      }
+
+      await pool.query(`UPDATE rooms SET ffmpeg_pid = $1, updated_at = NOW() WHERE id = $2`, [
+        fallbackProc.pid,
+        room.id,
+      ]);
+      await setActiveTask(roomKey, {
+        pid: fallbackProc.pid,
+        outputPath: outputFilePattern,
+        roomId: room.id,
+        sessionId,
+        startTime: Date.now(),
+        downloader: 'ffmpeg',
+      });
+
+      fallbackProc.on('close', async (fbCode) => {
+        await finishSession(fbCode, fallbackDl);
+      });
+      return;
+    }
+
     await delActiveTask(roomKey);
-    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${downloader.name}_${sessionId}.log)`);
+    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`);
 
     try {
       await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
@@ -545,7 +582,7 @@ router.post('/notify/live_download', async (req, res) => {
           try {
             fs.unlinkSync(segmentListPath);
           } catch (_) {}
-        } else if (downloader.name !== 'ffmpeg' && outputFilePattern) {
+        } else if (engine.name !== 'ffmpeg' && outputFilePattern) {
           try {
             const dir = path.dirname(outputFilePattern);
             const base = path.basename(outputFilePattern);
