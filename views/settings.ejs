@@ -64,6 +64,13 @@
             type: 'number',
             attrs: 'min="0" max="3600"',
           },
+          {
+            key: 'max_resume_retries',
+            label: '会话恢复重试次数',
+            desc: '服务器启动时自动恢复录制会话的最大重试次数，默认 3',
+            type: 'number',
+            attrs: 'min="0" max="20"',
+          },
         ],
       },
       {
@@ -157,6 +164,7 @@
       'threads',
       'pool2_size',
       'max_upload_limit',
+      'max_resume_retries',
     ];
 
     const btn = document.querySelector('#settingsBody .btn-primary');
