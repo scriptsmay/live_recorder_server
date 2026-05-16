@@ -6,15 +6,6 @@ if (process.env.NODE_ENV === 'development') {
   require('dotenv').config({ path: '.env.dev', override: true, quiet: true });
 }
 
-// 开发环境给 console 加时间戳（PM2 生产日志自带时间）
-if (process.env.NODE_ENV === 'development') {
-  const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
-  ['log', 'warn', 'error'].forEach((method) => {
-    const orig = console[method];
-    console[method] = (...args) => orig(`[${ts()}]`, ...args);
-  });
-}
-
 const path = require('path');
 const fs = require('fs');
 
@@ -22,6 +13,17 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const ejsLayouts = require('express-ejs-layouts');
+const dayjs = require('dayjs');
+
+// 开发环境给 console 加时间戳（PM2 生产日志自带时间）
+if (process.env.NODE_ENV === 'development') {
+  //
+  const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
+  ['log', 'warn', 'error'].forEach((method) => {
+    const orig = console[method];
+    console[method] = (...args) => orig(`[${ts()}]`, ...args);
+  });
+}
 
 const migrate = require('./db/migrate');
 const pool = require('./db/index');
@@ -42,7 +44,6 @@ const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
 const { getActiveDownloader } = require('./lib/downloaders/DownloaderFactory');
-const { updateHeartbeat, clearHeartbeat } = require('./lib/heartbeat-tracker');
 const watchdog = require('./lib/watchdog');
 
 // ──────────────────────────────────────────────
@@ -127,7 +128,6 @@ async function tryResumeSession(session) {
   if (ffmpeg.stderr) {
     ffmpeg.stderr.on('data', (chunk) => {
       logStream.write(chunk);
-      updateHeartbeat(session.room_url, chunk);
     });
   }
 
@@ -429,7 +429,7 @@ async function startup() {
 startup()
   .then(() => {
     app.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}`);
+      console.log(`[启动成功] Server running on http://localhost:${port}`);
     });
     watchdog.start();
   })

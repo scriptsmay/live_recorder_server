@@ -12,8 +12,6 @@ const notify = require('../lib/notify');
 const { createProcLog } = require('../lib/proc-log');
 const { scanRecordingFiles } = require('../lib/scan-files');
 const { getActiveDownloader } = require('../lib/downloaders/DownloaderFactory');
-const { updateHeartbeat, clearHeartbeat } = require('../lib/heartbeat-tracker');
-const { watchRoom, unwatchRoom } = require('../lib/file-watcher');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -287,14 +285,16 @@ router.post('/notify/live_download', async (req, res) => {
 
   if (!req.body || !req.body.url || !req.body.title) {
     console.log('[api] 录制请求被拒: 缺少必填参数 (body/url/title)');
-    return res.status(400).json({
+    return res.status(200).json({
       status: 'Error',
+      code: 400,
       message: '请提供直播流URL和标题。',
     });
   }
   if (!DOWNLOAD_DIR) {
-    return res.status(500).json({
+    return res.status(200).json({
       status: 'Error',
+      code: 500,
       message: '请设置 VIDEO_DOWNLOAD_DIR 环境变量，并确保该目录已存在。',
     });
   }
@@ -307,7 +307,7 @@ router.post('/notify/live_download', async (req, res) => {
 
   if (await isActiveTask(roomKey)) {
     console.log('[api] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
-    return res.status(400).json({ status: 'Already recording', message: '请勿重复开启' });
+    return res.json({ status: 'Already recording', code: 400, message: '请勿重复开启' });
   }
 
   let poolSize = 3;
@@ -320,8 +320,9 @@ router.post('/notify/live_download', async (req, res) => {
     activeKeys = await redis.keys('active_task:*');
   } catch (_) {}
   if (activeKeys.length >= poolSize) {
-    return res.status(429).json({
+    return res.status(200).json({
       status: 'Pool full',
+      code: 429,
       message: `下载线程池已满 (${activeKeys.length}/${poolSize})，请等待其他录制完成`,
     });
   }
@@ -331,12 +332,13 @@ router.post('/notify/live_download', async (req, res) => {
     room = await getOrCreateRoom(roomKey, title);
   } catch (dbErr) {
     console.error('[api] 数据库操作失败:', dbErr);
-    return res.status(500).json({ status: 'Error', message: '数据库操作失败' });
+    return res.status(200).json({ status: 'Error', code: 500, message: '数据库操作失败' });
   }
 
   if (room.monitoring_enabled === false) {
     console.log('[api] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
-    return res.status(400).json({
+    return res.status(200).json({
+      code: 400,
       status: 'Monitoring paused',
       message: `直播间 ${room.room_name || room.room_url} 已暂停监听`,
     });
@@ -344,7 +346,8 @@ router.post('/notify/live_download', async (req, res) => {
 
   if (room.status === 'recording' || room.status === 'paused') {
     console.log('[api] 录制请求被拒: 房间状态=' + room.status + ' (room=' + room.id + ')');
-    return res.status(400).json({
+    return res.status(200).json({
+      code: 400,
       status: 'Already recording',
       message: `直播间 ${room.room_name || room.room_url} 已在录制中`,
     });
@@ -441,7 +444,6 @@ router.post('/notify/live_download', async (req, res) => {
   if (dlProcess.stderr) {
     dlProcess.stderr.on('data', (chunk) => {
       logStream.write(chunk);
-      updateHeartbeat(roomKey, chunk);
     });
   }
 
@@ -519,13 +521,7 @@ router.post('/notify/live_download', async (req, res) => {
     downloader: downloader.name,
   });
 
-  if (useSegment) {
-    watchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
-  }
-
   const finishSession = async (code) => {
-    unwatchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
-    clearHeartbeat(roomKey);
     await delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${downloader.name}_${sessionId}.log)`);
 
