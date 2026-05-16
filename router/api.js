@@ -583,16 +583,25 @@ router.post('/notify/live_download', async (req, res) => {
         }
 
         if (sessionId) {
-          const segCount = reuseSession ? `total_segments + ${newFileCount}` : String(newFileCount);
-          const sizeTotal = reuseSession ? `total_size + ${totalSize}` : String(totalSize);
-          await pool.query(
-            `UPDATE recording_sessions
-             SET ended_at = NOW(), status = $1,
-                 total_segments = ${segCount},
-                 total_size = ${sizeTotal}
-             WHERE id = $2`,
-            [code === 0 ? 'completed' : 'interrupted', sessionId]
-          );
+          if (reuseSession) {
+            await pool.query(
+              `UPDATE recording_sessions
+               SET ended_at = NOW(), status = $1,
+                   total_segments = total_segments + $2,
+                   total_size = total_size + $3
+               WHERE id = $4`,
+              [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
+            );
+          } else {
+            await pool.query(
+              `UPDATE recording_sessions
+               SET ended_at = NOW(), status = $1,
+                   total_segments = $2,
+                   total_size = $3
+               WHERE id = $4`,
+              [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
+            );
+          }
         }
         console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
       } else {
@@ -632,15 +641,25 @@ router.post('/notify/live_download', async (req, res) => {
         }
 
         if (sessionId) {
-          const sizeTotal = reuseSession ? `total_size + ${fileSize}` : String(fileSize);
-          await pool.query(
-            `UPDATE recording_sessions
-             SET ended_at = NOW(), status = $1,
-                 total_segments = total_segments + 1,
-                 total_size = ${sizeTotal}
-             WHERE id = $2`,
-            [code === 0 ? 'completed' : 'interrupted', sessionId]
-          );
+          if (reuseSession) {
+            await pool.query(
+              `UPDATE recording_sessions
+               SET ended_at = NOW(), status = $1,
+                   total_segments = total_segments + 1,
+                   total_size = total_size + $2
+               WHERE id = $3`,
+              [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+            );
+          } else {
+            await pool.query(
+              `UPDATE recording_sessions
+               SET ended_at = NOW(), status = $1,
+                   total_segments = 1,
+                   total_size = $2
+               WHERE id = $3`,
+              [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+            );
+          }
           await pool.query(
             `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
              WHERE session_id = $2 AND file_path = $3`,

@@ -280,7 +280,7 @@ startup()
 
 ### lib/workers/fs-scanner.js + lib/fs-worker-pool.js
 
-- Worker Thread 池（默认 2 个 Worker）
+- Worker Thread 池（默认 2 个 Worker），通过 `getWorkerPool()` 获取全局共享单例
 - 工作：接收主线程 `{ dir, filter }` 消息，递归遍历目录，`fs.statSync` 收集文件信息
 - **降级策略**：无空闲 Worker 时自动 fallback 至子进程 `find . -type f`
 - 用于 `scanRecordingFiles()`、`scanActiveSegments()`、`cleanupFragmentFiles()`

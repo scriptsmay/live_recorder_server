@@ -126,3 +126,7 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 | **FLV 不能靠浏览器原生播放**                | 需集成 flv.js（MSE），且 stream URL 不带 `.flv` 后缀，需单独传扩展名判断       |
 | **两张表的数据源要统一**                    | `recording_files` 是文件主表，`recordings` 是元数据表，流媒体端点也要查两者     |
 | **nodemon 默认不监听 .ejs**                 | 改模板文件不会自动重启，需加 `--ext js,mjs,cjs,json,ejs`                       |
+| **心跳解析器导出但未调用**                  | `parseHeartbeat()` 在 `heartbeat-parser.js` 中正确定义，但 `heartbeat-tracker.js` 中只导入了 `isRetry`，导致任何 stderr 输出都被当作心跳，应显式调用 `parseHeartbeat` 判断后才更新时间戳 |
+| **WorkerPool 不要模块各自创建**             | 两个模块各自 `new FSWorkerPool(2)` → 4 个 Worker。应导出共享单例 `getWorkerPool()` |
+| **spawn 签名变更后要更新接口**              | `downloaders` 的 `spawn` 不再接收 `logFd`，但 `DownloaderInterface` 的参数名仍为 `_logFd`，误导性强 |
+| **SQL 中避免模板字符串拼接数值**            | `total_size = ${sizeTotal}` 依赖内部值但风格不一致，应用参数化查询分开 `SET` 赋值情形 |

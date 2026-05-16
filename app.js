@@ -42,7 +42,7 @@ const { router: uploadRouter } = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const { createProcLog } = require('./lib/proc-log');
 const { getActiveDownloader } = require('./lib/downloaders/DownloaderFactory');
-const { updateHeartbeat } = require('./lib/heartbeat-tracker');
+const { updateHeartbeat, clearHeartbeat } = require('./lib/heartbeat-tracker');
 const watchdog = require('./lib/watchdog');
 
 // ──────────────────────────────────────────────
@@ -143,6 +143,7 @@ async function tryResumeSession(session) {
     if (sessionFinalized) return;
     sessionFinalized = true;
 
+    clearHeartbeat(session.room_url);
     await delActiveTask(activeTaskKey(session.room_url));
     console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
 
