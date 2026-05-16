@@ -6,7 +6,7 @@
 - `npm run stop` → 停止服务
 - `npm run logs` → 查看 PM2 日志
 - `npm run restart` → PM2 生命周期管理
-- `npm run dev` → nodemon 开发模式（端口 3001，监听 `js,mjs,cjs,json,ejs`），**不会影响 PM2 生产进程**
+- `npm run dev` → node `--watch` 开发模式（端口 3001），**不会影响 PM2 生产进程**。按 Ctrl+C 一次即可完全停止
 - 需要重启 PM2 时执行 `npm run stop && npm run start`
 - **修改代码后必须更新文档 + 提交代码**：每次完成功能开发或修复后，先更新对应的 `docs/` 文档，再用 `git add`/`git commit` 提交。提交信息格式：`<type>: <description>`
 
