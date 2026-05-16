@@ -433,8 +433,8 @@ router.post('/notify/live_download', async (req, res) => {
 
   const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
 
-  const { stream: logStream, logPath, rename: renameLog, logCommand } = createProcLog(downloader.name);
-  console.log(`[任务启动] 下载引擎: ${downloader.name}, 日志: ${logPath}`);
+  const { stream: logStream, rename: renameLog, logCommand } = createProcLog(downloader.name);
+  console.log(`[任务启动] 下载引擎: ${downloader.name}`);
   logCommand(downloader.name, dlArgs);
 
   const dlProcess = downloader.spawn(dlArgs);
