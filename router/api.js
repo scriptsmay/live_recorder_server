@@ -455,7 +455,75 @@ router.post('/notify/live_download', async (req, res) => {
     console.error(`${downloader.name} 启动失败:`, err);
   });
 
-  dlProcess.on('close', async (code) => {
+  sessionStart = new Date();
+  try {
+    await pool.query(
+      `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
+      [outputFilePattern, dlProcess.pid, room.id]
+    );
+    await delRoomCache(room.room_url);
+
+    if (reuseSession) {
+      const recent = await pool.query(
+        `UPDATE recording_sessions SET status = 'recording', ended_at = NULL WHERE id = $1
+         RETURNING id`,
+        [resumeCount]
+      );
+      sessionId = recent.rows[0]?.id || null;
+    }
+
+    if (!sessionId) {
+      const session = await pool.query(
+        `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
+         VALUES ($1, $2, $3, 'recording', $4, $5)
+         RETURNING id`,
+        [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
+      );
+      sessionId = session.rows[0].id;
+    }
+    renameLog(sessionId);
+  } catch (dbErr) {
+    console.error('[api] 更新数据库状态失败:', dbErr);
+    dlProcess.kill();
+    return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
+  }
+
+  // 非分段模式：预写入录制文件记录（续播时更新已有记录）
+  if (!useSegment) {
+    try {
+      const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [outputFilePattern]);
+      if (existing.rows.length > 0) {
+        await pool.query(
+          `UPDATE recording_files SET status = 'recording', session_id = $1, checked_at = NOW()
+           WHERE id = $2`,
+          [sessionId, existing.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
+           VALUES ($1, $2, $3, $4, 'recording')`,
+          [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
+        );
+      }
+    } catch (dbErr) {
+      console.warn('[api] recording_files 写入失败:', dbErr.message);
+    }
+  }
+
+  await setActiveTask(roomKey, {
+    pid: dlProcess.pid,
+    outputPath: outputFilePattern,
+    roomId: room.id,
+    sessionId,
+    startTime: Date.now(),
+    downloader: downloader.name,
+  });
+
+  if (useSegment) {
+    watchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
+  }
+
+  const finishSession = async (code) => {
     unwatchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
     clearHeartbeat(roomKey);
     await delActiveTask(roomKey);
@@ -637,74 +705,12 @@ router.post('/notify/live_download', async (req, res) => {
     } catch (dbErr) {
       console.error('[api] 录制结束数据库更新失败:', dbErr);
     }
-  });
+  };
 
-  sessionStart = new Date();
-  try {
-    await pool.query(
-      `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
-      [outputFilePattern, dlProcess.pid, room.id]
-    );
-    await delRoomCache(room.room_url);
-
-    if (reuseSession) {
-      const recent = await pool.query(
-        `UPDATE recording_sessions SET status = 'recording', ended_at = NULL WHERE id = $1
-         RETURNING id`,
-        [resumeCount]
-      );
-      sessionId = recent.rows[0]?.id || null;
-    }
-
-    if (!sessionId) {
-      const session = await pool.query(
-        `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
-         VALUES ($1, $2, $3, 'recording', $4, $5)
-         RETURNING id`,
-        [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
-      );
-      sessionId = session.rows[0].id;
-    }
-    renameLog(sessionId);
-  } catch (dbErr) {
-    console.error('[api] 更新数据库状态失败:', dbErr);
-    dlProcess.kill();
-    return res.status(500).json({ status: 'Error', message: '更新数据库状态失败' });
-  }
-
-  // 非分段模式：预写入录制文件记录（续播时更新已有记录）
-  if (!useSegment) {
-    try {
-      const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [outputFilePattern]);
-      if (existing.rows.length > 0) {
-        await pool.query(
-          `UPDATE recording_files SET status = 'recording', session_id = $1, checked_at = NOW()
-           WHERE id = $2`,
-          [sessionId, existing.rows[0].id]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
-           VALUES ($1, $2, $3, $4, 'recording')`,
-          [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
-        );
-      }
-    } catch (dbErr) {
-      console.warn('[api] recording_files 写入失败:', dbErr.message);
-    }
-  }
-
-  await setActiveTask(roomKey, {
-    pid: dlProcess.pid,
-    outputPath: outputFilePattern,
-    roomId: room.id,
-    sessionId,
-    startTime: Date.now(),
-    downloader: downloader.name,
-  });
-
-  if (useSegment) {
-    watchRoom(room.room_url, path.dirname(outputFilePattern), sessionId);
+  if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
+    finishSession(dlProcess.exitCode);
+  } else {
+    dlProcess.on('close', finishSession);
   }
 
   notify.recordingStart(room.room_name || title, caption, room.room_url);
