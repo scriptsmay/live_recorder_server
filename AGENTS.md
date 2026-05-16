@@ -142,6 +142,7 @@ node scripts/cleanup-dev.js
 - ffmpeg 需单独安装，非 Node 依赖
 - 全局设置存储于 `settings` 表，启动时自动插入默认值；`watchdog_interval` 修改后下次调度自动生效
 - `max_upload_limit` 为 Redis INCR 持久化计数（`upload_count:{sessionId}`），24h 过期；自动投稿和手动投稿均受限制
+- **设计原则**：保持轻量。避免引入 chokidar / Worker Thread / EventEmitter / 复杂状态机。同步 fs 操作在典型负载下完全够用。
 
 ## 关联项目
 
