@@ -253,6 +253,13 @@ startup()
 - 删除磁盘文件 + 关联的 `recordings` + `recording_files` 记录
 - 更新 session 合计
 
+### syncMissingFiles()
+
+- 查询 `recording_files` 中所有非 `missing`/`deleted` 状态的记录
+- 逐个检查磁盘文件是否存在
+- 不存在的文件更新为 `status = 'missing'`
+- 配合 `cleanupFragmentFiles` 和手动删除文件后自动标记
+
 ---
 
 ## 五、启动清理 (cleanupStaleRecordings)
