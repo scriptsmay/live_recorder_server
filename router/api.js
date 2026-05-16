@@ -523,7 +523,8 @@ router.post('/notify/live_download', async (req, res) => {
 
   let fallbackAttempted = false;
 
-  const finishSession = async (code, engine = downloader) => {
+  const finishSession = async (code, engine) => {
+    if (!engine) engine = downloader;
     if (code !== 0 && engine.name === 'stream-gears' && !fallbackAttempted) {
       fallbackAttempted = true;
       console.log(`[api] stream-gears 退出 (code=${code}), 回退到 ffmpeg`);
