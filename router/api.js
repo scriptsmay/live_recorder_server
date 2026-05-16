@@ -433,7 +433,8 @@ router.post('/notify/live_download', async (req, res) => {
 
   const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
 
-  const { stream: logStream, logPath, rename: renameLog, logCommand } = createProcLog(downloader.name);
+  const procLog = createProcLog(downloader.name);
+  const { stream: logStream, rename: renameLog, logCommand } = procLog;
   console.log(`[任务启动] 下载引擎: ${downloader.name}`);
   logCommand(downloader.name, dlArgs);
 
@@ -485,7 +486,7 @@ router.post('/notify/live_download', async (req, res) => {
       sessionId = session.rows[0].id;
     }
     renameLog(sessionId);
-    console.log(`[api] 日志文件: ${logPath}`);
+    console.log(`[api] 日志文件: ${procLog.logPath}`);
   } catch (dbErr) {
     console.error('[api] 更新数据库状态失败:', dbErr);
     dlProcess.kill();
