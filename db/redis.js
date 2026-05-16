@@ -1,28 +1,16 @@
-const { createClient } = require('redis');
+const redisService = require('../lib/redis-service');
 
-const host = process.env.REDIS_HOST;
-const port = process.env.REDIS_PORT || 6379;
-const password = process.env.REDIS_PASSWORD || '';
-const user = process.env.REDIS_USER || 'default';
-const db = parseInt(process.env.REDIS_DB, 10) || 1;
-
-const url = password
-  ? `redis://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}`
-  : `redis://${host}:${port}`;
-
-const client = createClient({ url, database: db });
-
-client.on('error', (err) => {
-  if (err.code === 'CONNECTION_BROKEN') return;
-  console.error('[Redis] 错误:', err.message);
-});
-
-client.on('connect', () => {
-  console.log('[Redis] 已连接');
-});
-
-client.on('end', () => {
-  console.log('[Redis] 连接已关闭');
-});
+const client = {
+  connect: () => redisService.connect(),
+  get: (key) => redisService.get(key),
+  set: (key, value, options) => redisService.set(key, value, options),
+  setEx: (key, seconds, value) => redisService.setEx(key, seconds, value),
+  del: (key) => redisService.del(key),
+  exists: (key) => redisService.exists(key),
+  keys: (pattern) => redisService.keys(pattern),
+  incr: (key) => redisService.incr(key),
+  expire: (key, seconds) => redisService.expire(key, seconds),
+  disconnect: () => redisService.disconnect(),
+};
 
 module.exports = client;
