@@ -151,7 +151,7 @@ class UploadService {
         `UPDATE upload_records SET status='failed', error_message=$1, output=$2, completed_at=NOW() WHERE id=$3`,
         ['进程启动失败', output, recordId]
       );
-      notify.send('❌ 投稿失败', `模板：${tmpl.name}\n错误：进程启动失败`);
+      await notify.uploadFailed(session.room_name, tmpl.name, title, '进程启动失败', session.room_url);
     });
 
     proc.on('close', async (code) => {
@@ -184,7 +184,7 @@ class UploadService {
           `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
           [cmdStr, output, `exit code ${code}`, recordId]
         );
-        notify.send('❌ 投稿失败', `模板：${tmpl.name}\n标题：${title}\n错误：exit code ${code}`);
+        await notify.uploadFailed(session.room_name, tmpl.name, title, `exit code ${code}`, session.room_url);
       }
     });
 
