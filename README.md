@@ -51,18 +51,29 @@ npm run stop
 
 ```
 ├── app.js                 # 主入口文件
-├── lib/                   # 核心模块
-│   ├── logger.js          # 结构化日志（Winston）
-│   ├── response.js        # 统一 API 响应工具
-│   ├── redis-service.js   # Redis 统一服务层
-│   ├── downloaders/       # 下载引擎实现
-│   └── watchdog.js        # 看门狗监控
-├── router/                # API 路由
-├── db/                    # 数据库连接
+├── lib/                    # 核心模块
+│   ├── core/              # 核心功能
+│   │   ├── backup.js      # NAS 备份
+│   │   ├── downloaders/   # 下载引擎（FFmpeg、Stream-Gears）
+│   │   ├── notify.js      # 通知服务
+│   │   ├── proc-log.js    # 进程日志
+│   │   ├── scan-files.js  # 文件扫描
+│   │   ├── transcoder.js  # 视频转码
+│   │   └── watchdog.js    # 看门狗
+│   └── utils/             # 工具类
+├── services/              # 业务服务层
+│   ├── RecorderService.js # 录制服务
+│   ├── RoomService.js     # 直播间管理服务
+│   └── UploadService.js   # 投稿服务
+├── router/                # 路由层
+├── db/                    # 数据库连接和迁移
 ├── views/                 # EJS 模板
 ├── public/                # 静态资源
-├── test/                  # 单元测试
-└── docs/                  # 项目文档
+├── scripts/               # 工具脚本
+├── logs/                   # 日志
+├── docs/                   # 项目文档
+├── backups/                # 备份
+└── test/                   # 测试
 ```
 
 ## 测试

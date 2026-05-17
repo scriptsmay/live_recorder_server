@@ -62,6 +62,48 @@ node scripts/cleanup-dev.js
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
 - 无测试套件（test 脚本为占位）
 
+## 目录结构
+
+```
+├── app.js              # 主入口文件
+├── lib/                 # 核心模块（与业务无关的通用模块）
+│   ├── core/           # 核心功能
+│   │   ├── backup.js   # NAS 备份
+│   │   ├── downloaders/   # 下载引擎
+│   │   │   ├── DownloaderFactory.js
+│   │   │   ├── FFmpegDownloader.js
+│   │   │   └── StreamGearsDownloader.js
+│   │   ├── notify.js      # 通知服务
+│   │   ├── proc-log.js     # 进程日志
+│   │   ├── scan-files.js   # 文件扫描
+│   │   ├── transcoder.js   # 视频转码
+│   │   └── watchdog.js     # 看门狗
+│   └── utils/          # 工具类
+│       └── markdown.js
+├── router/             # 路由层（API + 页面）
+├── services/           # 业务服务层
+│   ├── RecorderService.js  # 录制服务
+│   ├── RoomService.js      # 直播间管理服务
+│   └── UploadService.js    # 投稿服务
+├── db/                 # 数据库
+│   ├── index.js
+│   ├── migrate.js
+│   └── redis.js
+├── views/              # EJS 模板
+├── public/             # 静态资源
+├── scripts/            # 工具脚本
+├── logs/               # 日志
+├── docs/               # 文档
+├── backups/            # 备份
+└── test/               # 测试
+```
+
+**目录组织原则：**
+- `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码）
+- `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染）
+- `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
+- `router/` — 路由层，负责接收请求、调用 Service、返回响应
+
 ## 代码规范
 
 - **ESLint**（v9 flat config）：`npm run lint` 运行，配置见 `eslint.config.mjs`
