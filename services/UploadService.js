@@ -172,7 +172,8 @@ class UploadService {
           session.id,
           tmpl.name,
           recordId,
-          session.room_name
+          session.room_name,
+          session.room_url
         );
         if (postResult) {
           output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
