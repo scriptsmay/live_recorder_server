@@ -74,6 +74,25 @@
         ],
       },
       {
+        title: '转码设置',
+        items: [
+          {
+            key: 'auto_transcode',
+            label: '自动转码',
+            desc: '录制完成后自动将 FLV 转换为 MP4',
+            type: 'select',
+            options: ['true', 'false'],
+          },
+          {
+            key: 'transcode_delete_originals',
+            label: '转码后删除原始文件',
+            desc: '转码成功后自动删除 FLV 原始文件',
+            type: 'select',
+            options: ['true', 'false'],
+          },
+        ],
+      },
+      {
         title: '上传设置',
         items: [
           {
@@ -116,16 +135,13 @@
     ];
 
     for (const group of groups) {
-      html += '<div class="col-md-6 mb-4">';
+      html += '<div class="col-md-4 mb-4">';
       html += `<div class="card"><div class="card-header"><h5 class="mb-0">${group.title}</h5></div><div class="card-body">`;
       for (const item of group.items) {
         const val = settings.find((s) => s.key === item.key)?.value || '';
         if (item.type === 'select') {
           const opts = item.options
-            .map(
-              (o) =>
-                `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`
-            )
+            .map((o) => `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`)
             .join('');
           html += `<div class="mb-3">
           <label class="form-label" for="set_${item.key}">${item.label}</label>
@@ -159,12 +175,14 @@
       'watchdog_timeout',
       'filtering_threshold',
       'delay',
+      'max_resume_retries',
+      'auto_transcode',
+      'transcode_delete_originals',
       'submit_api',
       'lines',
       'threads',
       'pool2_size',
       'max_upload_limit',
-      'max_resume_retries',
     ];
 
     const btn = document.querySelector('#settingsBody .btn-primary');

@@ -16,6 +16,7 @@
         <th>状态</th>
         <th>通知</th>
         <th>监听</th>
+        <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
         <th>操作</th>
@@ -65,6 +66,13 @@
           <label class="form-check-label" for="inputMonitor">启用监听</label>
           <div class="form-text">关闭后，即使收到录制通知也不会启动 ffmpeg 下载</div>
         </div>
+        <div class="mb-3">
+          <label class="form-label">投稿模板</label>
+          <select class="form-select" id="inputTemplateId">
+            <option value="">不使用模板</option>
+          </select>
+          <div class="form-text">用于自动投稿的模板，不选择则使用全局第一个模板</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -103,6 +111,21 @@ async function loadDownloaderInfo() {
   } catch (_) {}
 }
 
+async function loadTemplateSelect() {
+  try {
+    const res = await fetch('/api/upload_templates');
+    const json = await res.json();
+    const sel = document.getElementById('inputTemplateId');
+    sel.innerHTML = '<option value="">不使用模板</option>';
+    if (json.data) json.data.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      sel.appendChild(opt);
+    });
+  } catch (_) {}
+}
+
 async function loadRooms() {
   const res = await fetch('/api/rooms');
   const json = await res.json();
@@ -123,6 +146,7 @@ async function loadRooms() {
         <td>${statusBadge}</td>
         <td>${r.notification_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
         <td>${r.monitoring_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
+        <td>${r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-')}</td>
         <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
         <td>${seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-'}</td>
         <td class="text-nowrap">
@@ -146,10 +170,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
   const notify = document.getElementById('inputNotify').checked;
   const monitor = document.getElementById('inputMonitor').checked;
+  const templateId = document.getElementById('inputTemplateId').value;
 
   if (!url && !id) return alert('直播间地址必填');
 
-  const body = { room_name: name, filename_template: tmpl || undefined, segment_duration: segment, notification_enabled: notify, monitoring_enabled: monitor };
+  const body = { room_name: name, filename_template: tmpl || undefined, segment_duration: segment, notification_enabled: notify, monitoring_enabled: monitor, upload_template_id: templateId ? parseInt(templateId, 10) : null };
   const res = id
     ? await apiAction(`/api/rooms/${id}`, 'PUT', body)
     : await apiAction('/api/rooms', 'POST', { room_url: url, ...body });
@@ -171,6 +196,7 @@ function resetForm() {
   document.getElementById('inputSegment').value = 0;
   document.getElementById('inputNotify').checked = true;
   document.getElementById('inputMonitor').checked = true;
+  document.getElementById('inputTemplateId').value = '';
 }
 
 document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
@@ -193,6 +219,7 @@ document.addEventListener('click', e => {
         document.getElementById('inputSegment').value = r.segment_duration || 0;
         document.getElementById('inputNotify').checked = r.notification_enabled !== false;
         document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
+        document.getElementById('inputTemplateId').value = r.upload_template_id || '';
         new bootstrap.Modal(document.getElementById('roomModal')).show();
       });
     return;
@@ -215,4 +242,5 @@ document.addEventListener('click', e => {
 
 loadDownloaderInfo();
 loadRooms();
+loadTemplateSelect();
 </script>

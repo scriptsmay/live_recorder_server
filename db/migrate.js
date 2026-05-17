@@ -141,6 +141,7 @@ async function runMigration() {
       )
     `);
     await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS bv_id VARCHAR(50) DEFAULT ''`);
+    await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS upload_files TEXT DEFAULT '[]'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS recording_files (

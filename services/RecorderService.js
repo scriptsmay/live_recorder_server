@@ -248,7 +248,7 @@ class RecorderService {
           try {
             fs.unlinkSync(segmentListPath);
           } catch (_) {}
-        } else if (engine.name !== 'ffmpeg' && outputFilePattern) {
+        } else if (outputFilePattern) {
           try {
             const dir = path.dirname(outputFilePattern);
             const base = path.basename(outputFilePattern);
@@ -261,7 +261,7 @@ class RecorderService {
               .sort()
               .map((f) => path.join(dir, f));
           } catch (err) {
-            console.error('[api] stream-gears 分段文件扫描失败:', err.message);
+            console.error('[api] 分段文件扫描失败:', err.message);
           }
         }
 
@@ -319,7 +319,7 @@ class RecorderService {
         }
         console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
-        if (engine.name === 'ffmpeg' && code === 0 && segmentFiles.length > 0) {
+        if (engine.name === 'ffmpeg' && segmentFiles.length > 0) {
           await this.batchTranscodeSegmentFiles(segmentFiles, sessionId);
         }
       } else {
@@ -384,12 +384,12 @@ class RecorderService {
           );
         }
 
-        if (engine.name === 'ffmpeg' && code === 0 && /\.flv$/i.test(outputFilePattern)) {
+        if (engine.name === 'ffmpeg' && /\.flv$/i.test(outputFilePattern)) {
           await this.fastTranscodeSingleFile(outputFilePattern, sessionId);
         }
       }
 
-      if (code === 0 && sessionId) {
+      if (sessionId) {
         try {
           const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
             sessionId,
@@ -857,7 +857,7 @@ class RecorderService {
 
           await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [status, session.id]);
 
-          if (code === 0 && totalSegments > 0) {
+          if (totalSegments > 0) {
             try {
               const files = fs.readdirSync(outputDir);
               const flvFiles = files
@@ -897,7 +897,7 @@ class RecorderService {
             [status, fileSize, session.id]
           );
 
-          if (code === 0 && /\.flv$/i.test(outputPath)) {
+          if (/\.flv$/i.test(outputPath)) {
             try {
               await this.fastTranscodeSingleFile(outputPath, session.id);
             } catch (transcodeErr) {
@@ -905,6 +905,14 @@ class RecorderService {
             }
           }
         }
+
+        const completedSession = {
+          id: session.id,
+          room_url: session.room_url,
+          room_name: session.room_name,
+          started_at: session.started_at,
+        };
+        findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
       } catch (dbErr) {
         console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
       }
@@ -967,7 +975,7 @@ class RecorderService {
       }
 
       const staleSessions = await pool.query(
-        `SELECT rs.*, r.id as room_id FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
+        `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
       );
 
       for (const session of staleSessions.rows) {

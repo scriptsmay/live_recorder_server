@@ -105,9 +105,9 @@ class UploadService {
     }, 0);
 
     const record = await pool.query(
-      `INSERT INTO upload_records (session_id, template_id, room_url, title, status, file_count, total_size)
-       VALUES ($1,$2,$3,$4,'uploading',$5,$6) RETURNING id`,
-      [session.id, tmpl.id, session.room_url, title, files.length, totalSize]
+      `INSERT INTO upload_records (session_id, template_id, room_url, title, status, file_count, total_size, upload_files)
+       VALUES ($1,$2,$3,$4,'uploading',$5,$6,$7) RETURNING id`,
+      [session.id, tmpl.id, session.room_url, title, files.length, totalSize, JSON.stringify(files)]
     );
     const recordId = record.rows[0].id;
 

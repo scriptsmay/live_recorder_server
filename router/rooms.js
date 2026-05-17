@@ -13,9 +13,9 @@ router.get('/rooms', async (req, res) => {
       conditions.push(`status = $${params.length + 1}`);
       params.push(status);
     }
-    let sql = 'SELECT * FROM rooms';
+    let sql = `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id`;
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ` ORDER BY updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    sql += ` ORDER BY r.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
     const result = await pool.query(sql, params);
     const countResult = await pool.query('SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''), params.slice(0, params.length - 2));
@@ -67,7 +67,7 @@ router.post('/rooms', async (req, res) => {
 router.get('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
+    const result = await pool.query(`SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }

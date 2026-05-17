@@ -15,7 +15,7 @@ const ejsLayouts = require('express-ejs-layouts');
 const dayjs = require('dayjs');
 
 if (process.env.NODE_ENV === 'development') {
-  const ts = () => dayjs.format('YYYY-MM-DD HH:mm:ss');
+  const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
   ['log', 'warn', 'error'].forEach((method) => {
     const orig = console[method];
     console[method] = (...args) => orig(`[${ts()}]`, ...args);
@@ -28,7 +28,7 @@ const redis = require('./db/redis');
 const htmlRouter = require('./router/html');
 const { router: apiRouter } = require('./router/api');
 const roomsRouter = require('./router/rooms');
-const { router: uploadRouter } = require('./router/upload');
+const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const watchdog = require('./lib/core/watchdog');
 const RecorderService = require('./services/RecorderService');
