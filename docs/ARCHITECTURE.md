@@ -215,13 +215,14 @@ await transcodeQueue.getCurrentProcessingCount();
 
 ### 属于看门狗（`lib/watchdog.js`）
 
-| 函数                     | 触发        | 职责                                                            |
-| ------------------------ | ----------- | --------------------------------------------------------------- |
-| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制               |
-| `scanActiveSegments()`   | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）     |
-| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                    |
-| `syncMissingFiles()`     | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                 |
-| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件 |
+| 函数                      | 触发        | 职责                                                                   |
+| ------------------------- | ----------- | ---------------------------------------------------------------------- |
+| `checkStaleRecordings()`  | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                      |
+| `scanActiveSegments()`    | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）            |
+| `cleanupFragmentFiles()`  | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                           |
+| `syncMissingFiles()`      | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                        |
+| `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`） |
+| `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件        |
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 
@@ -240,6 +241,7 @@ watchdog.start()
        ├─ scanActiveSegments()      ← 追踪已完成分段（含 2 分钟稳定期）
        ├─ cleanupFragmentFiles()    ← 同步 fs 清理
        ├─ syncMissingFiles()        ← 检测被删除文件
+       ├─ scanPendingAutoUpload()  ← 转码完成后自动投稿
        └─ setTimeout(runWatchdog, interval)  ← 下次周期
 ```
 

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const transcodeQueue = require('../lib/core/TranscodeQueue');
 const notify = require('../lib/core/notify');
 const { createProcLog } = require('../lib/utils/proc-log');
 const { afterUpload } = require('../lib/core/backup');
@@ -190,6 +191,106 @@ class UploadService {
 
     await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
     console.log(`[投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
+  }
+
+  static async getSetting(key, def) {
+    try {
+      const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+      if (r.rows.length) return r.rows[0].value;
+    } catch (_) {}
+    return def;
+  }
+
+  static async hasBlockingUploadRecord(sessionId) {
+    const r = await pool.query(
+      `SELECT 1 FROM upload_records WHERE session_id = $1 AND status IN ('uploading', 'success') LIMIT 1`,
+      [sessionId]
+    );
+    return r.rows.length > 0;
+  }
+
+  /**
+   * 会话文件是否均已转码完成（无队列任务、无待转 FLV）
+   */
+  static async isSessionTranscodeComplete(sessionId) {
+    if (await transcodeQueue.hasSessionPending(sessionId)) return false;
+
+    const autoTranscode = await this.getSetting('auto_transcode', 'true');
+    if (autoTranscode !== 'true') return true;
+
+    let paths = [];
+    const files = await pool.query(
+      `SELECT file_path FROM recording_files
+       WHERE session_id = $1 AND status NOT IN ('missing', 'deleted')`,
+      [sessionId]
+    );
+    paths = files.rows.map((r) => r.file_path).filter(Boolean);
+
+    if (paths.length === 0) {
+      const recs = await pool.query(
+        `SELECT file_path FROM recordings
+         WHERE session_id = $1 AND status IN ('completed', 'interrupted')`,
+        [sessionId]
+      );
+      paths = recs.rows.map((r) => r.file_path).filter(Boolean);
+    }
+
+    for (const fp of paths) {
+      if (!/\.flv$/i.test(fp)) continue;
+      try {
+        if (!fs.existsSync(fp)) continue;
+        const mp4 = fp.replace(/\.flv$/i, '.mp4');
+        if (!fs.existsSync(mp4)) return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * 看门狗：扫描已完成且转码就绪的会话，按直播间模板自动投稿
+   */
+  static async scanPendingAutoUpload() {
+    try {
+      const { rows } = await pool.query(
+        `SELECT rs.id, rs.room_url, rs.started_at, r.room_name, r.upload_template_id
+         FROM recording_sessions rs
+         INNER JOIN rooms r ON r.room_url = rs.room_url
+         WHERE rs.status = 'completed'
+           AND r.upload_template_id IS NOT NULL
+           AND rs.ended_at > NOW() - INTERVAL '7 days'
+           AND NOT EXISTS (
+             SELECT 1 FROM upload_records ur
+             WHERE ur.session_id = rs.id AND ur.status IN ('uploading', 'success')
+           )
+         ORDER BY rs.ended_at DESC
+         LIMIT 20`
+      );
+
+      for (const row of rows) {
+        if (!(await this.isSessionTranscodeComplete(row.id))) continue;
+
+        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [row.upload_template_id]);
+        if (tmplResult.rows.length === 0) continue;
+
+        const tmpl = tmplResult.rows[0];
+        if (!tmpl.cookies_path) continue;
+        if (!(await this.checkUploadLimit(row.id))) continue;
+        if (await this.hasBlockingUploadRecord(row.id)) continue;
+
+        const session = {
+          id: row.id,
+          room_url: row.room_url,
+          room_name: row.room_name,
+          started_at: row.started_at,
+        };
+        console.log(`[看门狗][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
+        await this.executeUpload(session, tmpl);
+      }
+    } catch (err) {
+      console.error('[看门狗][投稿] 扫描失败:', err.message);
+    }
   }
 
   static async findAndAutoUpload(session) {
