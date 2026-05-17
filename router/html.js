@@ -74,8 +74,28 @@ router.get('/templates', (req, res) => {
   res.render('templates', { title: '投稿模板' });
 });
 
-router.get('/upload_records', (req, res) => {
-  res.render('upload_records', { title: '投稿记录' });
+router.get('/upload_records', async (req, res) => {
+  try {
+    const [recordsResult, templatesResult] = await Promise.all([
+      pool.query(`
+        SELECT ur.*, ut.name as template_name
+        FROM upload_records ur
+        LEFT JOIN upload_templates ut ON ur.template_id = ut.id
+        ORDER BY ur.id DESC
+        LIMIT 100
+      `),
+      pool.query('SELECT * FROM upload_templates ORDER BY id DESC'),
+    ]);
+
+    res.render('upload_records', {
+      title: '投稿记录',
+      records: recordsResult.rows,
+      templates: templatesResult.rows,
+    });
+  } catch (err) {
+    console.error('[html] 投稿记录页加载失败:', err);
+    res.status(500).render('upload_records', { title: '投稿记录', records: [], templates: [] });
+  }
 });
 
 router.get('/recordings', async (req, res) => {

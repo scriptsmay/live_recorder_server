@@ -25,9 +25,25 @@
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="recordingsBody">
+    <tbody>
       <% if (recordings.length === 0) { %>
         <tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>
+      <% } else { %>
+        <% recordings.forEach(r => { %>
+          <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
+          <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
+          <% const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-'); %>
+          <tr>
+            <td><%= r.id %></td>
+            <td><%- roomDisplay %></td>
+            <td><small><%= r.file_path || '-' %></small></td>
+            <td><%= size %></td>
+            <td><%- badge %></td>
+            <td><small><%= r.started_at ? new Date(r.started_at).toLocaleString() : '-' %></small></td>
+            <td><small><%= r.ended_at ? new Date(r.ended_at).toLocaleString() : '-' %></small></td>
+            <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button></td>
+          </tr>
+        <% }) %>
       <% } %>
     </tbody>
   </table>
@@ -35,34 +51,6 @@
 <%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
 
 <script>
-  const recordingsData = <%- JSON.stringify(recordings) %>;
-  const roomsData = <%- JSON.stringify(rooms) %>;
-
-  function renderRecordings(data) {
-    const tbody = document.getElementById('recordingsBody');
-    if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>';
-      return;
-    }
-    tbody.innerHTML = data.map(r => {
-      const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status;
-      const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
-      const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-');
-      return '<tr>' +
-        '<td>' + r.id + '</td>' +
-        '<td>' + roomDisplay + '</td>' +
-        '<td><small>' + (r.file_path || '-') + '</small></td>' +
-        '<td>' + size + '</td>' +
-        '<td>' + badge + '</td>' +
-        '<td><small>' + (r.started_at ? new Date(r.started_at).toLocaleString() : '-') + '</small></td>' +
-        '<td><small>' + (r.ended_at ? new Date(r.ended_at).toLocaleString() : '-') + '</small></td>' +
-        '<td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="' + r.id + '">删除</button></td>' +
-        '</tr>';
-    }).join('');
-  }
-
-  setupPagination('rec', recordingsData, renderRecordings);
-
   document.getElementById('roomFilter').addEventListener('change', e => {
     const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '/recordings';
     window.location.href = url;

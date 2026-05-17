@@ -15,9 +15,54 @@
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="recordsBody"></tbody>
+    <tbody>
+      <% if (records.length === 0) { %>
+        <tr><td colspan="9" class="text-center text-muted py-4">暂无投稿记录</td></tr>
+      <% } else { %>
+        <% records.forEach(r => { %>
+          <% const badge = {
+            pending: '<span class="badge bg-secondary">等待</span>',
+            uploading: '<span class="badge bg-primary">上传中</span>',
+            success: '<span class="badge bg-success">成功</span>',
+            failed: '<span class="badge bg-danger">失败</span>',
+          }[r.status] || r.status; %>
+          <% const size = r.total_size ? (r.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
+          <tr>
+            <td><%= r.id %></td>
+            <td>
+              <small><%= r.title || '-' %>
+                <% if (r.template_name) { %><br><span class="text-muted small"><%= r.template_name %></span><% } %>
+              </small>
+            </td>
+            <td><%= r.template_name || '-' %></td>
+            <td>
+              <button class="btn btn-sm btn-link p-0 viewFilesBtn" data-files='<%= encodeURIComponent(r.upload_files || "[]") %>' data-id="<%= r.id %>">
+                <%= r.file_count %>
+              </button>
+            </td>
+            <td><%= size %></td>
+            <td><%- badge %></td>
+            <td>
+              <% if (r.bv_id) { %>
+                <a href="https://www.bilibili.com/video/<%= r.bv_id %>" target="_blank" rel="noopener">
+                  <code><%= r.bv_id %></code>
+                </a>
+              <% } else { %>
+                -
+              <% } %>
+            </td>
+            <td>
+              <small><%= r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-') %></small>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="<%= r.id %>" data-output="<%= encodeURIComponent(r.output || '') %>">输出</button>
+              <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button>
+            </td>
+          </tr>
+        <% }) %>
+      <% } %>
+    </tbody>
   </table>
-  <p class="text-muted text-center" id="emptyRec">暂无投稿记录</p>
 </div>
 <%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
 
@@ -52,81 +97,49 @@
 </div>
 
 <script>
-async function loadRecords() {
-  const res = await fetch('/api/upload_records?limit=100');
-  const json = await res.json();
-  const tbody = document.getElementById('recordsBody');
-  const empty = document.getElementById('emptyRec');
-  tbody.innerHTML = '';
-  if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
-  empty.style.display = 'none';
-  setupPagination('rec', json.data, (pageData) => {
-    tbody.innerHTML = '';
-    pageData.forEach(r => {
-    const badge = {
-      pending: '<span class="badge bg-secondary">等待</span>',
-      uploading: '<span class="badge bg-primary">上传中</span>',
-      success: '<span class="badge bg-success">成功</span>',
-      failed: '<span class="badge bg-danger">失败</span>',
-    }[r.status] || r.status;
-    const size = r.total_size ? (r.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td><small>${r.title || '-'}${r.template_name ? '<br><span class="text-muted small">' + r.template_name + '</span>' : ''}</small></td>
-      <td>${r.template_name || '-'}</td>
-      <td><button class="btn btn-sm btn-link p-0 viewFilesBtn" data-files='${encodeURIComponent(r.upload_files || '[]')}' data-id="${r.id}">${r.file_count}</button></td>
-      <td>${size}</td>
-      <td>${badge}</td>
-      <td>${r.bv_id ? '<a href="https://www.bilibili.com/video/' + r.bv_id + '" target="_blank" rel="noopener"><code>' + r.bv_id + '</code></a>' : '-'}</td>
-      <td><small>${r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-')}</small></td>
-      <td>
-        <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="${r.id}" data-output="${encodeURIComponent(r.output || '')}">输出</button>
-        <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="${r.id}">删除</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-  });
-}
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('[class*="Btn"]');
+    if (!btn) return;
 
-document.addEventListener('click', async e => {
-  const btn = e.target.closest('[class*="Btn"]');
-  if (!btn) return;
-  if (btn.classList.contains('deleteRecBtn')) {
-    if (!confirm('确定删除此记录？')) return;
-    await fetch(`/api/upload_records/${btn.dataset.id}`, { method: 'DELETE' });
-    loadRecords();
-  }
-  if (btn.classList.contains('viewOutputBtn')) {
-    const output = decodeURIComponent(btn.dataset.output) || '(无输出)';
-    document.getElementById('outputRecId').textContent = btn.dataset.id;
-    document.getElementById('outputContent').textContent = output;
-    new bootstrap.Modal(document.getElementById('outputModal')).show();
-  }
-  if (btn.classList.contains('viewFilesBtn')) {
-    const recId = btn.dataset.id;
-    const filesContent = document.getElementById('filesContent');
-    const title = document.getElementById('filesRecId');
-    title.textContent = recId;
-    filesContent.innerHTML = '<div class="text-center text-muted py-3">加载中...</div>';
-    new bootstrap.Modal(document.getElementById('filesModal')).show();
-    try {
-      const files = JSON.parse(decodeURIComponent(btn.dataset.files || '[]'));
-      if (!files || files.length === 0) {
-        filesContent.innerHTML = '<div class="text-muted text-center py-3">无文件记录</div>';
-        return;
-      }
-      let html = '<table class="table table-sm mb-0"><thead><tr><th>#</th><th>文件路径</th></tr></thead><tbody>';
-      files.forEach((fp, i) => {
-        html += `<tr><td>${i + 1}</td><td><small title="${fp}">${fp}</small></td></tr>`;
-      });
-      html += '</tbody></table>';
-      filesContent.innerHTML = html;
-    } catch (err) {
-      filesContent.innerHTML = '<div class="alert alert-danger mb-0">加载失败</div>';
+    if (btn.classList.contains('deleteRecBtn')) {
+      if (!confirm('确定删除此记录？')) return;
+      await fetch(`/api/upload_records/${btn.dataset.id}`, { method: 'DELETE' });
+      window.location.reload();
+      return;
     }
-  }
-});
 
-loadRecords();
+    if (btn.classList.contains('viewOutputBtn')) {
+      const output = decodeURIComponent(btn.dataset.output) || '(无输出)';
+      document.getElementById('outputRecId').textContent = btn.dataset.id;
+      document.getElementById('outputContent').textContent = output;
+      new bootstrap.Modal(document.getElementById('outputModal')).show();
+      return;
+    }
+
+    if (btn.classList.contains('viewFilesBtn')) {
+      const recId = btn.dataset.id;
+      const filesContent = document.getElementById('filesContent');
+      const title = document.getElementById('filesRecId');
+      title.textContent = recId;
+      filesContent.innerHTML = '<div class="text-center text-muted py-3">加载中...</div>';
+      new bootstrap.Modal(document.getElementById('filesModal')).show();
+
+      try {
+        const files = JSON.parse(decodeURIComponent(btn.dataset.files || '[]'));
+        if (!files || files.length === 0) {
+          filesContent.innerHTML = '<div class="text-muted text-center py-3">无文件记录</div>';
+          return;
+        }
+        let html = '<table class="table table-sm mb-0"><thead><tr><th>#</th><th>文件路径</th></tr></thead><tbody>';
+        files.forEach((fp, i) => {
+          html += `<tr><td>${i + 1}</td><td><small title="${fp}">${fp}</small></td></tr>`;
+        });
+        html += '</tbody></table>';
+        filesContent.innerHTML = html;
+      } catch (err) {
+        filesContent.innerHTML = '<div class="alert alert-danger mb-0">加载失败</div>';
+      }
+      return;
+    }
+  });
 </script>
