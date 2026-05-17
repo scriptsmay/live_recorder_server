@@ -214,7 +214,7 @@ async function runMigration() {
       ['downloader', 'ffmpeg'],
       ['max_resume_retries', '3'],
       ['auto_transcode', 'true'],
-      ['transcode_delete_originals', 'false'],
+      ['transcode_delete_originals', 'true'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

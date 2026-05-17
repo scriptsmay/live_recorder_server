@@ -416,7 +416,7 @@ class RecorderService {
     try {
       const autoTranscode = await this.getSetting('auto_transcode', 'true');
       if (autoTranscode === 'true') {
-        const deleteOriginals = await this.getSetting('transcode_delete_originals', 'false');
+        const deleteOriginals = await this.getSetting('transcode_delete_originals', 'true');
         const shouldDelete = deleteOriginals === 'true';
 
         console.log(`[api] 开始批量转码 ${segmentFiles.length} 个 FLV 分片`);
@@ -457,7 +457,7 @@ class RecorderService {
     try {
       const autoTranscode = await this.getSetting('auto_transcode', 'true');
       if (autoTranscode === 'true') {
-        const deleteOriginals = await this.getSetting('transcode_delete_originals', 'false');
+        const deleteOriginals = await this.getSetting('transcode_delete_originals', 'true');
         const shouldDelete = deleteOriginals === 'true';
 
         const outputMp4 = flvPath.replace(/\.flv$/i, '.mp4');
