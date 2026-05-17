@@ -189,11 +189,11 @@ DownloaderFactory.getActiveDownloader()
 
 | 函数                     | 触发        | 职责                                                            |
 | ------------------------ | ----------- | --------------------------------------------------------------- |
-| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                |
-| `scanActiveSegments()`   | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）      |
-| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                     |
-| `syncMissingFiles()`     | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                  |
-| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件  |
+| `checkStaleRecordings()` | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制               |
+| `scanActiveSegments()`   | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）     |
+| `cleanupFragmentFiles()` | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                    |
+| `syncMissingFiles()`     | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                 |
+| `runFileScan()`          | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件 |
 
 ### 不属于看门狗（但在 `app.js` 启动时运行）
 

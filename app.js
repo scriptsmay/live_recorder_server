@@ -175,44 +175,44 @@ async function tryResumeSession(session) {
         const outputDir = path.dirname(outputPath);
         let totalSegments = 0;
         let totalSize = 0;
-        
+
         try {
           const files = fs.readdirSync(outputDir);
           const videoRe = /\.(flv|mp4)$/i;
-          
+
           for (const f of files) {
             if (!videoRe.test(f)) continue;
-            
+
             const fp = path.join(outputDir, f);
             const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
             if (tracked.rows.length > 0) continue;
-            
+
             let stat;
             try {
               stat = fs.statSync(fp);
             } catch (_) {
               continue;
             }
-            
+
             await pool.query(
               `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
                VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')
                ON CONFLICT (file_path) DO NOTHING`,
               [session.id, totalSegments, session.room_url, fp, stat.size]
             );
-            
+
             await pool.query(
               `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
                VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
                ON CONFLICT (file_path) DO NOTHING`,
               [session.id, session.room_url, fp, f, stat.size]
             );
-            
+
             totalSegments++;
             totalSize += stat.size;
           }
         } catch (_) {}
-        
+
         // 更新会话统计
         if (totalSegments > 0) {
           await pool.query(
@@ -220,7 +220,7 @@ async function tryResumeSession(session) {
             [totalSegments, totalSize, session.id]
           );
         }
-        
+
         await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [
           status,
           session.id,

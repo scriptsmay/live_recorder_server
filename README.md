@@ -28,24 +28,24 @@ npm run stop
 
 ### 数据库配置
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| DB_HOST | 数据库主机 | localhost |
-| DB_PORT | 数据库端口 | 5432 |
-| DB_NAME | 数据库名称 | ks_live_recorder |
-| DB_USER | 数据库用户名 | postgres |
-| DB_PASSWORD | 数据库密码 | - |
-| DB_POOL_MAX | 连接池最大连接数 | 20 |
-| DB_POOL_MIN | 连接池最小连接数 | 2 |
-| DB_IDLE_TIMEOUT | 连接空闲超时(ms) | 30000 |
+| 配置项          | 说明             | 默认值           |
+| --------------- | ---------------- | ---------------- |
+| DB_HOST         | 数据库主机       | localhost        |
+| DB_PORT         | 数据库端口       | 5432             |
+| DB_NAME         | 数据库名称       | ks_live_recorder |
+| DB_USER         | 数据库用户名     | postgres         |
+| DB_PASSWORD     | 数据库密码       | -                |
+| DB_POOL_MAX     | 连接池最大连接数 | 20               |
+| DB_POOL_MIN     | 连接池最小连接数 | 2                |
+| DB_IDLE_TIMEOUT | 连接空闲超时(ms) | 30000            |
 
 ### Redis 配置
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| REDIS_HOST | Redis 主机 | localhost |
-| REDIS_PORT | Redis 端口 | 6379 |
-| REDIS_DB | Redis 数据库编号 | 1 |
+| 配置项     | 说明             | 默认值    |
+| ---------- | ---------------- | --------- |
+| REDIS_HOST | Redis 主机       | localhost |
+| REDIS_PORT | Redis 端口       | 6379      |
+| REDIS_DB   | Redis 数据库编号 | 1         |
 
 ## 项目结构
 

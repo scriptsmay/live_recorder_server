@@ -57,7 +57,16 @@ router.get('/sessions', async (req, res) => {
     });
   } catch (err) {
     console.error('[html] 会话页加载失败:', err);
-    res.status(500).render('sessions', { title: '录制会话', sessions: [], uploadMap: {}, rooms: [], templates: [], currentRoomUrl: '' });
+    res
+      .status(500)
+      .render('sessions', {
+        title: '录制会话',
+        sessions: [],
+        uploadMap: {},
+        rooms: [],
+        templates: [],
+        currentRoomUrl: '',
+      });
   }
 });
 
