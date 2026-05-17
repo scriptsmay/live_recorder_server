@@ -5,6 +5,7 @@
     <thead class="table-light">
       <tr>
         <th>ID</th>
+        <th>会话ID</th>
         <th>标题</th>
         <th>模板</th>
         <th>文件数</th>
@@ -17,7 +18,7 @@
     </thead>
     <tbody>
       <% if (records.length === 0) { %>
-        <tr><td colspan="9" class="text-center text-muted py-4">暂无投稿记录</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">暂无投稿记录</td></tr>
       <% } else { %>
         <% records.forEach(r => { %>
           <% const badge = {
@@ -29,6 +30,7 @@
           <% const size = r.total_size ? (r.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
           <tr>
             <td><%= r.id %></td>
+            <td><%= r.session_id || '-' %></td>
             <td>
               <small><%= r.title || '-' %>
                 <% if (r.template_name) { %><br><span class="text-muted small"><%= r.template_name %></span><% } %>
