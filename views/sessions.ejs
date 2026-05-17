@@ -106,7 +106,7 @@
     const delBtn = e.target.closest('.deleteSessionBtn');
     if (delBtn) {
       if (!confirm('确定删除此会话？此操作不会删除实际文件。')) return;
-      const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId + '/delete', { method: 'POST' });
+      const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok) { alert(json.message); return; }
       location.reload();
