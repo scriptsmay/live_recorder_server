@@ -321,6 +321,13 @@ class RecorderService {
 
         if (engine.name === 'ffmpeg' && segmentFiles.length > 0) {
           await this.batchTranscodeSegmentFiles(segmentFiles, sessionId);
+          const completedSession = {
+            id: sessionId,
+            room_url: room.room_url,
+            room_name: room.room_name,
+            started_at: sessionStart,
+          };
+          findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
         }
       } else {
         let fileSize = 0;
@@ -378,35 +385,34 @@ class RecorderService {
             );
           }
           await pool.query(
-            `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
-             WHERE session_id = $2 AND file_path = $3`,
-            [fileSize, sessionId, outputFilePattern]
-          );
+              `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+               WHERE session_id = $2 AND file_path = $3`,
+              [fileSize, sessionId, outputFilePattern]
+            );
+          }
+
+          if (engine.name === 'ffmpeg' && /\.flv$/i.test(outputFilePattern)) {
+            await this.fastTranscodeSingleFile(outputFilePattern, sessionId);
+            const completedSession = {
+              id: sessionId,
+              room_url: room.room_url,
+              room_name: room.room_name,
+              started_at: sessionStart,
+            };
+            findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+          }
         }
 
-        if (engine.name === 'ffmpeg' && /\.flv$/i.test(outputFilePattern)) {
-          await this.fastTranscodeSingleFile(outputFilePattern, sessionId);
+        if (sessionId) {
+          try {
+            const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
+              sessionId,
+            ]);
+            const segs = sess.rows[0]?.total_segments || 0;
+            const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
+            notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
+          } catch (_) {}
         }
-      }
-
-      if (sessionId) {
-        try {
-          const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
-            sessionId,
-          ]);
-          const segs = sess.rows[0]?.total_segments || 0;
-          const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
-          notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
-        } catch (_) {}
-
-        const completedSession = {
-          id: sessionId,
-          room_url: room.room_url,
-          room_name: room.room_name,
-          started_at: sessionStart,
-        };
-        findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
-      }
     } catch (dbErr) {
       console.error('[api] 录制结束数据库更新失败:', dbErr);
     }
