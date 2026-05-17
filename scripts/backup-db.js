@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const dayjs = require('dayjs');
 const { execSync } = require('child_process');
 
 require('dotenv').config({
@@ -18,10 +19,14 @@ const dbConfig = {
   port: process.env.DB_PORT || 5432,
 };
 
+function log(msg) {
+  console.log(`[${dayjs().format('YYYY-MM-DD HH:mm:ss')}] ${msg}`);
+}
+
 async function backup() {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const ts = dayjs().format('YYYY-MM-DD_HH-mm-ss');
   const filePath = path.join(BACKUP_DIR, `backup_${ts}.sql`);
 
   // 优先用 pg_dump，否则用 Node 导出 INSERT
@@ -34,16 +39,16 @@ async function backup() {
         timeout: 120000,
       }
     );
-    console.log(`[备份] pg_dump 完成: ${filePath}`);
+    log(`[备份] pg_dump 完成: ${filePath}`);
   } catch (pgDumpErr) {
-    console.warn('[备份] pg_dump 不可用，使用 Node 导出:', pgDumpErr.message);
+    log('[备份] pg_dump 不可用，使用 Node 导出:' + pgDumpErr.message);
     await nodeDump(filePath);
   }
 
   // 压缩
   try {
     execSync(`gzip -f ${filePath}`, { stdio: 'pipe' });
-    console.log(`[备份] 已压缩: ${filePath}.gz`);
+    log(`[备份] 已压缩: ${filePath}.gz`);
   } catch (_) {}
 
   // 清理旧备份
@@ -54,11 +59,11 @@ async function backup() {
     const age = (now - fs.statSync(fp).mtimeMs) / 86400000;
     if (age > RETENTION_DAYS) {
       fs.unlinkSync(fp);
-      console.log(`[备份] 清理过期: ${f}`);
+      log(`[备份] 清理过期: ${f}`);
     }
   }
 
-  console.log('[备份] 完成');
+  log('[备份] 完成');
   process.exit(0);
 }
 
@@ -90,6 +95,6 @@ async function nodeDump(filePath) {
 }
 
 backup().catch((err) => {
-  console.error('[备份] 失败:', err.message);
+  log('[备份] 失败:' + err.message);
   process.exit(1);
 });
