@@ -211,10 +211,10 @@ async function runMigration() {
       ['threads', '3'],
       ['pool2_size', '3'],
       ['max_upload_limit', '99'],
-      ['downloader', 'ffmpeg'],
       ['max_resume_retries', '3'],
       ['auto_transcode', 'true'],
       ['transcode_delete_originals', 'true'],
+      ['transcode_concurrency', '3'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

@@ -198,9 +198,13 @@ class UploadService {
 
       let tmpl = null;
 
-      const roomResult = await pool.query('SELECT upload_template_id FROM rooms WHERE room_url = $1', [session.room_url]);
+      const roomResult = await pool.query('SELECT upload_template_id FROM rooms WHERE room_url = $1', [
+        session.room_url,
+      ]);
       if (roomResult.rows.length > 0 && roomResult.rows[0].upload_template_id) {
-        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [roomResult.rows[0].upload_template_id]);
+        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [
+          roomResult.rows[0].upload_template_id,
+        ]);
         if (tmplResult.rows.length > 0) {
           tmpl = tmplResult.rows[0];
         }

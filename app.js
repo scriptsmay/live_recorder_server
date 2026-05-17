@@ -32,6 +32,7 @@ const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const watchdog = require('./lib/core/watchdog');
 const RecorderService = require('./services/RecorderService');
+const transcodeQueue = require('./lib/core/TranscodeQueue');
 
 // ──────────────────────────────────────────────
 // 2. Express 配置
@@ -82,6 +83,7 @@ async function init() {
   }
 
   await RecorderService.cleanupStaleRecordings();
+  await transcodeQueue.init();
   watchdog.start();
 
   app.listen(port, () => {

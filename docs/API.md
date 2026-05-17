@@ -35,15 +35,15 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 
 **请求体：**
 
-| 参数              | 类型    | 必填 | 说明                                                        |
-| ----------------- | ------- | ---- | ----------------------------------------------------------- |
-| room_url          | string  | 是   | 直播间地址（唯一标识）                                      |
-| room_name         | string  | 否   | 直播间名称                                                  |
-| filename_template | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                   |
-| segment_duration  | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件 |
-| notification_enabled | boolean | 否 | 是否启用通知，默认 true |
-| monitoring_enabled | boolean | 否 | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载）|
-| upload_template_id | integer | 否   | 关联的投稿模板 ID，不设置则使用全局第一个模板 |
+| 参数                 | 类型    | 必填 | 说明                                                            |
+| -------------------- | ------- | ---- | --------------------------------------------------------------- |
+| room_url             | string  | 是   | 直播间地址（唯一标识）                                          |
+| room_name            | string  | 否   | 直播间名称                                                      |
+| filename_template    | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                       |
+| segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件     |
+| notification_enabled | boolean | 否   | 是否启用通知，默认 true                                         |
+| monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载） |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID，不设置则使用全局第一个模板                   |
 
 **示例：**
 
@@ -67,14 +67,14 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 **请求体：**
 
-| 参数              | 类型    | 必填 | 说明               |
-| ----------------- | ------- | ---- | ------------------ |
-| room_name         | string  | 否   | 直播间名称         |
-| filename_template | string  | 否   | 文件名模板         |
-| segment_duration  | integer | 否   | 分段录制时长（秒） |
-| notification_enabled | boolean | 否 | 是否启用通知       |
-| monitoring_enabled | boolean | 否 | 是否启用监听       |
-| upload_template_id | integer | 否   | 关联的投稿模板 ID |
+| 参数                 | 类型    | 必填 | 说明               |
+| -------------------- | ------- | ---- | ------------------ |
+| room_name            | string  | 否   | 直播间名称         |
+| filename_template    | string  | 否   | 文件名模板         |
+| segment_duration     | integer | 否   | 分段录制时长（秒） |
+| notification_enabled | boolean | 否   | 是否启用通知       |
+| monitoring_enabled   | boolean | 否   | 是否启用监听       |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID  |
 
 ---
 
@@ -337,22 +337,22 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 
 ### 全局设置项说明
 
-| 键                          | 类型   | 默认值 | 说明                                                         |
-| --------------------------- | ------ | ------ | ------------------------------------------------------------ |
-| `downloader`                | string | `ffmpeg` | 下载插件：`ffmpeg` 或 `stream-gears`                        |
-| `pool_size`                 | number | `3`    | 下载线程池大小，限制最大同时录制数                            |
-| `watchdog_interval`         | number | `30`   | 看门狗检查间隔（秒）                                         |
-| `watchdog_timeout`          | number | `60`   | 录制状态检查超时（秒），超过此时长无活动则标记为完成         |
-| `filtering_threshold`       | number | `10`   | 碎片过滤（MB），小于此大小的视频文件将被过滤删除             |
-| `delay`                     | number | `60`   | 下播延迟检测（秒），检测到主播下播后延迟确认时间             |
-| `max_resume_retries`        | number | `3`    | 会话恢复重试次数，服务器启动时自动恢复录制会话的最大重试次数 |
-| `auto_transcode`            | string | `true` | 自动转码，录制完成后自动将 FLV 转换为 MP4                    |
-| `transcode_delete_originals`| string | `false`| 转码后删除原始文件，转码成功后自动删除 FLV 原始文件           |
-| `submit_api`                | string | -      | 外部投稿 API 地址                                            |
-| `lines`                     | string | `1`    | 上传线路                                                    |
-| `threads`                   | string | `8`    | 上传线程数                                                  |
-| `pool2_size`                | string | `1`    | 上传线程池大小                                              |
-| `max_upload_limit`          | number | `3`    | 单会话最大投稿次数（24小时）                                 |
+| 键                           | 类型   | 默认值   | 说明                                                         |
+| ---------------------------- | ------ | -------- | ------------------------------------------------------------ |
+| `downloader`                 | string | `ffmpeg` | 下载插件：`ffmpeg` 或 `stream-gears`                         |
+| `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                           |
+| `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                         |
+| `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成         |
+| `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除             |
+| `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间             |
+| `max_resume_retries`         | number | `3`      | 会话恢复重试次数，服务器启动时自动恢复录制会话的最大重试次数 |
+| `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                    |
+| `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件          |
+| `submit_api`                 | string | -        | 外部投稿 API 地址                                            |
+| `lines`                      | string | `1`      | 上传线路                                                     |
+| `threads`                    | string | `8`      | 上传线程数                                                   |
+| `pool2_size`                 | string | `1`      | 上传线程池大小                                               |
+| `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                                 |
 
 ---
 
@@ -396,17 +396,17 @@ curl http://127.0.0.1:1123/api/upload_templates
 
 **请求体：**
 
-| 参数            | 类型   | 必填 | 说明                     |
-| --------------- | ------ | ---- | ------------------------ |
-| name            | string | 是   | 模板名称                  |
-| title_template  | string | 否   | 标题模板，默认 `{room_name} 直播录像 {date}` |
-| desc_template   | string | 否   | 描述模板                  |
-| tid             | string | 否   | 分区 ID                  |
-| cookies_path    | string | 否   | Cookies 文件路径          |
-| priority        | number | 否   | 优先级，数字越小越优先     |
-| source_delete   | number | 否   | 投稿后删除源文件，0=不删除 1=删除 |
-| after_upload    | string | 否   | 投稿后操作：`none`=无操作 `backup`=备份到NAS `delete`=删除 |
-| backup_path     | string | 否   | 备份目标路径（after_upload=backup 时必填） |
+| 参数           | 类型   | 必填 | 说明                                                       |
+| -------------- | ------ | ---- | ---------------------------------------------------------- |
+| name           | string | 是   | 模板名称                                                   |
+| title_template | string | 否   | 标题模板，默认 `{room_name} 直播录像 {date}`               |
+| desc_template  | string | 否   | 描述模板                                                   |
+| tid            | string | 否   | 分区 ID                                                    |
+| cookies_path   | string | 否   | Cookies 文件路径                                           |
+| priority       | number | 否   | 优先级，数字越小越优先                                     |
+| source_delete  | number | 否   | 投稿后删除源文件，0=不删除 1=删除                          |
+| after_upload   | string | 否   | 投稿后操作：`none`=无操作 `backup`=备份到NAS `delete`=删除 |
+| backup_path    | string | 否   | 备份目标路径（after_upload=backup 时必填）                 |
 
 **示例：**
 
@@ -438,8 +438,8 @@ curl -X POST http://127.0.0.1:1123/api/upload_templates \
 
 **请求体：**
 
-| 参数        | 类型    | 必填 | 说明             |
-| ----------- | ------- | ---- | ---------------- |
+| 参数        | 类型    | 必填 | 说明                        |
+| ----------- | ------- | ---- | --------------------------- |
 | template_id | integer | 否   | 投稿模板 ID，不传则自动选择 |
 
 **示例：**
@@ -469,20 +469,20 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数       | 类型    | 必填 | 说明                       |
-| ---------- | ------- | ---- | -------------------------- |
-| session_id | integer | 否   | 按会话 ID 筛选             |
+| 参数       | 类型    | 必填 | 说明                                           |
+| ---------- | ------- | ---- | ---------------------------------------------- |
+| session_id | integer | 否   | 按会话 ID 筛选                                 |
 | status     | string  | 否   | 按状态筛选：`uploading` / `success` / `failed` |
 
 **返回字段说明：**
 
-| 字段        | 类型    | 说明                                   |
-| ----------- | ------- | -------------------------------------- |
-| upload_files | string  | JSON 数组，投稿时的文件路径列表         |
-| file_count  | number  | 文件数量                                |
-| total_size  | number  | 总大小（字节）                          |
-| bv_id       | string  | B站视频 BV 号                          |
-| output      | string  | 投稿输出信息                            |
+| 字段         | 类型   | 说明                            |
+| ------------ | ------ | ------------------------------- |
+| upload_files | string | JSON 数组，投稿时的文件路径列表 |
+| file_count   | number | 文件数量                        |
+| total_size   | number | 总大小（字节）                  |
+| bv_id        | string | B站视频 BV 号                   |
+| output       | string | 投稿输出信息                    |
 
 ---
 

@@ -20,10 +20,10 @@ class RoomService {
       }
       return room;
     }
-    const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name) VALUES ($1, $2) RETURNING *`,
-      [roomUrl, roomName || '']
-    );
+    const result = await pool.query(`INSERT INTO rooms (room_url, room_name) VALUES ($1, $2) RETURNING *`, [
+      roomUrl,
+      roomName || '',
+    ]);
     return result.rows[0];
   }
 
@@ -51,7 +51,9 @@ class RoomService {
       }
     }
 
-    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [room.id]);
+    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+      room.id,
+    ]);
     return { success: false, message: 'PID 不存在，状态已重置' };
   }
 
@@ -75,7 +77,9 @@ class RoomService {
       }
     }
 
-    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [room.id]);
+    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+      room.id,
+    ]);
     return { success: false, message: 'PID 不存在，状态已重置' };
   }
 
@@ -97,10 +101,9 @@ class RoomService {
       }
     }
 
-    await pool.query(
-      `UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`,
-      [room.id]
-    );
+    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+      room.id,
+    ]);
     await redis.del(`active_task:room:${roomUrl}`).catch(() => {});
 
     if (force && room.output_path) {

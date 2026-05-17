@@ -3,28 +3,26 @@
 ## 整体流程
 
 ```
-[Chrome 扩展]                   [Server API]                 [Downloader]              [Post-processing]
-     │                               │                            │                         │
-     │  POST /notify/live_download   │     spawn pipe stderr      │                         │
-     │──────────────────────────────>│───────────────────────────>│                         │
-     │                               │   stderr tee ──→ log       │    持续写入 .part        │
-     │                               │                            │<────────────────────────│
-     │                               │                            │                         │
-     │                               │   ─── 看门狗 (每 30s) ─── │                         │
-     │                               │   ① mtime 僵死检查         │                         │
-     │                               │   ② 同步 fs 扫描分片       │                         │
-     │                               │   ③ 碎片文件清理           │                         │
-     │                               │                            │                         │
-     │                               │   进程退出 (stop/崩溃/断流)│                         │
-     │                               │<───────────────────────────│                         │
-     │                               │   close handler            │                         │
-     │                               │   (exitCode 安全兜底)      │                         │
-     │                               │                            │                         │
-     │                               │   若 stream-gears 报错      │                         │
-     │                               │   自动回退到 ffmpeg (同会话)│                         │
-     │                               │                            │                         │
-     │                               │   findAndAutoUpload()       ───────────────────────>│
-     │                               │                            │                         │  biliup upload
+[Chrome 扩展]                   [Server API]                 [FFmpeg]                [Transcode Queue]      [Upload]
+     │                               │                            │                         │                    │
+     │  POST /notify/live_download   │     spawn pipe stderr      │                         │                    │
+     │──────────────────────────────>│───────────────────────────>│                         │                    │
+     │                               │   stderr tee ──→ log       │    持续写入 .part        │                    │
+     │                               │                            │<────────────────────────│                    │
+     │                               │                            │                         │                    │
+     │                               │   ─── 看门狗 (每 30s) ─── │                         │                    │
+     │                               │   ① mtime 僵死检查         │                         │                    │
+     │                               │   ② 同步 fs 扫描分片       │                         │                    │
+     │                               │   ③ 碎片文件清理           │                         │                    │
+     │                               │                            │                         │                    │
+     │                               │   进程退出 (stop/崩溃/断流)│                         │                    │
+     │                               │<───────────────────────────│                         │                    │
+     │                               │   close handler            │                         │                    │
+     │                               │   (exitCode 安全兜底)      │                         │                    │
+     │                               │                            │                         │                    │
+     │                               │   FLV分片入队 ─────────────────────────────────────>│                    │
+     │                               │   findAndAutoUpload()       ─────────────────────────────────────────────>│
+     │                               │                            │   异步转码 (并发3)      │   biliup upload    │
 ```
 
 ## 一、会话生命周期
@@ -75,12 +73,12 @@
 ### 文件名生成
 
 ```
-非分段: {room_name}_{datetime}.{ext}
-分段:   {room_name}_%Y%m%d_%H%M%S.{ext}
+非分段: {room_name}_{datetime}.flv
+分段:   {room_name}_%Y%m%d_%H%M%S.flv
 ```
 
-- `ext` 由下载引擎决定：ffmpeg → `.mp4`，stream-gears → `.flv`
-- stream-gears 内部固定追加 `.flv`，buildArgs 中已去掉 outputPath 的扩展名
+- 录制输出固定为 FLV 格式(经 ffmpeg 录制)
+- 转码后输出 MP4 格式(通过 TranscodeQueue 异步处理)
 - 续播时（非分段 + delay 内）复用上一次的 outputFilePattern
 
 ### recording_files 表状态流转
@@ -101,10 +99,10 @@
 ### 分片追踪时序
 
 ```
-stream-gears 写入 .part
+FFmpeg 写入分段文件(.flv)
         │
-        │  分段边界 → FlvFile::Drop
-        │  .part → .flv (rename)
+        │  分段边界(segment)
+        │  直接输出 .flv
         │
         ▼
   [1] scanActiveSegments (看门狗 30s 周期)
@@ -116,10 +114,17 @@ stream-gears 写入 .part
       → 扫描目录
       → 跳过已在 recording_files 中的文件
       → 处理剩余未追踪文件
+      → FLV文件逐个入队 TranscodeQueue
       → 更新 session 状态
+
+  [3] TranscodeQueue (异步转码)
+      → 从 Redis 队列取出任务(并发3)
+      → ffmpeg -i input.flv -c copy output.mp4
+      → 更新 recording_files 和 recordings 表路径
+      → 删除原 FLV 文件(如果配置了 transcode_delete_originals=true)
 ```
 
-**注意**：stream-gears 的 FlvFile::Drop 在收到 SIGTERM 时可能不执行，导致 `.part` 不重命名。rooms.js stop 处理和启动清理包含 `.part → .flv` 的兜底重命名。
+**注意**：FFmpeg 在收到 SIGTERM 时会正常关闭分段文件。rooms.js stop 处理和启动清理包含 `.part` 文件的兜底重命名。
 
 ### 文件扫描 (scanRecordingFiles)
 
@@ -133,49 +138,72 @@ stream-gears 写入 .part
 
 ## 三、下载引擎
 
-### 工厂模式
-
-```
-DownloaderFactory.getActiveDownloader()
-    │
-    ├─ settings.downloader = 'ffmpeg'       → FFmpegDownloader (默认)
-    └─ settings.downloader = 'stream-gears'  → 探测可用性
-         ├─ pip install stream-gears 已安装  → StreamGearsDownloader
-         └─ 未安装 → fallback 到 ffmpeg
-```
-
-### FFmpegDownloader
+### FFmpegDownloader (唯一引擎)
 
 - spawn `ffmpeg` 子进程，`stdio: ['ignore', 'ignore', 'pipe']`, `detached: false`
 - 参数：`-c copy -fflags +genpts -reconnect ...`
 - 分段模式：`-f segment -segment_time N`
-- 扩展名：`.mp4`
+- 扩展名：`.flv` (录制输出) → `.mp4` (转码后)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
 
-### StreamGearsDownloader
+---
 
-- spawn `python3 stream_gears_wrapper.py` 子进程，`stdio: ['ignore', 'pipe', 'pipe']`, `detached: false`
-- Python 脚本调用 Rust 库 `stream_gears.download()`
-- 内部处理 FLV tag 修复、断线重试（指数退避 1s/2s/4s）
-- 分段模式：`PySegment.time(seconds)`
-- 扩展名：`.flv`
-- 写入策略：`{file_name}.flv.part` → Drop 时 rename → `{file_name}.flv`
-- **注意**：SIGTERM 时 Rust Drop 可能不执行，需兜底重命名
-- stdout/stderr pipe → 上层 tee 到日志文件
+## 四、流式转码架构
 
-### 自动回退机制
+### TranscodeQueue (`lib/core/TranscodeQueue.js`)
 
-当 stream-gears 退出码 ≠ 0 且未重试过时，`finishSession` 不会中断会话，而是自动启动 ffmpeg 接替录制：
+**设计理念**: 将集中式转码改为异步队列处理,分散CPU压力,提升用户体验。
 
-- 复用同一 session_id、output_path、日志流
-- 更新房间 ffmpeg_pid 和 Redis active_task
-- `fallbackAttempted` 标志防止无限回退
-- 用户和 Chrome 扩展无感知
+**工作流程**:
+
+```
+录制结束 → FLV分片文件入队(Redis LPUSH) → TranscodeQueue.processQueue()
+                                              │
+                                              ├─ 检查并发数(transcode_concurrency)
+                                              ├─ 从队列取出任务(Redis RPOP)
+                                              ├─ ffmpeg -i input.flv -c copy output.mp4
+                                              ├─ 更新DB路径(recording_files + recordings)
+                                              └─ 删除原FLV文件(如果配置了)
+```
+
+**关键特性**:
+
+- **Redis队列**: 使用 `transcode_queue` List存储任务,支持服务重启后恢复
+- **并发控制**: 通过 `transcode_concurrency` 设置(默认3),使用Redis计数器 `transcode_processing_count` 跟踪
+- **异步处理**: 在主进程内非阻塞执行,不阻塞录制和API响应
+- **实时入队**: 分段文件记录到数据库后立即入队,无需等待录制结束
+- **错误容忍**: 单个分片转码失败不影响其他分片
+
+**配置项**:
+
+| 设置项                       | 默认值 | 说明                 |
+| ---------------------------- | ------ | -------------------- |
+| `transcode_concurrency`      | `3`    | 转码并发数           |
+| `transcode_delete_originals` | `true` | 转码后是否删除原文件 |
+
+**监控API** (可选扩展):
+
+```javascript
+// 获取队列长度
+await transcodeQueue.getQueueLength();
+
+// 获取当前处理中任务数
+await transcodeQueue.getCurrentProcessingCount();
+```
+
+**收益对比**:
+
+| 指标          | 旧方案(集中转码)      | 新方案(流式转码)    |
+| ------------- | --------------------- | ------------------- |
+| 4小时直播转码 | 8-20分钟(集中处理)    | 分散处理,几乎无等待 |
+| CPU峰值       | 高(一次性转码240分片) | 低(并发3,持续处理)  |
+| 用户体验      | 录制结束后需等待      | 立即可操作部分文件  |
+| 失败影响      | 一个失败整体失败      | 单个失败不影响其他  |
 
 ---
 
-## 四、看门狗 (`lib/watchdog.js`)
+## 五、看门狗 (`lib/watchdog.js`)
 
 看门狗是独立模块，单实例运行。职责边界如下：
 
@@ -220,9 +248,10 @@ watchdog.start()
 ```
 startup()
   ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
-  ├─ cleanupStaleRecordings()       ← 重命名 .part + 追踪遗留文件 + 恢复会话
-  ├─ cleanupStaleRedis()            ← 清理 Redis 过期 key
-  └─ watchdog.runFileScan()         ← 同步 fs 扫描下载目录
+  ├─ cleanupStaleRedis()            ← 清理 Redis 过期 active_task
+  ├─ cleanupStaleRecordings()       ← 重命名 .part、恢复会话
+  ├─ transcodeQueue.init()          ← 初始化转码队列(加载并发配置)
+  └─ watchdog.start()               ← 启动看门狗
 ```
 
 ### checkStaleRecordings()

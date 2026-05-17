@@ -6,6 +6,7 @@ const redis = require('../db/redis');
 const { createProcLog } = require('../lib/utils/proc-log');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcoder = require('../lib/core/transcoder');
+const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { findAndAutoUpload } = require('./UploadService');
 const notify = require('../lib/core/notify');
 
@@ -190,13 +191,8 @@ class RecorderService {
     let outputFilePattern;
 
     if (useSegment) {
-      if (downloader.name === 'ffmpeg') {
-        const strftimeName = this.templateToStrftime(template, roomName || title, ext);
-        outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
-      } else {
-        const baseName = this.generateFilename(template, roomName || title, '');
-        outputFilePattern = path.join(DOWNLOAD_DIR, baseName + ext);
-      }
+      const strftimeName = this.templateToStrftime(template, roomName || title, ext);
+      outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
     } else {
       const filename = this.generateFilename(template, roomName || title, ext);
       outputFilePattern = path.join(DOWNLOAD_DIR, filename);
@@ -294,6 +290,18 @@ class RecorderService {
             [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
           );
           newFileCount++;
+
+          // 实时入队转码
+          if (filePath.endsWith('.flv')) {
+            const mp4Path = filePath.replace(/\.flv$/i, '.mp4');
+            transcodeQueue
+              .enqueue({
+                flvPath: filePath,
+                mp4Path: mp4Path,
+                sessionId: sessionId,
+              })
+              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          }
         }
 
         if (sessionId) {
@@ -319,8 +327,7 @@ class RecorderService {
         }
         console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
-        if (engine.name === 'ffmpeg' && segmentFiles.length > 0) {
-          await this.batchTranscodeSegmentFiles(segmentFiles, sessionId);
+        if (segmentFiles.length > 0) {
           const completedSession = {
             id: sessionId,
             room_url: room.room_url,
@@ -385,34 +392,41 @@ class RecorderService {
             );
           }
           await pool.query(
-              `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+            `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
                WHERE session_id = $2 AND file_path = $3`,
-              [fileSize, sessionId, outputFilePattern]
-            );
-          }
-
-          if (engine.name === 'ffmpeg' && /\.flv$/i.test(outputFilePattern)) {
-            await this.fastTranscodeSingleFile(outputFilePattern, sessionId);
-            const completedSession = {
-              id: sessionId,
-              room_url: room.room_url,
-              room_name: room.room_name,
-              started_at: sessionStart,
-            };
-            findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
-          }
+            [fileSize, sessionId, outputFilePattern]
+          );
         }
 
-        if (sessionId) {
-          try {
-            const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
-              sessionId,
-            ]);
-            const segs = sess.rows[0]?.total_segments || 0;
-            const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
-            notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
-          } catch (_) {}
+        if (/\.flv$/i.test(outputFilePattern)) {
+          const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
+          transcodeQueue
+            .enqueue({
+              flvPath: outputFilePattern,
+              mp4Path: mp4Path,
+              sessionId: sessionId,
+            })
+            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          const completedSession = {
+            id: sessionId,
+            room_url: room.room_url,
+            room_name: room.room_name,
+            started_at: sessionStart,
+          };
+          findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
         }
+      }
+
+      if (sessionId) {
+        try {
+          const sess = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
+            sessionId,
+          ]);
+          const segs = sess.rows[0]?.total_segments || 0;
+          const mb = ((sess.rows[0]?.total_size || 0) / 1024 / 1024).toFixed(1);
+          notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url);
+        } catch (_) {}
+      }
     } catch (dbErr) {
       console.error('[api] 录制结束数据库更新失败:', dbErr);
     }
@@ -438,10 +452,11 @@ class RecorderService {
               `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`,
               [mp4Path, path.basename(mp4Path), result.outputSize, flvPath]
             );
-            await pool.query(
-              `UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`,
-              [mp4Path, result.outputSize, flvPath]
-            );
+            await pool.query(`UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`, [
+              mp4Path,
+              result.outputSize,
+              flvPath,
+            ]);
             if (shouldDelete) {
               try {
                 fs.unlinkSync(flvPath);
@@ -476,10 +491,11 @@ class RecorderService {
             `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`,
             [outputMp4, path.basename(outputMp4), result.outputSize, flvPath]
           );
-          await pool.query(
-            `UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`,
-            [outputMp4, result.outputSize, flvPath]
-          );
+          await pool.query(`UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`, [
+            outputMp4,
+            result.outputSize,
+            flvPath,
+          ]);
           if (shouldDelete) {
             try {
               fs.unlinkSync(flvPath);
@@ -507,7 +523,12 @@ class RecorderService {
       return { error: true, status: 400, code: 400, message: '请提供直播流URL和标题。' };
     }
     if (!DOWNLOAD_DIR) {
-      return { error: true, status: 200, code: 500, message: '请设置 VIDEO_DOWNLOAD_DIR 环境变量，并确保该目录已存在。' };
+      return {
+        error: true,
+        status: 200,
+        code: 500,
+        message: '请设置 VIDEO_DOWNLOAD_DIR 环境变量，并确保该目录已存在。',
+      };
     }
     if (!fs.existsSync(DOWNLOAD_DIR)) {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
@@ -524,7 +545,13 @@ class RecorderService {
     const activeTasksCount = await this.getActiveTasksCount();
 
     if (activeTasksCount >= poolSize) {
-      return { error: true, status: 200, code: 429, status_str: 'Pool full', message: `下载线程池已满 (${activeTasksCount}/${poolSize})，请等待其他录制完成` };
+      return {
+        error: true,
+        status: 200,
+        code: 429,
+        status_str: 'Pool full',
+        message: `下载线程池已满 (${activeTasksCount}/${poolSize})，请等待其他录制完成`,
+      };
     }
 
     let room;
@@ -537,12 +564,24 @@ class RecorderService {
 
     if (room.monitoring_enabled === false) {
       console.log('[api] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
-      return { error: true, status: 200, code: 400, status_str: 'Monitoring paused', message: `直播间 ${room.room_name || room.room_url} 已暂停监听` };
+      return {
+        error: true,
+        status: 200,
+        code: 400,
+        status_str: 'Monitoring paused',
+        message: `直播间 ${room.room_name || room.room_url} 已暂停监听`,
+      };
     }
 
     if (room.status === 'recording' || room.status === 'paused') {
       console.log('[api] 录制请求被拒: 房间状态=' + room.status + ' (room=' + room.id + ')');
-      return { error: true, status: 200, code: 400, status_str: 'Already recording', message: `直播间 ${room.room_name || room.room_url} 已在录制中` };
+      return {
+        error: true,
+        status: 200,
+        code: 400,
+        status_str: 'Already recording',
+        message: `直播间 ${room.room_name || room.room_url} 已在录制中`,
+      };
     }
 
     await pool.query(
@@ -577,7 +616,10 @@ class RecorderService {
 
     let segmentListPath;
     if (useSegment) {
-      segmentListPath = path.join(DOWNLOAD_DIR, `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
+      segmentListPath = path.join(
+        DOWNLOAD_DIR,
+        `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
+      );
     }
 
     const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
@@ -672,45 +714,8 @@ class RecorderService {
       downloader: downloader.name,
     });
 
-    let fallbackAttempted = false;
-
     const finishSessionWrapper = async (code, engine) => {
       if (!engine) engine = downloader;
-      if (code !== 0 && engine.name === 'stream-gears' && !fallbackAttempted) {
-        fallbackAttempted = true;
-        console.log(`[api] stream-gears 退出 (code=${code}), 回退到 ffmpeg`);
-
-        const FFmpegDownloader = require('../lib/core/downloaders/FFmpegDownloader');
-        const fallbackDl = new FFmpegDownloader();
-        const fallbackArgs = fallbackDl.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
-        const fallbackProc = fallbackDl.spawn(fallbackArgs);
-
-        if (fallbackProc.stderr) {
-          fallbackProc.stderr.on('data', (chunk) => logStream.write(chunk));
-        }
-        if (fallbackProc.stdout) {
-          fallbackProc.stdout.on('data', (chunk) => logStream.write(chunk));
-        }
-
-        await pool.query(`UPDATE rooms SET ffmpeg_pid = $1, updated_at = NOW() WHERE id = $2`, [
-          fallbackProc.pid,
-          room.id,
-        ]);
-        await this.setActiveTask(roomKey, {
-          pid: fallbackProc.pid,
-          outputPath: outputFilePattern,
-          roomId: room.id,
-          sessionId,
-          startTime: Date.now(),
-          downloader: 'ffmpeg',
-        });
-
-        fallbackProc.on('close', async (fbCode) => {
-          await finishSessionWrapper(fbCode, fallbackDl);
-        });
-        return;
-      }
-
       await this.finishSession({
         code,
         engine,
@@ -752,13 +757,7 @@ class RecorderService {
   static async tryResumeSession(session) {
     if (!DOWNLOAD_DIR) throw new Error('VIDEO_DOWNLOAD_DIR 未设置');
 
-    let downloader;
-    try {
-      downloader = await getActiveDownloader();
-    } catch (_) {
-      const FFmpegDownloader = require('../lib/core/downloaders/FFmpegDownloader');
-      downloader = new FFmpegDownloader();
-    }
+    const downloader = await getActiveDownloader();
 
     const segmentDuration = session.segment_duration || 0;
     const useSegment = segmentDuration > 0;
@@ -768,13 +767,8 @@ class RecorderService {
 
     let outputPath;
     if (useSegment) {
-      if (downloader.name === 'ffmpeg') {
-        const strftimeName = this.templateToStrftime(template, session.room_name || '', ext);
-        outputPath = path.join(DOWNLOAD_DIR, strftimeName);
-      } else {
-        const baseName = this.generateFilename(template, session.room_name || '', '');
-        outputPath = path.join(DOWNLOAD_DIR, baseName + ext);
-      }
+      const strftimeName = this.templateToStrftime(template, session.room_name || '', ext);
+      outputPath = path.join(DOWNLOAD_DIR, strftimeName);
     } else {
       const base = this.generateFilename(template, session.room_name || '', ext);
       const parsed = path.parse(base);
@@ -861,7 +855,10 @@ class RecorderService {
             );
           }
 
-          await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [status, session.id]);
+          await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [
+            status,
+            session.id,
+          ]);
 
           if (totalSegments > 0) {
             try {
@@ -872,7 +869,16 @@ class RecorderService {
                 .sort();
 
               if (flvFiles.length > 0) {
-                await this.batchTranscodeSegmentFiles(flvFiles, session.id);
+                for (const flvPath of flvFiles) {
+                  const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
+                  transcodeQueue
+                    .enqueue({
+                      flvPath: flvPath,
+                      mp4Path: mp4Path,
+                      sessionId: session.id,
+                    })
+                    .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+                }
               }
             } catch (transcodeErr) {
               console.error('[恢复] 批量转码异常:', transcodeErr.message);
@@ -905,7 +911,14 @@ class RecorderService {
 
           if (/\.flv$/i.test(outputPath)) {
             try {
-              await this.fastTranscodeSingleFile(outputPath, session.id);
+              const mp4Path = outputPath.replace(/\.flv$/i, '.mp4');
+              transcodeQueue
+                .enqueue({
+                  flvPath: outputPath,
+                  mp4Path: mp4Path,
+                  sessionId: session.id,
+                })
+                .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
             } catch (transcodeErr) {
               console.error('[恢复] 快速转码异常:', transcodeErr.message);
             }
@@ -957,7 +970,10 @@ class RecorderService {
       startTime: Date.now(),
     });
 
-    await pool.query(`UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`, [(retryCount || 0) + 1, session.id]);
+    await pool.query(`UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`, [
+      (retryCount || 0) + 1,
+      session.id,
+    ]);
 
     console.log(`[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`);
   }
@@ -996,10 +1012,9 @@ class RecorderService {
         }
 
         console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
-        await pool.query(
-          `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`,
-          [session.id]
-        );
+        await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
+          session.id,
+        ]);
       }
     } catch (err) {
       console.error('[启动清理] 失败:', err);

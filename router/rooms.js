@@ -18,7 +18,10 @@ router.get('/rooms', async (req, res) => {
     sql += ` ORDER BY r.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
     const result = await pool.query(sql, params);
-    const countResult = await pool.query('SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''), params.slice(0, params.length - 2));
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''),
+      params.slice(0, params.length - 2)
+    );
     res.json({ status: 'ok', data: result.rows, total: parseInt(countResult.rows[0].count, 10) });
   } catch (err) {
     console.error('[rooms] 查询失败:', err);
@@ -28,7 +31,15 @@ router.get('/rooms', async (req, res) => {
 
 router.post('/rooms', async (req, res) => {
   try {
-    const { room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id } = req.body;
+    const {
+      room_url,
+      room_name,
+      notification_enabled,
+      monitoring_enabled,
+      segment_duration,
+      filename_template,
+      upload_template_id,
+    } = req.body;
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
@@ -37,8 +48,22 @@ router.post('/rooms', async (req, res) => {
     if (exist.rows.length > 0) {
       const fields = [];
       const values = [];
-      const fieldsList = ['room_name', 'notification_enabled', 'monitoring_enabled', 'segment_duration', 'filename_template', 'upload_template_id'];
-      const reqBody = { room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id };
+      const fieldsList = [
+        'room_name',
+        'notification_enabled',
+        'monitoring_enabled',
+        'segment_duration',
+        'filename_template',
+        'upload_template_id',
+      ];
+      const reqBody = {
+        room_name,
+        notification_enabled,
+        monitoring_enabled,
+        segment_duration,
+        filename_template,
+        upload_template_id,
+      };
       for (const f of fieldsList) {
         if (reqBody[f] !== undefined) {
           fields.push(`${f} = $${values.length + 1}`);
@@ -47,7 +72,10 @@ router.post('/rooms', async (req, res) => {
       }
       if (fields.length > 0) {
         values.push(room_url);
-        await pool.query(`UPDATE rooms SET ${fields.join(', ')}, updated_at = NOW() WHERE room_url = $${values.length}`, values);
+        await pool.query(
+          `UPDATE rooms SET ${fields.join(', ')}, updated_at = NOW() WHERE room_url = $${values.length}`,
+          values
+        );
       }
       return res.json({ status: 'ok', data: exist.rows[0], updated: true });
     }
@@ -55,7 +83,15 @@ router.post('/rooms', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [room_url, room_name || '', notification_enabled !== false, monitoring_enabled !== false, segment_duration || 0, filename_template || '', upload_template_id || null]
+      [
+        room_url,
+        room_name || '',
+        notification_enabled !== false,
+        monitoring_enabled !== false,
+        segment_duration || 0,
+        filename_template || '',
+        upload_template_id || null,
+      ]
     );
     res.json({ status: 'ok', data: result.rows[0], updated: false });
   } catch (err) {
@@ -67,7 +103,10 @@ router.post('/rooms', async (req, res) => {
 router.get('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(`SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`, [id]);
+    const result = await pool.query(
+      `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`,
+      [id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
@@ -81,7 +120,14 @@ router.get('/rooms/:id', async (req, res) => {
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = ['room_name', 'notification_enabled', 'monitoring_enabled', 'segment_duration', 'filename_template', 'upload_template_id'];
+    const fields = [
+      'room_name',
+      'notification_enabled',
+      'monitoring_enabled',
+      'segment_duration',
+      'filename_template',
+      'upload_template_id',
+    ];
     const sets = [];
     const values = [];
     for (const field of fields) {
@@ -209,9 +255,9 @@ router.get('/sessions/:id', async (req, res) => {
     }
     const recordings = await pool.query('SELECT * FROM recordings WHERE session_id = $1 ORDER BY id', [id]);
     // 检查文件是否存在
-    const recordingsWithExists = recordings.rows.map(rec => ({
+    const recordingsWithExists = recordings.rows.map((rec) => ({
       ...rec,
-      file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false
+      file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
     }));
     res.json({ status: 'ok', data: { ...result.rows[0], recordings: recordingsWithExists } });
   } catch (err) {

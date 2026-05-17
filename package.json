@@ -40,8 +40,7 @@
     "express-ejs-layouts": "^2.5.1",
     "morgan": "^1.10.1",
     "pg": "^8.20.0",
-    "redis": "^5.12.1",
-    "winston": "^3.19.0"
+    "redis": "^5.12.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

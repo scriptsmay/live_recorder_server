@@ -218,16 +218,26 @@ router.put('/recording_files/:id/associate', async (req, res) => {
     if (session.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
 
     const fileData = file.rows[0];
-    
-    await pool.query('UPDATE recording_files SET session_id = $1, status = \'completed\' WHERE id = $2', [session_id, id]);
-    
+
+    await pool.query("UPDATE recording_files SET session_id = $1, status = 'completed' WHERE id = $2", [
+      session_id,
+      id,
+    ]);
+
     await pool.query(
       `INSERT INTO recordings (session_id, room_url, file_path, file_size, started_at, ended_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'completed')
        ON CONFLICT (file_path) DO UPDATE SET session_id = $1, status = 'completed'`,
-      [session_id, fileData.room_url || session.rows[0].room_url, fileData.file_path, fileData.file_size, fileData.created_at, fileData.completed_at || new Date()]
+      [
+        session_id,
+        fileData.room_url || session.rows[0].room_url,
+        fileData.file_path,
+        fileData.file_size,
+        fileData.created_at,
+        fileData.completed_at || new Date(),
+      ]
     );
-    
+
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[api] 关联失败:', err);
@@ -265,26 +275,26 @@ const path = require('path');
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     let fileResult = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [id]);
     let filePath = fileResult.rows[0]?.file_path;
-    
+
     if (!filePath) {
       fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
       filePath = fileResult.rows[0]?.file_path;
     }
-    
+
     if (!filePath) {
       return res.status(404).json({ status: 'Error', message: '文件不存在' });
     }
-    
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ status: 'Error', message: '文件已从磁盘删除' });
     }
-    
+
     const stat = fs.statSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    
+
     let contentType = 'application/octet-stream';
     if (ext === '.mp4') contentType = 'video/mp4';
     else if (ext === '.flv') contentType = 'video/x-flv';
@@ -293,21 +303,21 @@ router.get('/recordings/:id/stream', async (req, res) => {
     else if (ext === '.mkv') contentType = 'video/x-matroska';
     else if (ext === '.avi') contentType = 'video/x-msvideo';
     else if (ext === '.mov') contentType = 'video/quicktime';
-    
+
     const range = req.headers.range;
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
-      const chunksize = (end - start) + 1;
-      
+      const chunksize = end - start + 1;
+
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${stat.size}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
         'Content-Type': contentType,
       });
-      
+
       const stream = fs.createReadStream(filePath, { start, end });
       stream.pipe(res);
     } else {
@@ -316,7 +326,7 @@ router.get('/recordings/:id/stream', async (req, res) => {
         'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
       });
-      
+
       const stream = fs.createReadStream(filePath);
       stream.pipe(res);
     }

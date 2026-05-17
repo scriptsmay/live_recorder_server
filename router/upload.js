@@ -60,9 +60,18 @@ router.put('/upload_templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const fields = [
-      'name', 'cookies_path', 'title_template', 'desc_template',
-      'tags', 'source', 'tid', 'copyright', 'is_only_self',
-      'cover', 'dtime', 'after_upload',
+      'name',
+      'cookies_path',
+      'title_template',
+      'desc_template',
+      'tags',
+      'source',
+      'tid',
+      'copyright',
+      'is_only_self',
+      'cover',
+      'dtime',
+      'after_upload',
     ];
     const sets = [];
     const values = [];

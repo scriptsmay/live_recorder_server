@@ -62,10 +62,9 @@ async function cleanup() {
   // 2. 杀死 nodemon 孤儿进程
   console.log('  └─ 杀死 nodemon 孤儿进程...');
   try {
-    const nodemonProcs = execSync(
-      'ps aux | grep "nodemon.*app.js" | grep -v grep | awk \'{print $2}\'',
-      { encoding: 'utf-8' }
-    ).trim();
+    const nodemonProcs = execSync('ps aux | grep "nodemon.*app.js" | grep -v grep | awk \'{print $2}\'', {
+      encoding: 'utf-8',
+    }).trim();
     if (nodemonProcs) {
       const pids = nodemonProcs.split('\n').filter(Boolean);
       for (const pid of pids) {
@@ -84,10 +83,9 @@ async function cleanup() {
   // 3. 杀死 node --watch 孤儿进程（开发环境专用）
   console.log('  └─ 杀死 node --watch 孤儿进程...');
   try {
-    const watchProcs = execSync(
-      'ps aux | grep -E "node.*--watch.*app.js" | grep -v grep | awk \'{print $2}\'',
-      { encoding: 'utf-8' }
-    ).trim();
+    const watchProcs = execSync('ps aux | grep -E "node.*--watch.*app.js" | grep -v grep | awk \'{print $2}\'', {
+      encoding: 'utf-8',
+    }).trim();
     if (watchProcs) {
       const pids = watchProcs.split('\n').filter(Boolean);
       for (const pid of pids) {
@@ -114,7 +112,7 @@ async function cleanup() {
   }
 
   // 等待进程完全退出
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // 5. 验证清理结果
   console.log('\n[2/5] 验证清理结果...');
@@ -137,10 +135,7 @@ async function cleanup() {
 
   // 检查开发环境进程
   try {
-    const procCheck = execSync(
-      'ps aux | grep -E "node.*--watch.*app.js" | grep -v grep',
-      { encoding: 'utf-8' }
-    );
+    const procCheck = execSync('ps aux | grep -E "node.*--watch.*app.js" | grep -v grep', { encoding: 'utf-8' });
     if (procCheck.trim()) {
       console.warn('  ⚠️  仍有开发进程在运行（已尝试清理）');
       hasWarning = true;
@@ -185,9 +180,7 @@ async function cleanup() {
     await d.query('BEGIN');
 
     // 删除孤文件 / 缺失记录
-    const orphaned = await d.query(
-      "DELETE FROM recording_files WHERE status IN ('orphaned', 'missing') RETURNING id"
-    );
+    const orphaned = await d.query("DELETE FROM recording_files WHERE status IN ('orphaned', 'missing') RETURNING id");
     if (orphaned.rowCount > 0) {
       console.log(`  └─ 删除孤文件/缺失记录: ${orphaned.rowCount} 条`);
     } else {
@@ -248,7 +241,7 @@ async function cleanup() {
   console.log('\n[5/5] 追踪遗留文件...');
 
   if (fs.existsSync(DOWNLOAD_DIR)) {
-    const tracked = (await pool.query('SELECT file_path FROM recording_files')).rows.map(r => r.file_path);
+    const tracked = (await pool.query('SELECT file_path FROM recording_files')).rows.map((r) => r.file_path);
     let count = 0;
     for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
       if (!/\.(flv|mp4)$/i.test(f)) continue;
