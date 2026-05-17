@@ -225,6 +225,30 @@ router.put('/recording_files/:id/associate', async (req, res) => {
   }
 });
 
+router.delete('/recording_files/missing', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM recording_files WHERE status = $1', ['missing']);
+    res.json({ status: 'ok', deleted_count: result.rowCount });
+  } catch (err) {
+    console.error('[api] 删除缺失文件失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
+  }
+});
+
+router.delete('/recordings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM recordings WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ status: 'Error', message: '记录不存在' });
+    }
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[api] 删除录制记录失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
+  }
+});
+
 module.exports = {
   router,
 };
