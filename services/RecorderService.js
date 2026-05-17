@@ -7,7 +7,7 @@ const { createProcLog } = require('../lib/utils/proc-log');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcoder = require('../lib/core/transcoder');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
-const { findAndAutoUpload } = require('./UploadService');
+const UploadService = require('./UploadService');
 const notify = require('../lib/core/notify');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -334,7 +334,7 @@ class RecorderService {
             room_name: room.room_name,
             started_at: sessionStart,
           };
-          findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+          UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
         }
       } else {
         let fileSize = 0;
@@ -413,7 +413,7 @@ class RecorderService {
             room_name: room.room_name,
             started_at: sessionStart,
           };
-          findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+          UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
         }
       }
 
@@ -931,7 +931,7 @@ class RecorderService {
           room_name: session.room_name,
           started_at: session.started_at,
         };
-        findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+        UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
       } catch (dbErr) {
         console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
       }
