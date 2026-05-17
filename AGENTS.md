@@ -60,7 +60,7 @@ node scripts/cleanup-dev.js
 - PostgreSQL（`pg` 模块）—— 连接池在 `db/index.js`
 - Redis（`redis` 模块）—— 客户端在 `db/redis.js`
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
-- 无测试套件（test 脚本为占位）
+- **Jest**（v30.4.2）—— 单元测试和 API 集成测试框架
 
 ## 目录结构
 
@@ -99,6 +99,7 @@ node scripts/cleanup-dev.js
 ```
 
 **目录组织原则：**
+
 - `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码）
 - `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染）
 - `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
@@ -111,7 +112,13 @@ node scripts/cleanup-dev.js
   - 排除 `public/`（minified bootstrap）、`node_modules/`、`logs/`、`backups/`
 - **Prettier**：`npm run format` 运行，配置见 `.prettierrc.json`，忽略规则见 `.prettierignore`
   - 单引号、尾逗号 es5、每行 80 字符、2 空格缩进
-- 提交前建议执行 `npm run lint && npm run format`
+- **Jest**（单元测试 & API 覆盖率）：
+  - `npm run test` —— 运行所有测试
+  - `npm run test:watch` —— 监听模式（修改文件自动重新运行）
+  - `npm run test:coverage` —— 生成覆盖率报告（输出到 `coverage/` 目录）
+  - `npm run test:api` —— 运行 API 集成测试（`test/api-coverage.test.js`）
+  - 测试文件位置：`test/*.test.js`
+- 提交前建议执行 `npm run lint && npm run format && npm run test`
 
 ## 数据库
 
