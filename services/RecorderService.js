@@ -334,7 +334,9 @@ class RecorderService {
             room_name: room.room_name,
             started_at: sessionStart,
           };
-          UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+          UploadService.findAndAutoUpload(completedSession).catch((err) =>
+            console.error('[自动投稿] 异常:', err.message)
+          );
         }
       } else {
         let fileSize = 0;
@@ -413,7 +415,9 @@ class RecorderService {
             room_name: room.room_name,
             started_at: sessionStart,
           };
-          UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+          UploadService.findAndAutoUpload(completedSession).catch((err) =>
+            console.error('[自动投稿] 异常:', err.message)
+          );
         }
       }
 
@@ -931,7 +935,9 @@ class RecorderService {
           room_name: session.room_name,
           started_at: session.started_at,
         };
-        UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+        UploadService.findAndAutoUpload(completedSession).catch((err) =>
+          console.error('[自动投稿] 异常:', err.message)
+        );
       } catch (dbErr) {
         console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
       }

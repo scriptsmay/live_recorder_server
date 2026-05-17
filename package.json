@@ -1,6 +1,6 @@
 {
   "name": "live_recorder_server",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "express server",
   "keywords": [
     "express"
@@ -19,9 +19,10 @@
   "main": "index.js",
   "scripts": {
     "start": "pm2 start ecosystem.config.js",
+    "clean-logs": "pm2 flush live_recorder_server",
     "dev": "PORT=3001 NODE_ENV=development node --watch app.js",
     "stop": "pm2 stop live_recorder_server && pm2 delete live_recorder_server",
-    "restart": "pm2 restart live_recorder_server",
+    "restart": "pm2 flush live_recorder_server && pm2 restart live_recorder_server",
     "logs": "pm2 logs live_recorder_server",
     "lint": "eslint .",
     "format": "prettier --write .",

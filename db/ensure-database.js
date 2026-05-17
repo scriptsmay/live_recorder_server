@@ -41,9 +41,7 @@ async function ensureDatabase() {
         return false;
       }
       if (err.code === '42501') {
-        throw new Error(
-          `[DB] 账号无 CREATEDB 权限，请手动执行: CREATE DATABASE "${dbName}";`
-        );
+        throw new Error(`[DB] 账号无 CREATEDB 权限，请手动执行: CREATE DATABASE "${dbName}";`);
       }
     } finally {
       try {
