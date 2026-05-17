@@ -109,7 +109,13 @@ router.post('/sessions/:id/upload', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 template_id' });
     }
 
-    const session = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [id]);
+    const session = await pool.query(
+      `SELECT rs.*, r.room_name 
+       FROM recording_sessions rs 
+       LEFT JOIN rooms r ON rs.room_url = r.room_url 
+       WHERE rs.id = $1`,
+      [id]
+    );
     if (session.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
