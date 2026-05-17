@@ -249,6 +249,73 @@ router.delete('/recordings/:id', async (req, res) => {
   }
 });
 
+const fs = require('fs');
+const path = require('path');
+
+router.get('/recordings/:id/stream', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    let fileResult = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [id]);
+    let filePath = fileResult.rows[0]?.file_path;
+    
+    if (!filePath) {
+      fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+      filePath = fileResult.rows[0]?.file_path;
+    }
+    
+    if (!filePath) {
+      return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    }
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'Error', message: '文件已从磁盘删除' });
+    }
+    
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    
+    let contentType = 'application/octet-stream';
+    if (ext === '.mp4') contentType = 'video/mp4';
+    else if (ext === '.flv') contentType = 'video/x-flv';
+    else if (ext === '.ts' || ext === '.m2ts') contentType = 'video/mp2t';
+    else if (ext === '.webm') contentType = 'video/webm';
+    else if (ext === '.mkv') contentType = 'video/x-matroska';
+    else if (ext === '.avi') contentType = 'video/x-msvideo';
+    else if (ext === '.mov') contentType = 'video/quicktime';
+    
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunksize = (end - start) + 1;
+      
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': contentType,
+      });
+      
+      const stream = fs.createReadStream(filePath, { start, end });
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+      
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+    }
+  } catch (err) {
+    console.error('[api] 流播放失败:', err);
+    res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
 module.exports = {
   router,
 };
