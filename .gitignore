@@ -3,6 +3,7 @@ logs
 user_data
 package-lock.json
 cookies.json
+.qoder
 .env
 .env.local
 .env.dev
