@@ -1,0 +1,195 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>仪表盘</h2>
+  <div>
+    <span class="badge bg-secondary me-2" id="refreshBadge">自动刷新: 5s</span>
+    <button class="btn btn-sm btn-outline-secondary" id="toggleRefreshBtn">暂停刷新</button>
+  </div>
+</div>
+
+<!-- 概览卡片 -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-white bg-primary">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="card-subtitle mb-1">活跃录制</h6>
+            <h3 class="card-title mb-0" id="activeCount">-</h3>
+          </div>
+          <span style="font-size:2rem">&#127909;</span>
+        </div>
+        <small id="poolInfo">线程池 -/-</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-success">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="card-subtitle mb-1">转码处理中</h6>
+            <h3 class="card-title mb-0" id="transcodeProcessing">-</h3>
+          </div>
+          <span style="font-size:2rem">&#9881;</span>
+        </div>
+        <small id="transcodeConcurrency">并发上限 -</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-warning">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="card-subtitle mb-1">转码队列</h6>
+            <h3 class="card-title mb-0" id="transcodeQueue">-</h3>
+          </div>
+          <span style="font-size:2rem">&#128203;</span>
+        </div>
+        <small>等待处理</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-info">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="card-subtitle mb-1">系统状态</h6>
+            <h3 class="card-title mb-0" id="systemStatus">-</h3>
+          </div>
+          <span style="font-size:2rem">&#128200;</span>
+        </div>
+        <small id="systemDetail">-</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 活跃录制列表 -->
+<div class="card mb-4">
+  <div class="card-header">活跃录制进程</div>
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>直播间</th>
+          <th>PID</th>
+          <th>会话ID</th>
+          <th>引擎</th>
+          <th>已录制时长</th>
+        </tr>
+      </thead>
+      <tbody id="activeBody">
+        <tr><td colspan="5" class="text-center text-muted py-3">暂无活跃录制</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 转码队列进度条 -->
+<div class="card mb-4">
+  <div class="card-header">转码队列状态</div>
+  <div class="card-body">
+    <div class="mb-2 d-flex justify-content-between">
+      <span>并发槽位使用</span>
+      <span id="slotText">-/-</span>
+    </div>
+    <div class="progress mb-3" style="height:24px">
+      <div class="progress-bar bg-success" id="slotBar" role="progressbar" style="width:0%">0%</div>
+    </div>
+    <div class="mb-2 d-flex justify-content-between">
+      <span>队列积压</span>
+      <span id="queueText">0</span>
+    </div>
+    <div class="progress" style="height:16px">
+      <div class="progress-bar bg-warning" id="queueBar" role="progressbar" style="width:0%">0</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const REFRESH_INTERVAL = 5000;
+let autoRefresh = true;
+let refreshTimer = null;
+
+function formatDuration(ms) {
+  if (!ms) return '-';
+  const sec = Math.floor((Date.now() - ms) / 1000);
+  if (sec < 60) return sec + '秒';
+  if (sec < 3600) return Math.floor(sec / 60) + '分' + (sec % 60) + '秒';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h + '时' + m + '分';
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard/status');
+    const json = await res.json();
+    if (json.status !== 'ok') return;
+    const d = json.data;
+
+    // 概览卡片
+    document.getElementById('activeCount').textContent = d.active_count;
+    document.getElementById('poolInfo').textContent = '线程池 ' + d.active_count + '/' + d.pool_size;
+    document.getElementById('transcodeProcessing').textContent = d.transcode.processing;
+    document.getElementById('transcodeConcurrency').textContent = '并发上限 ' + d.transcode.concurrency;
+    document.getElementById('transcodeQueue').textContent = d.transcode.queue_length;
+
+    const idle = d.active_count === 0 && d.transcode.processing === 0 && d.transcode.queue_length === 0;
+    document.getElementById('systemStatus').textContent = idle ? '空闲' : '工作中';
+    document.getElementById('systemDetail').textContent = idle ? '所有进程空闲' : '有活跃任务';
+
+    // 活跃录制表格
+    const tbody = document.getElementById('activeBody');
+    if (d.active_recordings.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">暂无活跃录制</td></tr>';
+    } else {
+      tbody.innerHTML = d.active_recordings.map(r =>
+        '<tr>' +
+        '<td>' + (r.room_name || r.room_url) + '</td>' +
+        '<td><code>' + r.pid + '</code></td>' +
+        '<td><a href="/sessions?room_url=' + encodeURIComponent(r.room_url) + '">#' + r.session_id + '</a></td>' +
+        '<td><span class="badge bg-info">' + r.downloader + '</span></td>' +
+        '<td>' + formatDuration(r.started_at) + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    // 转码进度条
+    const tc = d.transcode;
+    const slotPct = tc.concurrency > 0 ? Math.min(100, Math.round(tc.processing / tc.concurrency * 100)) : 0;
+    document.getElementById('slotText').textContent = tc.processing + '/' + tc.concurrency;
+    const slotBar = document.getElementById('slotBar');
+    slotBar.style.width = slotPct + '%';
+    slotBar.textContent = slotPct + '%';
+    slotBar.className = 'progress-bar ' + (slotPct >= 100 ? 'bg-danger' : slotPct > 50 ? 'bg-warning' : 'bg-success');
+
+    const queuePct = Math.min(100, tc.queue_length * 10);
+    document.getElementById('queueText').textContent = tc.queue_length + ' 个任务';
+    const queueBar = document.getElementById('queueBar');
+    queueBar.style.width = queuePct + '%';
+    queueBar.textContent = tc.queue_length;
+  } catch (err) {
+    console.error('仪表盘加载失败:', err);
+  }
+}
+
+document.getElementById('toggleRefreshBtn').addEventListener('click', function () {
+  autoRefresh = !autoRefresh;
+  this.textContent = autoRefresh ? '暂停刷新' : '恢复刷新';
+  document.getElementById('refreshBadge').textContent = autoRefresh ? '自动刷新: 5s' : '已暂停';
+  if (autoRefresh) scheduleRefresh();
+});
+
+function scheduleRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  if (!autoRefresh) return;
+  refreshTimer = setTimeout(() => {
+    loadDashboard().then(scheduleRefresh);
+  }, REFRESH_INTERVAL);
+}
+
+loadDashboard().then(scheduleRefresh);
+</script>

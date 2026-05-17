@@ -3,8 +3,10 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config/config');
 const pool = require('../db/index');
+const redis = require('../db/redis');
 const RecorderService = require('../services/RecorderService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
+const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -177,6 +179,62 @@ router.post('/scan_files', async (req, res) => {
   } catch (err) {
     console.error('[api] 扫描失败:', err);
     res.status(500).json({ status: 'Error', message: '扫描失败' });
+  }
+});
+
+router.get('/dashboard/status', async (req, res) => {
+  try {
+    // 活跃录制进程
+    const activeKeys = await redis.keys('active_task:*');
+    const activeRecordings = [];
+    for (const key of activeKeys) {
+      try {
+        const data = JSON.parse(await redis.get(key));
+        const roomUrl = key.replace('active_task:', '');
+        let roomName = '';
+        try {
+          const r = await pool.query('SELECT room_name FROM rooms WHERE room_url = $1', [roomUrl]);
+          roomName = r.rows[0]?.room_name || '';
+        } catch (_) {}
+        activeRecordings.push({
+          room_url: roomUrl,
+          room_name: roomName,
+          pid: data.pid,
+          session_id: data.sessionId,
+          started_at: data.startTime,
+          downloader: data.downloader || 'ffmpeg',
+        });
+      } catch (_) {}
+    }
+
+    // 转码队列状态
+    const transcodeQueueLength = await transcodeQueue.getQueueLength();
+    const transcodeProcessing = await transcodeQueue.getCurrentProcessingCount();
+    const transcodeConcurrency = transcodeQueue.concurrency;
+
+    // 池容量
+    let poolSize = 3;
+    try {
+      const ps = await pool.query("SELECT value FROM settings WHERE key = 'pool_size'");
+      if (ps.rows.length) poolSize = parseInt(ps.rows[0].value, 10) || 3;
+    } catch (_) {}
+
+    res.json({
+      status: 'ok',
+      data: {
+        active_recordings: activeRecordings,
+        active_count: activeRecordings.length,
+        pool_size: poolSize,
+        transcode: {
+          queue_length: transcodeQueueLength,
+          processing: transcodeProcessing,
+          concurrency: transcodeConcurrency,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[api] 仪表盘状态查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
   }
 });
 

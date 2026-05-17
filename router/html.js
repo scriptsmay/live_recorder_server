@@ -12,7 +12,11 @@ const md = require('../lib/utils/markdown');
 
 // 当访问根路径时，重定向
 router.get('/', (req, res) => {
-  res.redirect('/rooms');
+  res.redirect('/dashboard');
+});
+
+router.get('/dashboard', (req, res) => {
+  res.render('dashboard', { title: '仪表盘' });
 });
 
 router.get('/rooms', (req, res) => {
