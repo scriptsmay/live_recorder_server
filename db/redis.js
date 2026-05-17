@@ -1,4 +1,4 @@
-const redisService = require('../lib/redis-service');
+const redisService = require('../lib/utils/redis-service');
 
 const client = {
   connect: () => redisService.connect(),

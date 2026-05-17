@@ -1,77 +1,69 @@
 const express = require('express');
-const path = require('path');
 const router = express.Router();
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const RoomService = require('../services/RoomService');
 
-async function delRoomCache(roomUrl) {
-  try {
-    if (roomUrl) await redis.del(`room:${roomUrl}`);
-  } catch (_) {}
-}
-
-async function renderRoomsHtml(res) {
-  const result = await pool.query('SELECT * FROM rooms ORDER BY id DESC');
-  res.render('partials/_rooms_table', { rooms: result.rows, layout: false });
-}
-
-// GET /api/rooms — 直播间列表
 router.get('/rooms', async (req, res) => {
   try {
-    const { status } = req.query;
-    let query = 'SELECT * FROM rooms ORDER BY id DESC';
+    const { status, page = 1, limit = 50 } = req.query;
+    const conditions = [];
     const params = [];
     if (status) {
-      query = 'SELECT * FROM rooms WHERE status = $1 ORDER BY id DESC';
+      conditions.push(`status = $${params.length + 1}`);
       params.push(status);
     }
-    const result = await pool.query(query, params);
-    res.json({ status: 'ok', data: result.rows });
+    let sql = 'SELECT * FROM rooms';
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ` ORDER BY updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
+    const result = await pool.query(sql, params);
+    const countResult = await pool.query('SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''), params.slice(0, params.length - 2));
+    res.json({ status: 'ok', data: result.rows, total: parseInt(countResult.rows[0].count, 10) });
   } catch (err) {
     console.error('[rooms] 查询失败:', err);
-    res.status(500).json({ status: 'Error', message: '数据库查询失败' });
+    res.status(500).json({ status: 'Error', message: '查询失败' });
   }
 });
 
-// POST /api/rooms — 新增直播间
 router.post('/rooms', async (req, res) => {
   try {
-    const { room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } =
-      req.body;
+    const { room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id } = req.body;
     if (!room_url) {
-      return res.status(400).json({ status: 'Error', message: 'room_url 必填' });
+      return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
+
+    const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
+    if (exist.rows.length > 0) {
+      const fields = [];
+      const values = [];
+      const fieldsList = ['room_name', 'notification_enabled', 'monitoring_enabled', 'segment_duration', 'filename_template', 'upload_template_id'];
+      const reqBody = { room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id };
+      for (const f of fieldsList) {
+        if (reqBody[f] !== undefined) {
+          fields.push(`${f} = $${values.length + 1}`);
+          values.push(reqBody[f]);
+        }
+      }
+      if (fields.length > 0) {
+        values.push(room_url);
+        await pool.query(`UPDATE rooms SET ${fields.join(', ')}, updated_at = NOW() WHERE room_url = $${values.length}`, values);
+      }
+      return res.json({ status: 'ok', data: exist.rows[0], updated: true });
+    }
+
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (room_url) DO UPDATE SET
-         room_name = COALESCE($2, rooms.room_name),
-         filename_template = COALESCE($3, rooms.filename_template),
-         segment_duration = COALESCE($4, rooms.segment_duration),
-         notification_enabled = COALESCE($5, rooms.notification_enabled),
-         monitoring_enabled = COALESCE($6, rooms.monitoring_enabled),
-         updated_at = NOW()
-       RETURNING *`,
-      [
-        room_url,
-        room_name || '',
-        filename_template || null,
-        segment_duration ?? null,
-        notification_enabled !== undefined ? notification_enabled : true,
-        monitoring_enabled !== undefined ? monitoring_enabled : true,
-      ]
+      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [room_url, room_name || '', notification_enabled !== false, monitoring_enabled !== false, segment_duration || 0, filename_template || '', upload_template_id || null]
     );
-    await delRoomCache(result.rows[0].room_url);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
-    res.status(201).json({ status: 'ok', data: result.rows[0] });
+    res.json({ status: 'ok', data: result.rows[0], updated: false });
   } catch (err) {
     console.error('[rooms] 创建失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('创建失败');
     res.status(500).json({ status: 'Error', message: '创建失败' });
   }
 });
 
-// GET /api/rooms/:id — 直播间详情
 router.get('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -86,66 +78,51 @@ router.get('/rooms/:id', async (req, res) => {
   }
 });
 
-// PUT /api/rooms/:id — 更新直播间
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { room_name, filename_template, segment_duration, notification_enabled, monitoring_enabled } = req.body;
+    const fields = ['room_name', 'notification_enabled', 'monitoring_enabled', 'segment_duration', 'filename_template', 'upload_template_id'];
+    const sets = [];
+    const values = [];
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        sets.push(`${field} = $${values.length + 1}`);
+        values.push(req.body[field]);
+      }
+    }
+    if (sets.length === 0) {
+      return res.status(400).json({ status: 'Error', message: '无更新字段' });
+    }
+    values.push(id);
     const result = await pool.query(
-      `UPDATE rooms
-       SET room_name = COALESCE($1, room_name),
-           filename_template = COALESCE($2, filename_template),
-           segment_duration = COALESCE($3, segment_duration, 0),
-           notification_enabled = COALESCE($4, rooms.notification_enabled),
-           monitoring_enabled = COALESCE($5, rooms.monitoring_enabled),
-           updated_at = NOW()
-       WHERE id = $6
-       RETURNING *`,
-      [
-        room_name,
-        filename_template,
-        segment_duration != null ? segment_duration : null,
-        notification_enabled !== undefined ? notification_enabled : null,
-        monitoring_enabled !== undefined ? monitoring_enabled : null,
-        id,
-      ]
+      `UPDATE rooms SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`,
+      values
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    await delRoomCache(result.rows[0].room_url);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
+    await redis.del(`room:${result.rows[0].room_url}`).catch(() => {});
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 更新失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('更新失败');
     res.status(500).json({ status: 'Error', message: '更新失败' });
   }
 });
 
-// DELETE /api/rooms/:id — 删除直播间
 router.delete('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) {
-      return res.status(404).json({ status: 'Error', message: '直播间不存在' });
+    const result = await RoomService.deleteRoom(id);
+    if (!result.success) {
+      return res.status(404).json({ status: 'Error', message: result.message });
     }
-    if (room.rows[0].status !== 'idle') {
-      return res.status(400).json({ status: 'Error', message: '直播间录制中，无法删除' });
-    }
-    await delRoomCache(room.rows[0].room_url);
-    await pool.query('DELETE FROM rooms WHERE id = $1', [id]);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
-    res.json({ status: 'ok', message: '已删除' });
+    res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 删除失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('删除失败');
     res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
 
-// POST /api/rooms/:id/pause — 暂停录制
 router.post('/rooms/:id/pause', async (req, res) => {
   try {
     const { id } = req.params;
@@ -153,29 +130,17 @@ router.post('/rooms/:id/pause', async (req, res) => {
     if (room.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const r = room.rows[0];
-    if (r.status !== 'recording') {
-      return res.status(400).json({ status: 'Error', message: '当前状态不可暂停' });
+    const result = await RoomService.pauseRecording(room.rows[0].room_url);
+    if (!result.success) {
+      return res.status(400).json({ status: 'Error', message: result.message });
     }
-    if (r.ffmpeg_pid) {
-      try {
-        process.kill(r.ffmpeg_pid, 'SIGSTOP');
-      } catch (killErr) {
-        console.error('[rooms] SIGSTOP 失败:', killErr.message);
-      }
-    }
-    await pool.query(`UPDATE rooms SET status = 'paused', updated_at = NOW() WHERE id = $1`, [id]);
-    await delRoomCache(r.room_url);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
-    res.json({ status: 'ok', message: '已暂停录制' });
+    res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 暂停失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('暂停失败');
     res.status(500).json({ status: 'Error', message: '暂停失败' });
   }
 });
 
-// POST /api/rooms/:id/resume — 恢复录制
 router.post('/rooms/:id/resume', async (req, res) => {
   try {
     const { id } = req.params;
@@ -183,205 +148,51 @@ router.post('/rooms/:id/resume', async (req, res) => {
     if (room.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const r = room.rows[0];
-    if (r.status !== 'paused') {
-      return res.status(400).json({ status: 'Error', message: '当前状态不可恢复' });
+    const result = await RoomService.resumeRecording(room.rows[0].room_url);
+    if (!result.success) {
+      return res.status(400).json({ status: 'Error', message: result.message });
     }
-    if (r.ffmpeg_pid) {
-      try {
-        process.kill(r.ffmpeg_pid, 'SIGCONT');
-      } catch (killErr) {
-        console.error('[rooms] SIGCONT 失败:', killErr.message);
-      }
-    }
-    await pool.query(`UPDATE rooms SET status = 'recording', updated_at = NOW() WHERE id = $1`, [id]);
-    await delRoomCache(r.room_url);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
-    res.json({ status: 'ok', message: '已恢复录制' });
+    res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 恢复失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('恢复失败');
     res.status(500).json({ status: 'Error', message: '恢复失败' });
   }
 });
 
-// POST /api/rooms/:id/stop — 停止录制
 router.post('/rooms/:id/stop', async (req, res) => {
   try {
     const { id } = req.params;
+    const { force } = req.body;
     const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
     if (room.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const r = room.rows[0];
-    if (r.status === 'idle') {
-      return res.status(400).json({ status: 'Error', message: '当前未在录制' });
-    }
-
-    let activeSessionId = null;
-    try {
-      const sess = await pool.query(
-        `SELECT id FROM recording_sessions WHERE room_url = $1 AND status = 'recording' ORDER BY id DESC LIMIT 1`,
-        [r.room_url]
-      );
-      if (sess.rows.length) activeSessionId = sess.rows[0].id;
-    } catch (_) {}
-
-    if (activeSessionId) {
-      await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'completed' WHERE id = $1`, [
-        activeSessionId,
-      ]);
-    }
-    await pool.query(
-      `UPDATE recordings SET ended_at = NOW(), status = 'completed'
-       WHERE room_url = $1 AND status = 'recording'`,
-      [r.room_url]
-    );
-
-    if (r.ffmpeg_pid) {
-      try {
-        process.kill(r.ffmpeg_pid, 'SIGTERM');
-      } catch (killErr) {
-        console.error('[rooms] SIGTERM 失败:', killErr.message);
-      }
-    }
-    await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [id]);
-
-    // 同步扫描已下载文件（不依赖异步的 close handler），防止进程未清理时文件变孤文件
-    if (r.output_path) {
-      const outputDir = path.dirname(r.output_path);
-      const fs = require('fs');
-      const files = fs.readdirSync(outputDir);
-      const videoExtRe = /\.(mp4|flv|ts|mkv|avi|mov)$/i;
-      for (const f of files) {
-        const fp = path.join(outputDir, f);
-        if (f.endsWith('.flv.part')) {
-          const finalPath = fp.replace(/\.part$/, '');
-          try {
-            fs.renameSync(fp, finalPath);
-            console.log(`[rooms] .part 已重命名: ${finalPath}`);
-          } catch (_) {}
-          const exists = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [finalPath]);
-          if (exists.rows.length === 0) {
-            let sz = 0;
-            try {
-              sz = fs.statSync(finalPath).size;
-            } catch (_) {}
-            await pool.query(
-              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
-               VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-              [activeSessionId, r.room_url, finalPath, path.basename(finalPath), sz]
-            );
-          }
-          continue;
-        }
-        if (!videoExtRe.test(f)) continue;
-        const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
-        if (existing.rows.length === 0) {
-          let size = 0;
-          try {
-            size = fs.statSync(fp).size;
-          } catch (_) {}
-          await pool.query(
-            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, checked_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-            [activeSessionId, r.room_url, fp, f, size]
-          );
-        }
-      }
-    }
-
-    await delRoomCache(r.room_url);
-    if (req.headers['hx-request']) return renderRoomsHtml(res);
-    res.json({ status: 'ok', message: '已停止录制' });
+    const result = await RoomService.stopRecording(room.rows[0].room_url, force === true);
+    res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 停止失败:', err);
-    if (req.headers['hx-request']) return res.status(500).send('停止失败');
     res.status(500).json({ status: 'Error', message: '停止失败' });
   }
 });
 
-// GET /api/recordings — 录制历史列表
-router.get('/recordings', async (req, res) => {
-  try {
-    const { room_url, limit } = req.query;
-    let thresholdBytes = 0;
-    try {
-      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
-      if (ps.rows.length) thresholdBytes = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
-    } catch (_) {}
-
-    let query = `
-      SELECT r.*, rm.room_name
-      FROM recordings r
-      LEFT JOIN rooms rm ON r.room_url = rm.room_url
-    `;
-    const params = [];
-    const conditions = [];
-    if (thresholdBytes > 0) {
-      conditions.push(`r.file_size >= $${params.length + 1}`);
-      params.push(thresholdBytes);
-    }
-    if (room_url) {
-      conditions.push(`r.room_url = $${params.length + 1}`);
-      params.push(room_url);
-    }
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-    query += ' ORDER BY r.id DESC';
-    if (limit) {
-      query += ` LIMIT $${params.length + 1}`;
-      params.push(parseInt(limit, 10));
-    }
-    const result = await pool.query(query, params);
-    res.json({ status: 'ok', data: result.rows });
-  } catch (err) {
-    console.error('[recordings] 查询失败:', err);
-    res.status(500).json({ status: 'Error', message: '查询失败' });
-  }
-});
-
-// DELETE /api/recordings/:id — 删除录制记录
-router.delete('/recordings/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query('DELETE FROM recordings WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
-    }
-    res.json({ status: 'ok', message: '已删除' });
-  } catch (err) {
-    console.error('[recordings] 删除失败:', err);
-    res.status(500).json({ status: 'Error', message: '删除失败' });
-  }
-});
-
-// GET /api/sessions — 录制会话列表
 router.get('/sessions', async (req, res) => {
   try {
-    const { room_url, limit, show_deleted } = req.query;
-    const conditions = ['s.deleted_at IS NULL'];
+    const { room_url, status, page = 1, limit = 20 } = req.query;
+    const conditions = [];
     const params = [];
     if (room_url) {
-      conditions.push(`s.room_url = $${params.length + 1}`);
+      conditions.push(`room_url = $${params.length + 1}`);
       params.push(room_url);
     }
-    if (show_deleted === '1') {
-      conditions[0] = '1=1';
+    if (status) {
+      conditions.push(`status = $${params.length + 1}`);
+      params.push(status);
     }
-    let query = `
-      SELECT s.*, rm.room_name
-      FROM recording_sessions s
-      LEFT JOIN rooms rm ON s.room_url = rm.room_url
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY s.id DESC
-    `;
-    if (limit) {
-      query += ` LIMIT $${params.length + 1}`;
-      params.push(parseInt(limit, 10));
-    }
-    const result = await pool.query(query, params);
+    let sql = 'SELECT * FROM recording_sessions';
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ` ORDER BY started_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
+    const result = await pool.query(sql, params);
     res.json({ status: 'ok', data: result.rows });
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
@@ -389,96 +200,33 @@ router.get('/sessions', async (req, res) => {
   }
 });
 
-// POST /api/sessions/:id/delete — 软删除会话
-router.post('/sessions/:id/delete', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      `UPDATE recording_sessions SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
-      [id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在或已删除' });
-    res.json({ status: 'ok', message: '已标记删除' });
-  } catch (err) {
-    console.error('[sessions] 删除失败:', err);
-    res.status(500).json({ status: 'Error', message: '删除失败' });
-  }
-});
-
-// GET /api/sessions/:id — 会话详情（包含所有分片文件）
 router.get('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    let minSize = 0;
-    try {
-      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
-      if (ps.rows.length) minSize = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
-    } catch (_) {}
-    const session = await pool.query(
-      `SELECT s.*, rm.room_name
-       FROM recording_sessions s
-       LEFT JOIN rooms rm ON s.room_url = rm.room_url
-       WHERE s.id = $1`,
-      [id]
-    );
-    if (session.rows.length === 0) {
+    const result = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    // 以 recording_files（磁盘文件跟踪）作为会话文件列表的数据源
-    let rfQuery = 'SELECT * FROM recording_files WHERE session_id = $1';
-    const rfParams = [id];
-    if (minSize > 0) {
-      rfQuery += ' AND file_size >= $2';
-      rfParams.push(minSize);
-    }
-    rfQuery += ' ORDER BY id ASC';
-    const rfResult = await pool.query(rfQuery, rfParams);
-
-    // 对于录制中但尚无文件记录的会话，尝试从房间 output_path 定位
-    if (rfResult.rows.length === 0) {
-      const room = await pool.query(`SELECT output_path FROM rooms WHERE room_url = $1`, [session.rows[0].room_url]);
-      if (room.rows.length && room.rows[0].output_path) {
-        const fp = room.rows[0].output_path;
-        try {
-          const stat = require('fs').statSync(fp);
-          rfResult.rows.push({
-            id: null,
-            session_id: parseInt(id),
-            room_url: session.rows[0].room_url,
-            file_path: fp,
-            file_name: path.basename(fp),
-            file_size: stat.size,
-            status: 'recording',
-            started_at: null,
-            completed_at: null,
-          });
-        } catch (_) {}
-      }
-    }
-
-    const recordings = {
-      rows: rfResult.rows.map((f) => ({
-        ...f,
-        segment_index: 0,
-        ended_at: f.completed_at,
-      })),
-    };
-
-    for (const rec of recordings.rows) {
-      try {
-        require('fs').accessSync(rec.file_path, require('fs').constants.F_OK);
-        rec.file_exists = true;
-      } catch (_) {
-        rec.file_exists = false;
-      }
-    }
-    res.json({
-      status: 'ok',
-      data: { session: session.rows[0], recordings: recordings.rows },
-    });
+    const files = await pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id', [id]);
+    res.json({ status: 'ok', data: { ...result.rows[0], files: files.rows } });
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+router.delete('/sessions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [id]);
+    if (session.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '会话不存在' });
+    }
+    await pool.query('UPDATE recording_sessions SET deleted_at = NOW() WHERE id = $1', [id]);
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[sessions] 删除失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
 

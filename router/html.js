@@ -8,7 +8,7 @@ const pool = require('../db/index');
 // 日志目录
 const logsDir = path.join(__dirname, '../logs');
 const { LOG_ERR_HTML } = require('../config/template');
-const md = require('../lib/markdown');
+const md = require('../lib/utils/markdown');
 
 // 当访问根路径时，重定向
 router.get('/', (req, res) => {

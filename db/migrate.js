@@ -182,6 +182,14 @@ async function runMigration() {
     `);
 
     await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS upload_template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL
+    `);
+
+    await client.query(`
+      ALTER TABLE upload_templates DROP COLUMN IF EXISTS room_url
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         id SERIAL PRIMARY KEY,
         key VARCHAR(255) UNIQUE NOT NULL,
@@ -204,6 +212,8 @@ async function runMigration() {
       ['max_upload_limit', '99'],
       ['downloader', 'ffmpeg'],
       ['max_resume_retries', '3'],
+      ['auto_transcode', 'true'],
+      ['transcode_delete_originals', 'false'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

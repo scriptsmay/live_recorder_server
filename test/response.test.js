@@ -1,4 +1,4 @@
-const ResponseHelper = require('../lib/response');
+const ResponseHelper = require('../lib/utils/response');
 
 describe('ResponseHelper', () => {
   let mockRes;
