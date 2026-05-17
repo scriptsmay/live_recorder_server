@@ -92,7 +92,7 @@ class UploadService {
     files = files.map((fp) => path.resolve(fp));
 
     if (files.length === 0) {
-      console.log(`[自动投稿] 会话 ${session.id} 无文件，跳过`);
+      console.log(`[投稿] 会话 ${session.id} 无文件，跳过`);
       return;
     }
 
@@ -189,7 +189,7 @@ class UploadService {
     });
 
     await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
-    console.log(`[自动投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
+    console.log(`[投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
   }
 
   static async findAndAutoUpload(session) {
@@ -218,18 +218,18 @@ class UploadService {
       }
 
       if (!tmpl) {
-        console.log(`[自动投稿] 会话 ${session.id} 找不到可用模板`);
+        console.log(`[投稿] 会话 ${session.id} 找不到可用模板`);
         return;
       }
 
       if (!tmpl.cookies_path) {
-        console.log(`[自动投稿] 模板 ${tmpl.id} 未配置 cookies_path，跳过`);
+        console.log(`[投稿] 模板 ${tmpl.id} 未配置 cookies_path，跳过`);
         return;
       }
 
       await this.executeUpload(session, tmpl);
     } catch (err) {
-      console.error('[自动投稿] 失败:', err.message);
+      console.error('[投稿] 失败:', err.message);
     }
   }
 }

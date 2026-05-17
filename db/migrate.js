@@ -1,15 +1,26 @@
 const pool = require('./index');
+const ensureDatabase = require('./ensure-database');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
 async function migrate() {
+  await ensureDatabase();
+
   let lastError;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       return await runMigration();
     } catch (err) {
       lastError = err;
+      if (err.code === '3D000' && attempt === 1) {
+        try {
+          await ensureDatabase();
+          continue;
+        } catch (createErr) {
+          console.error('[DB] 自动建库失败:', createErr.message);
+        }
+      }
       if (err.code === '40P01' && attempt < MAX_RETRIES) {
         console.warn(`[DB] 死锁检测 (${attempt}/${MAX_RETRIES}), ${RETRY_DELAY_MS}ms 后重试...`);
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));

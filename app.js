@@ -91,4 +91,7 @@ async function init() {
   });
 }
 
-init();
+init().catch((err) => {
+  console.error('[启动失败] 数据库迁移出错:', err);
+  process.exit(1);
+});
