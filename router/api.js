@@ -217,7 +217,17 @@ router.put('/recording_files/:id/associate', async (req, res) => {
     const session = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [session_id]);
     if (session.rows.length === 0) return res.status(404).json({ status: 'Error', message: '会话不存在' });
 
+    const fileData = file.rows[0];
+    
     await pool.query('UPDATE recording_files SET session_id = $1, status = \'completed\' WHERE id = $2', [session_id, id]);
+    
+    await pool.query(
+      `INSERT INTO recordings (session_id, room_url, file_path, file_size, started_at, ended_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'completed')
+       ON CONFLICT (file_path) DO UPDATE SET session_id = $1, status = 'completed'`,
+      [session_id, fileData.room_url || session.rows[0].room_url, fileData.file_path, fileData.file_size, fileData.created_at, fileData.completed_at || new Date()]
+    );
+    
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[api] 关联失败:', err);
