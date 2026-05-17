@@ -119,9 +119,10 @@ router.get('/recordings', async (req, res) => {
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     const [recResult, roomsResult] = await Promise.all([
       pool.query(
-        `SELECT r.*, rm.room_name
+        `SELECT r.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
          FROM recordings r
          LEFT JOIN rooms rm ON r.room_url = rm.room_url
+         LEFT JOIN recording_sessions rs ON r.session_id = rs.id
          ${where}
          ORDER BY r.id DESC
          LIMIT 200`,
