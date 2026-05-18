@@ -82,6 +82,7 @@ node scripts/cleanup-dev.js
 │   │   ├── proc-log.js     # 进程日志
 │   │   ├── scan-files.js   # 文件扫描
 │   │   ├── transcoder.js   # 视频转码
+│   │   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
 │   │   └── watchdog.js     # 看门狗
 │   └── utils/          # 工具类
 │       └── markdown.js
@@ -198,6 +199,14 @@ node scripts/cleanup-dev.js
 - **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 固定返回 FFmpeg 实例（stream-gears 已移除，见 `docs/lessons.md`）
 - **接口**：`lib/core/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
 - **FFmpeg**：`lib/core/downloaders/FFmpegDownloader.js` — 唯一下载引擎，需单独安装 ffmpeg
+
+## 转码功能
+
+- **边下边转码**：`services/RecorderService.js` — 监听 FFmpeg stderr 输出，新分段打开时自动入队上一个已完成的分段
+- **转码队列**：`lib/core/TranscodeQueue.js` — Redis 队列 + 并发控制（`transcode_concurrency`），异步处理转码任务
+- **转码器**：`lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（FLV → MP4）
+- **转码配置**：`auto_transcode`（启用/禁用）、`transcode_delete_originals`（删除原文件）
+- **双重保障**：边下边转码为主，`finishSession` 批量处理为兜底，确保无遗漏
 
 ## 日志
 

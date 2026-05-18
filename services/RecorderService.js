@@ -220,6 +220,8 @@ class RecorderService {
     segmentListPath,
     outputFilePattern,
     roomKey,
+    segmentPathsForTranscode = [],
+    lastSegmentPath,
   }) {
     await this.delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`);
@@ -269,6 +271,11 @@ class RecorderService {
         // 收集所有需要转码的FLV文件
         const flvFilesToTranscode = [];
 
+        // 处理最后一个分段（如果有的话）
+        if (lastSegmentPath && /\.flv$/i.test(lastSegmentPath)) {
+          flvFilesToTranscode.push(lastSegmentPath);
+        }
+
         for (const filePath of segmentFiles) {
           const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
           if (tracked.rows.length > 0) continue;
@@ -299,23 +306,32 @@ class RecorderService {
               newFileCount++;
             }
 
-            // 只要是FLV文件且存在，就加入转码队列（即使小文件也尝试转码）
-            if (filePath.endsWith('.flv')) {
-              flvFilesToTranscode.push(filePath);
+            // 只要是FLV文件且存在，且未通过边下边转码处理过，就加入转码队列
+            if (filePath.endsWith('.flv') && !segmentPathsForTranscode.includes(filePath)) {
+              // 避免重复添加最后一个分段
+              if (filePath !== lastSegmentPath) {
+                flvFilesToTranscode.push(filePath);
+              }
             }
           }
         }
 
         // 对所有收集到的FLV文件进行转码
-        for (const filePath of flvFilesToTranscode) {
-          const mp4Path = filePath.replace(/\.flv$/i, '.mp4');
-          transcodeQueue
-            .enqueue({
-              flvPath: filePath,
-              mp4Path: mp4Path,
-              sessionId: sessionId,
-            })
-            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+        const autoTranscode = await this.getSetting('auto_transcode', 'true');
+        if (autoTranscode === 'true') {
+          // 去重
+          const uniqueFlvFilesToTranscode = [...new Set(flvFilesToTranscode)];
+          for (const filePath of uniqueFlvFilesToTranscode) {
+            const mp4Path = filePath.replace(/\.flv$/i, '.mp4');
+            console.log(`[finishSession] 入队转码: ${filePath} → ${mp4Path}`);
+            transcodeQueue
+              .enqueue({
+                flvPath: filePath,
+                mp4Path: mp4Path,
+                sessionId: sessionId,
+              })
+              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          }
         }
 
         if (sessionId) {
@@ -428,14 +444,17 @@ class RecorderService {
         }
 
         if (/\.flv$/i.test(outputFilePattern)) {
-          const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
-          transcodeQueue
-            .enqueue({
-              flvPath: outputFilePattern,
-              mp4Path: mp4Path,
-              sessionId: sessionId,
-            })
-            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          const autoTranscode = await this.getSetting('auto_transcode', 'true');
+          if (autoTranscode === 'true') {
+            const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
+            transcodeQueue
+              .enqueue({
+                flvPath: outputFilePattern,
+                mp4Path: mp4Path,
+                sessionId: sessionId,
+              })
+              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          }
           const completedSession = {
             id: sessionId,
             room_url: room.room_url,
@@ -665,9 +684,50 @@ class RecorderService {
     let sessionId = null;
     let sessionStart;
 
+    // 边下边转码相关变量
+    let lastSegmentPath = null;
+    let currentSegmentPath = null;
+    const segmentPathsForTranscode = [];
+
     if (dlProcess.stderr) {
       dlProcess.stderr.on('data', (chunk) => {
         logStream.write(chunk);
+
+        // 只在分段录制模式下尝试解析
+        if (useSegment) {
+          const logLine = chunk.toString('utf8');
+          // 匹配 [segment @ ...] Opening '...' for writing
+          const segmentMatch = logLine.match(/\[segment @ 0x[0-9a-f]+\] Opening '([^']+)' for writing/);
+          if (segmentMatch) {
+            const newSegmentPath = segmentMatch[1];
+            console.log(`[分段录制] 检测到新分段: ${newSegmentPath}`);
+
+            // 如果有上一个分段，且它是 FLV 文件，则入队转码
+            if (lastSegmentPath && /\.flv$/i.test(lastSegmentPath)) {
+              // 确保在处理之前先检查 auto_transcode 设置
+              this.getSetting('auto_transcode', 'true').then((autoTranscode) => {
+                if (autoTranscode === 'true') {
+                  const mp4Path = lastSegmentPath.replace(/\.flv$/i, '.mp4');
+                  console.log(`[边下边转码] 入队: ${lastSegmentPath} → ${mp4Path}`);
+                  transcodeQueue
+                    .enqueue({
+                      flvPath: lastSegmentPath,
+                      mp4Path: mp4Path,
+                      sessionId: sessionId, // sessionId 可能还没赋值，但没关系，后面会有记录
+                    })
+                    .catch((err) => console.error('[边下边转码][转码队列] 入队异常:', err.message));
+
+                  // 同时把这个路径记录下来，供 finishSession 做数据库记录时去重（已经入队了就不用再入队了）
+                  segmentPathsForTranscode.push(lastSegmentPath);
+                }
+              });
+            }
+
+            // 更新路径追踪
+            lastSegmentPath = currentSegmentPath;
+            currentSegmentPath = newSegmentPath;
+          }
+        }
       });
     }
 
@@ -758,6 +818,8 @@ class RecorderService {
         segmentListPath,
         outputFilePattern,
         roomKey,
+        segmentPathsForTranscode,
+        lastSegmentPath,
       });
     };
 
@@ -919,15 +981,18 @@ class RecorderService {
           }
 
           // 对所有收集到的FLV文件进行转码
-          for (const flvPath of flvFilesToTranscode) {
-            const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
-            transcodeQueue
-              .enqueue({
-                flvPath: flvPath,
-                mp4Path: mp4Path,
-                sessionId: session.id,
-              })
-              .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+          const autoTranscode = await this.getSetting('auto_transcode', 'true');
+          if (autoTranscode === 'true') {
+            for (const flvPath of flvFilesToTranscode) {
+              const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
+              transcodeQueue
+                .enqueue({
+                  flvPath: flvPath,
+                  mp4Path: mp4Path,
+                  sessionId: session.id,
+                })
+                .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+            }
           }
 
           // 更新会话统计
@@ -981,14 +1046,17 @@ class RecorderService {
 
           if (/\.flv$/i.test(outputPath)) {
             try {
-              const mp4Path = outputPath.replace(/\.flv$/i, '.mp4');
-              transcodeQueue
-                .enqueue({
-                  flvPath: outputPath,
-                  mp4Path: mp4Path,
-                  sessionId: session.id,
-                })
-                .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+              const autoTranscode = await this.getSetting('auto_transcode', 'true');
+              if (autoTranscode === 'true') {
+                const mp4Path = outputPath.replace(/\.flv$/i, '.mp4');
+                transcodeQueue
+                  .enqueue({
+                    flvPath: outputPath,
+                    mp4Path: mp4Path,
+                    sessionId: session.id,
+                  })
+                  .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+              }
             } catch (transcodeErr) {
               console.error('[恢复] 快速转码异常:', transcodeErr.message);
             }
