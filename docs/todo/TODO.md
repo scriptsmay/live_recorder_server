@@ -11,7 +11,7 @@
 
 ### 总体方案
 
-- 应用镜像内包含 Node.js runtime、项目代码、生产依赖、ffmpeg、Python 与通过 pip 安装的 biliup。
+- 应用镜像内包含 Node.js runtime、项目代码、生产依赖、ffmpeg、Python、uv 与通过 `uv tool install biliup` 安装的 biliup。
 - PostgreSQL 与 Redis 不打入应用镜像，通过 Docker Compose 独立编排。
 - 录制文件、日志、biliup 工作目录、数据库数据均使用 volume 或宿主机目录持久化。
 - 容器内不再使用 PM2，应用进程直接通过 `node app.js` 启动，重启交给 Docker restart policy。
@@ -23,8 +23,8 @@
 - 新增 `Dockerfile`
   - 基于稳定 Node.js 镜像。
   - 安装 `ffmpeg`。
-  - 安装 Python 与 `pip`。
-  - 通过 `pip install biliup` 安装投稿工具。
+  - 安装 Python、`pip` 与 `uv`。
+  - 通过 `uv tool install biliup` 安装投稿工具。
   - 仅安装 production dependencies。
   - 启动命令使用 `node app.js`。
 - 新增 `.dockerignore`
@@ -77,7 +77,8 @@
 
 #### 5. biliup 容器化
 
-- 镜像内通过 `pip install biliup` 安装 biliup。
+- 镜像内按 Linux 推荐方式安装 biliup：先安装 `uv`，再执行 `uv tool install biliup`。
+- 确认 `uv` 的工具安装目录已加入 `PATH`，使 `BILIUP_PATH=biliup` 可直接调用。
 - 默认配置：
   - `BILIUP_PATH=biliup`
   - `BILIUP_WORK_DIR=/data/biliup`
