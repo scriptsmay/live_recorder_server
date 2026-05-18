@@ -21,7 +21,7 @@
     "start": "pm2 start ecosystem.config.js",
     "clean-logs": "pm2 flush live_recorder_server",
     "dev": "PORT=3001 NODE_ENV=development node --watch app.js",
-    "dev:backend": "PORT=3001 NODE_ENV=development node --watch app.js",
+    "dev:backend": "PORT=3001 NODE_ENV=development node --watch app.js > /tmp/dev-server.log 2>&1 & echo $! > /tmp/dev-server.pid && echo 'Dev Server started on port 3001'",
     "dev:stop": "kill $(lsof -ti :3001) && echo 'Dev Server stopped'",
     "stop": "pm2 stop live_recorder_server && pm2 delete live_recorder_server && pm2 flush logs",
     "restart": "pm2 flush live_recorder_server && pm2 restart live_recorder_server",
