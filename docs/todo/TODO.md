@@ -42,7 +42,6 @@
   - `REDIS_URL=redis://default:password@redis:6379/1`
   - `APP_DATA_DIR=/data`
   - `VIDEO_DOWNLOAD_DIR=/data/video_downloads`
-  - `BILIUP_PATH=biliup`
   - `BILIUP_WORK_DIR=/data/biliup`
 - 配置持久化目录：
   - `./data/video_downloads:/data/video_downloads`
@@ -95,10 +94,11 @@
 #### 6. biliup 容器化
 
 - 镜像内按 Linux 推荐方式安装 biliup：先安装 `uv`，再执行 `uv tool install biliup`。
-- 确认 `uv` 的工具安装目录已加入 `PATH`，使 `BILIUP_PATH=biliup` 可直接调用。
+- 确认 `uv` 的工具安装目录已加入 `PATH`，使应用可直接调用 `biliup`。
 - 默认配置：
-  - `BILIUP_PATH=biliup`
   - `BILIUP_WORK_DIR=/data/biliup`
+- Docker 部署默认不需要配置 `BILIUP_PATH`。
+- `BILIUP_PATH` 仅作为兼容旧部署或自定义 biliup 二进制路径的可选覆盖项保留。
 - 将 `/data/biliup` 持久化到宿主机，避免登录态、配置和缓存随容器重建丢失。
 - 将 biliup 使用的 `cookies.json` 放在 `/data/biliup/cookies.json`，并在文档中说明宿主机对应路径。
 - 在文档中说明 biliup 登录、配置文件、cookie/认证信息的保存位置。
