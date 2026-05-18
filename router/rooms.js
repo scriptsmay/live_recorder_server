@@ -5,6 +5,7 @@ const redis = require('../db/redis');
 const RoomService = require('../services/RoomService');
 const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
+const { detectPlatform } = require('../lib/utils/platform-detector');
 
 router.get('/rooms', async (req, res) => {
   try {
@@ -32,7 +33,6 @@ router.post('/rooms', async (req, res) => {
       filename_template,
       upload_template_id,
       polling_enabled,
-      polling_platform,
       polling_interval,
     } = req.body;
 
@@ -40,10 +40,7 @@ router.post('/rooms', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
 
-    // 自动检测平台
-    if (polling_enabled && !polling_platform) {
-      polling_platform = pollingManager.constructor.detectPlatformFromUrl(room_url);
-    }
+    const polling_platform = polling_enabled ? detectPlatform(room_url) : null;
 
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
     if (exist.rows.length > 0) {
@@ -132,7 +129,6 @@ const ROOM_FIELDS_IDLE = [
   'filename_template',
   'upload_template_id',
   'polling_enabled',
-  'polling_platform',
   'polling_interval',
 ];
 const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id'];
@@ -156,9 +152,8 @@ router.put('/rooms/:id', async (req, res) => {
       }
     }
 
-    // 自动检测平台
-    if (req.body.polling_enabled && !req.body.polling_platform) {
-      const detectedPlatform = pollingManager.constructor.detectPlatformFromUrl(existing.rows[0].room_url);
+    if (req.body.polling_enabled) {
+      const detectedPlatform = detectPlatform(existing.rows[0].room_url);
       if (detectedPlatform) {
         sets.push('polling_platform = $' + (values.length + 1));
         values.push(detectedPlatform);
@@ -169,7 +164,9 @@ router.put('/rooms/:id', async (req, res) => {
       const msg = isActive ? '录制中仅可更新通知开关与投稿模板' : '无更新字段';
       return res.status(400).json({ status: 'Error', message: msg });
     }
-    const blocked = Object.keys(req.body).filter((k) => req.body[k] !== undefined && !fields.includes(k));
+    const blocked = Object.keys(req.body).filter(
+      (k) => req.body[k] !== undefined && !fields.includes(k) && k !== 'polling_platform'
+    );
     if (blocked.length > 0) {
       return res.status(400).json({
         status: 'Error',
@@ -186,11 +183,7 @@ router.put('/rooms/:id', async (req, res) => {
     }
     await redis.del(`room:${result.rows[0].room_url}`).catch(() => {});
 
-    if (
-      req.body.polling_enabled !== undefined ||
-      req.body.polling_platform !== undefined ||
-      req.body.polling_interval !== undefined
-    ) {
+    if (req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
       await pollingManager.reloadRoom(parseInt(id, 10));
     }
 
@@ -260,6 +253,10 @@ router.post('/rooms/:id/stop', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
     const result = await RoomService.stopRecording(room.rows[0].room_url, force === true);
+
+    await pool.query('UPDATE rooms SET monitoring_enabled = FALSE WHERE id = $1', [id]);
+    await pollingManager.reloadRoom(parseInt(id, 10));
+
     res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 停止失败:', err);

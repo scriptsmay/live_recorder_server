@@ -13,12 +13,12 @@
         <th>ID</th>
         <th>名称</th>
         <th>直播间地址</th>
-        <th>状态</th>
+        <th>录制状态</th>
         <th>通知</th>
         <th>监听</th>
         <th>轮询</th>
-      <th>直播状态</th>
-      <th>最后检测</th>
+        <th>直播状态</th>
+        <th>最后检测</th>
         <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
@@ -27,66 +27,61 @@
     </thead>
     <tbody id="roomsBody">
       <% if (rooms.length === 0) { %>
-        <tr><td colspan="11" class="text-center text-muted py-4">暂无直播间数据</td></tr>
+      <tr>
+        <td colspan="11" class="text-center text-muted py-4">暂无直播间数据</td>
+      </tr>
       <% } else { %>
-        <% rooms.forEach(r => { %>
-          <% const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status; %>
-          <% const seg = r.segment_duration; %>
-          <tr>
-            <td><%= r.id %></td>
-            <td><%= r.room_name || '-' %></td>
-            <td><a href="<%= r.room_url %>" target="_blank" title="<%= r.room_url %>"><%= r.room_url %></a></td>
-            <td><%- statusBadge %></td>
-            <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
-            <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
-            <td>
-      <% if (r.polling_enabled) { %>
-        <span class="badge bg-success">开</span>
-        <div>
-          <small class="text-muted"><%= r.polling_platform || '' %></small>
-          <% if (r.polling_interval) { %>
-            <small class="text-muted ms-1">(<%= r.polling_interval %>s)</small>
+      <% rooms.forEach(r => { %>
+      <% const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status; %>
+      <% const seg = r.segment_duration; %>
+      <tr>
+        <td><%= r.id %></td>
+        <td><%= r.room_name || '-' %></td>
+        <td><a href="<%= r.room_url %>" target="_blank" title="<%= r.room_url %>"><%= r.room_url %></a></td>
+        <td><%- statusBadge %></td>
+        <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
+        <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
+        <td><% if (r.polling_enabled) { %>
+          <span class="badge bg-info text-dark">开</span>
+          <% } else { %>
+          <span class="badge bg-secondary">关</span>
           <% } %>
-        </div>
-      <% } else { %>
-        <span class="badge bg-secondary">关</span>
-      <% } %>
-    </td>
-    <td>
-      <% if (r.last_live_status) { %>
-        <span class="badge bg-danger">🔴 直播中</span>
-      <% } else if (r.polling_enabled) { %>
-        <span class="badge bg-secondary">⚫ 未开播</span>
-      <% } else { %>
-        <span class="text-muted">-</span>
-      <% } %>
-    </td>
-    <td>
-      <% if (r.last_polled_at) { %>
-        <small><%= new Date(r.last_polled_at).toLocaleString('zh-CN') %></small>
-      <% } else { %>
-        <span class="text-muted">-</span>
-      <% } %>
-    </td>
-            <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
-            <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
-            <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
-            <td class="text-nowrap">
-              <% if (r.status === 'idle') { %>
-                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>">编辑</button>
-                <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="<%= r.id %>">删除</button>
-              <% } else if (r.status === 'recording') { %>
-                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
-                <button class="btn btn-sm btn-outline-warning actBtn" data-id="<%= r.id %>" data-action="pause">暂停</button>
-                <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
-              <% } else if (r.status === 'paused') { %>
-                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
-                <button class="btn btn-sm btn-outline-success actBtn" data-id="<%= r.id %>" data-action="resume">恢复</button>
-                <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
-              <% } %>
-            </td>
-          </tr>
-        <% }) %>
+        </td>
+        <td>
+          <% if (r.last_live_status) { %>
+          <span class="badge bg-danger">🔴 直播中</span>
+          <% } else if (r.polling_enabled) { %>
+          <span class="badge bg-secondary">⚫ 未开播</span>
+          <% } else { %>
+          <span class="text-muted">-</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (r.last_polled_at) { %>
+          <small><%= new Date(r.last_polled_at).toLocaleString('zh-CN') %></small>
+          <% } else { %>
+          <span class="text-muted">-</span>
+          <% } %>
+        </td>
+        <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
+        <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
+        <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
+        <td class="text-nowrap">
+          <% if (r.status === 'idle') { %>
+          <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>">编辑</button>
+          <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="<%= r.id %>">删除</button>
+          <% } else if (r.status === 'recording') { %>
+          <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
+          <button class="btn btn-sm btn-outline-warning actBtn" data-id="<%= r.id %>" data-action="pause">暂停</button>
+          <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
+          <% } else if (r.status === 'paused') { %>
+          <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
+          <button class="btn btn-sm btn-outline-success actBtn" data-id="<%= r.id %>" data-action="resume">恢复</button>
+          <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
+          <% } %>
+        </td>
+      </tr>
+      <% }) %>
       <% } %>
     </tbody>
   </table>
@@ -139,17 +134,6 @@
           <label class="form-check-label" for="inputPolling">启用轮询</label>
           <div class="form-text">开启后，将定期查询直播间开播状态（支持虎牙、斗鱼、B站、Twitch、抖音、TwitCasting）</div>
         </div>
-        <div class="mb-3" data-room-field="full" id="pollingConfig" style="display: none;">
-          <label class="form-label">轮询平台</label>
-          <select class="form-select" id="inputPollingPlatform">
-            <option value="huya">虎牙直播</option>
-            <option value="douyu">斗鱼直播</option>
-            <option value="bilibili">哔哩哔哩直播</option>
-            <option value="twitch">Twitch</option>
-            <option value="douyin">抖音直播</option>
-            <option value="twitcasting">TwitCasting</option>
-          </select>
-        </div>
         <div class="mb-3" data-room-field="full" id="pollingIntervalConfig" style="display: none;">
           <label class="form-label">轮询间隔（秒）</label>
           <input type="number" class="form-control" id="inputPollingInterval" min="30" max="3600" value="60" />
@@ -160,7 +144,7 @@
           <select class="form-select" id="inputTemplateId">
             <option value="">不使用模板</option>
             <% templates.forEach(t => { %>
-              <option value="<%= t.id %>"><%= t.name %></option>
+            <option value="<%= t.id %>"><%= t.name %></option>
             <% }) %>
           </select>
           <div class="form-text">选择后，该直播间录制完成且转码就绪时会自动投稿；不选择则不自动投稿（仍可于会话页手动投稿）</div>
@@ -175,170 +159,165 @@
 </div>
 
 <script>
-async function apiAction(url, method, body) {
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    alert(json.message || '操作失败');
-  }
-  return res;
-}
-
-function detectPlatform(url) {
-  const platformMap = {
-    'huya.com': 'huya',
-    'douyu.com': 'douyu',
-    'live.bilibili.com': 'bilibili',
-    'twitch.tv': 'twitch',
-    'douyin.com': 'douyin',
-    'twitcasting.tv': 'twitcasting'
-  };
-  
-  for (const [domain, platform] of Object.entries(platformMap)) {
-    const regex = new RegExp(`^(?:https?:\\/\\/)?.*?${domain}\\/(.+?)$`, 'i');
-    if (regex.test(url)) {
-      return platform;
+  async function apiAction(url, method, body) {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.message || '操作失败');
     }
+    return res;
   }
-  return null;
-}
 
-function setRoomFormMode(limited) {
-  document.getElementById('editLimited').value = limited ? '1' : '0';
-  document.getElementById('roomFormLimitedHint').classList.toggle('d-none', !limited);
-  document.querySelectorAll('[data-room-field="full"]').forEach((el) => {
-    el.classList.toggle('d-none', limited);
-  });
-  const nameInput = document.getElementById('inputName');
-  nameInput.disabled = limited;
-  document.getElementById('inputUrl').disabled = !!document.getElementById('editId').value;
-}
+  function detectPlatform(url) {
+    const platformMap = {
+      'huya.com': 'huya',
+      'douyu.com': 'douyu',
+      'live.bilibili.com': 'bilibili',
+      'twitch.tv': 'twitch',
+      'douyin.com': 'douyin',
+      'twitcasting.tv': 'twitcasting'
+    };
 
-document.getElementById('saveBtn').addEventListener('click', async () => {
-  const id = document.getElementById('editId').value;
-  const limited = document.getElementById('editLimited').value === '1';
-  const url = document.getElementById('inputUrl').value.trim();
-  const name = document.getElementById('inputName').value.trim();
-  const tmpl = document.getElementById('inputTemplate').value.trim();
-  const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
-  const notify = document.getElementById('inputNotify').checked;
-  const monitor = document.getElementById('inputMonitor').checked;
-  const templateId = document.getElementById('inputTemplateId').value;
-  const polling = document.getElementById('inputPolling').checked;
-  const pollingPlatform = document.getElementById('inputPollingPlatform').value;
-  const pollingInterval = parseInt(document.getElementById('inputPollingInterval').value, 10) || 60;
-
-  if (!url && !id) return alert('直播间地址必填');
-
-  const body = limited
-    ? {
-        notification_enabled: notify,
-        upload_template_id: templateId ? parseInt(templateId, 10) : null,
+    for (const [domain, platform] of Object.entries(platformMap)) {
+      const regex = new RegExp(`^(?:https?:\\/\\/)?.*?${domain}\\/(.+?)$`, 'i');
+      if (regex.test(url)) {
+        return platform;
       }
-    : {
-        room_name: name,
-        filename_template: tmpl || undefined,
-        segment_duration: segment,
-        notification_enabled: notify,
-        monitoring_enabled: monitor,
-        upload_template_id: templateId ? parseInt(templateId, 10) : null,
-        polling_enabled: polling,
-        polling_platform: polling ? pollingPlatform : null,
-        polling_interval: polling ? pollingInterval : 60,
-      };
-  const res = id
-    ? await apiAction(`/api/rooms/${id}`, 'PUT', body)
-    : await apiAction('/api/rooms', 'POST', { room_url: url, ...body });
-
-  if (res.ok) {
-    location.reload();
+    }
+    return null;
   }
-});
 
-function resetForm() {
-  document.getElementById('modalTitle').textContent = '新增直播间';
-  document.getElementById('editId').value = '';
-  setRoomFormMode(false);
-  document.getElementById('inputUrl').disabled = false;
-  document.getElementById('inputUrl').value = '';
-  document.getElementById('inputName').value = '';
-  document.getElementById('inputName').disabled = false;
-  document.getElementById('inputTemplate').value = '';
-  document.getElementById('inputSegment').value = 0;
-  document.getElementById('inputNotify').checked = true;
-  document.getElementById('inputMonitor').checked = true;
-  document.getElementById('inputTemplateId').value = '';
-  document.getElementById('inputPolling').checked = false;
-  document.getElementById('inputPollingPlatform').value = 'huya';
-  document.getElementById('inputPollingInterval').value = 60;
-  document.getElementById('pollingConfig').style.display = 'none';
-  document.getElementById('pollingIntervalConfig').style.display = 'none';
-}
-
-document.getElementById('inputPolling').addEventListener('change', function() {
-  const isEnabled = this.checked;
-  document.getElementById('pollingConfig').style.display = isEnabled ? '' : 'none';
-  document.getElementById('pollingIntervalConfig').style.display = isEnabled ? '' : 'none';
-});
-
-document.getElementById('inputUrl').addEventListener('input', function() {
-  const url = this.value.trim();
-  const platform = detectPlatform(url);
-  if (platform) {
-    document.getElementById('inputPollingPlatform').value = platform;
+  function setRoomFormMode(limited) {
+    document.getElementById('editLimited').value = limited ? '1' : '0';
+    document.getElementById('roomFormLimitedHint').classList.toggle('d-none', !limited);
+    document.querySelectorAll('[data-room-field="full"]').forEach((el) => {
+      el.classList.toggle('d-none', limited);
+    });
+    const nameInput = document.getElementById('inputName');
+    nameInput.disabled = limited;
+    document.getElementById('inputUrl').disabled = !!document.getElementById('editId').value;
   }
-});
 
-document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const id = document.getElementById('editId').value;
+    const limited = document.getElementById('editLimited').value === '1';
+    const url = document.getElementById('inputUrl').value.trim();
+    const name = document.getElementById('inputName').value.trim();
+    const tmpl = document.getElementById('inputTemplate').value.trim();
+    const segment = parseInt(document.getElementById('inputSegment').value, 10) || 0;
+    const notify = document.getElementById('inputNotify').checked;
+    const monitor = document.getElementById('inputMonitor').checked;
+    const templateId = document.getElementById('inputTemplateId').value;
+    const polling = document.getElementById('inputPolling').checked;
+    const pollingInterval = parseInt(document.getElementById('inputPollingInterval').value, 10) || 60;
 
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.editBtn');
-  if (btn) {
-    const id = btn.dataset.id;
-    const limited = btn.dataset.limited === '1';
-    fetch(`/api/rooms/${id}`)
-      .then(r => r.json())
-      .then(json => {
-        if (!json.data) return;
-        const r = json.data;
-        document.getElementById('modalTitle').textContent = limited ? '编辑（录制中）' : '编辑直播间';
-        document.getElementById('editId').value = r.id;
-        setRoomFormMode(limited);
-        document.getElementById('inputUrl').value = r.room_url;
-        document.getElementById('inputUrl').disabled = true;
-        document.getElementById('inputName').value = r.room_name || '';
-        document.getElementById('inputTemplate').value = r.filename_template || '';
-        document.getElementById('inputSegment').value = r.segment_duration || 0;
-        document.getElementById('inputNotify').checked = r.notification_enabled !== false;
-        document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
-        document.getElementById('inputTemplateId').value = r.upload_template_id || '';
-        document.getElementById('inputPolling').checked = r.polling_enabled === true;
-        document.getElementById('inputPollingPlatform').value = r.polling_platform || 'huya';
-        document.getElementById('inputPollingInterval').value = r.polling_interval || 60;
-        const pollingEnabled = r.polling_enabled === true;
-        document.getElementById('pollingConfig').style.display = pollingEnabled ? '' : 'none';
-        document.getElementById('pollingIntervalConfig').style.display = pollingEnabled ? '' : 'none';
-        new bootstrap.Modal(document.getElementById('roomModal')).show();
+    if (!url && !id) return alert('直播间地址必填');
+
+    const body = limited ? {
+      notification_enabled: notify,
+      upload_template_id: templateId ? parseInt(templateId, 10) : null,
+    } : {
+      room_name: name,
+      filename_template: tmpl || undefined,
+      segment_duration: segment,
+      notification_enabled: notify,
+      monitoring_enabled: monitor,
+      upload_template_id: templateId ? parseInt(templateId, 10) : null,
+      polling_enabled: polling,
+      polling_interval: polling ? pollingInterval : 60,
+    };
+    const res = id ?
+      await apiAction(`/api/rooms/${id}`, 'PUT', body) :
+      await apiAction('/api/rooms', 'POST', {
+        room_url: url,
+        ...body
       });
-    return;
+
+    if (res.ok) {
+      location.reload();
+    }
+  });
+
+  function resetForm() {
+    document.getElementById('modalTitle').textContent = '新增直播间';
+    document.getElementById('editId').value = '';
+    setRoomFormMode(false);
+    document.getElementById('inputUrl').disabled = false;
+    document.getElementById('inputUrl').value = '';
+    document.getElementById('inputName').value = '';
+    document.getElementById('inputName').disabled = false;
+    document.getElementById('inputTemplate').value = '';
+    document.getElementById('inputSegment').value = 0;
+    document.getElementById('inputNotify').checked = true;
+    document.getElementById('inputMonitor').checked = true;
+    document.getElementById('inputTemplateId').value = '';
+    document.getElementById('inputPolling').checked = false;
+    document.getElementById('inputPollingInterval').value = 60;
+    document.getElementById('pollingIntervalConfig').style.display = 'none';
   }
-  const actBtn = e.target.closest('.actBtn');
-  if (actBtn) {
-    const id = actBtn.dataset.id;
-    const action = actBtn.dataset.action;
-    const confirmMsg = { stop: '确定停止录制？', delete: '确定删除此直播间？' }[action];
-    if (confirmMsg && !confirm(confirmMsg)) return;
-    apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => { if (r.ok) location.reload(); });
-    return;
-  }
-  const delBtn = e.target.closest('.delRoomBtn');
-  if (delBtn) {
-    if (!confirm('确定删除此直播间？')) return;
-    apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => { if (r.ok) location.reload(); });
-  }
-});
+
+  document.getElementById('inputPolling').addEventListener('change', function() {
+    const isEnabled = this.checked;
+    document.getElementById('pollingIntervalConfig').style.display = isEnabled ? '' : 'none';
+  });
+
+  document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.editBtn');
+    if (btn) {
+      const id = btn.dataset.id;
+      const limited = btn.dataset.limited === '1';
+      fetch(`/api/rooms/${id}`)
+        .then(r => r.json())
+        .then(json => {
+          if (!json.data) return;
+          const r = json.data;
+          document.getElementById('modalTitle').textContent = limited ? '编辑（录制中）' : '编辑直播间';
+          document.getElementById('editId').value = r.id;
+          setRoomFormMode(limited);
+          document.getElementById('inputUrl').value = r.room_url;
+          document.getElementById('inputUrl').disabled = true;
+          document.getElementById('inputName').value = r.room_name || '';
+          document.getElementById('inputTemplate').value = r.filename_template || '';
+          document.getElementById('inputSegment').value = r.segment_duration || 0;
+          document.getElementById('inputNotify').checked = r.notification_enabled !== false;
+          document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
+          document.getElementById('inputTemplateId').value = r.upload_template_id || '';
+          document.getElementById('inputPolling').checked = r.polling_enabled === true;
+          document.getElementById('inputPollingInterval').value = r.polling_interval || 60;
+          const pollingEnabled = r.polling_enabled === true;
+          document.getElementById('pollingIntervalConfig').style.display = pollingEnabled ? '' : 'none';
+          new bootstrap.Modal(document.getElementById('roomModal')).show();
+        });
+      return;
+    }
+    const actBtn = e.target.closest('.actBtn');
+    if (actBtn) {
+      const id = actBtn.dataset.id;
+      const action = actBtn.dataset.action;
+      const confirmMsg = {
+        stop: '确定停止录制？',
+        delete: '确定删除此直播间？'
+      } [action];
+      if (confirmMsg && !confirm(confirmMsg)) return;
+      apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => {
+        if (r.ok) location.reload();
+      });
+      return;
+    }
+    const delBtn = e.target.closest('.delRoomBtn');
+    if (delBtn) {
+      if (!confirm('确定删除此直播间？')) return;
+      apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => {
+        if (r.ok) location.reload();
+      });
+    }
+  });
 </script>
