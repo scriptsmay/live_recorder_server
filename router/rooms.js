@@ -81,6 +81,11 @@ router.post('/rooms', async (req, res) => {
           values
         );
       }
+
+      if (req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
+        await pollingManager.reloadRoom(exist.rows[0].id);
+      }
+
       return res.json({ status: 'ok', data: exist.rows[0], updated: true });
     }
 
@@ -100,6 +105,9 @@ router.post('/rooms', async (req, res) => {
         polling_interval || 60,
       ]
     );
+    if (polling_enabled === true) {
+      await pollingManager.reloadRoom(result.rows[0].id);
+    }
     res.json({ status: 'ok', data: result.rows[0], updated: false });
   } catch (err) {
     console.error('[rooms] 创建失败:', err);
