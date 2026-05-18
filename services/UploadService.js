@@ -56,7 +56,19 @@ class UploadService {
     };
   }
 
+  static async isSessionDeleted(sessionId) {
+    const r = await pool.query('SELECT deleted_at FROM recording_sessions WHERE id = $1', [
+      sessionId,
+    ]);
+    return r.rows.length === 0 || r.rows[0].deleted_at != null;
+  }
+
   static async executeUpload(session, tmpl) {
+    if (await this.isSessionDeleted(session.id)) {
+      console.log(`[投稿] 会话 ${session.id} 已删除，跳过`);
+      return;
+    }
+
     const room = { room_url: session.room_url, room_name: session.room_name };
     const vars = this.getTemplateVars(room, session);
     const title = this.renderTemplate(tmpl.title_template, vars);
@@ -258,6 +270,7 @@ class UploadService {
          FROM recording_sessions rs
          INNER JOIN rooms r ON r.room_url = rs.room_url
          WHERE rs.status = 'completed'
+           AND rs.deleted_at IS NULL
            AND r.upload_template_id IS NOT NULL
            AND rs.ended_at > NOW() - INTERVAL '7 days'
            AND NOT EXISTS (
