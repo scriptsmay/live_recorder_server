@@ -32,6 +32,8 @@ pnpm-lock.yaml
 dev_downloads/
 dev_biliup/
 
+test_downloads/
+
 # database backups
 backups/
 __pycache__/
