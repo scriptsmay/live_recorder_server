@@ -1,6 +1,7 @@
 services:
   live_recorder_server:
-    image: imageName:latest
+    # 镜像发布在github站
+    image: ghcr.io/scriptsmay/live_recorder_server:latest
     container_name: live_recorder_server
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
