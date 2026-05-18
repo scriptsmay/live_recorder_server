@@ -1,33 +1,20 @@
 services:
-  app:
-    build: .
+  live_recorder_server:
+    image: imageName:latest
+    container_name: live_recorder_server
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-1123}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
       REDIS_URL: ${REDIS_URL:-redis://default:password@redis:6379/1}
-      APP_DATA_DIR: ${APP_DATA_DIR:-/data}
-      VIDEO_DOWNLOAD_DIR: ${VIDEO_DOWNLOAD_DIR:-/data/video_downloads}
-      BILIUP_WORK_DIR: ${BILIUP_WORK_DIR:-/data/biliup}
-      BILIUP_PATH: ${BILIUP_PATH:-}
       MESSAGE_FEISHU_WEBHOOK: ${MESSAGE_FEISHU_WEBHOOK:-}
       MESSAGE_GOTIFY_SERVER: ${MESSAGE_GOTIFY_SERVER:-}
       MESSAGE_GOTIFY_TOKEN: ${MESSAGE_GOTIFY_TOKEN:-}
       MESSAGE_GOTIFY_PRIORITY: ${MESSAGE_GOTIFY_PRIORITY:-5}
-      NAS_HOST: ${NAS_HOST:-}
-      NAS_USER: ${NAS_USER:-}
-      NAS_BACKUP_DIR: ${NAS_BACKUP_DIR:-}
     ports:
-      - '${PORT:-1123}:1123'
+      - '11123:1123'
     volumes:
       - ./data/video_downloads:/data/video_downloads
       - ./data/biliup:/data/biliup
       - ./logs:/app/logs
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -41,36 +28,3 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-live_recorder}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-password}
-    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:-password}']
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD:-password}" ping | grep PONG']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_data:
-  redis_data:
