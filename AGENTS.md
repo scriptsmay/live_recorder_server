@@ -50,7 +50,7 @@ node scripts/cleanup-dev.js
 
 该脚本会：杀死孤儿进程 → 重命名 `.part` → 清除孤文件 DB 记录 → 中断遗留会话 → 追踪遗留文件到 recording_files。具体实现见 `scripts/cleanup-dev.js`。
 
-- 录制进程日志（ffmpeg/stream-gears 输出）在 `logs/` 目录
+- 录制进程日志（ffmpeg 输出）在 `logs/` 目录
 - 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
 - Redis DB 编号：`2`（生产使用 `1`）
 
@@ -69,10 +69,10 @@ node scripts/cleanup-dev.js
 ├── lib/                 # 核心模块（与业务无关的通用模块）
 │   ├── core/           # 核心功能
 │   │   ├── backup.js   # NAS 备份
-│   │   ├── downloaders/   # 下载引擎
+│   │   ├── downloaders/   # 下载引擎（仅 FFmpeg）
 │   │   │   ├── DownloaderFactory.js
-│   │   │   ├── FFmpegDownloader.js
-│   │   │   └── StreamGearsDownloader.js
+│   │   │   ├── DownloaderInterface.js
+│   │   │   └── FFmpegDownloader.js
 │   │   ├── notify.js      # 通知服务
 │   │   ├── proc-log.js     # 进程日志
 │   │   ├── scan-files.js   # 文件扫描
@@ -82,6 +82,7 @@ node scripts/cleanup-dev.js
 │       └── markdown.js
 ├── router/             # 路由层（API + 页面）
 ├── services/           # 业务服务层
+│   ├── DataService.js      # 公共数据查询（rooms/settings/sessions 等）
 │   ├── RecorderService.js  # 录制服务
 │   ├── RoomService.js      # 直播间管理服务
 │   └── UploadService.js    # 投稿服务
@@ -103,7 +104,10 @@ node scripts/cleanup-dev.js
 - `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码）
 - `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染）
 - `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
+- `services/DataService.js` — 集中封装读库查询，供 API 路由与 `router/html.js` 页面渲染共用，避免重复 `pool.query`
 - `router/` — 路由层，负责接收请求、调用 Service、返回响应
+
+**页面渲染**：`templates`、`rooms`、`settings`、`sessions`、`upload_records`、`recordings` 由 `router/html.js` 后端 EJS 渲染；`dashboard`、`files` 保留前端 fetch（轮询/交互需求）。
 
 ## 代码规范
 
@@ -134,7 +138,7 @@ node scripts/cleanup-dev.js
 
 ### API
 
-- `POST /api/notify/live_download` —— 通过 `DownloaderFactory` 获取下载引擎（ffmpeg/stream-gears）录制直播流；关联 `rooms` 表，支持自定义文件名模板；受 `pool_size` 设置限制并发数；`monitoring_enabled=false` 时返回暂停状态
+- `POST /api/notify/live_download` —— 通过 `DownloaderFactory` 使用 FFmpeg 录制直播流；关联 `rooms` 表，支持自定义文件名模板；受 `pool_size` 设置限制并发数；`monitoring_enabled=false` 时返回暂停状态
 - `GET /api/notify/status` —— 轻量查询直播间录制状态，返回 `monitoring_paused`、`downloader` 等状态信息
 - `GET /api/recording_files` —— 查询文件跟踪记录（支持 `?status=` 筛选）
 - `PUT /api/recording_files/:id/associate` —— 将孤文件关联到录制会话
@@ -173,13 +177,9 @@ node scripts/cleanup-dev.js
 
 ## 下载引擎（Downloader）
 
-- **工厂模式**：`lib/downloaders/DownloaderFactory.js` — 根据 `settings` 表的 `downloader` 值选择引擎
-- **接口**：`lib/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
-- **FFmpeg 插件**（默认）：`lib/downloaders/FFmpegDownloader.js`
-- **Stream-Gears 插件**（可选）：`lib/downloaders/StreamGearsDownloader.js` — 调用 Python `stream-gears` 库
-  - 需手动 `pip install stream-gears`
-  - 启动时自动探测可用性，不可用时回退到 ffmpeg
-- `lib/downloaders/stream_gears_wrapper.py` — stream-gears 的 Python 入口脚本（启动时自动生成）
+- **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 固定返回 FFmpeg 实例（stream-gears 已移除，见 `docs/lessons.md`）
+- **接口**：`lib/core/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
+- **FFmpeg**：`lib/core/downloaders/FFmpegDownloader.js` — 唯一下载引擎，需单独安装 ffmpeg
 
 ## 日志
 

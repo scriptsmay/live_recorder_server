@@ -335,11 +335,9 @@ startup()
 | 看门狗误杀正在写 .part 的进程        | mtime 检查包含 .part 文件                       |
 | 文件扫描发现活跃录制中的文件         | 跳过该目录，由 close handler 追踪               |
 | 录制中途服务器重启                   | startup 清理 + 尝试恢复会话                     |
-| stream-gears 不可用                  | 自动回退到 ffmpeg                               |
 | 并发录制超过池大小                   | HTTP 429 "Pool full"                            |
 | Redis 残留 active_task               | cleanupStaleRedis 启动时清理                    |
 | DB 重复 recording_files              | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING |
-| stream-gears FLV 解析崩溃            | 自动回退到 ffmpeg，同一会话继续录制             |
 | stream URL 失效/过期                 | ffmpeg 重连机制自动处理（reconnect_streamed）   |
 | 磁盘空间不足                         | checkDiskSpace() 设 disk:critical，暂停新录制   |
 | 上传限流重启丢失                     | Redis INCR 持久化 + 24h 过期                    |

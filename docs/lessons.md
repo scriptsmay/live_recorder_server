@@ -1,6 +1,8 @@
 # 开发踩坑记录
 
-## 下载引擎集成后的一系列连锁问题
+> **说明**：stream-gears 下载引擎已于 v1.3 后完全移除，当前仅使用 FFmpeg。下文「下载引擎集成」章节保留为历史记录，供排查类似问题时参考。
+
+## 下载引擎集成后的一系列连锁问题（历史：stream-gears）
 
 ### 背景
 
@@ -132,7 +134,7 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 
 ---
 
-## 弃用 stream-gears 的决策
+## 弃用 stream-gears 的决策（已完成）
 
 ### 背景
 
@@ -151,12 +153,12 @@ UPDATE recording_sessions SET ... WHERE id = $1  [resumeCount]
 
 **弃用 stream-gears，只保留 ffmpeg 作为唯一下载引擎**
 
-**影响范围**:
+**影响范围**（已落地）:
 
-- 删除 `StreamGearsDownloader.js` 和 `stream_gears_wrapper.py`
-- 简化 `DownloaderFactory.js`（移除 stream-gears 探测和回退逻辑）
-- 简化 `RecorderService.js`（移除 fallback 分支）
-- 移除 `settings.downloader` 配置项
+- 已删除 `StreamGearsDownloader.js` 和 `stream_gears_wrapper.py`
+- `DownloaderFactory.js` 仅返回 FFmpeg 实例
+- `RecorderService.js` 已移除多引擎 fallback 分支
+- 设置页 `downloader` 仅保留 `ffmpeg` 选项（数据库键名保留兼容）
 
 ### 经验总结
 

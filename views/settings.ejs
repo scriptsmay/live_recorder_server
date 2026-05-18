@@ -2,171 +2,81 @@
   <h2>全局设置</h2>
 </div>
 
-<div id="settingsBody">
-  <div class="text-center py-5">
-    <div class="spinner-border text-primary" role="status"></div>
-    <p class="mt-2 text-muted">加载设置中...</p>
-  </div>
+<%
+  // 构建设置 map 方便查找
+  const settingsMap = {};
+  settings.forEach(s => { settingsMap[s.key] = s.value; });
+
+  const groups = [
+    {
+      title: '录制设置',
+      items: [
+        { key: 'downloader', label: '下载插件', desc: '选择录制的下载引擎', type: 'select', options: ['ffmpeg'] },
+        { key: 'pool_size', label: '下载线程池大小', desc: '限制最大同时录制数', type: 'number', attrs: 'min="1" max="20"' },
+        { key: 'watchdog_interval', label: '录制状态检查间隔（秒）', desc: '看门狗检查周期', type: 'number', attrs: 'min="10" max="600"' },
+        { key: 'watchdog_timeout', label: '录制状态检查超时（秒）', desc: '超过此时长无活动则标记为完成', type: 'number', attrs: 'min="10" max="3600"' },
+        { key: 'filtering_threshold', label: '碎片过滤（MB）', desc: '小于此大小的视频文件将被过滤删除', type: 'number', attrs: 'min="0" step="1"' },
+        { key: 'delay', label: '下播延迟检测（秒）', desc: '检测到主播下播后延迟确认时间', type: 'number', attrs: 'min="0" max="3600"' },
+        { key: 'max_resume_retries', label: '会话恢复重试次数', desc: '服务器启动时自动恢复录制会话的最大重试次数，默认 3', type: 'number', attrs: 'min="0" max="20"' },
+      ],
+    },
+    {
+      title: '转码设置',
+      items: [
+        { key: 'auto_transcode', label: '自动转码', desc: '录制完成后自动将 FLV 转换为 MP4', type: 'select', options: ['true', 'false'] },
+        { key: 'transcode_delete_originals', label: '转码后删除原始文件', desc: '转码成功后自动删除 FLV 原始文件', type: 'select', options: ['true', 'false'] },
+      ],
+    },
+    {
+      title: '上传设置',
+      items: [
+        { key: 'submit_api', label: '提交接口', desc: 'biliup --submit 选项，留空为自动选择', type: 'select', options: ['', 'app', 'web', 'b-cut-android'] },
+        { key: 'lines', label: '上传线路', desc: 'b站上传线路选择，留空为自动', type: 'select', options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'] },
+        { key: 'threads', label: '上传并发', desc: '单文件并发上传数', type: 'number', attrs: 'min="1" max="16"' },
+        { key: 'pool2_size', label: '上传线程池大小', desc: '负责上传事件的线程池大小', type: 'number', attrs: 'min="1" max="20"' },
+        { key: 'max_upload_limit', label: '上传重试次数限制', desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3', type: 'number', attrs: 'min="1" max="999"' },
+      ],
+    },
+  ];
+%>
+
+<div class="row">
+  <% groups.forEach(group => { %>
+    <div class="col-md-4 mb-4">
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0"><%= group.title %></h5></div>
+        <div class="card-body">
+          <% group.items.forEach(item => { %>
+            <% const val = settingsMap[item.key] || ''; %>
+            <% if (item.type === 'select') { %>
+              <div class="mb-3">
+                <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
+                <select class="form-select" id="set_<%= item.key %>">
+                  <% item.options.forEach(o => { %>
+                    <option value="<%= o %>" <%= val === o ? 'selected' : '' %>><%= o || '(自动)' %></option>
+                  <% }) %>
+                </select>
+                <div class="form-text"><%= item.desc %></div>
+              </div>
+            <% } else { %>
+              <div class="mb-3">
+                <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
+                <input type="<%= item.type %>" class="form-control" id="set_<%= item.key %>" value="<%= val %>" <%= item.attrs || '' %> />
+                <div class="form-text"><%= item.desc %></div>
+              </div>
+            <% } %>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<div class="text-end mt-3">
+  <button class="btn btn-primary" id="saveSettingsBtn">保存设置</button>
 </div>
 
 <script>
-  async function loadSettings() {
-    const res = await fetch('/api/settings');
-    const json = await res.json();
-    if (!json.data) return;
-    const settings = json.data;
-
-    let html = '<div class="row">';
-
-    const groups = [
-      {
-        title: '录制设置',
-        items: [
-          {
-            key: 'downloader',
-            label: '下载插件',
-            desc: '选择录制的下载引擎',
-            type: 'select',
-            options: ['ffmpeg', 'stream-gears'],
-          },
-          {
-            key: 'pool_size',
-            label: '下载线程池大小',
-            desc: '限制最大同时录制数',
-            type: 'number',
-            attrs: 'min="1" max="20"',
-          },
-          {
-            key: 'watchdog_interval',
-            label: '录制状态检查间隔（秒）',
-            desc: '看门狗检查周期',
-            type: 'number',
-            attrs: 'min="10" max="600"',
-          },
-          {
-            key: 'watchdog_timeout',
-            label: '录制状态检查超时（秒）',
-            desc: '超过此时长无活动则标记为完成',
-            type: 'number',
-            attrs: 'min="10" max="3600"',
-          },
-          {
-            key: 'filtering_threshold',
-            label: '碎片过滤（MB）',
-            desc: '小于此大小的视频文件将被过滤删除',
-            type: 'number',
-            attrs: 'min="0" step="1"',
-          },
-          {
-            key: 'delay',
-            label: '下播延迟检测（秒）',
-            desc: '检测到主播下播后延迟确认时间',
-            type: 'number',
-            attrs: 'min="0" max="3600"',
-          },
-          {
-            key: 'max_resume_retries',
-            label: '会话恢复重试次数',
-            desc: '服务器启动时自动恢复录制会话的最大重试次数，默认 3',
-            type: 'number',
-            attrs: 'min="0" max="20"',
-          },
-        ],
-      },
-      {
-        title: '转码设置',
-        items: [
-          {
-            key: 'auto_transcode',
-            label: '自动转码',
-            desc: '录制完成后自动将 FLV 转换为 MP4',
-            type: 'select',
-            options: ['true', 'false'],
-          },
-          {
-            key: 'transcode_delete_originals',
-            label: '转码后删除原始文件',
-            desc: '转码成功后自动删除 FLV 原始文件',
-            type: 'select',
-            options: ['true', 'false'],
-          },
-        ],
-      },
-      {
-        title: '上传设置',
-        items: [
-          {
-            key: 'submit_api',
-            label: '提交接口',
-            desc: 'biliup --submit 选项，留空为自动选择',
-            type: 'select',
-            options: ['', 'app', 'web', 'b-cut-android'],
-          },
-          {
-            key: 'lines',
-            label: '上传线路',
-            desc: 'b站上传线路选择，留空为自动',
-            type: 'select',
-            options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'],
-          },
-          {
-            key: 'threads',
-            label: '上传并发',
-            desc: '单文件并发上传数',
-            type: 'number',
-            attrs: 'min="1" max="16"',
-          },
-          {
-            key: 'pool2_size',
-            label: '上传线程池大小',
-            desc: '负责上传事件的线程池大小',
-            type: 'number',
-            attrs: 'min="1" max="20"',
-          },
-          {
-            key: 'max_upload_limit',
-            label: '上传重试次数限制',
-            desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3',
-            type: 'number',
-            attrs: 'min="1" max="999"',
-          },
-        ],
-      },
-    ];
-
-    for (const group of groups) {
-      html += '<div class="col-md-4 mb-4">';
-      html += `<div class="card"><div class="card-header"><h5 class="mb-0">${group.title}</h5></div><div class="card-body">`;
-      for (const item of group.items) {
-        const val = settings.find((s) => s.key === item.key)?.value || '';
-        if (item.type === 'select') {
-          const opts = item.options
-            .map((o) => `<option value="${o}" ${val === o ? 'selected' : ''}>${o || '(自动)'}</option>`)
-            .join('');
-          html += `<div class="mb-3">
-          <label class="form-label" for="set_${item.key}">${item.label}</label>
-          <select class="form-select" id="set_${item.key}">${opts}</select>
-          <div class="form-text">${item.desc}</div>
-        </div>`;
-        } else {
-          html += `<div class="mb-3">
-          <label class="form-label" for="set_${item.key}">${item.label}</label>
-          <input type="${item.type}" class="form-control" id="set_${item.key}" value="${val}" ${item.attrs} />
-          <div class="form-text">${item.desc}</div>
-        </div>`;
-        }
-      }
-      html += '</div></div></div>';
-    }
-
-    html += '</div>';
-
-    html +=
-      '<div class="text-end mt-3"><button class="btn btn-primary" onclick="saveSettings()">保存设置</button></div>';
-
-    document.getElementById('settingsBody').innerHTML = html;
-  }
-
   async function saveSettings() {
     const keys = [
       'downloader',
@@ -185,7 +95,7 @@
       'max_upload_limit',
     ];
 
-    const btn = document.querySelector('#settingsBody .btn-primary');
+    const btn = document.getElementById('saveSettingsBtn');
     btn.disabled = true;
     btn.textContent = '保存中...';
 
@@ -220,5 +130,5 @@
     }
   }
 
-  loadSettings();
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
 </script>

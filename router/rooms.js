@@ -3,26 +3,17 @@ const router = express.Router();
 const pool = require('../db/index');
 const redis = require('../db/redis');
 const RoomService = require('../services/RoomService');
+const DataService = require('../services/DataService');
 
 router.get('/rooms', async (req, res) => {
   try {
     const { status, page = 1, limit = 50 } = req.query;
-    const conditions = [];
-    const params = [];
-    if (status) {
-      conditions.push(`status = $${params.length + 1}`);
-      params.push(status);
-    }
-    let sql = `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id`;
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ` ORDER BY r.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
-    const result = await pool.query(sql, params);
-    const countResult = await pool.query(
-      'SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''),
-      params.slice(0, params.length - 2)
-    );
-    res.json({ status: 'ok', data: result.rows, total: parseInt(countResult.rows[0].count, 10) });
+    const { rows, total } = await DataService.getRooms({
+      status,
+      page,
+      limit,
+    });
+    res.json({ status: 'ok', data: rows, total });
   } catch (err) {
     console.error('[rooms] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
@@ -103,14 +94,11 @@ router.post('/rooms', async (req, res) => {
 router.get('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`,
-      [id]
-    );
-    if (result.rows.length === 0) {
+    const room = await DataService.getRoomById(id);
+    if (!room) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    res.json({ status: 'ok', data: result.rows[0] });
+    res.json({ status: 'ok', data: room });
   } catch (err) {
     console.error('[rooms] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
@@ -224,22 +212,13 @@ router.post('/rooms/:id/stop', async (req, res) => {
 router.get('/sessions', async (req, res) => {
   try {
     const { room_url, status, page = 1, limit = 20 } = req.query;
-    const conditions = [];
-    const params = [];
-    if (room_url) {
-      conditions.push(`room_url = $${params.length + 1}`);
-      params.push(room_url);
-    }
-    if (status) {
-      conditions.push(`status = $${params.length + 1}`);
-      params.push(status);
-    }
-    let sql = 'SELECT * FROM recording_sessions';
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ` ORDER BY started_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
-    const result = await pool.query(sql, params);
-    res.json({ status: 'ok', data: result.rows });
+    const data = await DataService.getSessions({
+      room_url,
+      status,
+      page,
+      limit,
+    });
+    res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });

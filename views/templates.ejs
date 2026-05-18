@@ -13,10 +13,30 @@
       <th>操作</th>
     </tr>
   </thead>
-  <tbody id="tmplBody"></tbody>
+  <tbody id="tmplBody">
+    <% if (templates.length === 0) { %>
+      <tr><td colspan="5" class="text-center text-muted py-4">暂无模板</td></tr>
+    <% } else { %>
+      <% templates.forEach(t => { %>
+        <tr>
+          <td><%= t.id %></td>
+          <td><%= t.name %></td>
+          <td><code><%= t.title_template || '-' %></code></td>
+          <td><%= t.tid || '-' %></td>
+          <td class="text-nowrap">
+            <button class="btn btn-sm btn-outline-primary editTmplBtn"
+              data='<%= JSON.stringify(t).replace(/'/g, "&#39;") %>'>编辑</button>
+            <button class="btn btn-sm btn-outline-success copyTmplBtn"
+              data='<%= JSON.stringify(t).replace(/'/g, "&#39;") %>'>复制</button>
+            <button class="btn btn-sm btn-outline-warning renewCookieBtn"
+              data-id="<%= t.id %>" data-name="<%= t.name %>">刷新Cookie</button>
+            <button class="btn btn-sm btn-outline-danger deleteTmplBtn" data-id="<%= t.id %>">删除</button>
+          </td>
+        </tr>
+      <% }) %>
+    <% } %>
+  </tbody>
 </table>
-<p class="text-muted text-center" id="emptyTmpl">暂无模板</p>
-<%- include('partials/_pagination', { prefix: 'tmpl', hideFirst: true }) %>
 
 <!-- 编辑弹窗 -->
 <div class="modal fade" id="tmplModal" tabindex="-1">
@@ -109,35 +129,6 @@
 </div>
 
 <script>
-async function loadTemplates() {
-  const res = await fetch('/api/upload_templates');
-  const json = await res.json();
-  const tbody = document.getElementById('tmplBody');
-  const empty = document.getElementById('emptyTmpl');
-  tbody.innerHTML = '';
-  if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
-  empty.style.display = 'none';
-  setupPagination('tmpl', json.data, (pageData) => {
-    tbody.innerHTML = '';
-    pageData.forEach(t => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${t.id}</td>
-      <td>${t.name}</td>
-      <td><code>${t.title_template || '-'}</code></td>
-      <td>${t.tid || '-'}</td>
-      <td class="text-nowrap">
-        <button class="btn btn-sm btn-outline-primary editTmplBtn"
-          data='${JSON.stringify(t).replace(/'/g, '&#39;')}'>编辑</button>
-        <button class="btn btn-sm btn-outline-success copyTmplBtn"
-          data='${JSON.stringify(t).replace(/'/g, '&#39;')}'>复制</button>
-        <button class="btn btn-sm btn-outline-danger deleteTmplBtn" data-id="${t.id}">删除</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-  });
-}
-
 async function apiAction(url, method, body) {
   const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const json = await res.json();
@@ -146,12 +137,27 @@ async function apiAction(url, method, body) {
 }
 
 document.addEventListener('click', async e => {
-  const btn = e.target.closest('[class*="TmplBtn"]');
+  const btn = e.target.closest('[class*="TmplBtn"], .renewCookieBtn');
   if (!btn) return;
   if (btn.classList.contains('deleteTmplBtn')) {
     if (!confirm('确定删除此模板？')) return;
     await apiAction(`/api/upload_templates/${btn.dataset.id}`, 'DELETE');
-    loadTemplates();
+    location.reload();
+  }
+  if (btn.classList.contains('renewCookieBtn')) {
+    const name = btn.dataset.name || '模板';
+    if (!confirm(`确定刷新「${name}」的 Cookie？将执行 biliup renew`)) return;
+    btn.disabled = true;
+    btn.textContent = '刷新中...';
+    try {
+      const json = await apiAction('/api/biliup/renew', 'POST', { template_id: parseInt(btn.dataset.id, 10) });
+      alert(json.message || '已启动');
+    } catch {
+      alert('刷新失败');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '刷新Cookie';
+    }
   }
   if (btn.classList.contains('copyTmplBtn')) {
     const t = JSON.parse(btn.getAttribute('data'));
@@ -170,7 +176,7 @@ document.addEventListener('click', async e => {
       after_upload: t.after_upload || 'none',
     };
     await apiAction('/api/upload_templates', 'POST', body);
-    loadTemplates();
+    location.reload();
   }
   if (btn.classList.contains('editTmplBtn')) {
     const t = JSON.parse(btn.getAttribute('data'));
@@ -215,7 +221,7 @@ document.getElementById('saveTmplBtn').addEventListener('click', async () => {
   }
   bootstrap.Modal.getInstance(document.getElementById('tmplModal')).hide();
   resetTmplForm();
-  loadTemplates();
+  location.reload();
 });
 
 document.getElementById('tmplModal').addEventListener('hidden.bs.modal', resetTmplForm);
@@ -235,6 +241,4 @@ function resetTmplForm() {
   document.getElementById('inputDtime').value = 0;
   document.getElementById('inputAfterUpload').value = 'none';
 }
-
-loadTemplates();
 </script>

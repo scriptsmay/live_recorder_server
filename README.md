@@ -3,7 +3,7 @@
 一个基于 nodejs express 的轻量直播录制服务器
 
 - 使用 pm2 进行进程管理
-- 支持 ffmpeg 和 stream-gears 下载引擎
+- 使用 FFmpeg 作为唯一下载引擎
 - 自动监控录制状态，支持断点续录
 
 ## 启动
@@ -54,7 +54,7 @@ npm run stop
 ├── lib/                    # 核心模块
 │   ├── core/              # 核心功能
 │   │   ├── backup.js      # NAS 备份
-│   │   ├── downloaders/   # 下载引擎（FFmpeg、Stream-Gears）
+│   │   ├── downloaders/   # 下载引擎（FFmpeg）
 │   │   ├── notify.js      # 通知服务
 │   │   ├── proc-log.js    # 进程日志
 │   │   ├── scan-files.js  # 文件扫描

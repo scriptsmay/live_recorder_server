@@ -1,15 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
+const DataService = require('../services/DataService');
 
 router.get('/settings', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM settings ORDER BY id');
-    const obj = {};
-    for (const row of result.rows) {
-      obj[row.key] = row.value;
-    }
-    res.json({ status: 'ok', data: result.rows, map: obj });
+    const { rows, map } = await DataService.getSettings();
+    res.json({ status: 'ok', data: rows, map });
   } catch (err) {
     console.error('[settings] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });

@@ -37,11 +37,10 @@
    ```js
    // lib/heartbeat-parser.js
    const FFmpegHeartbeat = /frame=\d+\s+fps=[\d.]+\s+bitrate=[\d.]+kbits/s/;
-   const StreamGearsHeartbeat = /download speed|retry|flv tag/; // 按实际 wrapper 输出适配
 
    function parseHeartbeat(chunk) {
      const text = chunk.toString();
-     return FFmpegHeartbeat.test(text) || StreamGearsHeartbeat.test(text);
+     return FFmpegHeartbeat.test(text);
    }
    ```
 
@@ -121,7 +120,7 @@
    **验收标准**：
 
 - [ ] 容器内 `ps aux` 无 `<defunct>` 僵尸进程
-- [ ] `kill -9 node` 后，FFmpeg/stream-gears 子进程在 3s 内自动退出
+- [ ] `kill -9 node` 后，FFmpeg 子进程在 3s 内自动退出
 - [ ] `startup()` 耗时从 ~15s 降至 ≤ 2s
 
 ---

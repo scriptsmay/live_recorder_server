@@ -339,7 +339,7 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 
 | 键                           | 类型   | 默认值   | 说明                                                         |
 | ---------------------------- | ------ | -------- | ------------------------------------------------------------ |
-| `downloader`                 | string | `ffmpeg` | 下载插件：`ffmpeg` 或 `stream-gears`                         |
+| `downloader`                 | string | `ffmpeg` | 下载插件（已弃用多引擎，仅 `ffmpeg`，保留键名兼容旧配置）    |
 | `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                           |
 | `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                         |
 | `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成         |

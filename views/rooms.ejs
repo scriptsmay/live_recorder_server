@@ -1,7 +1,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2>直播间管理</h2>
   <div>
-    <span class="badge bg-info me-2" id="downloaderBadge" style="display:none"></span>
+    <span class="badge bg-info me-2"><%= '\u2699 ' + downloader %></span>
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roomModal">+ 新增直播间</button>
   </div>
 </div>
@@ -22,11 +22,41 @@
         <th>操作</th>
       </tr>
     </thead>
-    <tbody id="roomsBody"></tbody>
+    <tbody id="roomsBody">
+      <% if (rooms.length === 0) { %>
+        <tr><td colspan="10" class="text-center text-muted py-4">暂无直播间数据</td></tr>
+      <% } else { %>
+        <% rooms.forEach(r => { %>
+          <% const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status; %>
+          <% const seg = r.segment_duration; %>
+          <tr>
+            <td><%= r.id %></td>
+            <td><%= r.room_name || '-' %></td>
+            <td><a href="<%= r.room_url %>" target="_blank" title="<%= r.room_url %>"><%= r.room_url %></a></td>
+            <td><%- statusBadge %></td>
+            <td><%= r.notification_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>' %></td>
+            <td><%= r.monitoring_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>' %></td>
+            <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
+            <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
+            <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
+            <td class="text-nowrap">
+              <% if (r.status === 'idle') { %>
+                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>">编辑</button>
+                <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="<%= r.id %>">删除</button>
+              <% } else if (r.status === 'recording') { %>
+                <button class="btn btn-sm btn-outline-warning actBtn" data-id="<%= r.id %>" data-action="pause">暂停</button>
+                <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
+              <% } else if (r.status === 'paused') { %>
+                <button class="btn btn-sm btn-outline-success actBtn" data-id="<%= r.id %>" data-action="resume">恢复</button>
+                <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      <% } %>
+    </tbody>
   </table>
-  <p class="text-muted text-center" id="emptyRooms">暂无直播间数据</p>
 </div>
-<%- include('partials/_pagination', { prefix: 'room', hideFirst: true }) %>
 
 <!-- 创建/编辑 Modal -->
 <div class="modal fade" id="roomModal" tabindex="-1">
@@ -70,6 +100,9 @@
           <label class="form-label">投稿模板</label>
           <select class="form-select" id="inputTemplateId">
             <option value="">不使用模板</option>
+            <% templates.forEach(t => { %>
+              <option value="<%= t.id %>"><%= t.name %></option>
+            <% }) %>
           </select>
           <div class="form-text">用于自动投稿的模板，不选择则使用全局第一个模板</div>
         </div>
@@ -96,72 +129,6 @@ async function apiAction(url, method, body) {
   return res;
 }
 
-async function loadDownloaderInfo() {
-  try {
-    const res = await fetch('/api/settings');
-    const json = await res.json();
-    if (json.data) {
-      const dl = json.data.find(s => s.key === 'downloader');
-      const badge = document.getElementById('downloaderBadge');
-      if (dl && dl.value) {
-        badge.textContent = '⚙ ' + dl.value;
-        badge.style.display = '';
-      }
-    }
-  } catch (_) {}
-}
-
-async function loadTemplateSelect() {
-  try {
-    const res = await fetch('/api/upload_templates');
-    const json = await res.json();
-    const sel = document.getElementById('inputTemplateId');
-    sel.innerHTML = '<option value="">不使用模板</option>';
-    if (json.data) json.data.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name;
-      sel.appendChild(opt);
-    });
-  } catch (_) {}
-}
-
-async function loadRooms() {
-  const res = await fetch('/api/rooms');
-  const json = await res.json();
-  const tbody = document.getElementById('roomsBody');
-  const empty = document.getElementById('emptyRooms');
-  tbody.innerHTML = '';
-  if (!json.data || json.data.length === 0) { empty.style.display = ''; return; }
-  empty.style.display = 'none';
-  setupPagination('room', json.data, (pageData) => {
-    tbody.innerHTML = '';
-    pageData.forEach(r => {
-      const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status;
-      const seg = r.segment_duration;
-      tbody.innerHTML += `<tr>
-        <td>${r.id}</td>
-        <td>${r.room_name || '-'}</td>
-        <td><a href="${r.room_url}" target="_blank" title="${r.room_url}">${r.room_url}</a></td>
-        <td>${statusBadge}</td>
-        <td>${r.notification_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
-        <td>${r.monitoring_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>'}</td>
-        <td>${r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-')}</td>
-        <td><code>${r.filename_template || '{room_name}_{datetime}'}</code></td>
-        <td>${seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-'}</td>
-        <td class="text-nowrap">
-          ${r.status === 'idle' ? `<button class="btn btn-sm btn-outline-primary editBtn" data-id="${r.id}">编辑</button>
-          <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="${r.id}">删除</button>` : ''}
-          ${r.status === 'recording' ? `<button class="btn btn-sm btn-outline-warning actBtn" data-id="${r.id}" data-action="pause">暂停</button>
-          <button class="btn btn-sm btn-outline-danger actBtn" data-id="${r.id}" data-action="stop">停止</button>` : ''}
-          ${r.status === 'paused' ? `<button class="btn btn-sm btn-outline-success actBtn" data-id="${r.id}" data-action="resume">恢复</button>
-          <button class="btn btn-sm btn-outline-danger actBtn" data-id="${r.id}" data-action="stop">停止</button>` : ''}
-        </td>
-      </tr>`;
-    });
-  });
-}
-
 document.getElementById('saveBtn').addEventListener('click', async () => {
   const id = document.getElementById('editId').value;
   const url = document.getElementById('inputUrl').value.trim();
@@ -180,9 +147,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     : await apiAction('/api/rooms', 'POST', { room_url: url, ...body });
 
   if (res.ok) {
-    bootstrap.Modal.getInstance(document.getElementById('roomModal')).hide();
-    resetForm();
-    loadRooms();
+    location.reload();
   }
 });
 
@@ -230,17 +195,13 @@ document.addEventListener('click', e => {
     const action = actBtn.dataset.action;
     const confirmMsg = { stop: '确定停止录制？', delete: '确定删除此直播间？' }[action];
     if (confirmMsg && !confirm(confirmMsg)) return;
-    apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => { if (r.ok) loadRooms(); });
+    apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => { if (r.ok) location.reload(); });
     return;
   }
   const delBtn = e.target.closest('.delRoomBtn');
   if (delBtn) {
     if (!confirm('确定删除此直播间？')) return;
-    apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => { if (r.ok) loadRooms(); });
+    apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => { if (r.ok) location.reload(); });
   }
 });
-
-loadDownloaderInfo();
-loadRooms();
-loadTemplateSelect();
 </script>

@@ -5,6 +5,7 @@ const config = require('../config/config');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 const RecorderService = require('../services/RecorderService');
+const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
@@ -104,12 +105,10 @@ router.get('/notify/status', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [url]);
-    if (result.rows.length === 0) {
+    const room = await DataService.getRoomByUrl(url);
+    if (!room) {
       return res.json({ exists: false });
     }
-
-    const room = result.rows[0];
     let downloaderEngine = 'ffmpeg';
     try {
       const dl = await getActiveDownloader();
@@ -193,8 +192,8 @@ router.get('/dashboard/status', async (req, res) => {
         const roomUrl = key.replace('active_task:', '');
         let roomName = '';
         try {
-          const r = await pool.query('SELECT room_name FROM rooms WHERE room_url = $1', [roomUrl]);
-          roomName = r.rows[0]?.room_name || '';
+          const room = await DataService.getRoomByUrl(roomUrl);
+          roomName = room?.room_name || '';
         } catch (_) {}
         activeRecordings.push({
           room_url: roomUrl,
@@ -215,8 +214,8 @@ router.get('/dashboard/status', async (req, res) => {
     // 池容量
     let poolSize = 3;
     try {
-      const ps = await pool.query("SELECT value FROM settings WHERE key = 'pool_size'");
-      if (ps.rows.length) poolSize = parseInt(ps.rows[0].value, 10) || 3;
+      const val = await DataService.getSetting('pool_size');
+      if (val) poolSize = parseInt(val, 10) || 3;
     } catch (_) {}
 
     res.json({
@@ -241,21 +240,8 @@ router.get('/dashboard/status', async (req, res) => {
 router.get('/recording_files', async (req, res) => {
   try {
     const { status, session_id } = req.query;
-    const conditions = [];
-    const params = [];
-    if (status) {
-      conditions.push(`status = $${params.length + 1}`);
-      params.push(status);
-    }
-    if (session_id) {
-      conditions.push(`session_id = $${params.length + 1}`);
-      params.push(parseInt(session_id));
-    }
-    let sql = 'SELECT * FROM recording_files';
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ' ORDER BY id DESC';
-    const result = await pool.query(sql, params);
-    res.json({ status: 'ok', data: result.rows });
+    const data = await DataService.getRecordingFiles({ status, session_id });
+    res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[api] recording_files 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });

@@ -1,12 +1,15 @@
 const express = require('express');
+const { spawn } = require('child_process');
 const router = express.Router();
 const pool = require('../db/index');
 const UploadService = require('../services/UploadService');
+const DataService = require('../services/DataService');
+const { createProcLog } = require('../lib/utils/proc-log');
 
 router.get('/upload_templates', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM upload_templates ORDER BY id');
-    res.json({ status: 'ok', data: result.rows });
+    const data = await DataService.getTemplates();
+    res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[templates] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
@@ -110,6 +113,66 @@ router.delete('/upload_templates/:id', async (req, res) => {
   }
 });
 
+router.post('/biliup/renew', async (req, res) => {
+  try {
+    const { template_id } = req.body;
+    if (!template_id) {
+      return res.status(400).json({ status: 'Error', message: '缺少 template_id' });
+    }
+
+    const tmpl = await DataService.getTemplates();
+    const row = tmpl.find((t) => t.id === template_id);
+    if (!row) {
+      return res.status(404).json({ status: 'Error', message: '模板不存在' });
+    }
+
+    const cookiesPath = row.cookies_path;
+    if (!cookiesPath) {
+      return res.status(400).json({
+        status: 'Error',
+        message: '该模板未配置 cookies_path',
+      });
+    }
+
+    const biliupPath = process.env.BILIUP_PATH || 'biliup';
+    const uploadCwd = process.env.BILIUP_WORK_DIR || process.env.HOME || '.';
+
+    const { stream: logStream, logPath } = createProcLog('biliup', `renew_${template_id}`);
+    console.log(`[biliup renew] 日志: ${logPath}`);
+
+    const proc = spawn(biliupPath, ['-u', cookiesPath, 'renew'], {
+      cwd: uploadCwd,
+    });
+
+    logStream.write(`# COMMAND: ${biliupPath} -u ${cookiesPath} renew\n`);
+
+    proc.stdout.on('data', (d) => {
+      logStream.write(d.toString());
+    });
+    proc.stderr.on('data', (d) => {
+      logStream.write(d.toString());
+    });
+
+    proc.on('error', (err) => {
+      logStream.write(`[ERROR] 进程启动失败: ${err.message}\n`);
+      console.error('[biliup renew] 进程启动失败:', err.message);
+    });
+
+    proc.on('close', (code) => {
+      logStream.write(`\n# EXIT CODE: ${code}\n`);
+      console.log(`[biliup renew] 模板 ${template_id} 退出码: ${code}, 日志: ${logPath}`);
+    });
+
+    res.json({
+      status: 'ok',
+      message: 'Cookie 刷新已启动，请稍后查看结果',
+    });
+  } catch (err) {
+    console.error('[biliup renew] 失败:', err);
+    res.status(500).json({ status: 'Error', message: '刷新失败' });
+  }
+});
+
 router.post('/sessions/:id/upload', async (req, res) => {
   try {
     const { id } = req.params;
@@ -146,22 +209,12 @@ router.post('/sessions/:id/upload', async (req, res) => {
 router.get('/upload_records', async (req, res) => {
   try {
     const { session_id, status, limit = 50 } = req.query;
-    const conditions = [];
-    const params = [];
-    if (session_id) {
-      conditions.push(`session_id = $${params.length + 1}`);
-      params.push(session_id);
-    }
-    if (status) {
-      conditions.push(`status = $${params.length + 1}`);
-      params.push(status);
-    }
-    let sql = 'SELECT * FROM upload_records';
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ` ORDER BY id DESC LIMIT $${params.length + 1}`;
-    params.push(parseInt(limit, 10));
-    const result = await pool.query(sql, params);
-    res.json({ status: 'ok', data: result.rows });
+    const data = await DataService.getUploadRecords({
+      session_id,
+      status,
+      limit,
+    });
+    res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[upload_records] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });

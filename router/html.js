@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const router = express.Router();
-const pool = require('../db/index');
+const DataService = require('../services/DataService');
 
 // 日志目录
 const logsDir = path.join(__dirname, '../logs');
@@ -19,44 +19,53 @@ router.get('/dashboard', (req, res) => {
   res.render('dashboard', { title: '仪表盘' });
 });
 
-router.get('/rooms', (req, res) => {
-  res.render('rooms', { title: '直播间管理' });
+router.get('/rooms', async (req, res) => {
+  try {
+    const [{ rows: rooms }, templates, { map: settingsMap }] = await Promise.all([
+      DataService.getRooms(),
+      DataService.getTemplates(),
+      DataService.getSettings(),
+    ]);
+    const downloader = settingsMap.downloader || 'ffmpeg';
+    res.render('rooms', {
+      title: '直播间管理',
+      rooms,
+      templates,
+      downloader,
+    });
+  } catch (err) {
+    console.error('[html] 直播间页加载失败:', err);
+    res.status(500).render('rooms', {
+      title: '直播间管理',
+      rooms: [],
+      templates: [],
+      downloader: 'ffmpeg',
+    });
+  }
 });
 
 router.get('/sessions', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
-    const whereClause = roomFilter ? 'WHERE s.deleted_at IS NULL AND s.room_url = $1' : 'WHERE s.deleted_at IS NULL';
-    const params = roomFilter ? [roomFilter] : [];
-    const [sessResult, uploadResult, roomsResult, tmplResult] = await Promise.all([
-      pool.query(
-        `
-        SELECT s.*, rm.room_name
-        FROM recording_sessions s
-        LEFT JOIN rooms rm ON s.room_url = rm.room_url
-        ${whereClause}
-        ORDER BY s.id DESC
-        LIMIT 50
-      `,
-        params
-      ),
-      pool.query('SELECT * FROM upload_records ORDER BY id DESC LIMIT 200'),
-      pool.query('SELECT room_url, room_name FROM rooms ORDER BY id DESC'),
-      pool.query('SELECT * FROM upload_templates ORDER BY id DESC'),
+    const [sessions, uploadRecords, rooms, templates] = await Promise.all([
+      DataService.getSessions({ room_url: roomFilter }),
+      DataService.getUploadRecords({ limit: 200 }),
+      DataService.getRoomList(),
+      DataService.getTemplates(),
     ]);
 
     const uploadMap = {};
-    for (const u of uploadResult.rows) {
+    for (const u of uploadRecords) {
       if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
       uploadMap[u.session_id].push(u);
     }
 
     res.render('sessions', {
       title: '录制会话',
-      sessions: sessResult.rows,
+      sessions,
       uploadMap,
-      rooms: roomsResult.rows,
-      templates: tmplResult.rows,
+      rooms,
+      templates,
       currentRoomUrl: roomFilter,
     });
   } catch (err) {
@@ -72,27 +81,27 @@ router.get('/sessions', async (req, res) => {
   }
 });
 
-router.get('/templates', (req, res) => {
-  res.render('templates', { title: '投稿模板' });
+router.get('/templates', async (req, res) => {
+  try {
+    const templates = await DataService.getTemplates();
+    res.render('templates', { title: '投稿模板', templates });
+  } catch (err) {
+    console.error('[html] 模板页加载失败:', err);
+    res.status(500).render('templates', { title: '投稿模板', templates: [] });
+  }
 });
 
 router.get('/upload_records', async (req, res) => {
   try {
-    const [recordsResult, templatesResult] = await Promise.all([
-      pool.query(`
-        SELECT ur.*, ut.name as template_name
-        FROM upload_records ur
-        LEFT JOIN upload_templates ut ON ur.template_id = ut.id
-        ORDER BY ur.id DESC
-        LIMIT 100
-      `),
-      pool.query('SELECT * FROM upload_templates ORDER BY id DESC'),
+    const [records, templates] = await Promise.all([
+      DataService.getUploadRecords({ limit: 100 }),
+      DataService.getTemplates(),
     ]);
 
     res.render('upload_records', {
       title: '投稿记录',
-      records: recordsResult.rows,
-      templates: templatesResult.rows,
+      records,
+      templates,
     });
   } catch (err) {
     console.error('[html] 投稿记录页加载失败:', err);
@@ -105,37 +114,21 @@ router.get('/recordings', async (req, res) => {
     const roomFilter = req.query.room_url || '';
     let thresholdBytes = 0;
     try {
-      const ps = await pool.query("SELECT value FROM settings WHERE key = 'filtering_threshold'");
-      if (ps.rows.length) thresholdBytes = (parseInt(ps.rows[0].value, 10) || 10) * 1024 * 1024;
+      const val = await DataService.getSetting('filtering_threshold');
+      if (val) thresholdBytes = (parseInt(val, 10) || 10) * 1024 * 1024;
     } catch (_) {}
-    const params = [];
-    const conditions = [];
-    if (thresholdBytes > 0) {
-      conditions.push(`r.file_size >= $${params.length + 1}`);
-      params.push(thresholdBytes);
-    }
-    if (roomFilter) {
-      conditions.push(`r.room_url = $${params.length + 1}`);
-      params.push(roomFilter);
-    }
-    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-    const [recResult, roomsResult] = await Promise.all([
-      pool.query(
-        `SELECT r.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
-         FROM recordings r
-         LEFT JOIN rooms rm ON r.room_url = rm.room_url
-         LEFT JOIN recording_sessions rs ON r.session_id = rs.id
-         ${where}
-         ORDER BY r.id DESC
-         LIMIT 200`,
-        params
-      ),
-      pool.query('SELECT room_url, room_name FROM rooms ORDER BY id DESC'),
+
+    const [recordings, rooms] = await Promise.all([
+      DataService.getRecordings({
+        room_url: roomFilter,
+        thresholdBytes,
+      }),
+      DataService.getRoomList(),
     ]);
     res.render('recordings', {
       title: '录制历史',
-      recordings: recResult.rows,
-      rooms: roomsResult.rows,
+      recordings,
+      rooms,
       roomFilter,
     });
   } catch (err) {
@@ -145,16 +138,22 @@ router.get('/recordings', async (req, res) => {
 });
 
 router.get('/_/rooms/table', async (req, res) => {
-  const result = await pool.query('SELECT * FROM rooms ORDER BY id DESC');
-  res.render('partials/_rooms_table', { rooms: result.rows, layout: false });
+  const { rows: rooms } = await DataService.getRooms();
+  res.render('partials/_rooms_table', { rooms, layout: false });
 });
 
 router.get('/files', (req, res) => {
   res.render('files', { title: '文件管理' });
 });
 
-router.get('/settings', (req, res) => {
-  res.render('settings', { title: '全局设置' });
+router.get('/settings', async (req, res) => {
+  try {
+    const { rows: settings } = await DataService.getSettings();
+    res.render('settings', { title: '全局设置', settings });
+  } catch (err) {
+    console.error('[html] 设置页加载失败:', err);
+    res.status(500).render('settings', { title: '全局设置', settings: [] });
+  }
 });
 
 router.get('/apiview', (req, res) => {
