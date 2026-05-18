@@ -92,6 +92,42 @@ docker compose --env-file .env.docker exec app sh
 biliup --help
 ```
 
+## 消息通知
+
+通知配置是可选的，未配置时系统会静默跳过对应通道：
+
+```env
+MESSAGE_FEISHU_WEBHOOK=
+MESSAGE_GOTIFY_SERVER=
+MESSAGE_GOTIFY_TOKEN=
+MESSAGE_GOTIFY_PRIORITY=5
+```
+
+- `MESSAGE_FEISHU_WEBHOOK`：飞书机器人 webhook。
+- `MESSAGE_GOTIFY_SERVER`：Gotify 服务地址，例如 `https://gotify.example.com`。
+- `MESSAGE_GOTIFY_TOKEN`：Gotify app token。
+- `MESSAGE_GOTIFY_PRIORITY`：Gotify 消息优先级，默认 `5`。
+
+`POST /api/notify/feishu_webhook` 仅用于飞书转发；未配置
+`MESSAGE_FEISHU_WEBHOOK` 时返回 HTTP 503。
+
+## NAS 备份
+
+Docker 部署通常通过 `./data/video_downloads:/data/video_downloads` 持久化录制文件，
+不一定需要额外 NAS 备份。
+
+如果投稿模板选择了 `after_upload=backup` 或 `backup_and_delete`，但未配置
+`NAS_HOST`、`NAS_USER`、`NAS_BACKUP_DIR`，系统会跳过 NAS 备份并在投稿记录中写入
+`skipped` 结果。`backup_and_delete` 在 NAS 未配置时不会继续删除本地文件。
+
+如仍需通过 rsync 备份到 NAS，可在 `.env.docker` 中配置：
+
+```env
+NAS_HOST=192.168.1.100
+NAS_USER=username
+NAS_BACKUP_DIR=/volume1/video_backups
+```
+
 ## 首次部署
 
 1. 准备 `.env.docker`，至少修改数据库和 Redis 密码。

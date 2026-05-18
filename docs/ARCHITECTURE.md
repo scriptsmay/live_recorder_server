@@ -347,6 +347,15 @@ startup()
 - `upload_templates` 表存储投稿参数
 - 支持变量替换：`{room_name}` `{date}` `{datetime}` 等
 - 投稿后处理：`none` / `backup` / `delete` / `backup_and_delete`
+- Docker 部署可仅依赖 volume 持久化录制文件；未配置 `NAS_*` 时，
+  `backup` / `backup_and_delete` 会返回 `skipped`，且不会执行本地删除。
+
+### 通知
+
+- 通知通道：飞书 webhook、Gotify。
+- 未配置通知参数时静默跳过对应通道。
+- Gotify 使用 `MESSAGE_GOTIFY_SERVER`、`MESSAGE_GOTIFY_TOKEN`、
+  `MESSAGE_GOTIFY_PRIORITY`。
 
 ### 执行
 

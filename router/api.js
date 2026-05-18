@@ -93,6 +93,11 @@ router.post('/notify/feishu_webhook', async (req, res) => {
         error: '缺少必填参数 title',
       });
     }
+    if (!config.MESSAGE_FEISHU_WEBHOOK) {
+      return res.status(503).json({
+        error: '未配置 MESSAGE_FEISHU_WEBHOOK',
+      });
+    }
 
     const sendContent = `${title}\n${content}\n${new Date().toISOString()}`;
     const response = await axios({

@@ -152,23 +152,23 @@
 
 投稿参数模板，支持变量替换。
 
-| 字段                    | 类型          | 约束                                    | 说明                                                                                                                  |
-| ----------------------- | ------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| id                      | SERIAL        | PRIMARY KEY                             |                                                                                                                       |
-| name                    | VARCHAR(255)  | NOT NULL                                | 模板名称                                                                                                              |
-| room_url                | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL | 关联直播间（可选）                                                                                                    |
-| title_template          | VARCHAR(1024) |                                         | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                          |
-| desc_template           | TEXT          |                                         | 简介模板                                                                                                              |
-| tid                     | INTEGER       | DEFAULT 171                             | B站分区 ID                                                                                                            |
-| tags                    | VARCHAR(1024) |                                         | 标签，逗号分隔                                                                                                        |
-| copyright               | INTEGER       | DEFAULT 2                               | 1-自制 2-转载                                                                                                         |
-| source                  | VARCHAR(1024) | DEFAULT `{room_url}`                    | 转载来源（支持模板变量）                                                                                              |
-| cover                   | VARCHAR(1024) |                                         | 封面路径                                                                                                              |
-| is_only_self            | INTEGER       | DEFAULT 0                               | 仅自己可见，0-关闭 1-开启                                                                                             |
-| cookies_path            | VARCHAR(1024) |                                         | biliup 账户文件绝对路径（必填）                                                                                       |
-| dtime                   | INTEGER       | DEFAULT 0                               | 延迟发布时间，10 位 Unix 时间戳                                                                                       |
-| after_upload            | VARCHAR(20)   | DEFAULT 'none'                          | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件 |
-| created_at / updated_at | TIMESTAMP     |                                         |                                                                                                                       |
+| 字段                    | 类型          | 约束                                    | 说明                                                                                                                                                     |
+| ----------------------- | ------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                      | SERIAL        | PRIMARY KEY                             |                                                                                                                                                          |
+| name                    | VARCHAR(255)  | NOT NULL                                | 模板名称                                                                                                                                                 |
+| room_url                | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL | 关联直播间（可选）                                                                                                                                       |
+| title_template          | VARCHAR(1024) |                                         | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                                                             |
+| desc_template           | TEXT          |                                         | 简介模板                                                                                                                                                 |
+| tid                     | INTEGER       | DEFAULT 171                             | B站分区 ID                                                                                                                                               |
+| tags                    | VARCHAR(1024) |                                         | 标签，逗号分隔                                                                                                                                           |
+| copyright               | INTEGER       | DEFAULT 2                               | 1-自制 2-转载                                                                                                                                            |
+| source                  | VARCHAR(1024) | DEFAULT `{room_url}`                    | 转载来源（支持模板变量）                                                                                                                                 |
+| cover                   | VARCHAR(1024) |                                         | 封面路径                                                                                                                                                 |
+| is_only_self            | INTEGER       | DEFAULT 0                               | 仅自己可见，0-关闭 1-开启                                                                                                                                |
+| cookies_path            | VARCHAR(1024) |                                         | biliup 账户文件绝对路径（必填）                                                                                                                          |
+| dtime                   | INTEGER       | DEFAULT 0                               | 延迟发布时间，10 位 Unix 时间戳                                                                                                                          |
+| after_upload            | VARCHAR(20)   | DEFAULT 'none'                          | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件；未配置 `NAS_*` 时备份类动作会跳过 |
+| created_at / updated_at | TIMESTAMP     |                                         |                                                                                                                                                          |
 
 **模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}`
 

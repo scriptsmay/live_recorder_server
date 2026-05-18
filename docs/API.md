@@ -165,6 +165,30 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 }
 ```
 
+### POST /api/notify/feishu_webhook
+
+转发一条飞书机器人消息。需要配置 `MESSAGE_FEISHU_WEBHOOK`；未配置时返回 HTTP 503。
+
+**请求体：**
+
+| 参数    | 类型   | 必填 | 说明     |
+| ------- | ------ | ---- | -------- |
+| title   | string | 是   | 消息标题 |
+| content | string | 否   | 消息内容 |
+
+---
+
+## 通知配置
+
+服务端通知由录制、投稿和投稿后处理流程自动触发，支持以下通道：
+
+| 环境变量                  | 说明                                               |
+| ------------------------- | -------------------------------------------------- |
+| `MESSAGE_FEISHU_WEBHOOK`  | 飞书机器人 webhook；未配置则跳过飞书通知           |
+| `MESSAGE_GOTIFY_SERVER`   | Gotify 服务地址，例如 `https://gotify.example.com` |
+| `MESSAGE_GOTIFY_TOKEN`    | Gotify app token；未配置则跳过 Gotify 通知         |
+| `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级，默认 `5`                            |
+
 ### GET /api/notify/status
 
 查询直播间录制状态（轻量只读，不会创建房间）。
@@ -424,17 +448,19 @@ curl http://127.0.0.1:1123/api/upload_templates
 
 **请求体：**
 
-| 参数           | 类型   | 必填 | 说明                                                       |
-| -------------- | ------ | ---- | ---------------------------------------------------------- |
-| name           | string | 是   | 模板名称                                                   |
-| title_template | string | 否   | 标题模板，默认 `{room_name} 直播录像 {date}`               |
-| desc_template  | string | 否   | 描述模板                                                   |
-| tid            | string | 否   | 分区 ID                                                    |
-| cookies_path   | string | 否   | Cookies 文件路径                                           |
-| priority       | number | 否   | 优先级，数字越小越优先                                     |
-| source_delete  | number | 否   | 投稿后删除源文件，0=不删除 1=删除                          |
-| after_upload   | string | 否   | 投稿后操作：`none`=无操作 `backup`=备份到NAS `delete`=删除 |
-| backup_path    | string | 否   | 备份目标路径（after_upload=backup 时必填）                 |
+| 参数           | 类型   | 必填 | 说明                                                                                      |
+| -------------- | ------ | ---- | ----------------------------------------------------------------------------------------- |
+| name           | string | 是   | 模板名称                                                                                  |
+| title_template | string | 否   | 标题模板，默认 `{room_name} 直播录像 {date}`                                              |
+| desc_template  | string | 否   | 描述模板                                                                                  |
+| tid            | string | 否   | 分区 ID                                                                                   |
+| cookies_path   | string | 否   | Cookies 文件路径                                                                          |
+| priority       | number | 否   | 优先级，数字越小越优先                                                                    |
+| source_delete  | number | 否   | 投稿后删除源文件，0=不删除 1=删除                                                         |
+| after_upload   | string | 否   | 投稿后操作：`none`=无操作 `backup`=备份到NAS `delete`=删除 `backup_and_delete`=备份后删除 |
+
+`after_upload=backup` 或 `backup_and_delete` 依赖 `NAS_HOST`、`NAS_USER`、
+`NAS_BACKUP_DIR`。未配置 NAS 时会跳过备份；`backup_and_delete` 不会继续删除本地文件。
 
 **示例：**
 
