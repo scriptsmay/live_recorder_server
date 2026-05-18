@@ -606,3 +606,43 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 | .segments_*.txt 残留 | 低 | 文件极小（<1KB），不影响功能 |
 | scanActiveSegments 5 分钟窗口 | 低 | `finishSession` 已正常处理，看门狗仅作二次兜底 |
 | pause/resume 失败后状态不一致 | 低 | 极少触发，且看门狗最终会修正 |
+
+## ffmpeg `+discardcorrupt` 导致虎牙直播流全变碎片文件
+
+### 问题现象
+
+commit `216d46f` 修改 ffmpeg 下载参数后，虎牙直播流下载全部变碎片文件——每次启动 ffmpeg 几秒就退出，产生 1-2MB 的碎片。
+
+### 问题根因
+
+对比 v1.0（正常工作）与当前的 ffmpeg 参数差异：
+
+```
+v1.0 (正常):                          216d46f (碎片):
+-fflags +genpts                       -fflags +genpts+discardcorrupt  ← 🔴
+(无)                                  -err_detect ignore_err           ← 🟡
+-reconnect_delay_max 60               -reconnect_delay_max 120         ← 🟢
+```
+
+**`+discardcorrupt`** 是根本原因。该 flag 告诉 ffmpeg **主动丢弃**它认为损坏的数据包。虎牙 HTTP-FLV 直播流包含一些非标准格式特征（尤其是初始握手阶段的流数据），ffmpeg 将其判定为 corruption 并丢弃。当关键包（SPS/PPS、关键帧）被丢弃后，解码器断裂，ffmpeg 正常退出（exit code 0，不是 crash）。
+
+`-err_detect ignore_err` 本意是忽略错误、防退出，但它作用于解码/解复用层的错误，而 `+discardcorrupt` 在更底层就直接丢弃了数据包——`err_detect` 根本看不到这些包，无从处理。
+
+### 修复方案
+
+回退 `buildArgs()` 到 v1.0 参数：
+
+```
+- '-fflags', '+genpts+discardcorrupt'  →  '-fflags', '+genpts'
+- '-reconnect_delay_max', '120'        →  '-reconnect_delay_max', '60'
+- '-err_detect', 'ignore_err'          →  删除
+```
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **ffmpeg 参数改一发动全身** | 看似无害的 flag 可能彻底改变流处理行为 |
+| **discardcorrupt ≠ 修复残缺流** | 它只是丢弃，不是修复。非标直播流中的数据被误判为 corruption，丢弃后流就断了 |
+| **err_detect 和 discardcorrupt 不是互补的** | err_detect 在解码层、discardcorrupt 在输入层——后者在前者之前就丢掉了数据 |
+| **回退到已知工作版本是最快修复** | 遇到参数导致的问题，优先比对 git 历史找到破坏性提交 |
