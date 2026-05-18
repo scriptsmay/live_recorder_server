@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-require('../config/env').applyEnvDefaults();
+require('../config/env').initEnv();
 
 function parseOptionalInt(value) {
   const parsed = parseInt(value, 10);

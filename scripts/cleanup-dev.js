@@ -23,8 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-require('dotenv').config({ path: path.join(__dirname, '..', '.env.dev'), quiet: true });
-require('dotenv').config({ quiet: true });
+require('../config/env').initEnv({ mode: 'development' });
 
 const pool = require('../db/index');
 

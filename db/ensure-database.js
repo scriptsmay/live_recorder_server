@@ -1,5 +1,5 @@
 const { Client } = require('pg');
-require('../config/env').applyEnvDefaults();
+require('../config/env').initEnv();
 
 const MAINTENANCE_DBS = ['postgres', 'template1'];
 

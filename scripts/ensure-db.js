@@ -1,7 +1,4 @@
-require('dotenv').config({ quiet: true });
-if (process.env.NODE_ENV === 'development') {
-  require('dotenv').config({ path: '.env.dev', override: true, quiet: true });
-}
+require('../config/env').initEnv();
 
 const ensureDatabase = require('../db/ensure-database');
 const migrate = require('../db/migrate');

@@ -1,4 +1,4 @@
-require('dotenv').config({ quiet: true });
+require('./env').initEnv();
 
 const envs = process.env;
 const SITE_URL = envs.SITE_URL || `http://localhost:${envs.PORT || 1123}/`;

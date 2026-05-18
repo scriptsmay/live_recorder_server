@@ -1,4 +1,21 @@
 const path = require('path');
+const dotenv = require('dotenv');
+
+const rootDir = path.join(__dirname, '..');
+
+function loadEnv(options = {}) {
+  const mode = options.mode || process.env.NODE_ENV;
+
+  dotenv.config({ path: path.join(rootDir, '.env'), quiet: true });
+
+  if (mode === 'development') {
+    dotenv.config({
+      path: path.join(rootDir, '.env.dev'),
+      override: true,
+      quiet: true,
+    });
+  }
+}
 
 function applyDockerDefaults() {
   const appDataDir = process.env.APP_DATA_DIR || '/data';
@@ -42,6 +59,15 @@ function applyEnvDefaults() {
   applyRedisUrl();
 }
 
+function initEnv(options = {}) {
+  loadEnv(options);
+  applyEnvDefaults();
+
+  return process.env;
+}
+
 module.exports = {
+  loadEnv,
   applyEnvDefaults,
+  initEnv,
 };
