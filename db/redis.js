@@ -10,6 +10,7 @@ const client = {
   keys: (pattern) => redisService.keys(pattern),
   incr: (key) => redisService.incr(key),
   expire: (key, seconds) => redisService.expire(key, seconds),
+  ping: () => redisService.ping(),
   disconnect: () => redisService.disconnect(),
 };
 

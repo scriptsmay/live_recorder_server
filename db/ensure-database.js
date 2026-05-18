@@ -1,6 +1,27 @@
 const { Client } = require('pg');
+require('../config/env').initEnv();
 
 const MAINTENANCE_DBS = ['postgres', 'template1'];
+
+function buildMaintenanceConnection(maintenanceDb) {
+  if (process.env.DATABASE_URL) {
+    const url = new URL(process.env.DATABASE_URL);
+    url.pathname = `/${maintenanceDb}`;
+    return {
+      connectionString: url.toString(),
+      connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT, 10) || 5000,
+    };
+  }
+
+  return {
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    password: process.env.DB_PASSWORD,
+    port: parseInt(process.env.DB_PORT, 10) || 5432,
+    database: maintenanceDb,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT, 10) || 5000,
+  };
+}
 
 /**
  * 若目标库不存在则创建（需对 maintenance 库有 CREATEDB 权限）。
@@ -17,14 +38,7 @@ async function ensureDatabase() {
 
   let lastErr;
   for (const maintenanceDb of MAINTENANCE_DBS) {
-    const client = new Client({
-      user: process.env.DB_USER,
-      host: process.env.DB_HOST,
-      password: process.env.DB_PASSWORD,
-      port: parseInt(process.env.DB_PORT, 10),
-      database: maintenanceDb,
-      connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT, 10) || 5000,
-    });
+    const client = new Client(buildMaintenanceConnection(maintenanceDb));
 
     try {
       await client.connect();

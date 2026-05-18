@@ -1,0 +1,52 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: ['main']
+
+# 定义权限，必须有 write 权限才能推送到 GHCR
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # 1. 登录到 GitHub Container Registry
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.MY_TOKEN }}
+
+      # 2. 提取元数据（自动生成标签，如 :main 和 :sha-xxxx）
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            latest
+
+      # 3. 设置 Buildx（用于缓存优化）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # 4. 构建并推送
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true # 设置为 true 就会自动推送
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

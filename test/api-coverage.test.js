@@ -46,6 +46,7 @@ const EXPECTED_APIS = [
   { method: 'DELETE', path: '/upload_records/:id' },
 
   // 额外的现有接口
+  { method: 'GET', path: '/health' },
   { method: 'POST', path: '/scan_files' },
   { method: 'GET', path: '/' },
   { method: 'POST', path: '/notify/feishu_webhook' },

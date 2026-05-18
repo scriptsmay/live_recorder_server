@@ -1,89 +1,176 @@
-# TODO: EJS 后端渲染改造 + 公共数据服务提取
+# TODO：下一个版本的开发计划
 
-> **状态：已完成**（2026-05-18）
+## v1.1：Docker 镜像与 NAS 部署支持
 
-## 目标
+### 目标
 
-1. 将 templates.ejs、rooms.ejs、settings.ejs 改为后端 EJS 渲染
-2. 提取公共数据服务，消除 html.js 和 API 路由的重复 pool.query
-3. dashboard.ejs 和 files.ejs 保留前端 fetch（轮询/交互需求）
+将项目封装成 Docker 镜像，并提供 Docker Compose 部署方案，方便在 NAS
+或其他 Linux 主机上稳定运行。
 
-## Task 1: 新建 `services/DataService.js` — 公共数据查询服务 ✅
+本版本不移除现有 PM2 本地部署方式，而是新增 Docker 部署能力，确保正式环境可平滑迁移与回滚。
 
-提取以下重复查询为独立方法：
+### 总体方案
 
-```js
-// services/DataService.js
-class DataService {
-  static async getTemplates()           // SELECT * FROM upload_templates ORDER BY id
-  static async getRooms(options)        // rooms 列表，支持 status 筛选/分页
-  static async getRoomById(id)          // 单个 room 详情
-  static async getSettings()            // SELECT * FROM settings，返回 { rows, map }
-  static async getSetting(key)          // 单个 setting 值
-  static async getSessions(options)     // sessions 列表，支持 room_url 筛选
-  static async getUploadRecords(options) // upload_records 列表
-  static async getRecordings(options)   // recordings 列表
+- 应用镜像内包含 Node.js runtime、项目代码、生产依赖、ffmpeg、Python、uv 与通过 `uv tool install biliup` 安装的 biliup。
+- PostgreSQL 与 Redis 不打入应用镜像，通过 Docker Compose 独立编排。
+- Docker 部署优先使用简洁环境变量，例如 `DATABASE_URL`、`REDIS_URL`、`APP_DATA_DIR`。
+- 录制文件、日志、biliup 工作目录、数据库数据均使用 volume 或宿主机目录持久化。
+- 容器内不再使用 PM2，应用进程直接通过 `node app.js` 启动，重启交给 Docker restart policy。
+
+### 计划任务
+
+#### 1. Docker 构建文件
+
+- [x] 新增 `Dockerfile`
+  - 基于稳定 Node.js 镜像。
+  - 安装 `ffmpeg`。
+  - 安装 Python、`pip` 与 `uv`。
+  - 通过 `uv tool install biliup` 安装投稿工具。
+  - 仅安装 production dependencies。
+  - 启动命令使用 `node app.js`。
+- [x] 新增 `.dockerignore`
+  - 排除 `node_modules/`、`logs/`、`backups/`、`coverage/`、开发下载目录、`.env` 等。
+
+#### 2. Docker Compose 编排
+
+- [x] 新增 `docker-compose.yml`
+  - `app` 服务：运行 live recorder server。
+  - `postgres` 服务：提供 PostgreSQL。
+  - `redis` 服务：提供 Redis。
+- [x] 新增 `.env.docker.example`
+  - `DATABASE_URL=postgresql://postgres:password@postgres:5432/live_recorder`
+  - `REDIS_URL=redis://default:password@redis:6379/1`
+  - `APP_DATA_DIR=/data`
+  - `VIDEO_DOWNLOAD_DIR=/data/video_downloads`
+  - `BILIUP_WORK_DIR=/data/biliup`
+- 配置持久化目录：
+  - `./data/video_downloads:/data/video_downloads`
+  - `./data/biliup:/data/biliup`
+  - `./logs:/app/logs`
+  - `postgres_data:/var/lib/postgresql/data`
+  - `redis_data:/data`
+
+#### 3. 环境变量兼容与简化
+
+- [x] PostgreSQL 配置支持两种方式：
+  - Docker 推荐：`DATABASE_URL=postgresql://user:password@host:5432/database`
+  - 兼容旧配置：`DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`
+- [x] Redis 配置支持两种方式：
+  - Docker 推荐：`REDIS_URL=redis://user:password@host:6379/1`
+  - 兼容旧配置：`REDIS_HOST`、`REDIS_PORT`、`REDIS_USER`、`REDIS_PASSWORD`、`REDIS_DB`
+- [x] 新增 `APP_DATA_DIR` 作为容器数据根目录，默认 `/data`。
+- [x] Docker 默认目录：
+  - `VIDEO_DOWNLOAD_DIR=/data/video_downloads`
+  - `BILIUP_WORK_DIR=/data/biliup`
+  - biliup cookies 文件放在 `/data/biliup/cookies.json`
+- [x] 保留显式 `VIDEO_DOWNLOAD_DIR` 与 `BILIUP_WORK_DIR`，允许高级用户覆盖默认目录。
+
+#### 4. 容器启动可靠性
+
+- [x] 新增 `scripts/docker-entrypoint.sh`
+  - 等待 PostgreSQL 可连接。
+  - 等待 Redis 可连接。
+  - 创建 `/data/video_downloads`、`/data/biliup`、`/app/logs` 等必要目录。
+  - 最后执行 `node app.js`。
+- [x] 确认启动时自动迁移逻辑在容器环境中可正常运行。
+- [x] 确认容器重启后 stale recording 清理逻辑仍然有效。
+
+#### 5. 健康检查
+
+- [x] 新增 `GET /api/health`。
+- 返回应用、数据库、Redis 状态与版本信息，例如：
+
+```json
+{
+  "ok": true,
+  "db": true,
+  "redis": true,
+  "version": "1.1.0"
 }
 ```
 
-**文件**: 新建 `services/DataService.js`
+- [x] 在 Dockerfile 或 Compose 中配置 healthcheck。
 
-## Task 2: API 路由调用 DataService 替代直接 pool.query ✅
+#### 6. biliup 容器化
 
-涉及文件:
+- [x] 镜像内按 Linux 推荐方式安装 biliup：先安装 `uv`，再执行 `uv tool install biliup`。
+- [x] 确认 `uv` 的工具安装目录已加入 `PATH`，使应用可直接调用 `biliup`。
+- [x] 默认配置：
+  - `BILIUP_WORK_DIR=/data/biliup`
+- [x] Docker 部署默认不需要配置 `BILIUP_PATH`。
+- [x] `BILIUP_PATH` 仅作为兼容旧部署或自定义 biliup 二进制路径的可选覆盖项保留。
+- [x] 将 `/data/biliup` 持久化到宿主机，避免登录态、配置和缓存随容器重建丢失。
+- [x] 将 biliup 使用的 `cookies.json` 放在 `/data/biliup/cookies.json`，并在文档中说明宿主机对应路径。
+- [x] 在文档中说明 biliup 登录、配置文件、cookie/认证信息的保存位置。
 
-- `router/upload.js` — `GET /api/upload_templates` 改用 `DataService.getTemplates()`
-- `router/rooms.js` — `GET /api/rooms`、`GET /api/rooms/:id`、`GET /api/sessions` 改用 DataService
-- `router/settings.js` — `GET /api/settings` 改用 DataService
-- `router/api.js` — `GET /api/recording_files`、`GET /api/notify/status`、`GET /api/dashboard/status` 等改用 DataService
+#### 7. 文档
 
-**注意**: 写操作（POST/PUT/DELETE）保留在路由中不变，只改读操作。
+- [x] 新增 `docs/DOCKER.md`
+  - 快速启动。
+  - `.env.docker` 配置说明。
+  - 首次部署步骤。
+  - NAS 部署目录建议。
+  - 数据卷说明。
+  - biliup 登录与投稿配置。
+  - 从 PM2 迁移到 Docker 的流程。
+  - Docker 回滚到 PM2 的流程。
+  - 备份与恢复 PostgreSQL、Redis、录制目录的方法。
+- [x] 更新 `docs/ARCHITECTURE.md`
+  - 补充 Docker 部署架构。
+- [x] 如新增 `/api/health`，同步更新 `docs/API.md`。
 
-## Task 3: templates.ejs 改为后端渲染 ✅
+#### 8. 验证
 
-- `router/html.js` 的 `GET /templates` 改为 async，查 `DataService.getTemplates()` 传给 EJS
-- `views/templates.ejs` 删除 `fetch('/api/upload_templates')` 和 JS 动态渲染，改用 EJS 循环 `<% templates.forEach(t => { %>`
-- 前端 JS 只保留：编辑弹窗填充数据、保存/删除/复制/刷新Cookie 的操作逻辑
+- 本地构建：
 
-## Task 4: rooms.ejs 改为后端渲染 ✅
+```bash
+docker compose build
+```
 
-- `router/html.js` 的 `GET /rooms` 改为 async，查 `DataService.getRooms()` + `DataService.getTemplates()` + downloader 信息
-- `views/rooms.ejs` 删除 `loadRooms()`、`loadDownloaderInfo()`、`loadTemplateSelect()` 三个 fetch 调用，改用 EJS 渲染
-- 前端 JS 只保留：编辑弹窗、操作按钮（暂停/恢复/停止/删除）
+- 本地启动：
 
-## Task 5: settings.ejs 改为后端渲染 ✅
+```bash
+docker compose up -d
+```
 
-- `router/html.js` 的 `GET /settings` 改为 async，查 `DataService.getSettings()`
-- `views/settings.ejs` 删除 `loadSettings()` fetch 调用，EJS 直接渲染表单
-- 前端 JS 只保留：`saveSettings()` 保存逻辑
+- 查看日志：
 
-## Task 6: html.js 现有后端渲染页面改用 DataService ✅
+```bash
+docker compose logs -f app
+```
 
-- `GET /sessions` — 改用 DataService
-- `GET /upload_records` — 改用 DataService
-- `GET /recordings` — 改用 DataService
-- `GET /_/rooms/table` — 改用 DataService
+- 验证项：
+  - 应用正常监听 `1123`。
+  - PostgreSQL 连接正常。
+  - Redis 连接正常。
+  - 数据库迁移正常执行。
+  - `/api/health` 正常返回。
+  - ffmpeg 可用。
+  - biliup 可用。
+  - `/data/biliup/cookies.json` 可被 biliup 读取。
+  - `VIDEO_DOWNLOAD_DIR` 自动创建且可写。
+  - `logs/` 自动创建且可写。
+  - 重启容器后录制状态清理逻辑正常。
 
-## Task 7: Lint + 逻辑验证 ✅
+#### 9. 发布
 
-对所有修改文件执行 `npx eslint` 确保无错误。
+- 建议分支：`codex/dockerize-app`
+- 建议提交信息：
 
-执行 tests 中的 api 测试用例，保证 api 接口没有缺失。
+```bash
+git commit -m "feat: add docker deployment support"
+```
 
-## Task 8: 项目文档更新 ✅
+- 建议版本：`v1.1.0`
 
-检查本次代码更新是否涉及到项目文档更新，保证 agents.md 和 docs/ 下的文档都是最新版本。
+### 最小交付范围
 
-## 文件变更总结
-
-| 文件                      | 操作                                                    |
-| ------------------------- | ------------------------------------------------------- |
-| `services/DataService.js` | 新建                                                    |
-| `router/html.js`          | 重构（templates/rooms/settings 改 async + DataService） |
-| `router/upload.js`        | 重构 GET 路由用 DataService                             |
-| `router/rooms.js`         | 重构 GET 路由用 DataService                             |
-| `router/settings.js`      | 重构 GET 路由用 DataService                             |
-| `router/api.js`           | 重构部分 GET 路由用 DataService                         |
-| `views/templates.ejs`     | 重构为后端渲染                                          |
-| `views/rooms.ejs`         | 重构为后端渲染                                          |
-| `views/settings.ejs`      | 重构为后端渲染                                          |
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.yml`
+- `.env.docker.example`
+- `scripts/docker-entrypoint.sh`
+- `DATABASE_URL` / `REDIS_URL` 连接串解析兼容
+- `GET /api/health`
+- `docs/DOCKER.md`
+- `docs/API.md` 与 `docs/ARCHITECTURE.md` 的对应更新

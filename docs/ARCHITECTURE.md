@@ -1,5 +1,48 @@
 # 直播录制自动化流程架构
 
+## 部署架构
+
+项目支持两种正式部署方式：
+
+| 方式   | 进程管理                   | 数据服务                        | 适用场景            |
+| ------ | -------------------------- | ------------------------------- | ------------------- |
+| PM2    | `pm2` 管理 `app.js`        | 外部 PostgreSQL / Redis         | 现有本地或 NAS 环境 |
+| Docker | 容器直接运行 `node app.js` | Compose 编排 PostgreSQL / Redis | 新部署、迁移和回滚  |
+
+Docker 架构：
+
+```
+                ┌────────────────────────────┐
+                │        Docker Compose       │
+                │                            │
+Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/video_downloads
+                │      + uv/biliup           │──▶ /data/biliup
+                │             │              │──▶ /app/logs
+                │             ├── postgres   │──▶ postgres_data
+                │             └── redis      │──▶ redis_data
+                └────────────────────────────┘
+```
+
+- Docker 推荐使用 `DATABASE_URL` 与 `REDIS_URL`，同时保留旧的拆分变量。
+- `APP_DATA_DIR` 默认 `/data`，录制文件默认 `/data/video_downloads`。
+- `BILIUP_WORK_DIR` 默认 `/data/biliup`，cookie 可放在
+  `/data/biliup/cookies.json`。
+- `/api/health` 用于 Docker healthcheck 和外部监控。
+
+## 环境变量加载
+
+环境变量统一由 `config/env.js` 初始化：
+
+1. 先静默加载项目根目录 `.env`。
+2. `NODE_ENV=development` 时再加载 `.env.dev`，并覆盖 `.env` 中同名配置。
+3. 最后应用派生默认值：`APP_DATA_DIR`、`VIDEO_DOWNLOAD_DIR`、
+   `BILIUP_WORK_DIR`，以及从 `DATABASE_URL` / `REDIS_URL` 拆分出的兼容变量。
+
+应用入口、数据库连接、Redis 工具和维护脚本都应调用
+`require('./config/env').initEnv()` 或按相对路径引入同一方法；不要在业务模块中直接
+`require('dotenv').config()`。开发清理脚本固定以 development 模式调用该入口，确保使用
+`.env.dev` 隔离配置。
+
 ## 整体流程
 
 ```
@@ -318,6 +361,15 @@ startup()
 - `upload_templates` 表存储投稿参数
 - 支持变量替换：`{room_name}` `{date}` `{datetime}` 等
 - 投稿后处理：`none` / `backup` / `delete` / `backup_and_delete`
+- Docker 部署可仅依赖 volume 持久化录制文件；未配置 `NAS_*` 时，
+  `backup` / `backup_and_delete` 会返回 `skipped`，且不会执行本地删除。
+
+### 通知
+
+- 通知通道：飞书 webhook、Gotify。
+- 未配置通知参数时静默跳过对应通道。
+- Gotify 使用 `MESSAGE_GOTIFY_SERVER`、`MESSAGE_GOTIFY_TOKEN`、
+  `MESSAGE_GOTIFY_PRIORITY`。
 
 ### 执行
 

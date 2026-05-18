@@ -1,10 +1,7 @@
 // ──────────────────────────────────────────────
 // 1. 依赖
 // ──────────────────────────────────────────────
-require('dotenv').config({ quiet: true });
-if (process.env.NODE_ENV === 'development') {
-  require('dotenv').config({ path: '.env.dev', override: true, quiet: true });
-}
+require('./config/env').initEnv();
 
 const path = require('path');
 
