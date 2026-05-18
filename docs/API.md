@@ -43,7 +43,7 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 | segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件     |
 | notification_enabled | boolean | 否   | 是否启用通知，默认 true                                         |
 | monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载） |
-| upload_template_id   | integer | 否   | 关联的投稿模板 ID，不设置则使用全局第一个模板                   |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）             |
 
 **示例：**
 
@@ -63,7 +63,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 ### PUT /api/rooms/:id
 
-更新直播间信息。
+更新直播间信息。直播间处于 `recording` 或 `paused` 时，仅接受 `notification_enabled`、`upload_template_id`；其余字段返回 400。
 
 **请求体：**
 
@@ -74,7 +74,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 | segment_duration     | integer | 否   | 分段录制时长（秒） |
 | notification_enabled | boolean | 否   | 是否启用通知       |
 | monitoring_enabled   | boolean | 否   | 是否启用监听       |
-| upload_template_id   | integer | 否   | 关联的投稿模板 ID  |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID；null 表示不自动投稿 |
 
 ---
 

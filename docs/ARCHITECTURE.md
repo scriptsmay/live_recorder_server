@@ -309,7 +309,7 @@ startup()
 
 ### 触发
 
-- 录制完成自动触发（`findAndAutoUpload`）
+- 录制完成自动触发（`findAndAutoUpload`，仅当直播间已配置 `upload_template_id`）
 - 手动触发（POST /api/sessions/:id/upload）
 - 受 `max_upload_limit` Redis INCR 持久化计数限制（`upload_count:{sessionId}`，24h 过期）
 

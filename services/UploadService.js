@@ -325,14 +325,7 @@ class UploadService {
       }
 
       if (!tmpl) {
-        const globalTmpls = await pool.query('SELECT * FROM upload_templates ORDER BY id LIMIT 1');
-        if (globalTmpls.rows.length > 0) {
-          tmpl = globalTmpls.rows[0];
-        }
-      }
-
-      if (!tmpl) {
-        console.log(`[投稿] 会话 ${session.id} 找不到可用模板`);
+        console.log(`[投稿] 会话 ${session.id} 直播间未配置投稿模板，跳过`);
         return;
       }
 

@@ -105,17 +105,26 @@ router.get('/rooms/:id', async (req, res) => {
   }
 });
 
+const ROOM_FIELDS_IDLE = [
+  'room_name',
+  'notification_enabled',
+  'monitoring_enabled',
+  'segment_duration',
+  'filename_template',
+  'upload_template_id',
+];
+const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id'];
+
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = [
-      'room_name',
-      'notification_enabled',
-      'monitoring_enabled',
-      'segment_duration',
-      'filename_template',
-      'upload_template_id',
-    ];
+    const existing = await pool.query('SELECT status FROM rooms WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '直播间不存在' });
+    }
+    const isActive = ['recording', 'paused'].includes(existing.rows[0].status);
+    const fields = isActive ? ROOM_FIELDS_WHILE_RECORDING : ROOM_FIELDS_IDLE;
+
     const sets = [];
     const values = [];
     for (const field of fields) {
@@ -125,7 +134,17 @@ router.put('/rooms/:id', async (req, res) => {
       }
     }
     if (sets.length === 0) {
-      return res.status(400).json({ status: 'Error', message: '无更新字段' });
+      const msg = isActive ? '录制中仅可更新通知开关与投稿模板' : '无更新字段';
+      return res.status(400).json({ status: 'Error', message: msg });
+    }
+    const blocked = Object.keys(req.body).filter(
+      (k) => req.body[k] !== undefined && !fields.includes(k)
+    );
+    if (blocked.length > 0) {
+      return res.status(400).json({
+        status: 'Error',
+        message: '录制中仅可更新通知开关与投稿模板',
+      });
     }
     values.push(id);
     const result = await pool.query(

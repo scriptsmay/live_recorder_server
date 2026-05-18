@@ -34,8 +34,8 @@
             <td><%= r.room_name || '-' %></td>
             <td><a href="<%= r.room_url %>" target="_blank" title="<%= r.room_url %>"><%= r.room_url %></a></td>
             <td><%- statusBadge %></td>
-            <td><%= r.notification_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>' %></td>
-            <td><%= r.monitoring_enabled !== false ? '<span class="badge bg-info text-dark">开</span>' : '<span class="badge bg-secondary">关</span>' %></td>
+            <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
+            <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
             <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
             <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
             <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
@@ -44,9 +44,11 @@
                 <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>">编辑</button>
                 <button class="btn btn-sm btn-outline-danger delRoomBtn" data-id="<%= r.id %>">删除</button>
               <% } else if (r.status === 'recording') { %>
+                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
                 <button class="btn btn-sm btn-outline-warning actBtn" data-id="<%= r.id %>" data-action="pause">暂停</button>
                 <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
               <% } else if (r.status === 'paused') { %>
+                <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>" data-limited="1">编辑</button>
                 <button class="btn btn-sm btn-outline-success actBtn" data-id="<%= r.id %>" data-action="resume">恢复</button>
                 <button class="btn btn-sm btn-outline-danger actBtn" data-id="<%= r.id %>" data-action="stop">停止</button>
               <% } %>
@@ -68,20 +70,24 @@
       </div>
       <div id="modalBody" class="modal-body">
         <input type="hidden" id="editId" value="" />
-        <div class="mb-3">
+        <input type="hidden" id="editLimited" value="0" />
+        <div id="roomFormLimitedHint" class="alert alert-info d-none mb-0">
+          录制或暂停中，仅可修改通知开关与投稿模板。
+        </div>
+        <div class="mb-3" data-room-field="context">
           <label class="form-label">直播间地址 <span class="text-danger">*</span></label>
           <input type="text" class="form-control" id="inputUrl" placeholder="https://live.example.com/room" />
         </div>
-        <div class="mb-3">
+        <div class="mb-3" data-room-field="context">
           <label class="form-label">直播间名称</label>
           <input type="text" class="form-control" id="inputName" placeholder="主播名" />
         </div>
-        <div class="mb-3">
+        <div class="mb-3" data-room-field="full">
           <label class="form-label">文件名模板</label>
           <input type="text" class="form-control" id="inputTemplate" placeholder="{room_name}_{datetime}" />
           <div class="form-text">支持：<code>{room_name}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code> <code>{HH}</code> <code>{mm}</code> <code>{ss}</code></div>
         </div>
-        <div class="mb-3">
+        <div class="mb-3" data-room-field="full">
           <label class="form-label">分段录制时长（秒，0 表示不分段）</label>
           <input type="number" class="form-control" id="inputSegment" min="0" step="60" value="0" />
           <div class="form-text">设为 3600 即每 1 小时自动分割为一个文件</div>
@@ -91,12 +97,12 @@
           <label class="form-check-label" for="inputNotify">启用通知</label>
           <div class="form-text">关闭后，开始录制、投稿通知将不会发送</div>
         </div>
-        <div class="form-check form-switch mb-2">
+        <div class="form-check form-switch mb-2" data-room-field="full">
           <input class="form-check-input" type="checkbox" id="inputMonitor" checked />
           <label class="form-check-label" for="inputMonitor">启用监听</label>
           <div class="form-text">关闭后，即使收到录制通知也不会启动 ffmpeg 下载</div>
         </div>
-        <div class="mb-3">
+        <div class="mb-3" data-room-field="limited">
           <label class="form-label">投稿模板</label>
           <select class="form-select" id="inputTemplateId">
             <option value="">不使用模板</option>
@@ -104,7 +110,7 @@
               <option value="<%= t.id %>"><%= t.name %></option>
             <% }) %>
           </select>
-          <div class="form-text">用于自动投稿的模板，不选择则使用全局第一个模板</div>
+          <div class="form-text">选择后，该直播间录制完成且转码就绪时会自动投稿；不选择则不自动投稿（仍可于会话页手动投稿）</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -129,8 +135,20 @@ async function apiAction(url, method, body) {
   return res;
 }
 
+function setRoomFormMode(limited) {
+  document.getElementById('editLimited').value = limited ? '1' : '0';
+  document.getElementById('roomFormLimitedHint').classList.toggle('d-none', !limited);
+  document.querySelectorAll('[data-room-field="full"]').forEach((el) => {
+    el.classList.toggle('d-none', limited);
+  });
+  const nameInput = document.getElementById('inputName');
+  nameInput.disabled = limited;
+  document.getElementById('inputUrl').disabled = !!document.getElementById('editId').value;
+}
+
 document.getElementById('saveBtn').addEventListener('click', async () => {
   const id = document.getElementById('editId').value;
+  const limited = document.getElementById('editLimited').value === '1';
   const url = document.getElementById('inputUrl').value.trim();
   const name = document.getElementById('inputName').value.trim();
   const tmpl = document.getElementById('inputTemplate').value.trim();
@@ -141,7 +159,19 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 
   if (!url && !id) return alert('直播间地址必填');
 
-  const body = { room_name: name, filename_template: tmpl || undefined, segment_duration: segment, notification_enabled: notify, monitoring_enabled: monitor, upload_template_id: templateId ? parseInt(templateId, 10) : null };
+  const body = limited
+    ? {
+        notification_enabled: notify,
+        upload_template_id: templateId ? parseInt(templateId, 10) : null,
+      }
+    : {
+        room_name: name,
+        filename_template: tmpl || undefined,
+        segment_duration: segment,
+        notification_enabled: notify,
+        monitoring_enabled: monitor,
+        upload_template_id: templateId ? parseInt(templateId, 10) : null,
+      };
   const res = id
     ? await apiAction(`/api/rooms/${id}`, 'PUT', body)
     : await apiAction('/api/rooms', 'POST', { room_url: url, ...body });
@@ -154,9 +184,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 function resetForm() {
   document.getElementById('modalTitle').textContent = '新增直播间';
   document.getElementById('editId').value = '';
+  setRoomFormMode(false);
   document.getElementById('inputUrl').disabled = false;
   document.getElementById('inputUrl').value = '';
   document.getElementById('inputName').value = '';
+  document.getElementById('inputName').disabled = false;
   document.getElementById('inputTemplate').value = '';
   document.getElementById('inputSegment').value = 0;
   document.getElementById('inputNotify').checked = true;
@@ -170,13 +202,15 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('.editBtn');
   if (btn) {
     const id = btn.dataset.id;
+    const limited = btn.dataset.limited === '1';
     fetch(`/api/rooms/${id}`)
       .then(r => r.json())
       .then(json => {
         if (!json.data) return;
         const r = json.data;
-        document.getElementById('modalTitle').textContent = '编辑直播间';
+        document.getElementById('modalTitle').textContent = limited ? '编辑（录制中）' : '编辑直播间';
         document.getElementById('editId').value = r.id;
+        setRoomFormMode(limited);
         document.getElementById('inputUrl').value = r.room_url;
         document.getElementById('inputUrl').disabled = true;
         document.getElementById('inputName').value = r.room_name || '';
