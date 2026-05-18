@@ -23,7 +23,7 @@ router.get('/rooms', async (req, res) => {
 
 router.post('/rooms', async (req, res) => {
   try {
-    const {
+    let {
       room_url,
       room_name,
       notification_enabled,
@@ -35,8 +35,14 @@ router.post('/rooms', async (req, res) => {
       polling_platform,
       polling_interval,
     } = req.body;
+
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
+    }
+
+    // 自动检测平台
+    if (polling_enabled && !polling_platform) {
+      polling_platform = pollingManager.constructor.detectPlatformFromUrl(room_url);
     }
 
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
@@ -134,7 +140,7 @@ const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await pool.query('SELECT status FROM rooms WHERE id = $1', [id]);
+    const existing = await pool.query('SELECT status, room_url FROM rooms WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
@@ -149,6 +155,16 @@ router.put('/rooms/:id', async (req, res) => {
         values.push(req.body[field]);
       }
     }
+
+    // 自动检测平台
+    if (req.body.polling_enabled && !req.body.polling_platform) {
+      const detectedPlatform = pollingManager.constructor.detectPlatformFromUrl(existing.rows[0].room_url);
+      if (detectedPlatform) {
+        sets.push('polling_platform = $' + (values.length + 1));
+        values.push(detectedPlatform);
+      }
+    }
+
     if (sets.length === 0) {
       const msg = isActive ? '录制中仅可更新通知开关与投稿模板' : '无更新字段';
       return res.status(400).json({ status: 'Error', message: msg });

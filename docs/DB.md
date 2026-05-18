@@ -64,7 +64,7 @@
 | segment_duration     | INTEGER       | DEFAULT 0                        | 分段录制时长（秒），0 表示不分段         |
 | notification_enabled | BOOLEAN       | DEFAULT TRUE                     | 通知开关，关闭后不发送录制/投稿通知      |
 | monitoring_enabled   | BOOLEAN       | DEFAULT TRUE                     | 监听开关，关闭后 API 触发时不启动 ffmpeg |
-| upload_template_id   | INTEGER       | FK → upload_templates(id)         | 关联的投稿模板                           |
+| upload_template_id   | INTEGER       | FK → upload_templates(id)        | 关联的投稿模板                           |
 | polling_enabled      | BOOLEAN       | DEFAULT FALSE                    | 轮询开关，启用后定期检测开播状态         |
 | polling_platform     | VARCHAR(50)   |                                  | 轮询平台：`huya` 等                      |
 | polling_interval     | INTEGER       | DEFAULT 60                       | 轮询间隔（秒）                           |

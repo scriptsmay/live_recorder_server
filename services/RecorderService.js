@@ -266,6 +266,9 @@ class RecorderService {
         let totalSize = 0;
         let newFileCount = 0;
 
+        // 收集所有需要转码的FLV文件
+        const flvFilesToTranscode = [];
+
         for (const filePath of segmentFiles) {
           const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
           if (tracked.rows.length > 0) continue;
@@ -274,37 +277,54 @@ class RecorderService {
           try {
             fileSize = fs.statSync(filePath).size;
           } catch (_) {}
-          if (fileSize < thresholdBytes && fileSize > 0) continue;
-          totalSize += fileSize;
 
-          await pool.query(
-            `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
-             ON CONFLICT (file_path) DO NOTHING`,
-            [sessionId, newFileCount, room.room_url, filePath, fileSize, sessionStart]
-          );
-          await pool.query(
-            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-             ON CONFLICT (file_path) DO NOTHING`,
-            [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
-          );
-          newFileCount++;
+          // 只有大小>0的文件才处理
+          if (fileSize > 0) {
+            // 小于阈值的文件不入库，但仍然加入转码队列？不，还是统一处理
+            if (fileSize >= thresholdBytes) {
+              totalSize += fileSize;
 
-          // 实时入队转码
-          if (filePath.endsWith('.flv')) {
-            const mp4Path = filePath.replace(/\.flv$/i, '.mp4');
-            transcodeQueue
-              .enqueue({
-                flvPath: filePath,
-                mp4Path: mp4Path,
-                sessionId: sessionId,
-              })
-              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+              await pool.query(
+                `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
+                 ON CONFLICT (file_path) DO NOTHING`,
+                [sessionId, newFileCount, room.room_url, filePath, fileSize, sessionStart]
+              );
+              await pool.query(
+                `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+                 VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+                 ON CONFLICT (file_path) DO NOTHING`,
+                [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
+              );
+              newFileCount++;
+            }
+
+            // 只要是FLV文件且存在，就加入转码队列（即使小文件也尝试转码）
+            if (filePath.endsWith('.flv')) {
+              flvFilesToTranscode.push(filePath);
+            }
           }
         }
 
+        // 对所有收集到的FLV文件进行转码
+        for (const filePath of flvFilesToTranscode) {
+          const mp4Path = filePath.replace(/\.flv$/i, '.mp4');
+          transcodeQueue
+            .enqueue({
+              flvPath: filePath,
+              mp4Path: mp4Path,
+              sessionId: sessionId,
+            })
+            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+        }
+
         if (sessionId) {
+          // 会话状态判断：只要有文件处理成功，即使code非0也标记为completed
+          let sessionStatus = 'completed';
+          if (newFileCount === 0 && code !== 0) {
+            sessionStatus = 'interrupted';
+          }
+
           if (reuseSession) {
             await pool.query(
               `UPDATE recording_sessions
@@ -312,7 +332,7 @@ class RecorderService {
                    total_segments = total_segments + $2,
                    total_size = total_size + $3
                WHERE id = $4 AND status = 'recording'`,
-              [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
+              [sessionStatus, newFileCount, totalSize, sessionId]
             );
           } else {
             await pool.query(
@@ -321,12 +341,13 @@ class RecorderService {
                    total_segments = $2,
                    total_size = $3
                WHERE id = $4 AND status = 'recording'`,
-              [code === 0 ? 'completed' : 'interrupted', newFileCount, totalSize, sessionId]
+              [sessionStatus, newFileCount, totalSize, sessionId]
             );
           }
         }
         console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
+        // 只要有文件收集到就触发自动投稿（包括小于阈值的文件，因为它们也可能被转码）
         if (segmentFiles.length > 0) {
           const completedSession = {
             id: sessionId,
@@ -374,6 +395,12 @@ class RecorderService {
         }
 
         if (sessionId) {
+          // 会话状态判断：只要有文件存在，即使code非0也标记为completed
+          let sessionStatus = 'completed';
+          if (fileSize === 0 && code !== 0) {
+            sessionStatus = 'interrupted';
+          }
+
           if (reuseSession) {
             await pool.query(
               `UPDATE recording_sessions
@@ -381,7 +408,7 @@ class RecorderService {
                    total_segments = total_segments + 1,
                    total_size = total_size + $2
                WHERE id = $3 AND status = 'recording'`,
-              [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+              [sessionStatus, fileSize, sessionId]
             );
           } else {
             await pool.query(
@@ -390,7 +417,7 @@ class RecorderService {
                    total_segments = 1,
                    total_size = $2
                WHERE id = $3 AND status = 'recording'`,
-              [code === 0 ? 'completed' : 'interrupted', fileSize, sessionId]
+              [sessionStatus, fileSize, sessionId]
             );
           }
           await pool.query(
@@ -770,9 +797,14 @@ class RecorderService {
     const ext = downloader.getExtension();
 
     let outputPath;
+    let segmentListPath;
     if (useSegment) {
       const strftimeName = this.templateToStrftime(template, session.room_name || '', ext);
       outputPath = path.join(DOWNLOAD_DIR, strftimeName);
+      segmentListPath = path.join(
+        DOWNLOAD_DIR,
+        `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
+      );
     } else {
       const base = this.generateFilename(template, session.room_name || '', ext);
       const parsed = path.parse(base);
@@ -780,7 +812,7 @@ class RecorderService {
     }
 
     const streamUrl = session.stream_url || session.room_url;
-    const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
+    const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration, segmentListPath });
 
     const { stream: logStream, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
     logCommand(downloader.name, dlArgs);
@@ -809,49 +841,96 @@ class RecorderService {
         ]);
         await this.delRoomCache(session.room_url);
 
-        const status = code === 0 ? 'completed' : 'interrupted';
-
         if (useSegment) {
           const outputDir = path.dirname(outputPath);
+          let segmentFiles = [];
+
+          // 先尝试从segment list文件读取
+          if (segmentListPath && fs.existsSync(segmentListPath)) {
+            const content = fs.readFileSync(segmentListPath, 'utf-8');
+            const lines = content
+              .split('\n')
+              .map((l) => l.trim())
+              .filter(Boolean);
+            for (const line of lines) {
+              segmentFiles.push(path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line));
+            }
+            try {
+              fs.unlinkSync(segmentListPath);
+            } catch (_) {}
+          }
+
+          // 如果segment list没有文件，再扫描目录
+          if (segmentFiles.length === 0) {
+            try {
+              const files = fs.readdirSync(outputDir);
+              const base = path.basename(outputPath);
+              const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
+              const ext = path.extname(base);
+              const regex = new RegExp('^' + prefix + '.*' + ext.replace(/\./g, '\\.') + '$');
+              segmentFiles = files
+                .filter((f) => regex.test(f))
+                .sort()
+                .map((f) => path.join(outputDir, f));
+            } catch (_) {}
+          }
+
+          const thresholdValue = await this.getSetting('filtering_threshold', '10');
+          const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
           let totalSegments = 0;
           let totalSize = 0;
+          const flvFilesToTranscode = [];
 
-          try {
-            const files = fs.readdirSync(outputDir);
-            const videoRe = /\.(flv|mp4)$/i;
+          for (const filePath of segmentFiles) {
+            const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
+            if (tracked.rows.length > 0) continue;
 
-            for (const f of files) {
-              if (!videoRe.test(f)) continue;
-              const fp = path.join(outputDir, f);
-              const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [fp]);
-              if (tracked.rows.length > 0) continue;
+            let stat;
+            try {
+              stat = fs.statSync(filePath);
+            } catch (_) {
+              continue;
+            }
 
-              let stat;
-              try {
-                stat = fs.statSync(fp);
-              } catch (_) {
-                continue;
+            if (stat.size > 0) {
+              if (stat.size >= thresholdBytes) {
+                await pool.query(
+                  `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+                   VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
+                   ON CONFLICT (file_path) DO NOTHING`,
+                  [session.id, totalSegments, session.room_url, filePath, stat.size, session.started_at]
+                );
+
+                await pool.query(
+                  `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+                   VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+                   ON CONFLICT (file_path) DO NOTHING`,
+                  [session.id, session.room_url, filePath, path.basename(filePath), stat.size]
+                );
+
+                totalSegments++;
+                totalSize += stat.size;
               }
 
-              await pool.query(
-                `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-                 VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 'completed')
-                 ON CONFLICT (file_path) DO NOTHING`,
-                [session.id, totalSegments, session.room_url, fp, stat.size]
-              );
-
-              await pool.query(
-                `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-                 VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-                 ON CONFLICT (file_path) DO NOTHING`,
-                [session.id, session.room_url, fp, f, stat.size]
-              );
-
-              totalSegments++;
-              totalSize += stat.size;
+              if (filePath.endsWith('.flv')) {
+                flvFilesToTranscode.push(filePath);
+              }
             }
-          } catch (_) {}
+          }
 
+          // 对所有收集到的FLV文件进行转码
+          for (const flvPath of flvFilesToTranscode) {
+            const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
+            transcodeQueue
+              .enqueue({
+                flvPath: flvPath,
+                mp4Path: mp4Path,
+                sessionId: session.id,
+              })
+              .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
+          }
+
+          // 更新会话统计
           if (totalSegments > 0) {
             await pool.query(
               `UPDATE recording_sessions SET total_segments = total_segments + $1, total_size = total_size + $2 WHERE id = $3`,
@@ -859,35 +938,16 @@ class RecorderService {
             );
           }
 
+          // 会话状态判断
+          let sessionStatus = 'completed';
+          if (totalSegments === 0 && code !== 0) {
+            sessionStatus = 'interrupted';
+          }
+
           await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [
-            status,
+            sessionStatus,
             session.id,
           ]);
-
-          if (totalSegments > 0) {
-            try {
-              const files = fs.readdirSync(outputDir);
-              const flvFiles = files
-                .filter((f) => /\.flv$/i.test(f))
-                .map((f) => path.join(outputDir, f))
-                .sort();
-
-              if (flvFiles.length > 0) {
-                for (const flvPath of flvFiles) {
-                  const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
-                  transcodeQueue
-                    .enqueue({
-                      flvPath: flvPath,
-                      mp4Path: mp4Path,
-                      sessionId: session.id,
-                    })
-                    .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
-                }
-              }
-            } catch (transcodeErr) {
-              console.error('[恢复] 批量转码异常:', transcodeErr.message);
-            }
-          }
         } else {
           let fileSize = 0;
           try {
@@ -908,9 +968,15 @@ class RecorderService {
             [session.id, session.room_url, outputPath, path.basename(outputPath), fileSize]
           );
 
+          // 会话状态判断
+          let sessionStatus = 'completed';
+          if (fileSize === 0 && code !== 0) {
+            sessionStatus = 'interrupted';
+          }
+
           await pool.query(
             `UPDATE recording_sessions SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2 WHERE id = $3`,
-            [status, fileSize, session.id]
+            [sessionStatus, fileSize, session.id]
           );
 
           if (/\.flv$/i.test(outputPath)) {
