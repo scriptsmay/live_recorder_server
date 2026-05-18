@@ -1,5 +1,34 @@
 # 直播录制自动化流程架构
 
+## 部署架构
+
+项目支持两种正式部署方式：
+
+| 方式   | 进程管理                   | 数据服务                        | 适用场景            |
+| ------ | -------------------------- | ------------------------------- | ------------------- |
+| PM2    | `pm2` 管理 `app.js`        | 外部 PostgreSQL / Redis         | 现有本地或 NAS 环境 |
+| Docker | 容器直接运行 `node app.js` | Compose 编排 PostgreSQL / Redis | 新部署、迁移和回滚  |
+
+Docker 架构：
+
+```
+                ┌────────────────────────────┐
+                │        Docker Compose       │
+                │                            │
+Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/video_downloads
+                │      + uv/biliup           │──▶ /data/biliup
+                │             │              │──▶ /app/logs
+                │             ├── postgres   │──▶ postgres_data
+                │             └── redis      │──▶ redis_data
+                └────────────────────────────┘
+```
+
+- Docker 推荐使用 `DATABASE_URL` 与 `REDIS_URL`，同时保留旧的拆分变量。
+- `APP_DATA_DIR` 默认 `/data`，录制文件默认 `/data/video_downloads`。
+- `BILIUP_WORK_DIR` 默认 `/data/biliup`，cookie 可放在
+  `/data/biliup/cookies.json`。
+- `/api/health` 用于 Docker healthcheck 和外部监控。
+
 ## 整体流程
 
 ```

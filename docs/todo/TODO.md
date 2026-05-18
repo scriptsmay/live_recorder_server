@@ -21,23 +21,23 @@
 
 #### 1. Docker 构建文件
 
-- 新增 `Dockerfile`
+- [x] 新增 `Dockerfile`
   - 基于稳定 Node.js 镜像。
   - 安装 `ffmpeg`。
   - 安装 Python、`pip` 与 `uv`。
   - 通过 `uv tool install biliup` 安装投稿工具。
   - 仅安装 production dependencies。
   - 启动命令使用 `node app.js`。
-- 新增 `.dockerignore`
+- [x] 新增 `.dockerignore`
   - 排除 `node_modules/`、`logs/`、`backups/`、`coverage/`、开发下载目录、`.env` 等。
 
 #### 2. Docker Compose 编排
 
-- 新增 `docker-compose.yml`
+- [x] 新增 `docker-compose.yml`
   - `app` 服务：运行 live recorder server。
   - `postgres` 服务：提供 PostgreSQL。
   - `redis` 服务：提供 Redis。
-- 新增 `.env.docker.example`
+- [x] 新增 `.env.docker.example`
   - `DATABASE_URL=postgresql://postgres:password@postgres:5432/live_recorder`
   - `REDIS_URL=redis://default:password@redis:6379/1`
   - `APP_DATA_DIR=/data`
@@ -52,32 +52,32 @@
 
 #### 3. 环境变量兼容与简化
 
-- PostgreSQL 配置支持两种方式：
+- [x] PostgreSQL 配置支持两种方式：
   - Docker 推荐：`DATABASE_URL=postgresql://user:password@host:5432/database`
   - 兼容旧配置：`DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`
-- Redis 配置支持两种方式：
+- [x] Redis 配置支持两种方式：
   - Docker 推荐：`REDIS_URL=redis://user:password@host:6379/1`
   - 兼容旧配置：`REDIS_HOST`、`REDIS_PORT`、`REDIS_USER`、`REDIS_PASSWORD`、`REDIS_DB`
-- 新增 `APP_DATA_DIR` 作为容器数据根目录，默认 `/data`。
-- Docker 默认目录：
+- [x] 新增 `APP_DATA_DIR` 作为容器数据根目录，默认 `/data`。
+- [x] Docker 默认目录：
   - `VIDEO_DOWNLOAD_DIR=/data/video_downloads`
   - `BILIUP_WORK_DIR=/data/biliup`
   - biliup cookies 文件放在 `/data/biliup/cookies.json`
-- 保留显式 `VIDEO_DOWNLOAD_DIR` 与 `BILIUP_WORK_DIR`，允许高级用户覆盖默认目录。
+- [x] 保留显式 `VIDEO_DOWNLOAD_DIR` 与 `BILIUP_WORK_DIR`，允许高级用户覆盖默认目录。
 
 #### 4. 容器启动可靠性
 
-- 新增 `scripts/docker-entrypoint.sh`
+- [x] 新增 `scripts/docker-entrypoint.sh`
   - 等待 PostgreSQL 可连接。
   - 等待 Redis 可连接。
   - 创建 `/data/video_downloads`、`/data/biliup`、`/app/logs` 等必要目录。
   - 最后执行 `node app.js`。
-- 确认启动时自动迁移逻辑在容器环境中可正常运行。
-- 确认容器重启后 stale recording 清理逻辑仍然有效。
+- [x] 确认启动时自动迁移逻辑在容器环境中可正常运行。
+- [x] 确认容器重启后 stale recording 清理逻辑仍然有效。
 
 #### 5. 健康检查
 
-- 新增 `GET /api/health`。
+- [x] 新增 `GET /api/health`。
 - 返回应用、数据库、Redis 状态与版本信息，例如：
 
 ```json
@@ -89,23 +89,23 @@
 }
 ```
 
-- 在 Dockerfile 或 Compose 中配置 healthcheck。
+- [x] 在 Dockerfile 或 Compose 中配置 healthcheck。
 
 #### 6. biliup 容器化
 
-- 镜像内按 Linux 推荐方式安装 biliup：先安装 `uv`，再执行 `uv tool install biliup`。
-- 确认 `uv` 的工具安装目录已加入 `PATH`，使应用可直接调用 `biliup`。
-- 默认配置：
+- [x] 镜像内按 Linux 推荐方式安装 biliup：先安装 `uv`，再执行 `uv tool install biliup`。
+- [x] 确认 `uv` 的工具安装目录已加入 `PATH`，使应用可直接调用 `biliup`。
+- [x] 默认配置：
   - `BILIUP_WORK_DIR=/data/biliup`
-- Docker 部署默认不需要配置 `BILIUP_PATH`。
-- `BILIUP_PATH` 仅作为兼容旧部署或自定义 biliup 二进制路径的可选覆盖项保留。
-- 将 `/data/biliup` 持久化到宿主机，避免登录态、配置和缓存随容器重建丢失。
-- 将 biliup 使用的 `cookies.json` 放在 `/data/biliup/cookies.json`，并在文档中说明宿主机对应路径。
-- 在文档中说明 biliup 登录、配置文件、cookie/认证信息的保存位置。
+- [x] Docker 部署默认不需要配置 `BILIUP_PATH`。
+- [x] `BILIUP_PATH` 仅作为兼容旧部署或自定义 biliup 二进制路径的可选覆盖项保留。
+- [x] 将 `/data/biliup` 持久化到宿主机，避免登录态、配置和缓存随容器重建丢失。
+- [x] 将 biliup 使用的 `cookies.json` 放在 `/data/biliup/cookies.json`，并在文档中说明宿主机对应路径。
+- [x] 在文档中说明 biliup 登录、配置文件、cookie/认证信息的保存位置。
 
 #### 7. 文档
 
-- 新增 `docs/DOCKER.md`
+- [x] 新增 `docs/DOCKER.md`
   - 快速启动。
   - `.env.docker` 配置说明。
   - 首次部署步骤。
@@ -115,9 +115,9 @@
   - 从 PM2 迁移到 Docker 的流程。
   - Docker 回滚到 PM2 的流程。
   - 备份与恢复 PostgreSQL、Redis、录制目录的方法。
-- 更新 `docs/ARCHITECTURE.md`
+- [x] 更新 `docs/ARCHITECTURE.md`
   - 补充 Docker 部署架构。
-- 如新增 `/api/health`，同步更新 `docs/API.md`。
+- [x] 如新增 `/api/health`，同步更新 `docs/API.md`。
 
 #### 8. 验证
 

@@ -11,6 +11,7 @@ const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
+const { version } = require('../package.json');
 
 router.get('/', (req, res) => {
   res.status(200).json({
@@ -47,6 +48,34 @@ router.get('/', (req, res) => {
       ],
     },
   });
+});
+
+router.get('/health', async (req, res) => {
+  const data = {
+    ok: true,
+    app: true,
+    db: false,
+    redis: false,
+    version,
+  };
+
+  try {
+    await pool.query('SELECT 1');
+    data.db = true;
+  } catch (err) {
+    data.ok = false;
+    data.db_error = err.message;
+  }
+
+  try {
+    data.redis = (await redis.ping()) === 'PONG';
+  } catch (err) {
+    data.ok = false;
+    data.redis_error = err.message;
+  }
+
+  if (!data.redis) data.ok = false;
+  res.status(data.ok ? 200 : 503).json(data);
 });
 
 router.post('/notify/feishu_webhook', async (req, res) => {

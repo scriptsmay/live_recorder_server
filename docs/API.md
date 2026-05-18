@@ -8,6 +8,34 @@
 
 ---
 
+## 健康检查
+
+### GET /api/health
+
+检查应用、PostgreSQL、Redis 是否可用，并返回当前版本。
+
+**响应示例：**
+
+```json
+{
+  "ok": true,
+  "app": true,
+  "db": true,
+  "redis": true,
+  "version": "1.1.0"
+}
+```
+
+当数据库或 Redis 不可用时返回 HTTP 503，`ok` 为 `false`。
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/health
+```
+
+---
+
 ## 直播间管理
 
 ### GET /api/rooms
@@ -67,13 +95,13 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 **请求体：**
 
-| 参数                 | 类型    | 必填 | 说明               |
-| -------------------- | ------- | ---- | ------------------ |
-| room_name            | string  | 否   | 直播间名称         |
-| filename_template    | string  | 否   | 文件名模板         |
-| segment_duration     | integer | 否   | 分段录制时长（秒） |
-| notification_enabled | boolean | 否   | 是否启用通知       |
-| monitoring_enabled   | boolean | 否   | 是否启用监听       |
+| 参数                 | 类型    | 必填 | 说明                                   |
+| -------------------- | ------- | ---- | -------------------------------------- |
+| room_name            | string  | 否   | 直播间名称                             |
+| filename_template    | string  | 否   | 文件名模板                             |
+| segment_duration     | integer | 否   | 分段录制时长（秒）                     |
+| notification_enabled | boolean | 否   | 是否启用通知                           |
+| monitoring_enabled   | boolean | 否   | 是否启用监听                           |
 | upload_template_id   | integer | 否   | 关联的投稿模板 ID；null 表示不自动投稿 |
 
 ---

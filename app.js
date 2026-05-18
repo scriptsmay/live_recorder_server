@@ -5,6 +5,7 @@ require('dotenv').config({ quiet: true });
 if (process.env.NODE_ENV === 'development') {
   require('dotenv').config({ path: '.env.dev', override: true, quiet: true });
 }
+require('./config/env').applyEnvDefaults();
 
 const path = require('path');
 
