@@ -57,9 +57,7 @@ class UploadService {
   }
 
   static async isSessionDeleted(sessionId) {
-    const r = await pool.query('SELECT deleted_at FROM recording_sessions WHERE id = $1', [
-      sessionId,
-    ]);
+    const r = await pool.query('SELECT deleted_at FROM recording_sessions WHERE id = $1', [sessionId]);
     return r.rows.length === 0 || r.rows[0].deleted_at != null;
   }
 

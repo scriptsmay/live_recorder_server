@@ -31,6 +31,7 @@ const roomsRouter = require('./router/rooms');
 const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const watchdog = require('./lib/core/watchdog');
+const { pollingManager } = require('./lib/core/polling');
 const RecorderService = require('./services/RecorderService');
 const transcodeQueue = require('./lib/core/TranscodeQueue');
 
@@ -85,6 +86,7 @@ async function init() {
   await RecorderService.cleanupStaleRecordings();
   await transcodeQueue.init();
   watchdog.start();
+  await pollingManager.start();
 
   app.listen(port, () => {
     console.log(`Live Recorder Server 已启动，端口 ${port}`);
@@ -94,4 +96,16 @@ async function init() {
 init().catch((err) => {
   console.error('[启动失败] 数据库迁移出错:', err);
   process.exit(1);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('[退出] 收到 SIGTERM，正在停止轮询管理器...');
+  await pollingManager.stop();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[退出] 收到 SIGINT，正在停止轮询管理器...');
+  await pollingManager.stop();
+  process.exit(0);
 });

@@ -44,6 +44,9 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 | notification_enabled | boolean | 否   | 是否启用通知，默认 true                                         |
 | monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载） |
 | upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）             |
+| polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false                            |
+| polling_platform     | string  | 否   | 轮询平台：`huya`（当前仅支持虎牙）                              |
+| polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                               |
 
 **示例：**
 
@@ -57,7 +60,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 ### GET /api/rooms/:id
 
-查询单个直播间详情。
+查询单个直播间详情（包含轮询状态字段）。
 
 ---
 
@@ -67,14 +70,17 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 **请求体：**
 
-| 参数                 | 类型    | 必填 | 说明               |
-| -------------------- | ------- | ---- | ------------------ |
-| room_name            | string  | 否   | 直播间名称         |
-| filename_template    | string  | 否   | 文件名模板         |
-| segment_duration     | integer | 否   | 分段录制时长（秒） |
-| notification_enabled | boolean | 否   | 是否启用通知       |
-| monitoring_enabled   | boolean | 否   | 是否启用监听       |
+| 参数                 | 类型    | 必填 | 说明                                   |
+| -------------------- | ------- | ---- | -------------------------------------- |
+| room_name            | string  | 否   | 直播间名称                             |
+| filename_template    | string  | 否   | 文件名模板                             |
+| segment_duration     | integer | 否   | 分段录制时长（秒）                     |
+| notification_enabled | boolean | 否   | 是否启用通知                           |
+| monitoring_enabled   | boolean | 否   | 是否启用监听                           |
 | upload_template_id   | integer | 否   | 关联的投稿模板 ID；null 表示不自动投稿 |
+| polling_enabled      | boolean | 否   | 是否启用轮询                           |
+| polling_platform     | string  | 否   | 轮询平台                               |
+| polling_interval     | integer | 否   | 轮询间隔（秒）                         |
 
 ---
 

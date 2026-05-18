@@ -198,6 +198,26 @@ async function runMigration() {
     `);
 
     await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_enabled BOOLEAN DEFAULT FALSE
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_platform VARCHAR(50) DEFAULT NULL
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_interval INTEGER DEFAULT 60
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMP DEFAULT NULL
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS last_live_status BOOLEAN DEFAULT FALSE
+    `);
+
+    await client.query(`
       ALTER TABLE upload_templates DROP COLUMN IF EXISTS room_url
     `);
 

@@ -4,6 +4,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const RoomService = require('../services/RoomService');
 const DataService = require('../services/DataService');
+const { pollingManager } = require('../lib/core/polling');
 
 router.get('/rooms', async (req, res) => {
   try {
@@ -30,6 +31,9 @@ router.post('/rooms', async (req, res) => {
       segment_duration,
       filename_template,
       upload_template_id,
+      polling_enabled,
+      polling_platform,
+      polling_interval,
     } = req.body;
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
@@ -46,6 +50,9 @@ router.post('/rooms', async (req, res) => {
         'segment_duration',
         'filename_template',
         'upload_template_id',
+        'polling_enabled',
+        'polling_platform',
+        'polling_interval',
       ];
       const reqBody = {
         room_name,
@@ -54,6 +61,9 @@ router.post('/rooms', async (req, res) => {
         segment_duration,
         filename_template,
         upload_template_id,
+        polling_enabled,
+        polling_platform,
+        polling_interval,
       };
       for (const f of fieldsList) {
         if (reqBody[f] !== undefined) {
@@ -72,8 +82,8 @@ router.post('/rooms', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id, polling_enabled, polling_platform, polling_interval)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         room_url,
         room_name || '',
@@ -82,6 +92,9 @@ router.post('/rooms', async (req, res) => {
         segment_duration || 0,
         filename_template || '',
         upload_template_id || null,
+        polling_enabled === true,
+        polling_platform || null,
+        polling_interval || 60,
       ]
     );
     res.json({ status: 'ok', data: result.rows[0], updated: false });
@@ -112,6 +125,9 @@ const ROOM_FIELDS_IDLE = [
   'segment_duration',
   'filename_template',
   'upload_template_id',
+  'polling_enabled',
+  'polling_platform',
+  'polling_interval',
 ];
 const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id'];
 
@@ -137,9 +153,7 @@ router.put('/rooms/:id', async (req, res) => {
       const msg = isActive ? '录制中仅可更新通知开关与投稿模板' : '无更新字段';
       return res.status(400).json({ status: 'Error', message: msg });
     }
-    const blocked = Object.keys(req.body).filter(
-      (k) => req.body[k] !== undefined && !fields.includes(k)
-    );
+    const blocked = Object.keys(req.body).filter((k) => req.body[k] !== undefined && !fields.includes(k));
     if (blocked.length > 0) {
       return res.status(400).json({
         status: 'Error',
@@ -155,6 +169,15 @@ router.put('/rooms/:id', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
     await redis.del(`room:${result.rows[0].room_url}`).catch(() => {});
+
+    if (
+      req.body.polling_enabled !== undefined ||
+      req.body.polling_platform !== undefined ||
+      req.body.polling_interval !== undefined
+    ) {
+      await pollingManager.reloadRoom(parseInt(id, 10));
+    }
+
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[rooms] 更新失败:', err);

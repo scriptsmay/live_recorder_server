@@ -16,6 +16,7 @@
         <th>状态</th>
         <th>通知</th>
         <th>监听</th>
+        <th>轮询</th>
         <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
@@ -24,7 +25,7 @@
     </thead>
     <tbody id="roomsBody">
       <% if (rooms.length === 0) { %>
-        <tr><td colspan="10" class="text-center text-muted py-4">暂无直播间数据</td></tr>
+        <tr><td colspan="11" class="text-center text-muted py-4">暂无直播间数据</td></tr>
       <% } else { %>
         <% rooms.forEach(r => { %>
           <% const statusBadge = { idle: '<span class="badge bg-secondary">空闲</span>', recording: '<span class="badge bg-success">录制中</span>', paused: '<span class="badge bg-warning text-dark">已暂停</span>' }[r.status] || r.status; %>
@@ -36,6 +37,16 @@
             <td><%- statusBadge %></td>
             <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
             <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
+            <td>
+              <% if (r.polling_enabled) { %>
+                <span class="badge bg-success">开</span>
+                <% if (r.polling_platform) { %>
+                  <small class="text-muted"><%= r.polling_platform %></small>
+                <% } %>
+              <% } else { %>
+                <span class="badge bg-secondary">关</span>
+              <% } %>
+            </td>
             <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
             <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
             <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
@@ -102,6 +113,22 @@
           <label class="form-check-label" for="inputMonitor">启用监听</label>
           <div class="form-text">关闭后，即使收到录制通知也不会启动 ffmpeg 下载</div>
         </div>
+        <div class="form-check form-switch mb-2" data-room-field="full">
+          <input class="form-check-input" type="checkbox" id="inputPolling" />
+          <label class="form-check-label" for="inputPolling">启用轮询</label>
+          <div class="form-text">开启后，将定期查询直播间开播状态（当前仅支持虎牙）</div>
+        </div>
+        <div class="mb-3" data-room-field="full" id="pollingConfig" style="display: none;">
+          <label class="form-label">轮询平台</label>
+          <select class="form-select" id="inputPollingPlatform">
+            <option value="huya">虎牙直播</option>
+          </select>
+        </div>
+        <div class="mb-3" data-room-field="full" id="pollingIntervalConfig" style="display: none;">
+          <label class="form-label">轮询间隔（秒）</label>
+          <input type="number" class="form-control" id="inputPollingInterval" min="30" max="3600" value="60" />
+          <div class="form-text">建议不少于 30 秒，避免请求过于频繁</div>
+        </div>
         <div class="mb-3" data-room-field="limited">
           <label class="form-label">投稿模板</label>
           <select class="form-select" id="inputTemplateId">
@@ -156,6 +183,9 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const notify = document.getElementById('inputNotify').checked;
   const monitor = document.getElementById('inputMonitor').checked;
   const templateId = document.getElementById('inputTemplateId').value;
+  const polling = document.getElementById('inputPolling').checked;
+  const pollingPlatform = document.getElementById('inputPollingPlatform').value;
+  const pollingInterval = parseInt(document.getElementById('inputPollingInterval').value, 10) || 60;
 
   if (!url && !id) return alert('直播间地址必填');
 
@@ -171,6 +201,9 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
         notification_enabled: notify,
         monitoring_enabled: monitor,
         upload_template_id: templateId ? parseInt(templateId, 10) : null,
+        polling_enabled: polling,
+        polling_platform: polling ? pollingPlatform : null,
+        polling_interval: polling ? pollingInterval : 60,
       };
   const res = id
     ? await apiAction(`/api/rooms/${id}`, 'PUT', body)
@@ -194,7 +227,18 @@ function resetForm() {
   document.getElementById('inputNotify').checked = true;
   document.getElementById('inputMonitor').checked = true;
   document.getElementById('inputTemplateId').value = '';
+  document.getElementById('inputPolling').checked = false;
+  document.getElementById('inputPollingPlatform').value = 'huya';
+  document.getElementById('inputPollingInterval').value = 60;
+  document.getElementById('pollingConfig').style.display = 'none';
+  document.getElementById('pollingIntervalConfig').style.display = 'none';
 }
+
+document.getElementById('inputPolling').addEventListener('change', function() {
+  const isEnabled = this.checked;
+  document.getElementById('pollingConfig').style.display = isEnabled ? '' : 'none';
+  document.getElementById('pollingIntervalConfig').style.display = isEnabled ? '' : 'none';
+});
 
 document.getElementById('roomModal').addEventListener('hidden.bs.modal', resetForm);
 
@@ -219,6 +263,12 @@ document.addEventListener('click', e => {
         document.getElementById('inputNotify').checked = r.notification_enabled !== false;
         document.getElementById('inputMonitor').checked = r.monitoring_enabled !== false;
         document.getElementById('inputTemplateId').value = r.upload_template_id || '';
+        document.getElementById('inputPolling').checked = r.polling_enabled === true;
+        document.getElementById('inputPollingPlatform').value = r.polling_platform || 'huya';
+        document.getElementById('inputPollingInterval').value = r.polling_interval || 60;
+        const pollingEnabled = r.polling_enabled === true;
+        document.getElementById('pollingConfig').style.display = pollingEnabled ? '' : 'none';
+        document.getElementById('pollingIntervalConfig').style.display = pollingEnabled ? '' : 'none';
         new bootstrap.Modal(document.getElementById('roomModal')).show();
       });
     return;
