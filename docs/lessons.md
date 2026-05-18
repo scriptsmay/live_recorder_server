@@ -531,3 +531,78 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 |------|------|
 | **文件名不应暗示"续传"** | FFmpeg 不支持文件续传，`_resume` 后缀让文件名误导 |
 | **模板优先原则** | 始终用数据库配置的文件名模板，保持一致性 |
+
+## 全面碎片/脏数据审计：修复 6 个隐藏风险
+
+### 审计范围
+
+覆盖录制启动→录制结束→看门狗清理→转码队列全链路，共发现 15 个风险点，修复了 6 个高风险/中风险问题。
+
+### 修复的风险
+
+#### 1. RoomService active_task key 格式不一致
+
+**问题**: `RoomService.stopRecording()` 和 `RoomService.deleteRoom()` 使用 `active_task:room:${roomUrl}`，而 `RecorderService` 使用 `active_task:${roomUrl}`（无 `room:` 前缀），导致停止/删除房间时 Redis key 无法清除，录制请求被阻塞长达 24 小时。
+
+**修复**: 统一 key 格式为 `active_task:${roomUrl}`。
+
+代码位置：
+- [RoomService.js:L107](file:///Users/virola/code/projects/live_recorder_server/services/RoomService.js#L107)
+- [RoomService.js:L175](file:///Users/virola/code/projects/live_recorder_server/services/RoomService.js#L175)
+
+#### 2. 转码计数器无 TTL 崩溃泄露
+
+**问题**: `transcode_processing_count` 计数器无 TTL，Node 进程崩溃（OOM、kill -9）后计数永久 +1 不恢复，导致转码队列并发槽永久阻塞。
+
+**修复**: 
+- `decrementProcessingCount` 中 count ≤ 0 时删除 key
+- 启动时调用 `resetProcessingCount` 重置计数器
+
+代码位置：
+- [TranscodeQueue.js:L180-L195](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L180-L195)
+- [TranscodeQueue.js:L25](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L25)
+
+#### 3. ffmpeg close 事件 TOCTOU 竞态
+
+**问题**: `startRecording` 中先检查 `exitCode`，如未退出再注册 `close` handler。在检查和注册之间 ffmpeg 可能退出，导致 `close` 事件丢失、`finishSession` 永不调用。
+
+**修复**: 先注册 `close` handler，再检查是否已退出；已退出则手动 `emit('close')` 触发 handler。
+
+代码位置：
+- [RecorderService.js:L867-L870](file:///Users/virola/code/projects/live_recorder_server/services/RecorderService.js#L867-L870)
+
+#### 4. 启动清理遗漏 recording_files 状态更新
+
+**问题**: `cleanupStaleRecordings` 对重试次数耗尽、未续播的会话仅标记 `recording_sessions.status='interrupted'`，不更新 `recording_files` 中状态为 `recording` 的记录，导致永久卡住。
+
+**修复**: 同步更新 `recording_files SET status='interrupted'`。
+
+代码位置：
+- [RecorderService.js:L1198-L1203](file:///Users/virola/code/projects/live_recorder_server/services/RecorderService.js#L1198-L1203)
+
+#### 5. 碎片清理不递归子目录
+
+**问题**: `cleanupFragmentFiles` 仅扫描下载目录顶级，不处理子目录中的碎片文件。`scanRecordingFiles` 会递归发现子目录文件但 `cleanupFragmentFiles` 不清除它们。
+
+**修复**: 用 `fs.readdirSync` + `withFileTypes: true` 递归遍历所有子目录。
+
+代码位置：
+- [watchdog.js:L249-L262](file:///Users/virola/code/projects/live_recorder_server/lib/core/watchdog.js#L249-L262)
+
+#### 6. 转码失败残留孤儿 MP4
+
+**问题**: `transcoder.fastTranscode` 失败（code ≠ 0 或超时 kill）后可能残留不完整的 MP4 文件，既不删除也不通知。
+
+**修复**: 转码失败后 `fs.unlinkSync(mp4Path)` 清理残留产物。
+
+代码位置：
+- [TranscodeQueue.js:L133-L141](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L133-L141)
+
+### 未修复的低风险问题（保留观察）
+
+| 问题 | 风险 | 理由 |
+|------|------|------|
+| PollingManager 双重检查无锁 | 低 | 有 `isActiveTask` Redis 兜底，冲突仅产生 400 错误 |
+| .segments_*.txt 残留 | 低 | 文件极小（<1KB），不影响功能 |
+| scanActiveSegments 5 分钟窗口 | 低 | `finishSession` 已正常处理，看门狗仅作二次兜底 |
+| pause/resume 失败后状态不一致 | 低 | 极少触发，且看门狗最终会修正 |

@@ -306,7 +306,11 @@ class RecorderService {
             newFileCount++;
 
             // 只有大于阈值的FLV文件才加入转码队列
-            if (fileSize >= thresholdBytes && filePath.endsWith('.flv') && !segmentPathsForTranscode.includes(filePath)) {
+            if (
+              fileSize >= thresholdBytes &&
+              filePath.endsWith('.flv') &&
+              !segmentPathsForTranscode.includes(filePath)
+            ) {
               // 避免重复添加最后一个分段
               if (filePath !== lastSegmentPath) {
                 flvFilesToTranscode.push(filePath);
@@ -355,10 +359,7 @@ class RecorderService {
                 [sessionId]
               );
               if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
-                await pool.query(
-                  `UPDATE recording_sessions SET status = 'completed' WHERE id = $1`,
-                  [sessionId]
-                );
+                await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
               }
             }
           } else {
@@ -443,10 +444,7 @@ class RecorderService {
                 [sessionId]
               );
               if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
-                await pool.query(
-                  `UPDATE recording_sessions SET status = 'completed' WHERE id = $1`,
-                  [sessionId]
-                );
+                await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
               }
             }
           } else {
@@ -591,6 +589,7 @@ class RecorderService {
       title,
       room_url,
       url: url?.slice(0, 60),
+      caption,
     });
 
     if (!url || !title) {
@@ -744,7 +743,9 @@ class RecorderService {
                     return;
                   }
                   if (stat.size < thresholdBytes) {
-                    console.log(`[边下边转码] 文件小于碎片阈值，跳过: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`);
+                    console.log(
+                      `[边下边转码] 文件小于碎片阈值，跳过: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+                    );
                     return;
                   }
 
@@ -864,10 +865,10 @@ class RecorderService {
       });
     };
 
+    dlProcess.on('close', finishSessionWrapper);
+
     if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
-      finishSessionWrapper(dlProcess.exitCode);
-    } else {
-      dlProcess.on('close', finishSessionWrapper);
+      dlProcess.emit('close', dlProcess.exitCode);
     }
 
     notify.recordingStart(room.room_name || title, caption, room.room_url);
@@ -1195,6 +1196,11 @@ class RecorderService {
         await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
           session.id,
         ]);
+        await pool.query(
+          `UPDATE recording_files SET status = 'interrupted', completed_at = NOW()
+           WHERE session_id = $1 AND status = 'recording'`,
+          [session.id]
+        );
       }
     } catch (err) {
       console.error('[启动清理] 失败:', err);

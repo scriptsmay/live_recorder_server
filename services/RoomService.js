@@ -104,7 +104,7 @@ class RoomService {
     await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
       room.id,
     ]);
-    await redis.del(`active_task:room:${roomUrl}`).catch(() => {});
+    await redis.del(`active_task:${roomUrl}`).catch(() => {});
 
     if (force && room.output_path) {
       try {
@@ -175,7 +175,7 @@ class RoomService {
 
     await pool.query('DELETE FROM rooms WHERE id = $1', [roomId]);
     await pool.query('DELETE FROM recording_sessions WHERE room_url = $1', [r.room_url]);
-    await redis.del(`active_task:room:${r.room_url}`).catch(() => {});
+    await redis.del(`active_task:${r.room_url}`).catch(() => {});
 
     return { success: true, message: '直播间已删除' };
   }
