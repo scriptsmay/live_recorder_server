@@ -64,19 +64,31 @@ async function main() {
   const outputPath = path.join(TEST_OUTPUT_DIR, `test_${Date.now()}.flv`);
 
   const ffmpegArgs = [
-    '-i', status.streamUrl,
-    '-t', String(testDuration),
-    '-c', 'copy',
-    '-fflags', '+genpts',
-    '-timeout', '2147483647',
-    '-reconnect', '1',
-    '-reconnect_at_eof', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_delay_max', '60',
-    '-rw_timeout', '30000000',
-    '-analyzeduration', '10000000',
-    '-probesize', '5000000',
-    outputPath
+    '-i',
+    status.streamUrl,
+    '-t',
+    String(testDuration),
+    '-c',
+    'copy',
+    '-fflags',
+    '+genpts',
+    '-timeout',
+    '2147483647',
+    '-reconnect',
+    '1',
+    '-reconnect_at_eof',
+    '1',
+    '-reconnect_streamed',
+    '1',
+    '-reconnect_delay_max',
+    '60',
+    '-rw_timeout',
+    '30000000',
+    '-analyzeduration',
+    '10000000',
+    '-probesize',
+    '5000000',
+    outputPath,
   ];
 
   console.log('ffmpeg 命令:', 'ffmpeg ' + ffmpegArgs.join(' '));
@@ -86,7 +98,7 @@ async function main() {
   let lastProgressTime = 0;
 
   const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   ffmpeg.stderr.on('data', (data) => {
@@ -136,13 +148,16 @@ async function main() {
     process.exit(code);
   });
 
-  setTimeout(() => {
-    console.log('\n⏱️  到达预设时间，停止录制...');
-    ffmpeg.kill('SIGTERM');
-  }, testDuration * 1000 + 1000);
+  setTimeout(
+    () => {
+      console.log('\n⏱️  到达预设时间，停止录制...');
+      ffmpeg.kill('SIGTERM');
+    },
+    testDuration * 1000 + 1000
+  );
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('❌ 测试脚本执行失败:', err);
   process.exit(1);
 });
