@@ -74,6 +74,11 @@ node scripts/cleanup-dev.js
 │   │   │   ├── DownloaderInterface.js
 │   │   │   └── FFmpegDownloader.js
 │   │   ├── notify.js      # 通知服务
+│   │   ├── polling/       # 直播轮询检测
+│   │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
+│   │   │   ├── HuyaChecker.js       # 虎牙平台检查器
+│   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
+│   │   │   └── index.js
 │   │   ├── proc-log.js     # 进程日志
 │   │   ├── scan-files.js   # 文件扫描
 │   │   ├── transcoder.js   # 视频转码
@@ -128,7 +133,7 @@ node scripts/cleanup-dev.js
 
 - 启动时自动迁移建表（`db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）
-- `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）
+- `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）、`last_live_status`（最近直播状态，Redis 缓存为主，DB 为兜底）、`last_polled_at`（最近轮询时间）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
 - `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
 - 连接信息从 `.env` 的 `DB_*` 变量读取
@@ -142,11 +147,11 @@ node scripts/cleanup-dev.js
 - `GET /api/notify/status` —— 轻量查询直播间录制状态，返回 `monitoring_paused`、`downloader` 等状态信息
 - `GET /api/recording_files` —— 查询文件跟踪记录（支持 `?status=` 筛选）
 - `PUT /api/recording_files/:id/associate` —— 将孤文件关联到录制会话
-- `GET/POST /api/rooms` —— 直播间列表 / 创建（upsert），支持 `notification_enabled` / `monitoring_enabled`
+- `GET/POST /api/rooms` —— 直播间列表 / 创建（upsert），支持 `notification_enabled` / `monitoring_enabled` / `polling_enabled` / `polling_platform` / `polling_interval`
 - `GET/PUT/DELETE /api/rooms/:id` —— 直播间详情 / 更新 / 删除
 - `POST /api/rooms/:id/pause` —— 暂停录制（SIGSTOP）
 - `POST /api/rooms/:id/resume` —— 恢复录制（SIGCONT）
-- `POST /api/rooms/:id/stop` —— 停止录制（SIGTERM）
+- `POST /api/rooms/:id/stop` —— 停止录制（SIGTERM），同时自动关闭 `monitoring_enabled` 防止轮询二次触发录制
 - `GET /api/settings` —— 查询全局设置列表
 - `PUT /api/settings/:key` —— 更新全局设置项
 
@@ -175,6 +180,19 @@ node scripts/cleanup-dev.js
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
 - `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`
 
+## 直播轮询 (Polling)
+
+- **策略模式**：`lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `PollingManager.CHECKERS`
+- **虎牙检查器**：`lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
+- **轮询管理器**：`lib/core/polling/PollingManager.js` — 单例，随 `app.js` 启动自动运行：
+  - 启动时加载所有 `polling_enabled=true` 的房间
+  - 按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
+  - 检测到 **非开播→开播** 状态转换时，自动调用 `RecorderService.startRecording()` 启动录制
+  - 直播状态写入 Redis（`polling:live_status:{roomId}`），TTL=`polling_interval * 2`
+  - 手动停止录制时自动关闭 `monitoring_enabled`，防止轮询二次触发
+- **平台检测**：前端输入 room_url 时自动识别平台（huya/douyu/bilibili/twitch/douyin/twitcasting），后端也支持根据 URL 自动检测
+- 轮询间隔可配置（秒），建议 ≥ 30s
+
 ## 下载引擎（Downloader）
 
 - **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 固定返回 FFmpeg 实例（stream-gears 已移除，见 `docs/lessons.md`）
@@ -194,6 +212,7 @@ node scripts/cleanup-dev.js
 - 全局设置存储于 `settings` 表，启动时自动插入默认值；`watchdog_interval` 修改后下次调度自动生效
 - `max_upload_limit` 为 Redis INCR 持久化计数（`upload_count:{sessionId}`），24h 过期；自动投稿和手动投稿均受限制
 - **设计原则**：保持轻量。避免引入 chokidar / Worker Thread / EventEmitter / 复杂状态机。同步 fs 操作在典型负载下完全够用。
+- **Redis 缓存策略**：瞬时状态（直播状态、轮询时间、活跃任务）用 Redis 缓存带 TTL，持久数据（房间配置、文件路径）存 DB
 
 ## 关联项目
 

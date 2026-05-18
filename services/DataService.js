@@ -1,4 +1,5 @@
 const pool = require('../db/index');
+const redis = require('../db/redis');
 
 class DataService {
   static async getTemplates() {
@@ -29,8 +30,10 @@ class DataService {
       countParams
     );
 
+    const rows = await this._enrichWithLiveStatus(result.rows);
+
     return {
-      rows: result.rows,
+      rows,
       total: parseInt(countResult.rows[0].count, 10),
     };
   }
@@ -40,7 +43,42 @@ class DataService {
       `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`,
       [id]
     );
-    return result.rows[0] || null;
+    if (!result.rows[0]) return null;
+    const enriched = await this._enrichWithLiveStatus(result.rows);
+    return enriched[0];
+  }
+
+  static async _enrichWithLiveStatus(rooms) {
+    const pollingRooms = rooms.filter((r) => r.polling_enabled);
+    if (pollingRooms.length === 0) return rooms;
+
+    const redisKeys = pollingRooms.map((r) => `polling:live_status:${r.id}`);
+    let liveStatusMap = {};
+
+    try {
+      const values = await Promise.all(redisKeys.map((k) => redis.get(k).catch(() => null)));
+      for (let i = 0; i < pollingRooms.length; i++) {
+        const raw = values[i];
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            liveStatusMap[pollingRooms[i].id] = parsed;
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    return rooms.map((r) => {
+      const live = liveStatusMap[r.id];
+      if (live) {
+        return {
+          ...r,
+          last_live_status: live.isLive,
+          last_polled_at: live.lastPolledAt,
+        };
+      }
+      return r;
+    });
   }
 
   static async getRoomByUrl(roomUrl) {

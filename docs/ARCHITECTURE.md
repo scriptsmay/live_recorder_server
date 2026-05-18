@@ -46,14 +46,19 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 ## 整体流程
 
 ```
-[Chrome 扩展]                   [Server API]                 [FFmpeg]                [Transcode Queue]      [Upload]
-     │                               │                            │                         │                    │
-     │  POST /notify/live_download   │     spawn pipe stderr      │                         │                    │
-     │──────────────────────────────>│───────────────────────────>│                         │                    │
-     │                               │   stderr tee ──→ log       │    持续写入 .part        │                    │
-     │                               │                            │<────────────────────────│                    │
-     │                               │                            │                         │                    │
-     │                               │   ─── 看门狗 (每 30s) ─── │                         │                    │
+[Chrome 扩展 / 轮询检测]               [Server API]                 [FFmpeg]                [Transcode Queue]      [Upload]
+     │                                       │                            │                         │                    │
+     │  POST /notify/live_download           │     spawn pipe stderr      │                         │                    │
+     │  (Chrome 扩展)                        │                            │                         │                    │
+     │ ────────────────────────────────────>│───────────────────────────>│                         │                    │
+     │                                       │   stderr tee ──→ log       │    持续写入 .part        │                    │
+     │                                       │                            │<────────────────────────│                    │
+     │                                       │                            │                         │                    │
+     │  pollingManager                       │                            │                         │                    │
+     │  (轮询检测到开播 → 自动调用)          │                            │                         │                    │
+     │ ────────────────────────────────────>│                            │                         │                    │
+     │                                       │                            │                         │                    │
+     │                                       │   ─── 看门狗 (每 30s) ─── │                         │                    │
      │                               │   ① mtime 僵死检查         │                         │                    │
      │                               │   ② 同步 fs 扫描分片       │                         │                    │
      │                               │   ③ 碎片文件清理           │                         │                    │
@@ -296,6 +301,7 @@ startup()
   ├─ cleanupStaleRedis()            ← 清理 Redis 过期 active_task
   ├─ cleanupStaleRecordings()       ← 重命名 .part、恢复会话
   ├─ transcodeQueue.init()          ← 初始化转码队列(加载并发配置)
+  ├─ pollingManager.start()         ← 启动轮询管理器(加载 polling_enabled 房间)
   └─ watchdog.start()               ← 启动看门狗
 ```
 
@@ -336,7 +342,79 @@ startup()
 
 ---
 
-## 五、启动清理 (cleanupStaleRecordings)
+## 五、直播轮询（Polling）
+
+`lib/core/polling/`
+
+策略模式实现的多平台开播检测与自动录制系统。
+
+### 架构
+
+```
+PollingManager (单例)
+├── CHECKERS 注册表
+│   ├── huya  → HuyaChecker  (mp.huya.com/cache.php)
+│   ├── douyu → (待实现)
+│   └── ...
+└── timers 调度表
+    └── room:{id} → setInterval(pollRoom, interval)
+```
+
+### PlatformChecker 基类
+
+| 方法                       | 说明                                               |
+| -------------------------- | -------------------------------------------------- |
+| `static getPlatformId()`   | 平台标识符，如 `'huya'`                            |
+| `static canHandleUrl(url)` | 判断 URL 是否属于本平台                            |
+| `async checkStatus()`      | 返回 `{ isLive, roomName, roomTitle, streamInfo }` |
+
+### HuyaChecker 实现要点
+
+- 通过虎牙移动 API `mp.huya.com/cache.php` 查询
+- 自动解析短房间号（字符串 ID → 数字 ID）
+- 流地址构建：`{sFlvUrl}/{streamName}.{sFlvUrlSuffix}?{sFlvAntiCode}`
+- **去掉 `-imgplus`**：移动端 anticode 会导致 ffmpeg ~6 秒断连
+
+### 轮询流程
+
+```
+app.js init()
+  └─ pollingManager.start()
+       └─ loadPollingRooms()                       # DB: polling_enabled=true
+            └─ startRoomPolling(room) × N
+                 ├─ pollRoom(room)                   # 首次立即执行（0~5s jitter）
+                 │    └─ checkRoom(room)
+                 │         ├─ PlatformChecker.checkStatus()   # 平台 API
+                 │         ├─ 状态转换检测 (wasLive→isLive)
+                 │         ├─ Redis SET (TTL=interval×2)      # 瞬时状态缓存
+                 │         └─ _tryStartRecording()             # 开播触发录制
+                 └─ setInterval(pollRoom, intervalMs)          # 定时轮询
+```
+
+### 数据存储策略
+
+| 数据                | 存储                    | 原因         |
+| ------------------- | ----------------------- | ------------ |
+| 直播状态 / 轮询时间 | Redis，TTL=`interval*2` | 瞬时数据     |
+| 房间配置            | DB `rooms` 表           | 持久配置     |
+| room_name           | DB，仅在首次为空时填充  | 用户可自定义 |
+
+### 安全机制
+
+- **停止 → 关监听**：`POST /api/rooms/:id/stop` 自动 `monitoring_enabled=false`
+- **状态转换判定**：仅 `!wasLive && isLive` 触发录制
+- **防重复**：`RecorderService.startRecording()` 有 Redis `active_task` 保护
+- **jitter**：0~5s 随机延迟防惊群
+
+### 扩展新平台
+
+1. 继承 `PlatformChecker` 实现三个接口方法
+2. 注册到 `PollingManager.CHECKERS`
+3. 前端 `detectPlatform()` 添加 URL 规则
+
+---
+
+## 六、启动清理 (cleanupStaleRecordings)
 
 在 `startup()` 中运行，按顺序：
 
@@ -348,7 +426,7 @@ startup()
 
 ---
 
-## 六、投稿流程
+## 七、投稿流程
 
 ### 触发
 
@@ -379,17 +457,20 @@ startup()
 
 ---
 
-## 七、边界情况与容错
+## 八、边界情况与容错
 
-| 场景                                 | 处理方式                                        |
-| ------------------------------------ | ----------------------------------------------- |
-| 进程收到 SIGTERM 后 Rust Drop 不执行 | rooms.js stop 同步扫描 + 重命名 .part           |
-| 看门狗误杀正在写 .part 的进程        | mtime 检查包含 .part 文件                       |
-| 文件扫描发现活跃录制中的文件         | 跳过该目录，由 close handler 追踪               |
-| 录制中途服务器重启                   | startup 清理 + 尝试恢复会话                     |
-| 并发录制超过池大小                   | HTTP 429 "Pool full"                            |
-| Redis 残留 active_task               | cleanupStaleRedis 启动时清理                    |
-| DB 重复 recording_files              | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING |
-| stream URL 失效/过期                 | ffmpeg 重连机制自动处理（reconnect_streamed）   |
-| 磁盘空间不足                         | checkDiskSpace() 设 disk:critical，暂停新录制   |
-| 上传限流重启丢失                     | Redis INCR 持久化 + 24h 过期                    |
+| 场景                                 | 处理方式                                               |
+| ------------------------------------ | ------------------------------------------------------ |
+| 进程收到 SIGTERM 后 Rust Drop 不执行 | rooms.js stop 同步扫描 + 重命名 .part                  |
+| 看门狗误杀正在写 .part 的进程        | mtime 检查包含 .part 文件                              |
+| 文件扫描发现活跃录制中的文件         | 跳过该目录，由 close handler 追踪                      |
+| 录制中途服务器重启                   | startup 清理 + 尝试恢复会话                            |
+| 并发录制超过池大小                   | HTTP 429 "Pool full"                                   |
+| Redis 残留 active_task               | cleanupStaleRedis 启动时清理                           |
+| DB 重复 recording_files              | UNIQUE(file_path) 约束 + ON CONFLICT DO NOTHING        |
+| stream URL 失效/过期                 | ffmpeg 重连机制自动处理（reconnect_streamed）          |
+| 磁盘空间不足                         | checkDiskSpace() 设 disk:critical，暂停新录制          |
+| 上传限流重启丢失                     | Redis INCR 持久化 + 24h 过期                           |
+| 轮询检测到开播但 ffmpeg 断连         | 去掉 `-imgplus` 绕过移动端平台检测；reconnect 自动重连 |
+| 重启时轮询状态与直播一致无法触发录制 | 启动时从 Redis/DB 加载 last_live_status 做状态对比     |
+| 手动停止后被轮询二次触发录制         | stop 自动将 monitoring_enabled 设为 false              |
