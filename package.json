@@ -30,7 +30,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:api": "jest test/api-coverage.test.js --verbose",
-    "db:ensure": "node scripts/ensure-db.js"
+    "db:ensure": "node scripts/ensure-db.js",
+    "check-env": "bash scripts/check-env.sh"
   },
   "dependencies": {
     "axios": "^1.16.1",
