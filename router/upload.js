@@ -44,11 +44,11 @@ router.post('/upload_templates', async (req, res) => {
         desc_template || '',
         tags || '',
         source || '{room_url}',
-        tid || null,
-        copyright || null,
-        is_only_self || false,
+        tid != null ? parseInt(tid, 10) : null,
+        copyright != null ? parseInt(copyright, 10) : null,
+        is_only_self != null ? parseInt(is_only_self, 10) : 0,
         cover || null,
-        dtime || null,
+        dtime != null && dtime !== '' ? parseInt(dtime, 10) : null,
         after_upload || null,
       ]
     );
@@ -76,12 +76,18 @@ router.put('/upload_templates/:id', async (req, res) => {
       'dtime',
       'after_upload',
     ];
+    const intFields = new Set(['tid', 'copyright', 'is_only_self', 'dtime']);
     const sets = [];
     const values = [];
     for (const field of fields) {
       if (req.body[field] !== undefined) {
         sets.push(`${field} = $${values.length + 1}`);
-        values.push(req.body[field]);
+        const val = req.body[field];
+        if (intFields.has(field)) {
+          values.push(val != null && val !== '' ? parseInt(val, 10) : null);
+        } else {
+          values.push(val);
+        }
       }
     }
     if (sets.length === 0) {
