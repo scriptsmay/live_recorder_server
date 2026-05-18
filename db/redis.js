@@ -9,9 +9,15 @@ const client = {
   exists: (key) => redisService.exists(key),
   keys: (pattern) => redisService.keys(pattern),
   incr: (key) => redisService.incr(key),
+  decr: (key) => redisService.decr(key),
   expire: (key, seconds) => redisService.expire(key, seconds),
   ping: () => redisService.ping(),
   disconnect: () => redisService.disconnect(),
+  // 列表操作
+  lPush: (key, value) => redisService.lPush(key, value),
+  rPop: (key) => redisService.rPop(key),
+  lLen: (key) => redisService.lLen(key),
+  lRange: (key, start, end) => redisService.lRange(key, start, end),
 };
 
 module.exports = client;

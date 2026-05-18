@@ -112,7 +112,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 - 新录制请求时查询最近一次会话 `ended_at > NOW() - delay`
 - 匹配 `status IN ('completed', 'interrupted')`
 - 复用会话 ID，不清 zero totals，close handler 累加
-- **注意**：续播不 append 到旧文件。FLV/MP4 容器无文件级 append 机制，服务器重启恢复时生成新文件（`_resume_N`）
+- **注意**：续播不 append 到旧文件。FLV/MP4 容器无文件级 append 机制，每次启动录制均使用文件名模板生成新文件。
 
 ---
 

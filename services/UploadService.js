@@ -92,9 +92,14 @@ class UploadService {
       files = fallback.rows.map((r) => r.file_path).filter(Boolean);
     }
 
+    // 读取碎片大小阈值
+    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+    const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
+
     files = files.filter((fp) => {
       try {
-        return fs.statSync(fp).isFile();
+        const stat = fs.statSync(fp);
+        return stat.isFile() && stat.size >= thresholdBytes;
       } catch {
         return false;
       }
@@ -103,7 +108,7 @@ class UploadService {
     files = files.map((fp) => path.resolve(fp));
 
     if (files.length === 0) {
-      console.log(`[投稿] 会话 ${session.id} 无文件，跳过`);
+      console.log(`[投稿] 会话 ${session.id} 无有效文件（或均小于碎片阈值），跳过`);
       return;
     }
 
@@ -307,6 +312,35 @@ class UploadService {
   static async findAndAutoUpload(session) {
     try {
       if (!(await this.checkUploadLimit(session.id))) return;
+
+      const existingRecords = await pool.query(
+        'SELECT id, status FROM upload_records WHERE session_id = $1 LIMIT 1',
+        [session.id]
+      );
+      if (existingRecords.rows.length > 0) {
+        console.log(
+          `[投稿] 会话 ${session.id} 已有投稿记录，跳过自动投稿`
+        );
+        return;
+      }
+
+      const sess = await pool.query(
+        'SELECT status FROM recording_sessions WHERE id = $1',
+        [session.id]
+      );
+      if (sess.rows.length === 0 || sess.rows[0].status !== 'completed') {
+        console.log(
+          `[投稿] 会话 ${session.id} 状态非 completed (${sess.rows[0]?.status || '不存在'})，跳过自动投稿`
+        );
+        return;
+      }
+
+      if (!(await this.isSessionTranscodeComplete(session.id))) {
+        console.log(
+          `[投稿] 会话 ${session.id} 转码未完成，跳过自动投稿（等待看门狗兜底）`
+        );
+        return;
+      }
 
       let tmpl = null;
 

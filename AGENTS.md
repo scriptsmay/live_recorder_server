@@ -35,7 +35,16 @@ CREATE DATABASE ks_live_recorder_dev;
 
 ```bash
 npm run dev                          # 前台启动（日志直接看终端，Ctrl+C 一次即停）
-tail -f /tmp/dev-server.log          # 后台启动时实时查看日志
+
+# 方式2：后台运行并查看日志
+npm run dev > /tmp/dev-server.log 2>&1 &
+tail -f /tmp/dev-server.log
+
+```
+
+其他命令：
+
+```bash
 kill $(lsof -ti :3001)               # 停止开发服务
 lsof -i :3001                        # 检查端口占用
 ps aux | grep nodemon | grep -v grep # 检查是否有旧版 nodemon 孤儿进程

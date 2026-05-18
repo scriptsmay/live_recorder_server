@@ -1,6 +1,10 @@
 # 开发踩坑记录
 
-> **说明**：stream-gears 下载引擎已于 v1.3 后完全移除，当前仅使用 FFmpeg。
+## 开发环境怎么杀死进程
+
+```bash
+lsof -ti :3001 | xargs kill -9 2>/dev/null; sleep 1; echo "已停止旧进程"
+```
 
 ## 集中式转码的延迟问题与边下边转码方案
 
@@ -74,3 +78,456 @@ FFmpeg 打开 segment 3.flv → [边下边转码] segment 2.flv 入队 → 继�
 | **双重保障机制**         | 主流程 + 兜底流程配合，确保无遗漏                    |
 | **错误隔离提升稳定性**   | 单个分片转码失败不影响其他分片，避免级联失败         |
 | **避免处理正在写入文件** | 通过状态跟踪，等新分段打开时再处理上一个完成的分段   |
+
+## 轮询启动录制失败：streamInfo 为 null 导致流地址丢失
+
+### 问题现象
+
+虎牙直播间已开播，`HuyaChecker` 成功检测到直播状态并打印了日志：
+
+```
+[HuyaChecker] 构建虎牙流地址 (TX): https://...
+```
+
+但录制没有启动，没有任何 `[PollingManager] 准备启动录制` 或 `[PollingManager] ✅ 启动录制成功` 的日志。
+
+### 问题根因
+
+`HuyaChecker.checkStatus()` 返回了两个字段：
+
+- `streamUrl` - 直接从 `liveData` 构建的流地址
+- `streamInfo` - 经过 `extractStreamInfo()` 处理的数据
+
+当虎牙 API 返回的 `bitRateInfo` 字段是无效 JSON 时：
+
+```javascript
+// HuyaChecker.js extractStreamInfo() 方法
+const bitRateInfo = liveData.liveData?.bitRateInfo ? JSON.parse(liveData.liveData.bitRateInfo) : [];
+```
+
+`JSON.parse()` 抛出异常，导致整个 `extractStreamInfo()` 返回 `null`。
+
+**问题链条**：
+
+```
+checkStatus() 返回 { streamUrl: 有效值, streamInfo: null }
+    ↓
+PollingManager._extractStreamUrl() 收到 null 的 streamInfo
+    ↓
+buildStreamUrlFromStreamInfo(null) 返回 null
+    ↓
+_tryStartRecording() 因为 streamUrl 为 null 跳过录制
+```
+
+日志中看到 "构建虎牙流地址" 是 `extractStreamUrl()` 打印的（它成功执行了），但录制流程使用的是 `streamInfo` 字段。
+
+### 修复方案
+
+**1. 优先使用已构建的 streamUrl**（`PollingManager.js`）：
+
+```javascript
+async _extractStreamUrl(room_url, checkResult) {
+  // 优先使用 checkStatus() 已经成功构建的 streamUrl
+  if (checkResult.streamUrl) {
+    return checkResult.streamUrl;
+  }
+
+  // 兜底：尝试从 streamInfo 重新构建
+  if (checkResult.streamInfo) {
+    const detectedPlatform = detectPlatform(room_url);
+    if (detectedPlatform === 'huya') {
+      const huyaChecker = new HuyaChecker(room_url);
+      return huyaChecker.buildStreamUrlFromStreamInfo(checkResult.streamInfo, { useAntiCodeSign: false });
+    }
+  }
+
+  return null;
+}
+```
+
+**2. 增强 extractStreamInfo() 的 JSON.parse 错误处理**：
+
+```javascript
+extractStreamInfo(liveData) {
+  try {
+    const stream = liveData.stream?.baseSteamInfoList || liveData.gameStreamInfoList || [];
+    let bitRateInfo = [];
+    if (liveData.liveData?.bitRateInfo) {
+      try {
+        bitRateInfo = JSON.parse(liveData.liveData.bitRateInfo);
+      } catch (_) {
+        // JSON 解析失败时使用空数组，而不是让整个方法失败
+        bitRateInfo = [];
+      }
+    }
+
+    if (stream.length === 0) {
+      return null;
+    }
+
+    return {
+      streams: stream,
+      bitRateInfo: bitRateInfo,
+      maxBitrate: liveData.liveData?.bitRate || liveData.bitRate || 0,
+    };
+  } catch (err) {
+    console.error(`[HuyaChecker] 解析流信息失败:`, err.message);
+    return null;
+  }
+}
+```
+
+### 经验总结
+
+| 教训                    | 说明                                                                        |
+| ----------------------- | --------------------------------------------------------------------------- |
+| **优先使用已有结果**    | `checkStatus()` 已成功构建 `streamUrl`，不应该再依赖可能失败的 `streamInfo` |
+| **防御性编程处理 JSON** | 对外部 API 返回的可疑 JSON 数据添加 try-catch 包裹                          |
+| **避免级联失败**        | 一个字段解析失败不应该阻塞其他正常字段的使用                                |
+| **日志要成对出现**      | 如果打印了 "构建成功" 日志，确保后续流程能真正使用该结果                    |
+
+## 优化开播检测：结合 Redis 缓存和房间实际录制状态
+
+### 问题现象
+
+即使直播间正在开播，PollingManager 可能不会启动录制。原因是：
+
+- Redis 缓存中保存了 `wasLive=true`
+- 所以即使 `isLive=true`，也不会触发开播检测
+- 导致房间一直处于 "漏录" 状态
+
+### 问题根因
+
+原逻辑只检查 Redis 缓存的状态：
+
+```javascript
+if (isLive && !wasLive) {
+  // 开播检测
+}
+```
+
+如果 Redis 缓存显示 `wasLive=true`，就不会再尝试启动录制了。但实际上：
+
+- Redis 缓存可能过期或不准确
+- 房间可能已经结束录制，状态变回 `idle`
+- 此时应该再次检查并启动录制
+
+### 修复方案
+
+优化开播检测逻辑，同时检查 **Redis 缓存** 和 **房间的实际录制状态**：
+
+```javascript
+const wasLive = this.roomLiveStatus.get(id) || false;
+const isLive = result.isLive;
+
+// 开播条件：isLive=true 且 (wasLive=false 或 当前不在录制中)
+const shouldStartRecording = isLive && (!wasLive || room.status !== 'recording');
+
+if (shouldStartRecording) {
+  // 开播检测
+}
+
+// 启动录制条件：isLive=true 且 当前不在录制中
+if (isLive && room.status !== 'recording' && (result.streamUrl || result.streamInfo)) {
+  await this._tryStartRecording(room, result);
+}
+```
+
+### 经验总结
+
+| 教训                       | 说明                                               |
+| -------------------------- | -------------------------------------------------- |
+| **不要完全依赖缓存状态**    | 缓存可能过期或不准确，始终以实际状态为准           |
+| **结合多重状态判断**        | 同时检查缓存状态和实际状态，避免被单一状态误导     |
+| **状态更新后重置缓存状态**  | 房间停止录制后，应该重置相关缓存，避免影响下次判断 |
+
+## 轮询录制循环启动问题：录制冷却期机制
+
+### 问题现象
+
+开发环境中，即使直播间一直在开播，PollingManager 仍然会**每隔一段时间就重新启动录制**，导致产生大量碎片文件。
+
+### 问题根因
+
+录制进程因为流地址失效等原因启动后几秒就退出，录制结束后房间状态立即变回 `idle`。下一次轮询检测到开播时，又会重新启动录制，形成循环。
+
+### 修复方案
+
+**1. 录制冷却期（Redis）**：
+
+在 `RecorderService.finishSession` 中，录制结束后在 Redis 中设置冷却期：
+
+```javascript
+// 设置录制冷却期（60秒），防止流地址失效导致频繁重启录制
+const cooldownKey = `polling:recording_cooldown:${room.id}`;
+await redis.set(cooldownKey, Date.now().toString(), { EX: 60 }).catch(() => {});
+```
+
+**2. PollingManager 检查冷却期**：
+
+在 `PollingManager.checkRoom` 中，启动录制前先检查是否有冷却期：
+
+```javascript
+// 检查是否有录制冷却期（录制失败后等待一段时间再重新启动）
+const cooldownKey = `polling:recording_cooldown:${id}`;
+const cooldown = await redis.get(cooldownKey).catch(() => null);
+if (cooldown) {
+  console.log(`[PollingManager] 录制冷却期，跳过: ${room.room_name || room_url}`);
+  return;
+}
+```
+
+**3. 查询最新房间状态**：
+
+在 `PollingManager` 中，启动录制前先查询数据库的最新状态：
+
+```javascript
+const freshRoom = await pool.query('SELECT status, ffmpeg_pid FROM rooms WHERE id = $1', [id]);
+const currentStatus = freshRoom.rows[0]?.status;
+```
+
+### 经验总结
+
+| 教训                     | 说明                                                                       |
+| ------------------------ | -------------------------------------------------------------------------- |
+| **录制后需要冷却期**     | 录制失败或退出后，应该等待一段时间再重新启动，避免频繁重启                  |
+| **结合多重状态判断**      | 同时检查缓存状态和数据库状态，避免被单一状态误导                            |
+| **流地址有时效性**        | 虎牙等平台的流地址可能需要不断刷新，录制过程中需要处理流中断的情况          |
+
+## 自动投稿缺乏完整性检查：在转码完成前就触发投稿
+
+### 问题现象
+
+录制结束后 `findAndAutoUpload` 立即被调用，此时 FLV 文件尚未转码为 MP4，投稿上传的是原始 FLV 文件而非转码后的 MP4 文件。
+
+### 触发链路分析
+
+系统中有 4 个自动投稿触发点：
+
+| 触发点 | 位置 | 调用时机 | 会话状态 | 转码完成 | 风险 |
+|--------|------|----------|----------|----------|------|
+| finishSession (分段) | RecorderService.js:381 | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| finishSession (单FLV) | RecorderService.js:471 | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| tryResumeSession | RecorderService.js:1095 | 恢复会话完成 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| scanPendingAutoUpload | UploadService.js:269 | 看门狗定时 | completed ✅ | ✅ 已检查 | **安全** |
+
+**三个 `findAndAutoUpload` 触发点都在转码完成之前就触发，上传的是未转码的 FLV 文件。**
+
+额外风险：`findAndAutoUpload` 和 `scanPendingAutoUpload` 之间可能存在竞赛条件 —— `findAndAutoUpload` 先上传 FLV，转码完成后 `scanPendingAutoUpload` 再上传 MP4，导致重复投稿。
+
+### 修复方案
+
+为 `findAndAutoUpload` 增加**三重前置检查**：
+
+```javascript
+static async findAndAutoUpload(session) {
+    // 1. 投稿次数限制
+    if (!(await this.checkUploadLimit(session.id))) return;
+
+    // 2. 已有投稿记录 → 跳过
+    const existingRecords = await pool.query(...);
+    if (existingRecords.rows.length > 0) return;
+
+    // 3. 会话状态必须是 completed
+    const sess = await pool.query('SELECT status FROM recording_sessions WHERE id = $1', [session.id]);
+    if (sess.rows[0]?.status !== 'completed') return;
+
+    // 4. 转码必须完成（所有 FLV → MP4）
+    if (!(await this.isSessionTranscodeComplete(session.id))) return;
+
+    // ... 继续投稿流程
+}
+```
+
+这样 `findAndAutoUpload` 的即时触发点会因为转码未完成而自动跳过，由 `scanPendingAutoUpload`（看门狗）在转码完成后安全地投稿。
+
+### 投稿安全保障矩阵
+
+| 检查项 | findAndAutoUpload | scanPendingAutoUpload |
+|--------|:---:|:---:|
+| 会话状态 = completed | ✅ 新增 | ✅ SQL WHERE |
+| 转码完成 | ✅ 新增 | ✅ isSessionTranscodeComplete |
+| 无已有投稿记录 | ✅ 已有 | ✅ NOT EXISTS SQL |
+| 投稿次数限制 | ✅ 已有 | ✅ checkUploadLimit |
+| 碎片大小过滤 | ✅ executeUpload 内 | ✅ executeUpload 内 |
+| 文件存在性 | ✅ executeUpload 内 | ✅ executeUpload 内 |
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **投稿必须等转码** | FLV 文件不能直接投稿，必须转为 MP4 后再上传 |
+| **即时触发 ≠ 安全触发** | 录制结束立即触发看似快捷，实则跳过了关键的前置条件 |
+| **看门狗模式更安全** | `scanPendingAutoUpload` 的定时扫描模式天然保证了前置条件 |
+| **多重检查防竞赛** | 同时检查"已有记录"和"转码完成"避免并发重复投稿 |
+| **兜底机制分层设计** | 即时触发（快速路径）+ 看门狗（兜底保障），但快速路径也必须满足所有条件 |
+
+## 录制中断却通知"录制完成"：通知与状态不同步
+
+### 问题现象
+
+正式环境中收到通知：
+
+```
+✅ 录制完成
+直播间：KSG无言
+文件：1 段
+大小：0.0 MB
+会话ID：19
+```
+
+但数据库中 `recording_sessions.status = 'interrupted'`，文件实际 0 字节，ffmpeg 异常退出。
+
+### 问题根因
+
+`finishSession` 中的状态判断逻辑：
+
+```javascript
+let sessionStatus = 'completed';
+if (fileSize === 0 && code !== 0) {
+  sessionStatus = 'interrupted';  // ← 正确给 DB 写入了 interrupted
+}
+// UPDATE recording_sessions SET status = $1  ← DB 已更新为 interrupted
+
+// 但通知却…
+notify.recordingComplete(...);  // ← 始终发送"录制完成"，不管实际状态
+```
+
+`sessionStatus` 变量只用于 UPDATE 查询，通知函数 `notify.recordingComplete()` 没有接收状态参数，永远发送 ✅ 录制完成。
+
+### 修复方案
+
+**1. 通知函数增加状态参数**（`lib/core/notify.js`）：
+
+```javascript
+async function recordingComplete(roomName, fileCount, totalMB, sessionId, roomUrl, status = 'completed') {
+  if (status === 'interrupted') {
+    send('⚠️ 录制中断',
+      `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}\n\n录制异常中断，文件可能不完整`);
+  } else {
+    send('✅ 录制完成',
+      `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}`);
+  }
+}
+```
+
+**2. `finishSession` 传入实际状态**（`services/RecorderService.js`）：
+
+```javascript
+// 从数据库查询实际更新后的状态，而不是使用局部变量（防止 UPDATE 被 WHERE 条件跳过）
+const sess = await pool.query(
+  'SELECT status, total_segments, total_size FROM recording_sessions WHERE id = $1',
+  [sessionId]
+);
+const status = sess.rows[0]?.status || 'completed';
+notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url, status);
+```
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **通知和状态必须同步** | 不能在 DB 里写 interrupted，通知却说 completed |
+| **查询最新状态再通知** | 从 DB 重新查询状态，避免 UPDATE 被 WHERE 条件跳过导致不一致 |
+| **默认参数保持兼容** | `status = 'completed'` 作为默认值，不影响任何已有调用 |
+
+## 会话复用（reuseSession）导致正常录制被误判为中断
+
+### 问题现象
+
+正式环境会话 19，主播正常下播，但 `recording_sessions.status = 'interrupted'`。通知显示"大小：0.0 MB"，实际前几轮录制已有内容。
+
+### 问题根因
+
+轮询系统频繁重启录制（流地址过期导致 ffmpeg 几秒退出），`reuseSession` 模式复用同一会话。状态判断只看**最后一批**文件的增量：
+
+```javascript
+let sessionStatus = 'completed';
+if (fileSize === 0 && code !== 0) {
+    sessionStatus = 'interrupted'; // ← 只看当前批次
+}
+
+// reuseSession 时 UPDATE 用当前批次的状态覆盖
+await pool.query(
+    `UPDATE recording_sessions SET status = $1, ... WHERE id = $2`,
+    [sessionStatus, sessionId]
+);
+```
+
+**问题链条**：
+```
+第1轮: 录了 50MB → total_size=50MB, 会话仍在 recording 状态
+第2轮: 录了 30MB → total_size=80MB, 会话仍在 recording 状态
+第3轮: 流地址过期, fileSize=0, code≠0 → sessionStatus='interrupted' → 覆盖整个会话！
+```
+
+虽然前几轮已累积 80MB 内容，但最后一轮的失败直接把整个会话标记为"中断"。
+
+### 修复方案
+
+在 `reuseSession` 模式下，如果本次判断为 `interrupted`，先查询数据库中的累积值。只要前几轮有内容，就修正为 `completed`：
+
+```javascript
+if (reuseSession && sessionStatus === 'interrupted') {
+    const accumulated = await pool.query(
+        'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
+        [sessionId]
+    );
+    if ((accumulated.rows[0]?.total_segments || 0) > 0 ||
+        (accumulated.rows[0]?.total_size || 0) > 0) {
+        await pool.query(
+            `UPDATE recording_sessions SET status = 'completed' WHERE id = $1`,
+            [sessionId]
+        );
+    }
+}
+```
+
+修改了分段模式（第 344-379 行）和单文件模式（第 431-470 行）两个路径。
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **复用会话用累积值判断** | `reuseSession` 时状态不能只看增量，要看累积量 |
+| **增量状态 ≠ 整体状态** | 每批文件的新增状态与整个会话的最终状态是两回事 |
+| **回查数据库修正状态** | UPDATE 后回查累积值，必要时用二次 UPDATE 修正 |
+
+## 续播时文件名错误：`_resume` 后缀无意义
+
+### 问题现象
+
+`reuseSession` 模式下，录制文件被重命名成 `MrGemini_20260518_234839_resume_2.flv` 这种格式。
+
+### 问题根因
+
+两个位置产生了无意义的 `_resume` 后缀：
+
+1. `tryResumeSession`（会话恢复）中拼接了 `_resume_${retryCount + 1}`
+2. `generateOutputPath` 在 `reuseSession` 时直接复用上次的 `room.output_path`，而这个路径可能来自上一次 `tryResumeSession` 的 `_resume` 文件名
+
+FFmpeg 没有文件级续传（append）功能，每次启动都是全新录制，加 `_resume` 后缀毫无意义反而造成文件名混乱。
+
+### 修复方案
+
+1. `tryResumeSession` 直接用模板文件名，不再加 `_resume_N` 后缀
+2. `generateOutputPath` 移除 `reuseSession` 路径复用逻辑，始终用模板生成新文件名
+
+```javascript
+// tryResumeSession — 修复前
+const parsed = path.parse(base);
+outputPath = path.join(DOWNLOAD_DIR, `${parsed.name}_resume_${retryCount + 1}${parsed.ext}`);
+
+// tryResumeSession — 修复后
+outputPath = path.join(DOWNLOAD_DIR, base);
+
+// generateOutputPath — 移除 reuseSession 路径复用
+// 不再设置 outputFilePattern = prevOutput
+```
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **文件名不应暗示"续传"** | FFmpeg 不支持文件续传，`_resume` 后缀让文件名误导 |
+| **模板优先原则** | 始终用数据库配置的文件名模板，保持一致性 |
