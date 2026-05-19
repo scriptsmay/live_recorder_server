@@ -25,12 +25,22 @@ class UploadService {
         await redis.expire(`upload_count:${sessionId}`, 86400);
       }
       if (count > limit) {
+        await redis.set(`upload_skipped:${sessionId}`, '1', { EX: 86400 }).catch(() => {});
         console.log(`[上传限制] 会话 ${sessionId} 已达上传次数上限 (${count - 1}/${limit})，跳过`);
         return false;
       }
       return true;
     } catch (_) {
       return true;
+    }
+  }
+
+  static async isUploadSkipped(sessionId) {
+    try {
+      const skipped = await redis.get(`upload_skipped:${sessionId}`);
+      return skipped === '1';
+    } catch (_) {
+      return false;
     }
   }
 
@@ -285,6 +295,9 @@ class UploadService {
       );
 
       for (const row of rows) {
+        if (await this.isUploadSkipped(row.id)) {
+          continue;
+        }
         if (!(await this.isSessionTranscodeComplete(row.id))) continue;
 
         const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [row.upload_template_id]);
@@ -320,6 +333,10 @@ class UploadService {
     } catch (_) {}
 
     try {
+      if (await this.isUploadSkipped(session.id)) {
+        console.log(`[投稿] 会话 ${session.id} 已达上传限制，跳过`);
+        return;
+      }
       if (!(await this.checkUploadLimit(session.id))) return;
 
       const existingRecords = await pool.query(
