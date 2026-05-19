@@ -3,10 +3,8 @@ const fs = require('fs');
 const dayjs = require('dayjs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
-const { createProcLog } = require('../lib/utils/proc-log');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
-const transcodeQueue = require('../lib/core/TranscodeQueue');
-const segmenter = require('../lib/core/segmenter');
+const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 
 const UploadService = require('./UploadService');
@@ -15,15 +13,43 @@ const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
 const ACTIVE_TASK_TTL = 86400;
 
+/**
+ * 录制服务 - 负责直播间录制的业务逻辑协调
+ * 
+ * 主要职责：
+ * 1. 管理房间状态和缓存
+ * 2. 处理录制请求的验证和权限检查
+ * 3. 协调录制进程的启动和结束
+ * 4. 管理录制会话的生命周期
+ * 5. 触发文件处理和自动上传
+ */
 class RecorderService {
+  /**
+   * 生成 Redis 房间缓存键
+   * 
+   * @param {string} roomUrl - 房间URL
+   * @returns {string} Redis key
+   */
   static redisKey(roomUrl) {
     return `room:${roomUrl}`;
   }
 
+  /**
+   * 生成 Redis 活跃任务键
+   * 
+   * @param {string} roomKey - 房间唯一标识
+   * @returns {string} Redis key
+   */
   static activeTaskKey(roomKey) {
     return `active_task:${roomKey}`;
   }
 
+  /**
+   * 获取房间缓存
+   * 
+   * @param {string} roomUrl - 房间URL
+   * @returns {Promise<Object|null>} 房间信息对象或 null
+   */
   static async getRoomCache(roomUrl) {
     try {
       const data = await redis.get(this.redisKey(roomUrl));
@@ -32,18 +58,34 @@ class RecorderService {
     return null;
   }
 
+  /**
+   * 设置房间缓存
+   * 
+   * @param {Object} room - 房间信息对象
+   */
   static async setRoomCache(room) {
     try {
       await redis.setEx(this.redisKey(room.room_url), ROOM_CACHE_TTL, JSON.stringify(room));
     } catch (_) {}
   }
 
+  /**
+   * 删除房间缓存
+   * 
+   * @param {string} roomUrl - 房间URL
+   */
   static async delRoomCache(roomUrl) {
     try {
       await redis.del(this.redisKey(roomUrl));
     } catch (_) {}
   }
 
+  /**
+   * 检查是否存在活跃任务
+   * 
+   * @param {string} roomKey - 房间唯一标识
+   * @returns {Promise<boolean>} 是否存在活跃任务
+   */
   static async isActiveTask(roomKey) {
     try {
       const exists = await redis.exists(this.activeTaskKey(roomKey));
@@ -53,18 +95,35 @@ class RecorderService {
     }
   }
 
+  /**
+   * 设置活跃任务
+   * 
+   * @param {string} roomKey - 房间唯一标识
+   * @param {Object} data - 任务数据
+   */
   static async setActiveTask(roomKey, data) {
     try {
       await redis.setEx(this.activeTaskKey(roomKey), ACTIVE_TASK_TTL, JSON.stringify(data));
     } catch (_) {}
   }
 
+  /**
+   * 删除活跃任务
+   * 
+   * @param {string} roomKey - 房间唯一标识
+   */
   static async delActiveTask(roomKey) {
     try {
       await redis.del(this.activeTaskKey(roomKey));
     } catch (_) {}
   }
 
+  /**
+   * 清理文件名中的非法字符
+   * 
+   * @param {string} name - 原始文件名
+   * @returns {string} 清理后的文件名
+   */
   static sanitizeFilename(name) {
     return name
       .replace(/[\\/:\*\?"<>\|\x00-\x1F\x7F]/g, '')
@@ -72,6 +131,14 @@ class RecorderService {
       .replace(/^_+|_+$/g, '');
   }
 
+  /**
+   * 根据模板生成文件名
+   * 
+   * @param {string} template - 文件名模板
+   * @param {string} roomName - 房间名称
+   * @param {string} ext - 文件扩展名
+   * @returns {string} 生成的文件名
+   */
   static generateFilename(template, roomName, ext = '.mp4') {
     const now = dayjs();
     const vars = {
@@ -91,6 +158,14 @@ class RecorderService {
     return this.sanitizeFilename(result) + ext;
   }
 
+  /**
+   * 将模板转换为 strftime 格式
+   * 
+   * @param {string} template - 文件名模板
+   * @param {string} roomName - 房间名称
+   * @param {string} ext - 文件扩展名
+   * @returns {string} strftime 格式的路径
+   */
   static templateToStrftime(template, roomName, ext = '.mp4') {
     const roomNameSafe = this.sanitizeFilename(roomName || 'unknown').replace(/%/g, '%%');
     return (
@@ -106,6 +181,13 @@ class RecorderService {
     );
   }
 
+  /**
+   * 获取或创建房间记录
+   * 
+   * @param {string} roomUrl - 房间URL
+   * @param {string} roomName - 房间名称
+   * @returns {Promise<Object>} 房间信息对象
+   */
   static async getOrCreateRoom(roomUrl, roomName) {
     const cached = await this.getRoomCache(roomUrl);
     if (cached) return cached;
@@ -127,6 +209,13 @@ class RecorderService {
     return room;
   }
 
+  /**
+   * 获取系统设置值
+   * 
+   * @param {string} key - 设置键名
+   * @param {string} defaultValue - 默认值
+   * @returns {Promise<string>} 设置值或默认值
+   */
   static async getSetting(key, defaultValue) {
     try {
       const ps = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
@@ -137,11 +226,21 @@ class RecorderService {
     return defaultValue;
   }
 
+  /**
+   * 获取线程池大小配置
+   * 
+   * @returns {Promise<number>} 线程池大小
+   */
   static async getPoolSize() {
     const value = await this.getSetting('pool_size', '3');
     return parseInt(value, 10) || 3;
   }
 
+  /**
+   * 获取当前活跃任务数量
+   * 
+   * @returns {Promise<number>} 活跃任务数量
+   */
   static async getActiveTasksCount() {
     try {
       const keys = await redis.keys('active_task:*');
@@ -151,6 +250,12 @@ class RecorderService {
     }
   }
 
+  /**
+   * 检查是否可以复用之前的录制会话（续播）
+   * 
+   * @param {Object} room - 房间信息对象
+   * @returns {Promise<Object>} 包含 reuseSession 和 resumeCount 的对象
+   */
   static async checkReuseSession(room) {
     let reuseSession = false;
     let resumeCount = 0;
@@ -185,13 +290,23 @@ class RecorderService {
     return { reuseSession, resumeCount };
   }
 
+  /**
+   * 生成输出文件路径
+   * 
+   * @param {Object} downloader - 下载器实例
+   * @param {string} template - 文件名模板
+   * @param {string} roomName - 房间名称
+   * @param {string} title - 直播标题
+   * @param {number} segmentDuration - 分段时长（秒）
+   * @param {boolean} _reuseSession - 是否复用会话（预留参数）
+   * @param {string} _roomOutputPath - 房间输出路径（预留参数）
+   * @returns {string} 输出文件路径
+   */
   static generateOutputPath(downloader, template, roomName, title, segmentDuration, _reuseSession, _roomOutputPath) {
     const useSegment = segmentDuration > 0;
     const ext = downloader.getExtension();
 
     let outputFilePattern;
-
-    // 这里需要判断下载平台
 
     if (useSegment) {
       const strftimeName = this.templateToStrftime(template, roomName || title, ext);
@@ -204,33 +319,20 @@ class RecorderService {
     return outputFilePattern;
   }
 
-  static async startSegmentTask({
-    inputFile,
-    outputFilePattern,
-    roomKey,
-    segmentDuration,
-  }) {
-    // const input = './recordings/live_stream.ts';
-    // const outputPattern = './output/clip_%03d.mp4';
-
-    // 2. 调用方法
-    const result = await segmenter.segmentAndTranscode(
-      inputFile,
-      outputFilePattern,
-      {
-        segmentTime: segmentDuration, // 每 segmentDuration 秒切一片
-      },
-      roomKey // sessionId
-    );
-
-    if (result.success) {
-      console.log('切割转码完成，日志路径:', result.logPath);
-    } else {
-      console.error('任务失败:', result.error);
-    }
-    return result;
-  }
-
+  /**
+   * 完成录制会话的后续处理
+   * 
+   * @param {Object} params - 处理参数
+   * @param {number} params.code - 进程退出码
+   * @param {Object} params.engine - 下载器引擎实例
+   * @param {Object} params.room - 房间信息对象
+   * @param {string|number} params.sessionId - 会话ID
+   * @param {Date} params.sessionStart - 会话开始时间
+   * @param {boolean} params.reuseSession - 是否复用会话
+   * @param {boolean} params.useSegment - 是否使用分段录制
+   * @param {string} params.outputFilePattern - 输出文件路径模式
+   * @param {string} params.roomKey - 房间唯一标识
+   */
   static async finishSession({
     code,
     engine,
@@ -265,259 +367,23 @@ class RecorderService {
       }
 
       if (useSegment) {
-        // 处理录制完后切片的情况
-        const cutAfterDownloaded = engine.getCutAfterDownloaded();
-        if (cutAfterDownloaded) {
-          // 录制完实际下载的文件名是啥？
-          const result = await this.startSegmentTask({
-            inputFile: '',
-            outputFilePattern,
-            roomKey,
-            segmentDuration,
-          });
-          
-          console.log(`[finishSession] 录制完成，处理切片结果: ${result}`);
-        }
-
-        const thresholdValue = await this.getSetting('filtering_threshold', '10');
-        const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
-        let totalSize = 0;
-        let newFileCount = 0;
-
-        // 收集所有需要转码的FLV文件
-        const flvFilesToTranscode = [];
-
-        // 从数据库查询该会话已追踪的所有文件
-        const sessionFiles = await pool.query(
-          'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
-          [sessionId]
-        );
-
-        for (const row of sessionFiles.rows) {
-          const filePath = row.file_path;
-          let fileSize = row.file_size;
-
-          // 如果数据库中文件大小为0，尝试重新获取
-          if (fileSize === 0) {
-            try {
-              fileSize = fs.statSync(filePath).size;
-            } catch (_) {}
-          }
-
-          // 小于阈值的文件直接删除，不进行保存和转码
-          if (fileSize > 0 && fileSize < thresholdBytes) {
-            try {
-              fs.unlinkSync(filePath);
-              console.log(
-                `[finishSession] 碎片文件已删除: ${path.basename(filePath)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
-              );
-              
-              // 从数据库中删除该文件记录
-              await pool.query('DELETE FROM recording_files WHERE file_path = $1', [filePath]);
-              await pool.query('DELETE FROM recordings WHERE file_path = $1', [filePath]);
-            } catch (err) {
-              console.error(`[finishSession] 删除碎片文件失败: ${filePath}`, err.message);
-            }
-            continue;
-          }
-
-          // 只有大于等于阈值的文件才保留入库
-          if (fileSize > 0) {
-            totalSize += fileSize;
-
-            // 更新 recordings 表中的文件大小
-            await pool.query(
-              'UPDATE recordings SET file_size = $1, ended_at = NOW(), status = \'completed\' WHERE file_path = $2',
-              [fileSize, filePath]
-            );
-            
-            newFileCount++;
-
-            // 只有大于阈值的FLV文件才加入转码队列
-            if (fileSize >= thresholdBytes && filePath.endsWith('.flv')) {
-              flvFilesToTranscode.push(filePath);
-            }
-          }
-        }
-
-        // 会话结束时取消转码，改为让看门狗定时检测
-        // 条件：转码开关启用 + 会话结束录制状态 + 查询会话下有待转码文件
-
-        if (sessionId) {
-          let sessionStatus = 'completed';
-          if (newFileCount === 0 && code !== 0) {
-            sessionStatus = 'interrupted';
-          }
-
-          if (reuseSession) {
-            await pool.query(
-              `UPDATE recording_sessions
-               SET ended_at = NOW(), status = $1,
-                   total_segments = total_segments + $2,
-                   total_size = total_size + $3
-               WHERE id = $4 AND status = 'recording'`,
-              [sessionStatus, newFileCount, totalSize, sessionId]
-            );
-            // 复用会话：只要有累积内容（含前几轮），就视为完成
-            if (sessionStatus === 'interrupted') {
-              const accumulated = await pool.query(
-                'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
-                [sessionId]
-              );
-              if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
-                await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
-              }
-            }
-          } else {
-            await pool.query(
-              `UPDATE recording_sessions
-               SET ended_at = NOW(), status = $1,
-                   total_segments = $2,
-                   total_size = $3
-               WHERE id = $4 AND status = 'recording'`,
-              [sessionStatus, newFileCount, totalSize, sessionId]
-            );
-          }
-        }
-        console.log(`[api] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
-
-        // 只要有文件收集到就触发自动投稿（包括小于阈值的文件，因为它们也可能被转码）
-        if (newFileCount > 0) {
-          const completedSession = {
-            id: sessionId,
-            room_url: room.room_url,
-            room_name: room.room_name,
-            started_at: sessionStart,
-          };
-          UploadService.findAndAutoUpload(completedSession).catch((err) =>
-            console.error('[自动投稿] 异常:', err.message)
-          );
-        }
+        await this._handleSegmentFinish({
+          engine,
+          room,
+          sessionId,
+          sessionStart,
+          reuseSession,
+          outputFilePattern,
+        });
       } else {
-        let fileSize = 0;
-        let fileExists = false;
-        try {
-          const stat = fs.statSync(outputFilePattern);
-          fileSize = stat.size;
-          fileExists = true;
-        } catch (statErr) {
-          console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
-        }
-
-        // 获取阈值
-        const thresholdValue = await this.getSetting('filtering_threshold', '10');
-        const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
-
-        // 如果文件小于阈值，直接删除
-        if (fileExists && fileSize > 0 && fileSize < thresholdBytes) {
-          try {
-            fs.unlinkSync(outputFilePattern);
-            console.log(
-              `[finishSession] 非分段录制碎片文件已删除: ${path.basename(outputFilePattern)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
-            );
-            fileSize = 0;
-            fileExists = false;
-          } catch (err) {
-            console.error(`[finishSession] 删除非分段碎片文件失败: ${outputFilePattern}`, err.message);
-          }
-        }
-
-        if (fileExists && fileSize > 0) {
-          const existingRec = reuseSession
-            ? await pool.query('SELECT id FROM recordings WHERE session_id = $1 AND file_path = $2', [
-                sessionId,
-                outputFilePattern,
-              ])
-            : null;
-
-          if (existingRec?.rows.length > 0) {
-            await pool.query(
-              `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
-              [fileSize, existingRec.rows[0].id]
-            );
-          } else {
-            await pool.query(
-              `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-               VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
-              [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
-            );
-            await pool.query(
-              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-               VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-               ON CONFLICT (file_path) DO NOTHING`,
-              [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern), fileSize]
-            );
-          }
-
-          if (sessionId) {
-            let sessionStatus = 'completed';
-            if (fileSize === 0 && code !== 0) {
-              sessionStatus = 'interrupted';
-            }
-
-            if (reuseSession) {
-              await pool.query(
-                `UPDATE recording_sessions
-                 SET ended_at = NOW(), status = $1,
-                     total_segments = total_segments + 1,
-                     total_size = total_size + $2
-                 WHERE id = $3 AND status = 'recording'`,
-                [sessionStatus, fileSize, sessionId]
-              );
-              // 复用会话：只要有累积内容（含前几轮），就视为完成
-              if (sessionStatus === 'interrupted') {
-                const accumulated = await pool.query(
-                  'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
-                  [sessionId]
-                );
-                if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
-                  await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
-                }
-              }
-            } else {
-              await pool.query(
-                `UPDATE recording_sessions
-                 SET ended_at = NOW(), status = $1,
-                     total_segments = 1,
-                     total_size = $2
-                 WHERE id = $3 AND status = 'recording'`,
-                [sessionStatus, fileSize, sessionId]
-              );
-            }
-            await pool.query(
-              `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
-               WHERE session_id = $2 AND file_path = $3`,
-              [fileSize, sessionId, outputFilePattern]
-            );
-          }
-
-          if (/\.flv$/i.test(outputFilePattern)) {
-            const autoTranscode = await this.getSetting('auto_transcode', 'true');
-            if (autoTranscode === 'true') {
-              // 只有大于等于阈值的文件才转码
-              if (fileSize >= thresholdBytes) {
-                const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
-                transcodeQueue
-                  .enqueue({
-                    flvPath: outputFilePattern,
-                    mp4Path: mp4Path,
-                    sessionId: sessionId,
-                  })
-                  .catch((err) => console.error('[转码队列] 入队异常:', err.message));
-              }
-            }
-            const completedSession = {
-              id: sessionId,
-              room_url: room.room_url,
-              room_name: room.room_name,
-              started_at: sessionStart,
-            };
-            // 只有有文件存在时才触发自动投稿
-            UploadService.findAndAutoUpload(completedSession).catch((err) =>
-              console.error('[自动投稿] 异常:', err.message)
-            );
-          }
-        }
+        await this._handleNonSegmentFinish({
+          room,
+          sessionId,
+          sessionStart,
+          reuseSession,
+          outputFilePattern,
+          code,
+        });
       }
 
       if (sessionId) {
@@ -537,6 +403,276 @@ class RecorderService {
     }
   }
 
+  /**
+   * 处理分段录制结束的逻辑
+   * 
+   * @param {Object} params - 处理参数
+   * @param {Object} params.engine - 下载器引擎实例
+   * @param {Object} params.room - 房间信息对象
+   * @param {string|number} params.sessionId - 会话ID
+   * @param {Date} params.sessionStart - 会话开始时间
+   * @param {boolean} params.reuseSession - 是否复用会话
+   * @param {string} params.outputFilePattern - 输出文件路径模式
+   */
+  static async _handleSegmentFinish({ engine, room, sessionId, sessionStart, reuseSession, outputFilePattern }) {
+    const cutAfterDownloaded = engine.getCutAfterDownloaded();
+    if (cutAfterDownloaded) {
+      const result = await recordingManager.startSegmentTask({
+        inputFile: '',
+        outputFilePattern,
+        roomKey: room.room_url,
+        segmentDuration: room.segment_duration || 0,
+      });
+      
+      console.log(`[finishSession] 录制完成，处理切片结果: ${result}`);
+    }
+
+    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+    const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
+    let totalSize = 0;
+    let newFileCount = 0;
+
+    const flvFilesToTranscode = [];
+
+    const sessionFiles = await pool.query(
+      'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
+      [sessionId]
+    );
+
+    for (const row of sessionFiles.rows) {
+      const filePath = row.file_path;
+      let fileSize = row.file_size;
+
+      if (fileSize === 0) {
+        try {
+          fileSize = fs.statSync(filePath).size;
+        } catch (_) {}
+      }
+
+      if (fileSize > 0 && fileSize < thresholdBytes) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(
+            `[finishSession] 碎片文件已删除: ${path.basename(filePath)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+          );
+          
+          await pool.query('DELETE FROM recording_files WHERE file_path = $1', [filePath]);
+          await pool.query('DELETE FROM recordings WHERE file_path = $1', [filePath]);
+        } catch (err) {
+          console.error(`[finishSession] 删除碎片文件失败: ${filePath}`, err.message);
+        }
+        continue;
+      }
+
+      if (fileSize > 0) {
+        totalSize += fileSize;
+
+        await pool.query(
+          'UPDATE recordings SET file_size = $1, ended_at = NOW(), status = \'completed\' WHERE file_path = $2',
+          [fileSize, filePath]
+        );
+        
+        newFileCount++;
+
+        if (fileSize >= thresholdBytes && filePath.endsWith('.flv')) {
+          flvFilesToTranscode.push(filePath);
+        }
+      }
+    }
+
+    if (sessionId) {
+      let sessionStatus = 'completed';
+      if (newFileCount === 0 && code !== 0) {
+        sessionStatus = 'interrupted';
+      }
+
+      if (reuseSession) {
+        await pool.query(
+          `UPDATE recording_sessions
+           SET ended_at = NOW(), status = $1,
+               total_segments = total_segments + $2,
+               total_size = total_size + $3
+           WHERE id = $4 AND status = 'recording'`,
+          [sessionStatus, newFileCount, totalSize, sessionId]
+        );
+        if (sessionStatus === 'interrupted') {
+          const accumulated = await pool.query(
+            'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
+            [sessionId]
+          );
+          if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
+            await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
+          }
+        }
+      } else {
+        await pool.query(
+          `UPDATE recording_sessions
+           SET ended_at = NOW(), status = $1,
+               total_segments = $2,
+               total_size = $3
+           WHERE id = $4 AND status = 'recording'`,
+          [sessionStatus, newFileCount, totalSize, sessionId]
+        );
+      }
+    }
+    console.log(`[api] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+
+    if (newFileCount > 0) {
+      const completedSession = {
+        id: sessionId,
+        room_url: room.room_url,
+        room_name: room.room_name,
+        started_at: sessionStart,
+      };
+      UploadService.findAndAutoUpload(completedSession).catch((err) =>
+        console.error('[自动投稿] 异常:', err.message)
+      );
+    }
+  }
+
+  /**
+   * 处理非分段录制结束的逻辑
+   * 
+   * @param {Object} params - 处理参数
+   * @param {Object} params.room - 房间信息对象
+   * @param {string|number} params.sessionId - 会话ID
+   * @param {Date} params.sessionStart - 会话开始时间
+   * @param {boolean} params.reuseSession - 是否复用会话
+   * @param {string} params.outputFilePattern - 输出文件路径
+   * @param {number} params.code - 进程退出码
+   */
+  static async _handleNonSegmentFinish({ room, sessionId, sessionStart, reuseSession, outputFilePattern, code }) {
+    let fileSize = 0;
+    let fileExists = false;
+    try {
+      const stat = fs.statSync(outputFilePattern);
+      fileSize = stat.size;
+      fileExists = true;
+    } catch (statErr) {
+      console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
+    }
+
+    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+    const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
+
+    if (fileExists && fileSize > 0 && fileSize < thresholdBytes) {
+      try {
+        fs.unlinkSync(outputFilePattern);
+        console.log(
+          `[finishSession] 非分段录制碎片文件已删除: ${path.basename(outputFilePattern)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+        );
+        fileSize = 0;
+        fileExists = false;
+      } catch (err) {
+        console.error(`[finishSession] 删除非分段碎片文件失败: ${outputFilePattern}`, err.message);
+      }
+    }
+
+    if (fileExists && fileSize > 0) {
+      const existingRec = reuseSession
+        ? await pool.query('SELECT id FROM recordings WHERE session_id = $1 AND file_path = $2', [
+            sessionId,
+            outputFilePattern,
+          ])
+        : null;
+
+      if (existingRec?.rows.length > 0) {
+        await pool.query(
+          `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
+          [fileSize, existingRec.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+           VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
+          [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
+        );
+        await pool.query(
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+           VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+           ON CONFLICT (file_path) DO NOTHING`,
+          [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern), fileSize]
+        );
+      }
+
+      if (sessionId) {
+        let sessionStatus = 'completed';
+        if (fileSize === 0 && code !== 0) {
+          sessionStatus = 'interrupted';
+        }
+
+        if (reuseSession) {
+          await pool.query(
+            `UPDATE recording_sessions
+             SET ended_at = NOW(), status = $1,
+                 total_segments = total_segments + 1,
+                 total_size = total_size + $2
+             WHERE id = $3 AND status = 'recording'`,
+            [sessionStatus, fileSize, sessionId]
+          );
+          if (sessionStatus === 'interrupted') {
+            const accumulated = await pool.query(
+              'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
+              [sessionId]
+            );
+            if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
+              await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
+            }
+          }
+        } else {
+          await pool.query(
+            `UPDATE recording_sessions
+             SET ended_at = NOW(), status = $1,
+                 total_segments = 1,
+                 total_size = $2
+             WHERE id = $3 AND status = 'recording'`,
+            [sessionStatus, fileSize, sessionId]
+          );
+        }
+        await pool.query(
+          `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+           WHERE session_id = $2 AND file_path = $3`,
+          [fileSize, sessionId, outputFilePattern]
+        );
+      }
+
+      if (/\.flv$/i.test(outputFilePattern)) {
+        const autoTranscode = await this.getSetting('auto_transcode', 'true');
+        if (autoTranscode === 'true') {
+          if (fileSize >= thresholdBytes) {
+            const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
+            transcodeQueue
+              .enqueue({
+                flvPath: outputFilePattern,
+                mp4Path: mp4Path,
+                sessionId: sessionId,
+              })
+              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          }
+        }
+        const completedSession = {
+          id: sessionId,
+          room_url: room.room_url,
+          room_name: room.room_name,
+          started_at: sessionStart,
+        };
+        UploadService.findAndAutoUpload(completedSession).catch((err) =>
+          console.error('[自动投稿] 异常:', err.message)
+        );
+      }
+    }
+  }
+
+  /**
+   * 启动录制任务
+   * 
+   * @param {Object} params - 录制参数
+   * @param {string} params.url - 直播流地址
+   * @param {string} params.title - 直播标题
+   * @param {string} params.caption - 备注信息
+   * @param {string} params.room_url - 房间URL
+   * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
+   */
   static async startRecording({ url, title, caption, room_url }) {
     console.log('[api] 收到录制请求:', {
       title,
@@ -640,67 +776,37 @@ class RecorderService {
     console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
     console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
-    const dlArgs = downloader.buildArgs(url, outputFilePattern, {
-      segmentDuration,
-      segmentListPath,
-      platform: room.polling_platform,
-      isStreamUrl: true,
+    const sessionStart = new Date();
+    
+    const { process: dlProcess, logPath, renameLog } = recordingManager.startRecordingProcess({
+      downloader,
+      streamUrl: url,
+      outputPath: outputFilePattern,
+      options: {
+        segmentDuration,
+        platform: room.polling_platform,
+        isStreamUrl: true,
+      },
+      sessionId: null,
     });
-
-    const procLog = createProcLog(downloader.name);
-    const { stream: logStream, rename: renameLog, logCommand } = procLog;
-    console.log(`[任务启动] 下载引擎: ${downloader.name}`);
-    logCommand(downloader.name, dlArgs);
-
-    const dlProcess = downloader.spawn(dlArgs);
 
     let sessionId = null;
-    let sessionStart;
 
-    if (dlProcess.stderr) {
-      dlProcess.stderr.on('data', (chunk) => {
-        logStream.write(chunk);
-      });
-    }
-
-    if (dlProcess.stdout) {
-      dlProcess.stdout.on('data', (chunk) => {
-        logStream.write(chunk);
-      });
-    }
-
-    dlProcess.on('error', (err) => {
-      console.error(`${downloader.name} 启动失败:`, err);
-    });
-
-    sessionStart = new Date();
     try {
-      await pool.query(
-        `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
-        [outputFilePattern, dlProcess.pid, room.id]
-      );
-      await this.delRoomCache(room.room_url);
+      sessionId = await recordingManager.updateSessionToDatabase({
+        room,
+        outputPath: outputFilePattern,
+        pid: dlProcess.pid,
+        sessionId: null,
+        sessionStart,
+        reuseSession,
+        resumeCount,
+        caption,
+        streamUrl: url,
+      });
 
-      if (reuseSession) {
-        const recent = await pool.query(
-          `UPDATE recording_sessions SET status = 'recording', ended_at = NULL WHERE id = $1
-           RETURNING id`,
-          [resumeCount]
-        );
-        sessionId = recent.rows[0]?.id || null;
-      }
-
-      if (!sessionId) {
-        const session = await pool.query(
-          `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url)
-           VALUES ($1, $2, $3, 'recording', $4, $5)
-           RETURNING id`,
-          [room.room_url, sessionStart, path.dirname(outputFilePattern), caption || '', url]
-        );
-        sessionId = session.rows[0].id;
-      }
       renameLog(sessionId);
-      console.log(`[api] 日志文件: ${procLog.logPath}`);
+      console.log(`[api] 日志文件: ${logPath}`);
     } catch (dbErr) {
       console.error('[api] 更新数据库状态失败:', dbErr);
       dlProcess.kill();
@@ -708,24 +814,11 @@ class RecorderService {
     }
 
     if (!useSegment) {
-      try {
-        const existing = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [outputFilePattern]);
-        if (existing.rows.length > 0) {
-          await pool.query(
-            `UPDATE recording_files SET status = 'recording', session_id = $1, checked_at = NOW()
-             WHERE id = $2`,
-            [sessionId, existing.rows[0].id]
-          );
-        } else {
-          await pool.query(
-            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status)
-             VALUES ($1, $2, $3, $4, 'recording')`,
-            [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern)]
-          );
-        }
-      } catch (dbErr) {
-        console.warn('[api] recording_files 写入失败:', dbErr.message);
-      }
+      await recordingManager.initNonSegmentFileRecord({
+        sessionId,
+        room,
+        outputPath: outputFilePattern,
+      });
     }
 
     await this.setActiveTask(roomKey, {
@@ -752,7 +845,6 @@ class RecorderService {
       });
     };
 
-    // 下载结束触发
     dlProcess.on('close', finishSessionWrapper);
 
     if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
@@ -769,6 +861,11 @@ class RecorderService {
     };
   }
 
+  /**
+   * 获取最大恢复重试次数配置
+   * 
+   * @returns {Promise<number>} 最大重试次数
+   */
   static async getMaxResumeRetries() {
     try {
       const r = await pool.query("SELECT value FROM settings WHERE key = 'max_resume_retries'");
@@ -777,220 +874,13 @@ class RecorderService {
     return 3;
   }
 
+  /**
+   * 尝试恢复中断的录制会话
+   * 
+   * @param {Object} session - 会话信息对象
+   */
   static async tryResumeSession(session) {
-    if (!DOWNLOAD_DIR) throw new Error('VIDEO_DOWNLOAD_DIR 未设置');
-
-    const downloader = await getActiveDownloader();
-
-    const segmentDuration = session.segment_duration || 0;
-    const useSegment = segmentDuration > 0;
-    const template = session.filename_template || '{room_name}_{datetime}';
-    const retryCount = session.retry_count || 0;
-    const ext = downloader.getExtension();
-
-    let outputPath;
-    if (useSegment) {
-      const strftimeName = this.templateToStrftime(template, session.room_name || '', ext);
-      outputPath = path.join(DOWNLOAD_DIR, strftimeName);
-    } else {
-      const base = this.generateFilename(template, session.room_name || '', ext);
-      outputPath = path.join(DOWNLOAD_DIR, base);
-    }
-
-    const streamUrl = session.stream_url || session.room_url;
-    const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
-
-    const { stream: logStream, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
-    logCommand(downloader.name, dlArgs);
-
-    const ffmpeg = downloader.spawn(dlArgs);
-
-    if (ffmpeg.stderr) {
-      ffmpeg.stderr.on('data', (chunk) => logStream.write(chunk));
-    }
-    if (ffmpeg.stdout) {
-      ffmpeg.stdout.on('data', (chunk) => logStream.write(chunk));
-    }
-
-    let sessionFinalized = false;
-
-    ffmpeg.on('close', async (code) => {
-      if (sessionFinalized) return;
-      sessionFinalized = true;
-
-      await this.delActiveTask(this.activeTaskKey(session.room_url));
-      console.log(`[恢复] 会话 ${session.id} ffmpeg 退出 (code=${code}), 文件: ${outputPath} (日志: ${ffmpegLogPath})`);
-
-      try {
-        await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
-          session.room_id,
-        ]);
-        await this.delRoomCache(session.room_url);
-
-        if (useSegment) {
-
-          // const thresholdValue = await this.getSetting('filtering_threshold', '10');
-          // const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
-          let totalSegments = 0;
-          let totalSize = 0;
-
-          // 从数据库查询该会话已追踪的所有文件
-          const sessionFiles = await pool.query(
-            'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
-            [session.id]
-          );
-
-          for (const row of sessionFiles.rows) {
-            const filePath = row.file_path;
-            let fileSize = row.file_size;
-
-            // 如果数据库中文件大小为0，尝试重新获取
-            if (fileSize === 0) {
-              try {
-                const stat = fs.statSync(filePath);
-                fileSize = stat.size;
-                
-                // 更新数据库中的文件大小
-                await pool.query(
-                  'UPDATE recording_files SET file_size = $1 WHERE file_path = $2',
-                  [fileSize, filePath]
-                );
-                await pool.query(
-                  'UPDATE recordings SET file_size = $1 WHERE file_path = $2',
-                  [fileSize, filePath]
-                );
-              } catch (_) {
-                continue;
-              }
-            }
-
-            if (fileSize > 0) {
-              totalSegments++;
-              totalSize += fileSize;
-            }
-          }
-
-          // 更新会话统计
-          if (totalSegments > 0) {
-            await pool.query(
-              `UPDATE recording_sessions SET total_segments = total_segments + $1, total_size = total_size + $2 WHERE id = $3`,
-              [totalSegments, totalSize, session.id]
-            );
-          }
-
-          // 会话状态判断
-          let sessionStatus = 'completed';
-          if (totalSegments === 0 && code !== 0) {
-            sessionStatus = 'interrupted';
-          }
-
-          await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = $1 WHERE id = $2`, [
-            sessionStatus,
-            session.id,
-          ]);
-        } else {
-          let fileSize = 0;
-          try {
-            const stat = fs.statSync(outputPath);
-            fileSize = stat.size;
-          } catch (_) {}
-
-          await pool.query(
-            `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-             VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
-            [session.id, session.room_url, outputPath, fileSize, session.started_at]
-          );
-
-          await pool.query(
-            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-             ON CONFLICT (file_path) DO NOTHING`,
-            [session.id, session.room_url, outputPath, path.basename(outputPath), fileSize]
-          );
-
-          // 会话状态判断
-          let sessionStatus = 'completed';
-          if (fileSize === 0 && code !== 0) {
-            sessionStatus = 'interrupted';
-          }
-
-          await pool.query(
-            `UPDATE recording_sessions SET ended_at = NOW(), status = $1, total_segments = 1, total_size = $2 WHERE id = $3`,
-            [sessionStatus, fileSize, session.id]
-          );
-
-          if (/\.flv$/i.test(outputPath)) {
-            try {
-              const autoTranscode = await this.getSetting('auto_transcode', 'true');
-              if (autoTranscode === 'true') {
-                const mp4Path = outputPath.replace(/\.flv$/i, '.mp4');
-                transcodeQueue
-                  .enqueue({
-                    flvPath: outputPath,
-                    mp4Path: mp4Path,
-                    sessionId: session.id,
-                  })
-                  .catch((err) => console.error('[恢复][转码队列] 入队异常:', err.message));
-              }
-            } catch (transcodeErr) {
-              console.error('[恢复] 快速转码异常:', transcodeErr.message);
-            }
-          }
-        }
-
-        const completedSession = {
-          id: session.id,
-          room_url: session.room_url,
-          room_name: session.room_name,
-          started_at: session.started_at,
-        };
-        UploadService.findAndAutoUpload(completedSession).catch((err) =>
-          console.error('[自动投稿] 异常:', err.message)
-        );
-      } catch (dbErr) {
-        console.error(`[恢复] 会话 ${session.id} 结束处理失败:`, dbErr.message);
-      }
-    });
-
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve(), 2000);
-      ffmpeg.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-      ffmpeg.on('close', (code) => {
-        clearTimeout(timer);
-        if (code !== null && code !== 0) reject(new Error(`ffmpeg exited with code ${code}`));
-        else resolve();
-      });
-    });
-
-    try {
-      process.kill(ffmpeg.pid, 0);
-    } catch (_) {
-      throw new Error('ffmpeg exited during initialization');
-    }
-
-    await pool.query(
-      `UPDATE rooms SET status = 'recording', output_path = $1, ffmpeg_pid = $2, updated_at = NOW() WHERE id = $3`,
-      [outputPath, ffmpeg.pid, session.room_id]
-    );
-    await this.delRoomCache(session.room_url);
-
-    await this.setActiveTask(this.activeTaskKey(session.room_url), {
-      pid: ffmpeg.pid,
-      outputPath,
-      roomId: session.room_id,
-      sessionId: session.id,
-      startTime: Date.now(),
-    });
-
-    await pool.query(`UPDATE recording_sessions SET retry_count = $1 WHERE id = $2`, [
-      (retryCount || 0) + 1,
-      session.id,
-    ]);
-
-    console.log(`[恢复] 会话 ${session.id} ffmpeg 已启动 (PID: ${ffmpeg.pid}), 输出: ${outputPath}`);
+    await recordingManager.resumeSession(session);
   }
 
   /**
@@ -1007,12 +897,10 @@ class RecorderService {
   static async cleanupStaleRecordings() {
     const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
     try {
-      // 查询所有处于录制或暂停状态的房间
       const staleRooms = await pool.query(
         `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
       );
 
-      // 清理每个陈旧房间的状态
       for (const row of staleRooms.rows) {
         if (row.ffmpeg_pid) {
           try {
@@ -1025,14 +913,11 @@ class RecorderService {
         ]);
       }
 
-      // 查询所有处于录制状态的会话
       const staleSessions = await pool.query(
         `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
       );
 
-      // 处理每个陈旧的录制会话
       for (const session of staleSessions.rows) {
-        // 如果重试次数未达到上限，尝试恢复会话
         if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
           try {
             console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
@@ -1043,7 +928,6 @@ class RecorderService {
           }
         }
 
-        // 标记会话和相关文件为中断状态
         console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
         await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
           session.id,
@@ -1061,16 +945,6 @@ class RecorderService {
 }
 
 module.exports = RecorderService;
-
-
-
-
-
-
-
-
-
-
 
 
 
