@@ -10,6 +10,7 @@ const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 
 const UploadService = require('./UploadService');
+const RecordingManager = require('../lib/core/RecordingManager');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -211,6 +212,7 @@ class RecorderService {
   static async checkReuseSession(room) {
     let reuseSession = false;
     let resumeCount = 0;
+    let session = null;
 
     try {
       const delayValue = await this.getSetting('delay', '60');
@@ -232,6 +234,7 @@ class RecorderService {
           if (recent.rows.length > 0) {
             reuseSession = true;
             resumeCount = recent.rows[0].id;
+            session = recent.rows[0];
             console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
           }
           redis.del(lockKey).catch(() => {});
@@ -239,7 +242,7 @@ class RecorderService {
       }
     } catch (_) {}
 
-    return { reuseSession, resumeCount };
+    return { reuseSession, resumeCount, session };
   }
 
   /**
@@ -735,31 +738,12 @@ class RecorderService {
 
     const sessionStart = new Date();
 
-    // 先启动下载器模块的录制进程
-    const {
-      process: dlProcess,
-      logPath,
-      renameLog,
-    } = recordingManager.startRecordingProcess({
-      downloader,
-      streamUrl: url,
-      outputPath: outputFilePattern,
-      options: {
-        segmentDuration,
-        platform: room.polling_platform,
-        isStreamUrl: true,
-      },
-      sessionId: null,
-    });
-
-    let sessionId = null;
-
+    // 为什么不先新增会话数据库，再启动录制进程呢？
     try {
-      // 然后新增一个录制会话
-      sessionId = await recordingManager.updateSessionToDatabase({
+      // 一、新增一个录制会话
+      let sessionId = await recordingManager.createSession({
         room,
         outputPath: outputFilePattern,
-        pid: dlProcess.pid,
         sessionId: null,
         sessionStart,
         reuseSession,
@@ -767,70 +751,99 @@ class RecorderService {
         caption,
         streamUrl: url,
       });
+      console.log(`[任务启动] 录制会话: ${sessionId}`);
 
-      // 返回新增的会话ID
-      renameLog(sessionId);
-      console.log(`[RecorderService] 日志文件: ${logPath}`);
+      // 二、然后启动下载器模块的录制进程
+      const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
+        downloader,
+        streamUrl: url,
+        outputPath: outputFilePattern,
+        options: {
+          segmentDuration,
+          platform: room.polling_platform,
+          isStreamUrl: true,
+        },
+        sessionId,
+      });
+      console.log(`[任务启动] 输出文件路径: ${outputFilePattern} | PID: ${dlProcess.pid}`);
+
+      // 三、再去更新 session.pid
+      await recordingManager.updateSessionPidToDatabase({
+        roomId: room.id,
+        sessionId,
+        pid: dlProcess.pid,
+      });
+
+      console.log(`[RecorderService] 日志文件: ${logPath} `);
+
+      // 业务逻辑统一监听 'segment' 事件
+      downloader.on('segment', async (filePath) => {
+        console.log(`[RecorderService] 监测到文件切片: ${filePath}`);
+        // const realPath = path.resolve(filePath);
+        // 这里处理你的分片入库逻辑
+        await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
+      });
+
+      // // 不分段的模板直接就是文件名
+      // // 有的下载器不支持分段录制，也是直接插入文件名
+      // const isEngineSegment = downloader.isSegment();
+      // if (!useSegment || !isEngineSegment) {
+      //   await recordingManager.initNonSegmentFileRecord({
+      //     sessionId,
+      //     room,
+      //     outputPath: outputFilePattern,
+      //   });
+      // }
+
+      // 更新 redis 缓存
+      await this.setActiveTask(roomKey, {
+        pid: dlProcess.pid,
+        outputPath: outputFilePattern,
+        roomId: room.id,
+        sessionId,
+        startTime: sessionStart,
+        downloader: downloader.name,
+      });
+
+      const finishSessionWrapper = async (code, signal) => {
+        if (code !== 0) {
+          console.error(`FFmpeg 下载失败，退出码: ${code}, 信号: ${signal}`);
+        } else {
+          console.log('FFmpeg 下载完成');
+        }
+        await this.finishSession({
+          code,
+          engine: downloader,
+          room,
+          sessionId,
+          sessionStart,
+          reuseSession,
+          useSegment,
+          outputFilePattern,
+          roomKey,
+        });
+      };
+
+      dlProcess.on('close', finishSessionWrapper);
+
+      // 风险代码，先注释掉
+      // if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
+      //   dlProcess.emit('close', dlProcess.exitCode);
+      // }
+
+      notify.recordingStart(room.room_name || title, caption, room.room_url);
+
+      return {
+        error: false,
+        room,
+        sessionId,
+        outputFilePattern,
+      };
     } catch (dbErr) {
       console.error('[RecorderService] 更新数据库状态失败:', dbErr);
-      dlProcess.kill();
+      // dlProcess.kill();
       return { error: true, status: 500, code: 500, message: '更新数据库状态失败' };
     }
-
-    // 不分段的模板直接就是文件名
-    // 有的下载器不支持分段录制，也是直接插入文件名
-    const isEngineSegment = downloader.isSegment();
-    if (!useSegment || !isEngineSegment) {
-      await recordingManager.initNonSegmentFileRecord({
-        sessionId,
-        room,
-        outputPath: outputFilePattern,
-      });
-    }
-
-    await this.setActiveTask(roomKey, {
-      pid: dlProcess.pid,
-      outputPath: outputFilePattern,
-      roomId: room.id,
-      sessionId,
-      startTime: Date.now(),
-      downloader: downloader.name,
-    });
-
-    const finishSessionWrapper = async (code, signal) => {
-      if (code !== 0) {
-        console.error(`FFmpeg 下载失败，退出码: ${code}, 信号: ${signal}`);
-      } else {
-        console.log('FFmpeg 下载完成');
-      }
-      await this.finishSession({
-        code,
-        engine: downloader,
-        room,
-        sessionId,
-        sessionStart,
-        reuseSession,
-        useSegment,
-        outputFilePattern,
-        roomKey,
-      });
-    };
-
-    dlProcess.on('close', finishSessionWrapper);
-
-    // 风险代码，先注释掉
-    // if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
-    //   dlProcess.emit('close', dlProcess.exitCode);
-    // }
-
-    notify.recordingStart(room.room_name || title, caption, room.room_url);
-
-    return {
-      error: false,
-      room,
-      sessionId,
-      outputFilePattern,
-    };
   }
 
   /**
@@ -867,14 +880,35 @@ class RecorderService {
    *    - 如果恢复失败或重试次数已达上限，将会话和文件状态标记为 'interrupted'
    */
   static async cleanupStaleRecordings() {
-    const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
+    // const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
     try {
       const staleRooms = await pool.query(
         `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
       );
 
       for (const row of staleRooms.rows) {
+        // 优先尝试续播
+        const { reuseSession, session } = await this.checkReuseSession(row);
+        let success = false;
+        if (reuseSession) {
+          try {
+            await this.tryResumeSession(session);
+            success = true;
+          } catch (resumeErr) {
+            console.error(`[清理] 尝试恢复录制会话失败: ${resumeErr}`);
+            // 尝试恢复失败，将状态标记为 'interrupted'
+            await pool.query(
+              `UPDATE recording_sessions SET status = 'interrupted', updated_at = NOW() WHERE id = `,
+              $0
+            );
+          }
+        }
+        // 成功恢复，跳过
+        if (success) continue;
+
         if (row.ffmpeg_pid) {
+          // 如果 ffmpeg 进程存在，就暂时不处理，等它自然退出试试
+          console.log(`[清理] 提示，存在一个 ffmpeg 进程 (${row.ffmpeg_pid}) 正在运行，尝试停止它...`);
           try {
             process.kill(row.ffmpeg_pid, 'SIGTERM');
           } catch (_) {}
@@ -885,31 +919,35 @@ class RecorderService {
         ]);
       }
 
-      const staleSessions = await pool.query(
-        `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
-      );
+      // TODO： 待验证 - 跳过处理会话
+      // // 录制中状态的会话
+      // const staleSessions = await pool.query(
+      //   `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
+      // );
 
-      for (const session of staleSessions.rows) {
-        if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
-          try {
-            console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
-            await this.tryResumeSession(session);
-            continue;
-          } catch (err) {
-            console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
-          }
-        }
+      // for (const session of staleSessions.rows) {
+      //   // if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
+      //   //   try {
+      //   //     console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
+      //   //     await this.tryResumeSession(session);
+      //   //     continue;
+      //   //   } catch (err) {
+      //   //     console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
+      //   //   }
+      //   // }
+      //   // 跳过恢复会话
+      //   // 如果当前时间
 
-        console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
-        await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
-          session.id,
-        ]);
-        await pool.query(
-          `UPDATE recording_files SET status = 'interrupted', completed_at = NOW()
-           WHERE session_id = $1 AND status = 'recording'`,
-          [session.id]
-        );
-      }
+      //   console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
+      //   await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
+      //     session.id,
+      //   ]);
+      //   await pool.query(
+      //     `UPDATE recording_files SET status = 'interrupted', completed_at = NOW()
+      //      WHERE session_id = $1 AND status = 'recording'`,
+      //     [session.id]
+      //   );
+      // }
     } catch (err) {
       console.error('[启动清理] 失败:', err);
     }

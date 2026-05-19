@@ -35,6 +35,7 @@ console.log('  开发环境清理脚本');
 console.log('========================================');
 console.log('⚠️  注意：本脚本只清理开发环境，不会影响 PM2 生产环境');
 console.log('----------------------------------------');
+console.log(`DOWNLOAD_DIR: ${DOWNLOAD_DIR} | PORT: ${DEV_PORT}`);
 
 async function cleanup() {
   console.log('\n[1/5] 清理开发环境进程...');
