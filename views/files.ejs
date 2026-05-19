@@ -118,7 +118,7 @@
         <tr>
           <td>${s.id}</td>
           <td>${s.room_name || s.room_url || '-'}</td>
-          <td><small>${s.started_at ? new Date(s.started_at).toLocaleString() : '-'}</small></td>
+          <td><small>${s.started_at ? dayjs(s.started_at).format('YYYY-MM-DD HH:mm:ss') : '-'}</small></td>
           <td>${s.total_segments || 0}</td>
           <td>${s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'}</td>
           <td>${s.status}</td>
@@ -140,12 +140,12 @@
               modal.hide();
               loadFiles(currentStatus);
             } else {
-              alert(j.message || '关联失败');
+              toast(j.message || '关联失败');
               btn.disabled = false;
               btn.textContent = '关联';
             }
           } catch (err) {
-            alert('关联失败');
+            toast('关联失败');
             btn.disabled = false;
             btn.textContent = '关联';
           }
@@ -161,25 +161,28 @@
   }
 
   async function clearMissing() {
-    if (!confirm('确定删除所有缺失文件记录？此操作不可恢复。')) return;
-    const btn = document.getElementById('clearMissingBtn');
-    btn.disabled = true;
-    btn.textContent = '删除中...';
-    try {
-      const res = await fetch('/api/recording_files/missing', { method: 'DELETE' });
-      const json = await res.json();
-      if (res.ok) {
-        loadFiles('missing');
-      } else {
-        alert(json.message || '删除失败');
+    showConfirm('确定删除所有缺失文件记录？此操作不可恢复。').then(async confirmed => {
+      if (!confirmed) return;
+      const btn = document.getElementById('clearMissingBtn');
+      btn.disabled = true;
+      btn.textContent = '删除中...';
+      try {
+        const res = await fetch('/api/recording_files/missing', { method: 'DELETE' });
+        const json = await res.json();
+        if (res.ok) {
+          loadFiles('missing');
+        } else {
+          toast(json.message || '删除失败');
+          btn.disabled = false;
+          btn.textContent = '一键清空';
+        }
+      } catch (_) {
+        toast('删除失败');
         btn.disabled = false;
         btn.textContent = '一键清空';
       }
-    } catch (_) {
-      alert('删除失败');
-      btn.disabled = false;
-      btn.textContent = '一键清空';
-    }
+    });
+    
   }
 
   document.querySelectorAll('#fileTabs .nav-link').forEach(tab => {

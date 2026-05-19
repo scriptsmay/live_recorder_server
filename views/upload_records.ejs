@@ -54,7 +54,7 @@
               <% } %>
             </td>
             <td>
-              <small><%= r.completed_at ? new Date(r.completed_at).toLocaleString() : (r.started_at ? new Date(r.started_at).toLocaleString() : '-') %></small>
+              <small><%= formatDate(r.completed_at || r.started_at) %></small>
             </td>
             <td>
               <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="<%= r.id %>" data-output="<%= encodeURIComponent(r.output || '') %>">输出</button>

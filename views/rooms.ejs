@@ -57,11 +57,7 @@
           <% } %>
         </td>
         <td>
-          <% if (r.last_polled_at) { %>
-          <small><%= new Date(r.last_polled_at).toLocaleString('zh-CN') %></small>
-          <% } else { %>
-          <span class="text-muted">-</span>
-          <% } %>
+          <small><%= formatDate(r.last_polled_at) %></small>
         </td>
         <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
         <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
@@ -169,7 +165,7 @@
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
-      alert(json.message || '操作失败');
+      toast(json.message || '操作失败');
     }
     return res;
   }
@@ -217,7 +213,7 @@
     const polling = document.getElementById('inputPolling').checked;
     const pollingInterval = parseInt(document.getElementById('inputPollingInterval').value, 10) || 60;
 
-    if (!url && !id) return alert('直播间地址必填');
+    if (!url && !id) return toast('直播间地址必填');
 
     const body = limited ? {
       notification_enabled: notify,
@@ -304,19 +300,25 @@
       const action = actBtn.dataset.action;
       const confirmMsg = {
         stop: '确定停止录制？',
-        delete: '确定删除此直播间？'
+        pause: '确定暂停此直播间？',
+        resume: '确定恢复此直播间？',
       } [action];
-      if (confirmMsg && !confirm(confirmMsg)) return;
-      apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => {
-        if (r.ok) location.reload();
+      if (!confirmMsg) return;
+      showConfirm(confirmMsg).then(confirmed => {
+        if (!confirmed) return;
+        apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => {
+          if (r.ok) location.reload();
+        });
       });
       return;
     }
     const delBtn = e.target.closest('.delRoomBtn');
     if (delBtn) {
-      if (!confirm('确定删除此直播间？')) return;
-      apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => {
-        if (r.ok) location.reload();
+      showConfirm('确定删除此直播间？').then(confirmed => {
+        if (!confirmed) return;
+        apiAction(`/api/rooms/${delBtn.dataset.id}`, 'DELETE').then(r => {
+          if (r.ok) location.reload();
+        });
       });
     }
   });

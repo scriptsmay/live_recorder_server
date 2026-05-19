@@ -23,9 +23,30 @@
 
       <footer><%- include('partials/_footer') %></footer>
     </div>
+    <!-- 公共组件 -->
+    <!-- 全局统一的空容器 -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
+    <!-- 通用 Confirm 模态框 HTML 结构 -->
+    <div class="modal fade" id="globalConfirmModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered">
+        <!-- 居中显示 -->
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="confirmTitle">提示</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="confirmMessage">确定要执行此操作吗？</div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="confirmBtnCancel" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="confirmBtnOk">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- 通用JS -->
     <script src="/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.20/dayjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.min.js"></script>
     <script src="/js/app.js"></script>
     <!-- 页面特定JS -->

@@ -32,17 +32,25 @@
       <div class="card-body">
         <% if (s.caption) { %><div class="mb-2"><small class="text-muted">📺 <%= s.caption %></small></div><% } %>
         <div class="row mb-2">
-          <div class="col-md-3"><small>开始: <%= s.started_at ? new Date(s.started_at).toLocaleString() : '-' %></small></div>
-          <div class="col-md-3"><small>结束: <%= s.ended_at ? new Date(s.ended_at).toLocaleString() : '-' %></small></div>
+          <div class="col-md-3"><small>开始: <%= formatDate(s.started_at) %></small></div>
+          <div class="col-md-3"><small>结束: <%= formatDate(s.ended_at) %></small></div>
           <div class="col-md-3"><small>分片: <%= s.total_segments || 0 %> 段</small></div>
           <div class="col-md-3"><small>大小: <%= totalSize %></small></div>
         </div>
+        
+        <div>
+          <div>直播流: <code style="cursor: pointer;" onclick="copyCode(this, '<%= s.stream_url %>')"><%= (s.stream_url || '').slice(0, 100) + '…' %></code></div>
+          <div class="form-text">注：如果录制完成但没有分片文件，可能是录制过程中断导致的。请检查直播间状态和录制日志。</div>
+        </div>
+        
         <% if (uploads.length) { %>
           <div class="mb-2">
-            <% uploads.forEach(u => { %>
-              <% const cls = { uploading: 'badge bg-primary', success: 'badge bg-success', failed: 'badge bg-danger' }[u.status] || 'badge bg-secondary'; %>
-              <span class="<%= cls %> me-1" title="<%= u.status %>"><%= u.bv_id ? 'BV ' + u.bv_id : u.status %></span>
-            <% }) %>
+            <p>投稿记录：
+              <% uploads.forEach(u => { %>
+                <% const cls = { uploading: 'badge bg-primary', success: 'badge bg-success', failed: 'badge bg-danger' }[u.status] || 'badge bg-secondary'; %>
+                <span class="<%= cls %> me-1" title="<%= u.status %>"><%= u.bv_id ? 'BV ' + u.bv_id : u.status %></span>
+              <% }) %>
+            </p>
           </div>
         <% } %>
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
@@ -105,11 +113,13 @@
 
     const delBtn = e.target.closest('.deleteSessionBtn');
     if (delBtn) {
-      if (!confirm('确定删除此会话？此操作不会删除实际文件。')) return;
-      const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId, { method: 'DELETE' });
-      const json = await res.json();
-      if (!res.ok) { alert(json.message); return; }
-      location.reload();
+      showConfirm('确定删除此会话？此操作不会删除实际文件。').then(async confirmed => {
+        if (!confirmed) return;
+        const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok) { toast(json.message); return; }
+        location.reload();
+      });
       return;
     }
 
@@ -121,27 +131,29 @@
 
     const uploadBtn = e.target.closest('.uploadBtn');
     if (uploadBtn && !uploadBtn.disabled) {
-      if (!confirm('确认投稿？')) return;
-      const sessionId = uploadBtn.dataset.sessionId;
-      const sel = uploadBtn.parentElement.querySelector('.uploadTmplSelect');
-      const templateId = sel.value;
-      uploadBtn.disabled = true;
-      uploadBtn.textContent = '投稿中...';
-      const res = await fetch('/api/sessions/' + sessionId + '/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_id: parseInt(templateId) }),
+      showConfirm('确认投稿？').then(async confirmed => {
+        if (!confirmed) return;
+        const sessionId = uploadBtn.dataset.sessionId;
+        const sel = uploadBtn.parentElement.querySelector('.uploadTmplSelect');
+        const templateId = sel.value;
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '投稿中...';
+        const res = await fetch('/api/sessions/' + sessionId + '/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_id: parseInt(templateId) }),
+        });
+        const json = await res.json();
+        if (res.ok) {
+          uploadBtn.textContent = '已提交';
+          uploadBtn.className = 'btn btn-sm btn-success';
+        } else {
+          toast(json.message || '投稿失败');
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = '投稿';
+        }
+        return;
       });
-      const json = await res.json();
-      if (res.ok) {
-        uploadBtn.textContent = '已提交';
-        uploadBtn.className = 'btn btn-sm btn-success';
-      } else {
-        alert(json.message || '投稿失败');
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = '投稿';
-      }
-      return;
     }
   });
 

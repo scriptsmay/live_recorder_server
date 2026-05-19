@@ -132,33 +132,48 @@
 async function apiAction(url, method, body) {
   const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const json = await res.json();
-  if (!res.ok) { alert(json.message || '操作失败'); throw new Error(json.message); }
+  if (!res.ok) { toast(json.message || '操作失败'); throw new Error(json.message); }
   return json;
 }
 
 document.addEventListener('click', async e => {
   const btn = e.target.closest('[class*="TmplBtn"], .renewCookieBtn');
   if (!btn) return;
+
+  // action: 删除模板
   if (btn.classList.contains('deleteTmplBtn')) {
-    if (!confirm('确定删除此模板？')) return;
-    await apiAction(`/api/upload_templates/${btn.dataset.id}`, 'DELETE');
-    location.reload();
+    showConfirm('确定删除此模板？').then(async confirmed => {
+      if (!confirmed) return;
+      await apiAction(`/api/upload_templates/${btn.dataset.id}`, 'DELETE');
+      location.reload();
+    });
   }
+
+  // action: 刷新cookie
   if (btn.classList.contains('renewCookieBtn')) {
     const name = btn.dataset.name || '模板';
-    if (!confirm(`确定刷新「${name}」的 Cookie？将执行 biliup renew`)) return;
-    btn.disabled = true;
-    btn.textContent = '刷新中...';
-    try {
-      const json = await apiAction('/api/biliup/renew', 'POST', { template_id: parseInt(btn.dataset.id, 10) });
-      alert(json.message || '已启动');
-    } catch {
-      alert('刷新失败');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '刷新Cookie';
+    if (!btn.dataset.id) {
+      toast('请选择模板');
+      return;
     }
+    showConfirm(`确定刷新「${name}」的 Cookie？将执行 biliup renew`).then(async confirmed => {
+      if (!confirmed) return;
+      btn.disabled = true;
+      btn.textContent = '刷新中...';
+      try {
+        const json = await apiAction('/api/biliup/renew', 'POST', { template_id: parseInt(btn.dataset.id, 10) });
+        toast(json.message || '已启动');
+      } catch {
+        toast('刷新失败');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '刷新Cookie';
+      }
+    });
+    
   }
+
+  // 复制模板
   if (btn.classList.contains('copyTmplBtn')) {
     const t = JSON.parse(btn.getAttribute('data'));
     const body = {

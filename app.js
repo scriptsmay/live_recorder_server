@@ -57,6 +57,8 @@ app.use(morgan('dev'));
 app.use((req, res, next) => {
   res.locals.path = req.path;
   res.locals.title = 'Live Recorder Server';
+  res.locals.dayjs = dayjs;
+  res.locals.formatDate = (date) => date ? dayjs(date).format('YYYY-MM-DD HH:mm:ss') : '-';
   next();
 });
 
