@@ -444,7 +444,7 @@ class RecorderService {
 
     if (sessionId) {
       let sessionStatus = 'completed';
-      if (newFileCount === 0 && code !== 0) {
+      if (newFileCount === 0 && downloaderCode !== 0) {
         sessionStatus = 'interrupted';
       }
 
@@ -515,18 +515,18 @@ class RecorderService {
     const thresholdValue = await this.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
-    if (fileExists && fileSize > 0 && fileSize < thresholdBytes) {
-      try {
-        fs.unlinkSync(outputFilePattern);
-        console.log(
-          `[finishSession] 非分段录制碎片文件已删除: ${path.basename(outputFilePattern)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
-        );
-        fileSize = 0;
-        fileExists = false;
-      } catch (err) {
-        console.error(`[finishSession] 删除非分段碎片文件失败: ${outputFilePattern}`, err.message);
-      }
-    }
+    // if (fileExists && fileSize > 0 && fileSize < thresholdBytes) {
+    //   try {
+    //     fs.unlinkSync(outputFilePattern);
+    //     console.log(
+    //       `[finishSession] 非分段录制碎片文件已删除: ${path.basename(outputFilePattern)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+    //     );
+    //     fileSize = 0;
+    //     fileExists = false;
+    //   } catch (err) {
+    //     console.error(`[finishSession] 删除非分段碎片文件失败: ${outputFilePattern}`, err.message);
+    //   }
+    // }
 
     if (fileExists && fileSize > 0) {
       const existingRec = reuseSession
@@ -783,17 +783,6 @@ class RecorderService {
         // 这里处理你的分片入库逻辑
         await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
       });
-
-      // // 不分段的模板直接就是文件名
-      // // 有的下载器不支持分段录制，也是直接插入文件名
-      // const isEngineSegment = downloader.isSegment();
-      // if (!useSegment || !isEngineSegment) {
-      //   await recordingManager.initNonSegmentFileRecord({
-      //     sessionId,
-      //     room,
-      //     outputPath: outputFilePattern,
-      //   });
-      // }
 
       // 更新 redis 缓存
       await this.setActiveTask(roomKey, {

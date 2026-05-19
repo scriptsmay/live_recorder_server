@@ -15,7 +15,7 @@ if (!fs.existsSync(TEST_OUTPUT_DIR)) {
 async function main() {
   const args = process.argv.slice(2);
   let testRoomUrl = 'https://www.huya.com/kpl';
-  let testDuration = 30;
+  let testDuration = 10;
   let testQuality = 'UHD';
   let useDirectStreamUrl = true; // 默认使用房间 URL（完全按照参考项目）
   let maxRetries = 30; // Python 下载器自动重连次数
@@ -56,7 +56,7 @@ async function main() {
     }
   }
 
-  console.log('=== 虎牙 Python 下载器测试 ===');
+  console.log('=== 虎牙 ts 下载器测试 ===');
   console.log(`测试直播间: ${testRoomUrl}`);
   console.log(`测试时长: ${testDuration}秒`);
   console.log(`自动重连次数: ${maxRetries}`);
@@ -93,95 +93,44 @@ async function main() {
 
   const outputPath = path.join(TEST_OUTPUT_DIR, `test_${status.roomName}_${Date.now()}${fileExt}`);
 
-  let buildArgs;
-  if (useDirectStreamUrl) {
-    console.log('使用直接流 URL 模式');
-    buildArgs = downloader.buildArgs(status.streamUrl, outputPath, {
-      quality: testQuality,
-      maxRetries,
-      segmentDuration,
-    });
-  } else {
-    console.log('不支持房间直连模式');
-    process.exit(1);
-  }
-
-  console.log('构建的参数:', buildArgs);
-  console.log('Python 命令: python3 ' + buildArgs.join(' '));
-  console.log();
-
+  console.log('使用直接流 URL 模式');
   console.log(`[3/3] 开始测试录制（${testDuration}秒）...`);
-  let startTime = Date.now();
-  let lastProgressTime = 0;
+  console.log(`URL: ${status.streamUrl}`);
 
-  const processObj = downloader.spawn(buildArgs);
+  // --- 新增：手动构建并打印参数 ---
+  const options = { segmentDuration };
+  const finalArgs = downloader.buildArgs(status.streamUrl, outputPath, options);
 
-  processObj.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        console.log('[stderr]', line);
-      }
+  // 打印拼接好的完整命令行字符串，方便直接复制到终端运行测试
+  console.log('--------------------------------------------------');
+  console.log('FFmpeg 执行命令:');
+  console.log(`ffmpeg ${finalArgs.join(' ')}`);
+  console.log('--------------------------------------------------');
+  // ------------------------------
 
-      const progress = downloader.parseProgress(line);
-      if (progress) {
-        if (progress.timeSeconds !== undefined && progress.timeSeconds !== lastProgressTime) {
-          lastProgressTime = progress.timeSeconds;
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          let progressStr = `\r[${elapsed}s] 录制进度: ${Math.floor(progress.timeSeconds)}秒`;
-          if (progress.sizeBytes !== undefined) {
-            const sizeMB = (progress.sizeBytes / 1024 / 1024).toFixed(2);
-            progressStr += ` | 大小: ${sizeMB} MB`;
-          }
-          if (progress.speed !== undefined) {
-            progressStr += ` | 速度: ${progress.speed}x`;
-          }
-          if (progress.frames !== undefined) {
-            progressStr += ` | 帧数: ${progress.frames}`;
-          }
-          process.stdout.write(progressStr);
-        }
-      }
-    }
+  // 1. 订阅事件
+  downloader.on('progress', (p) => {
+    console.log(`进度更新: ${p.timeSeconds}s`);
   });
 
-  processObj.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        console.log('[stdout]', line);
+  downloader.on('exit', (code) => {
+    console.log(`进程结束，退出码: ${code}`);
+  });
+
+  // 2. 启动下载
+  try {
+    const processObj = downloader.start(status.streamUrl, outputPath, { segmentDuration });
+    console.log('[DEBUG] processObj 类型:', typeof processObj);
+
+    setTimeout(() => {
+      console.log('\n⏱️  停止录制...');
+      if (processObj) {
+        processObj.kill('SIGINT');
       }
-    }
-  });
-
-  processObj.on('error', (err) => {
-    console.error('\n❌ 进程启动失败:', err.message);
-    process.exit(1);
-  });
-
-  processObj.on('close', (code, signal) => {
-    console.log('\n');
-    if (code === 0) {
-      console.log('✅ 下载测试成功！');
-      console.log(`输出文件: ${outputPath}`);
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
-        console.log(`文件大小: ${sizeMB} MB`);
-      }
-    } else {
-      console.log(`❌ 进程退出，代码: ${code}，信号: ${signal}`);
-
-      const strategy = downloader.getRetryStrategy(code);
-      console.log(`重试策略:`, strategy);
-    }
-    process.exit(code);
-  });
-
-  setTimeout(() => {
-    console.log('\n⏱️  到达预设时间，停止录制...');
-    processObj.kill('SIGINT');
-  }, testDuration * 1000);
+    }, testDuration * 1000);
+  } catch (e) {
+    console.error('[DEBUG] 启动下载时捕获到异常:', e);
+  }
 }
 
 main().catch((err) => {

@@ -3,6 +3,7 @@
 ## docker 镜像中，含有中文的文件名似乎不被biliup能识别，从而导致无法上传
 
 已解决，在 Dockerfile 中添加：
+
 ```
 # 设置环境变量，强制系统使用 UTF-8
 ENV LANG C.UTF-8
@@ -10,6 +11,7 @@ ENV LC_ALL C.UTF-8
 ```
 
 已部署的 docker-compose.yml 中添加环境变量:
+
 ```
 services:
   your-service-name:
@@ -22,3 +24,7 @@ services:
     volumes:
       - /path/on/host:/data/video_downloads
 ```
+
+## 测试不同情况的 ffmpeg 进程代码 code
+
+- 点击停止录制时，提示：`FFmpeg 下载失败，退出码: 255, 信号: null`;
