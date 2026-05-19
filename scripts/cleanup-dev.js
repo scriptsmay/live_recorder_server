@@ -58,27 +58,6 @@ async function cleanup() {
     console.log('    ✅ 端口未被占用');
   }
 
-  // 2. 杀死 nodemon 孤儿进程
-  console.log('  └─ 杀死 nodemon 孤儿进程...');
-  try {
-    const nodemonProcs = execSync('ps aux | grep "nodemon.*app.js" | grep -v grep | awk \'{print $2}\'', {
-      encoding: 'utf-8',
-    }).trim();
-    if (nodemonProcs) {
-      const pids = nodemonProcs.split('\n').filter(Boolean);
-      for (const pid of pids) {
-        try {
-          execSync(`kill ${pid} 2>/dev/null`, { stdio: 'ignore' });
-        } catch (_) {}
-      }
-      console.log(`    ✅ 已清理 ${pids.length} 个 nodemon 进程`);
-    } else {
-      console.log('    ✅ 无 nodemon 进程');
-    }
-  } catch (_) {
-    console.log('    ✅ 无 nodemon 进程');
-  }
-
   // 3. 杀死 node --watch 孤儿进程（开发环境专用）
   console.log('  └─ 杀死 node --watch 孤儿进程...');
   try {
@@ -104,7 +83,6 @@ async function cleanup() {
   console.log('  └─ 杀死残留录制进程...');
   try {
     execSync('pkill -f "ffmpeg -i" 2>/dev/null', { stdio: 'ignore' });
-    execSync('pkill -f "stream_gears_wrapper" 2>/dev/null', { stdio: 'ignore' });
     console.log('    ✅ 录制进程已清理');
   } catch (_) {
     console.log('    ✅ 无残留录制进程');

@@ -4,6 +4,7 @@ services:
     image: ghcr.io/scriptsmay/live_recorder_server:latest
     container_name: live_recorder_server
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
       REDIS_URL: ${REDIS_URL:-redis://default:password@redis:6379/1}
       MESSAGE_FEISHU_WEBHOOK: ${MESSAGE_FEISHU_WEBHOOK:-}

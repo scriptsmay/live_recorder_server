@@ -6,8 +6,10 @@ const redis = require('../db/redis');
 const { createProcLog } = require('../lib/utils/proc-log');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
-const UploadService = require('./UploadService');
+const segmenter = require('../lib/core/segmenter');
 const notify = require('../lib/core/notify');
+
+const UploadService = require('./UploadService');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -202,6 +204,33 @@ class RecorderService {
     return outputFilePattern;
   }
 
+  static async startSegmentTask({
+    inputFile,
+    outputFilePattern,
+    roomKey,
+    segmentDuration,
+  }) {
+    // const input = './recordings/live_stream.ts';
+    // const outputPattern = './output/clip_%03d.mp4';
+
+    // 2. 调用方法
+    const result = await segmenter.segmentAndTranscode(
+      inputFile,
+      outputFilePattern,
+      {
+        segmentTime: segmentDuration, // 每 segmentDuration 秒切一片
+      },
+      roomKey // sessionId
+    );
+
+    if (result.success) {
+      console.log('切割转码完成，日志路径:', result.logPath);
+    } else {
+      console.error('任务失败:', result.error);
+    }
+    return result;
+  }
+
   static async finishSession({
     code,
     engine,
@@ -210,7 +239,6 @@ class RecorderService {
     sessionStart,
     reuseSession,
     useSegment,
-    segmentListPath,
     outputFilePattern,
     roomKey,
   }) {
@@ -237,34 +265,18 @@ class RecorderService {
       }
 
       if (useSegment) {
-        let segmentFiles = [];
-        if (segmentListPath && fs.existsSync(segmentListPath)) {
-          const content = fs.readFileSync(segmentListPath, 'utf-8');
-          const lines = content
-            .split('\n')
-            .map((l) => l.trim())
-            .filter(Boolean);
-          for (const line of lines) {
-            segmentFiles.push(path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line));
-          }
-          try {
-            fs.unlinkSync(segmentListPath);
-          } catch (_) {}
-        } else if (outputFilePattern) {
-          try {
-            const dir = path.dirname(outputFilePattern);
-            const base = path.basename(outputFilePattern);
-            const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
-            const ext = path.extname(base);
-            const regex = new RegExp('^' + prefix + '.*' + ext.replace(/\./g, '\\.') + '$');
-            const files = fs.readdirSync(dir);
-            segmentFiles = files
-              .filter((f) => regex.test(f))
-              .sort()
-              .map((f) => path.join(dir, f));
-          } catch (err) {
-            console.error('[api] 分段文件扫描失败:', err.message);
-          }
+        // 处理录制完后切片的情况
+        const cutAfterDownloaded = engine.getCutAfterDownloaded();
+        if (cutAfterDownloaded) {
+          // 录制完实际下载的文件名是啥？
+          const result = await this.startSegmentTask({
+            inputFile: '',
+            outputFilePattern,
+            roomKey,
+            segmentDuration,
+          });
+          
+          console.log(`[finishSession] 录制完成，处理切片结果: ${result}`);
         }
 
         const thresholdValue = await this.getSetting('filtering_threshold', '10');
@@ -275,14 +287,22 @@ class RecorderService {
         // 收集所有需要转码的FLV文件
         const flvFilesToTranscode = [];
 
-        for (const filePath of segmentFiles) {
-          const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
-          if (tracked.rows.length > 0) continue;
+        // 从数据库查询该会话已追踪的所有文件
+        const sessionFiles = await pool.query(
+          'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
+          [sessionId]
+        );
 
-          let fileSize = 0;
-          try {
-            fileSize = fs.statSync(filePath).size;
-          } catch (_) {}
+        for (const row of sessionFiles.rows) {
+          const filePath = row.file_path;
+          let fileSize = row.file_size;
+
+          // 如果数据库中文件大小为0，尝试重新获取
+          if (fileSize === 0) {
+            try {
+              fileSize = fs.statSync(filePath).size;
+            } catch (_) {}
+          }
 
           // 小于阈值的文件直接删除，不进行保存和转码
           if (fileSize > 0 && fileSize < thresholdBytes) {
@@ -291,6 +311,10 @@ class RecorderService {
               console.log(
                 `[finishSession] 碎片文件已删除: ${path.basename(filePath)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
               );
+              
+              // 从数据库中删除该文件记录
+              await pool.query('DELETE FROM recording_files WHERE file_path = $1', [filePath]);
+              await pool.query('DELETE FROM recordings WHERE file_path = $1', [filePath]);
             } catch (err) {
               console.error(`[finishSession] 删除碎片文件失败: ${filePath}`, err.message);
             }
@@ -301,18 +325,12 @@ class RecorderService {
           if (fileSize > 0) {
             totalSize += fileSize;
 
+            // 更新 recordings 表中的文件大小
             await pool.query(
-              `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-               VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
-               ON CONFLICT (file_path) DO NOTHING`,
-              [sessionId, newFileCount, room.room_url, filePath, fileSize, sessionStart]
+              'UPDATE recordings SET file_size = $1, ended_at = NOW(), status = \'completed\' WHERE file_path = $2',
+              [fileSize, filePath]
             );
-            await pool.query(
-              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-               VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-               ON CONFLICT (file_path) DO NOTHING`,
-              [sessionId, room.room_url, filePath, path.basename(filePath), fileSize]
-            );
+            
             newFileCount++;
 
             // 只有大于阈值的FLV文件才加入转码队列
@@ -361,10 +379,10 @@ class RecorderService {
             );
           }
         }
-        console.log(`[api] 分段录制完成, 共 ${segmentFiles.length} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+        console.log(`[api] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
         // 只要有文件收集到就触发自动投稿（包括小于阈值的文件，因为它们也可能被转码）
-        if (segmentFiles.length > 0) {
+        if (newFileCount > 0) {
           const completedSession = {
             id: sessionId,
             room_url: room.room_url,
@@ -603,16 +621,7 @@ class RecorderService {
 
     console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
-    // 对于虎牙平台，直接使用房间 URL，让 huya_downloader.py 自己获取流地址
-    // removed
-    let finalUrl = url;
-    // if (room.polling_platform === 'huya' && room.room_url) {
-    //   console.log(`[RecorderService] 虎牙平台，使用房间 URL: ${room.room_url}`);
-    //   finalUrl = room.room_url;
-    // }
-
     const downloader = await getActiveDownloader(room.polling_platform);
-
     const template = room.filename_template || '{room_name}_{datetime}';
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0;
@@ -631,15 +640,7 @@ class RecorderService {
     console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
     console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
-    let segmentListPath;
-    if (useSegment) {
-      segmentListPath = path.join(
-        DOWNLOAD_DIR,
-        `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
-      );
-    }
-
-    const dlArgs = downloader.buildArgs(finalUrl, outputFilePattern, {
+    const dlArgs = downloader.buildArgs(url, outputFilePattern, {
       segmentDuration,
       segmentListPath,
       platform: room.polling_platform,
@@ -746,12 +747,12 @@ class RecorderService {
         sessionStart,
         reuseSession,
         useSegment,
-        segmentListPath,
         outputFilePattern,
         roomKey,
       });
     };
 
+    // 下载结束触发
     dlProcess.on('close', finishSessionWrapper);
 
     if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
@@ -788,21 +789,16 @@ class RecorderService {
     const ext = downloader.getExtension();
 
     let outputPath;
-    let segmentListPath;
     if (useSegment) {
       const strftimeName = this.templateToStrftime(template, session.room_name || '', ext);
       outputPath = path.join(DOWNLOAD_DIR, strftimeName);
-      segmentListPath = path.join(
-        DOWNLOAD_DIR,
-        `.segments_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`
-      );
     } else {
       const base = this.generateFilename(template, session.room_name || '', ext);
       outputPath = path.join(DOWNLOAD_DIR, base);
     }
 
     const streamUrl = session.stream_url || session.room_url;
-    const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration, segmentListPath });
+    const dlArgs = downloader.buildArgs(streamUrl, outputPath, { segmentDuration });
 
     const { stream: logStream, logPath: ffmpegLogPath, logCommand } = createProcLog(downloader.name, session.id);
     logCommand(downloader.name, dlArgs);
@@ -832,74 +828,45 @@ class RecorderService {
         await this.delRoomCache(session.room_url);
 
         if (useSegment) {
-          const outputDir = path.dirname(outputPath);
-          let segmentFiles = [];
-
-          // 先尝试从segment list文件读取
-          if (segmentListPath && fs.existsSync(segmentListPath)) {
-            const content = fs.readFileSync(segmentListPath, 'utf-8');
-            const lines = content
-              .split('\n')
-              .map((l) => l.trim())
-              .filter(Boolean);
-            for (const line of lines) {
-              segmentFiles.push(path.isAbsolute(line) ? line : path.join(DOWNLOAD_DIR, line));
-            }
-            try {
-              fs.unlinkSync(segmentListPath);
-            } catch (_) {}
-          }
-
-          // 如果segment list没有文件，再扫描目录
-          if (segmentFiles.length === 0) {
-            try {
-              const files = fs.readdirSync(outputDir);
-              const base = path.basename(outputPath);
-              const prefix = base.replace(/%[YmdHMS]/g, '.*').replace(/\.\w+$/, '');
-              const ext = path.extname(base);
-              const regex = new RegExp('^' + prefix + '.*' + ext.replace(/\./g, '\\.') + '$');
-              segmentFiles = files
-                .filter((f) => regex.test(f))
-                .sort()
-                .map((f) => path.join(outputDir, f));
-            } catch (_) {}
-          }
 
           // const thresholdValue = await this.getSetting('filtering_threshold', '10');
           // const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
           let totalSegments = 0;
           let totalSize = 0;
 
-          for (const filePath of segmentFiles) {
-            const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
-            if (tracked.rows.length > 0) continue;
+          // 从数据库查询该会话已追踪的所有文件
+          const sessionFiles = await pool.query(
+            'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
+            [session.id]
+          );
 
-            let stat;
-            try {
-              stat = fs.statSync(filePath);
-            } catch (_) {
-              continue;
+          for (const row of sessionFiles.rows) {
+            const filePath = row.file_path;
+            let fileSize = row.file_size;
+
+            // 如果数据库中文件大小为0，尝试重新获取
+            if (fileSize === 0) {
+              try {
+                const stat = fs.statSync(filePath);
+                fileSize = stat.size;
+                
+                // 更新数据库中的文件大小
+                await pool.query(
+                  'UPDATE recording_files SET file_size = $1 WHERE file_path = $2',
+                  [fileSize, filePath]
+                );
+                await pool.query(
+                  'UPDATE recordings SET file_size = $1 WHERE file_path = $2',
+                  [fileSize, filePath]
+                );
+              } catch (_) {
+                continue;
+              }
             }
 
-            if (stat.size > 0) {
-              // TODO: 这个地方的逻辑，是有问题的，暂时注释掉。
-              // // 恢复录制会话时，不管文件多小，都保留入库（碎片过滤只在看门狗后台清理时生效）
-              // await pool.query(
-              //   `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-              //    VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'completed')
-              //    ON CONFLICT (file_path) DO NOTHING`,
-              //   [session.id, totalSegments, session.room_url, filePath, stat.size, session.started_at]
-              // );
-
-              // await pool.query(
-              //   `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-              //    VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-              //    ON CONFLICT (file_path) DO NOTHING`,
-              //   [session.id, session.room_url, filePath, path.basename(filePath), stat.size]
-              // );
-
+            if (fileSize > 0) {
               totalSegments++;
-              totalSize += stat.size;
+              totalSize += fileSize;
             }
           }
 
@@ -1094,3 +1061,17 @@ class RecorderService {
 }
 
 module.exports = RecorderService;
+
+
+
+
+
+
+
+
+
+
+
+
+
+

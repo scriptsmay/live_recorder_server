@@ -46,7 +46,6 @@ async function main() {
       console.log('  --duration &lt;秒数&gt;         测试录制时长（默认：30秒）');
       console.log('  --quality &lt;画质&gt;          指定画质（OD/BD/UHD/HD/SD/LD，默认：UHD）');
       console.log('  --max-retries &lt;次数&gt;      Python下载器自动重连次数（默认：30）');
-      console.log('  --no-direct-stream        不使用直接流 URL 模式（尝试直接用房间 URL 录制）');
       console.log('  --help                    显示帮助信息');
       console.log();
       console.log('示例:');
