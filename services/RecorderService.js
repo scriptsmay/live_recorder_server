@@ -214,6 +214,7 @@ class RecorderService {
     roomKey,
     segmentPathsForTranscode = [],
     lastSegmentPath,
+    currentSegmentPath,
   }) {
     await this.delActiveTask(roomKey);
     console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`);
@@ -267,16 +268,6 @@ class RecorderService {
         // 收集所有需要转码的FLV文件
         const flvFilesToTranscode = [];
 
-        // 处理最后一个分段（如果有的话）
-        if (lastSegmentPath && /\.flv$/i.test(lastSegmentPath)) {
-          try {
-            const stat = fs.statSync(lastSegmentPath);
-            if (stat.size >= thresholdBytes) {
-              flvFilesToTranscode.push(lastSegmentPath);
-            }
-          } catch (_) {}
-        }
-
         for (const filePath of segmentFiles) {
           const tracked = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [filePath]);
           if (tracked.rows.length > 0) continue;
@@ -306,16 +297,23 @@ class RecorderService {
             newFileCount++;
 
             // 只有大于阈值的FLV文件才加入转码队列
-            if (
-              fileSize >= thresholdBytes &&
-              filePath.endsWith('.flv') &&
-              !segmentPathsForTranscode.includes(filePath)
-            ) {
-              // 避免重复添加最后一个分段
-              if (filePath !== lastSegmentPath) {
-                flvFilesToTranscode.push(filePath);
-              }
+            if (fileSize >= thresholdBytes && filePath.endsWith('.flv') && !segmentPathsForTranscode.includes(filePath)) {
+              flvFilesToTranscode.push(filePath);
             }
+          }
+        }
+
+        // 处理最后一个分段：确保它被加入转码队列（不受碎片阈值限制）
+        // 使用 lastSegmentPath（当有多个分段时） 或 currentSegmentPath（当只有一段时）
+        const actualLastSegment = lastSegmentPath || currentSegmentPath;
+        if (actualLastSegment && /\.flv$/i.test(actualLastSegment)) {
+          if (!segmentPathsForTranscode.includes(actualLastSegment) && !flvFilesToTranscode.includes(actualLastSegment)) {
+            try {
+              const stat = fs.statSync(actualLastSegment);
+              if (stat.size > 0) {
+                flvFilesToTranscode.push(actualLastSegment);
+              }
+            } catch (_) {}
           }
         }
 
@@ -862,6 +860,7 @@ class RecorderService {
         roomKey,
         segmentPathsForTranscode,
         lastSegmentPath,
+        currentSegmentPath,
       });
     };
 
