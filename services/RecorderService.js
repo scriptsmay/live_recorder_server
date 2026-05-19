@@ -189,6 +189,8 @@ class RecorderService {
 
     let outputFilePattern;
 
+    // 这里需要判断下载平台
+
     if (useSegment) {
       const strftimeName = this.templateToStrftime(template, roomName || title, ext);
       outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
@@ -602,11 +604,12 @@ class RecorderService {
     console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
     // 对于虎牙平台，直接使用房间 URL，让 huya_downloader.py 自己获取流地址
+    // removed
     let finalUrl = url;
-    if (room.polling_platform === 'huya' && room.room_url) {
-      console.log(`[RecorderService] 虎牙平台，使用房间 URL: ${room.room_url}`);
-      finalUrl = room.room_url;
-    }
+    // if (room.polling_platform === 'huya' && room.room_url) {
+    //   console.log(`[RecorderService] 虎牙平台，使用房间 URL: ${room.room_url}`);
+    //   finalUrl = room.room_url;
+    // }
 
     const downloader = await getActiveDownloader(room.polling_platform);
 
@@ -1025,7 +1028,7 @@ class RecorderService {
 
   /**
    * 清理陈旧的录制任务和会话
-   * 
+   *
    * 该函数用于处理系统异常重启或崩溃后遗留的录制状态，主要执行以下操作：
    * 1. 查找所有状态为 'recording' 或 'paused' 的直播间房间
    *    - 终止相关的 ffmpeg 进程（如果存在）
@@ -1041,7 +1044,7 @@ class RecorderService {
       const staleRooms = await pool.query(
         `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
       );
-      
+
       // 清理每个陈旧房间的状态
       for (const row of staleRooms.rows) {
         if (row.ffmpeg_pid) {
@@ -1091,5 +1094,3 @@ class RecorderService {
 }
 
 module.exports = RecorderService;
-
-

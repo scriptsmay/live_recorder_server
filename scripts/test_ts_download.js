@@ -4,9 +4,9 @@ const fs = require('fs');
 const path = require('path');
 
 const HuyaChecker = require('../lib/core/polling/HuyaChecker');
-const HuyaPythonDownloader = require('../lib/core/downloaders/HuyaPythonDownloader');
+const TsDownloader = require('../lib/core/downloaders/TsDownloader');
 
-const TEST_OUTPUT_DIR = path.join(__dirname, '..', 'test_downloads');
+const TEST_OUTPUT_DIR = path.join(__dirname, '..', 'dev_downloads');
 
 if (!fs.existsSync(TEST_OUTPUT_DIR)) {
   fs.mkdirSync(TEST_OUTPUT_DIR, { recursive: true });
@@ -17,7 +17,7 @@ async function main() {
   let testRoomUrl = 'https://www.huya.com/kpl';
   let testDuration = 30;
   let testQuality = 'UHD';
-  let useDirectStreamUrl = false; // 默认使用房间 URL（完全按照参考项目）
+  let useDirectStreamUrl = true; // 默认使用房间 URL（完全按照参考项目）
   let maxRetries = 30; // Python 下载器自动重连次数
   let segmentDuration = 0; // 分段时长（测试切割功能）
 
@@ -39,7 +39,7 @@ async function main() {
     } else if (args[i] === '--no-direct-stream') {
       useDirectStreamUrl = false;
     } else if (args[i] === '--help') {
-      console.log('用法: node test_huya_python_download.js [选项]');
+      console.log('用法: node test_ts_download.js [选项]');
       console.log();
       console.log('选项:');
       console.log('  --url &lt;直播间URL&gt;        指定测试的虎牙直播间 URL');
@@ -50,9 +50,9 @@ async function main() {
       console.log('  --help                    显示帮助信息');
       console.log();
       console.log('示例:');
-      console.log('  node test_huya_python_download.js');
-      console.log('  node test_huya_python_download.js --url https://www.huya.com/kpl');
-      console.log('  node test_huya_python_download.js --url https://www.huya.com/kpl --duration 60 --quality HD');
+      console.log('  node test_ts_download.js');
+      console.log('  node test_ts_download.js --url https://www.huya.com/kpl');
+      console.log('  node test_ts_download.js --url https://www.huya.com/kpl --duration 60 --quality HD');
       process.exit(0);
     }
   }
@@ -82,8 +82,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('[2/3] 准备使用 HuyaPythonDownloader 测试...');
-  const downloader = new HuyaPythonDownloader();
+  console.log('[2/3] 准备使用 TsDownloader 测试...');
+  const downloader = new TsDownloader();
 
   const fileExt = downloader.getExtension();
 
@@ -103,8 +103,8 @@ async function main() {
       segmentDuration,
     });
   } else {
-    console.log('使用房间 URL 模式（让 huya_downloader.py 自己解析，包含自动重连）');
-    buildArgs = downloader.buildArgs(testRoomUrl, outputPath, { quality: testQuality, maxRetries, segmentDuration });
+    console.log('不支持房间直连模式');
+    process.exit(1);
   }
 
   console.log('构建的参数:', buildArgs);
