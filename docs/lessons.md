@@ -362,6 +362,90 @@ static async findAndAutoUpload(session) {
 | **多重检查防竞赛** | 同时检查"已有记录"和"转码完成"避免并发重复投稿 |
 | **兜底机制分层设计** | 即时触发（快速路径）+ 看门狗（兜底保障），但快速路径也必须满足所有条件 |
 
+## 自动投稿竞态条件：竞态导致同一会话重复投稿
+
+### 问题现象
+
+开发环境中会话 81 产生了 **两条投稿记录**，`created_at` 仅差 **9ms**：
+
+```sql
+id=16: 2026-05-19 09:31:03.683
+id=17: 2026-05-19 09:31:03.692  ← 仅差 9ms
+```
+
+### 问题根因
+
+`findAndAutoUpload` 在 `RecorderService.finishSession` 中有多个调用点：
+
+1. **分段模式**（第 384 行）：`segmentFiles.length > 0` 时触发
+2. **非分段 FLV 模式**（第 477-485 行）：`/\.flv$/i.test(outputFilePattern)` 时触发
+
+当 `finishSession` 被**重复调用**时（竞态或重复触发），两次调用几乎同时进入 `findAndAutoUpload`：
+
+```
+线程A: SELECT upload_records → 0条 → 继续
+线程B: SELECT upload_records → 0条 → 继续  ← 此时线程A还没INSERT
+线程A: INSERT upload_records (id=16)
+线程B: INSERT upload_records (id=17)  ← 重复投稿！
+```
+
+`SELECT ... LIMIT 1` 检查在两次调用之间存在时间窗口，无法保证原子性。
+
+### 触发链路分析
+
+根据 git 历史，问题源于 commit `01f72fb` 修改了 close 事件处理：
+
+```javascript
+// 之前：进程已退出时直接调用一次
+if (dlProcess.exitCode !== null) {
+  finishSessionWrapper(exitCode);  // 直接执行
+} else {
+  dlProcess.on('close', finishSessionWrapper);  // 异步监听
+}
+
+// 之后：先监听再手动触发
+dlProcess.on('close', finishSessionWrapper);  // 注册监听器
+if (dlProcess.exitCode !== null) {
+  dlProcess.emit('close', exitCode);  // 手动触发
+}
+```
+
+如果在 `dlProcess.on('close', ...)` 注册之前，ffmpeg 已经退出，`emit('close')` 会触发监听器。但如果 Chrome 扩展或前端发送了**重复的录制请求**，`finishSession` 可能被调用多次，导致重复投稿。
+
+### 修复方案
+
+在 `findAndAutoUpload` 入口添加 **Redis 分布式锁**，确保同一会话的检查+执行流程是原子的：
+
+```javascript
+static async findAndAutoUpload(session) {
+  const lockKey = `lock:auto_upload:${session.id}`;
+  try {
+    const acquired = await redis.set(lockKey, '1', { EX: 300, NX: true });
+    if (!acquired) {
+      console.log(`[投稿] 会话 ${session.id} 正在执行中，跳过`);
+      return;
+    }
+  } catch (_) {}
+
+  try {
+    // ... 原有逻辑
+  }
+}
+```
+
+`SET NX EX` 保证：
+- 第一个调用获得锁 → 继续执行
+- 第二个调用获取锁失败 → 直接跳过
+
+### 经验总结
+
+| 教训 | 说明 |
+|------|------|
+| **异步并发需要锁** | 数据库检查不是原子操作，必须用 Redis 分布式锁兜底 |
+| **先监听再触发有风险** | 事件处理器的注册时机与进程退出时机存在竞态窗口 |
+| **锁的 TTL 要够长** | 300 秒 TTL 确保投稿流程（包括转码检查）有充足时间完成 |
+| **SET NX EX 是原子操作** | Redis 原生命令保证锁获取的原子性，无需 Lua 脚本 |
+
 ## 录制中断却通知"录制完成"：通知与状态不同步
 
 ### 问题现象

@@ -310,6 +310,15 @@ class UploadService {
   }
 
   static async findAndAutoUpload(session) {
+    const lockKey = `lock:auto_upload:${session.id}`;
+    try {
+      const acquired = await redis.set(lockKey, '1', { EX: 300, NX: true });
+      if (!acquired) {
+        console.log(`[投稿] 会话 ${session.id} 正在执行中，跳过`);
+        return;
+      }
+    } catch (_) {}
+
     try {
       if (!(await this.checkUploadLimit(session.id))) return;
 
