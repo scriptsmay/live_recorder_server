@@ -3,6 +3,8 @@ name: Docker Image CI
 on:
   push:
     branches: ['main']
+  push:
+    tags: ['v*']
 
 # 定义权限，必须有 write 权限才能推送到 GHCR
 permissions:
@@ -34,7 +36,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,format=short
-            latest
+            type=ref,event=tag
 
       # 3. 设置 Buildx（用于缓存优化）
       - name: Set up Docker Buildx
