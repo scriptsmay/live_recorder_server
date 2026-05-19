@@ -18,7 +18,6 @@
         <th>监听</th>
         <th>轮询</th>
         <th>直播状态</th>
-        <th>最后检测</th>
         <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
@@ -55,9 +54,9 @@
           <% } else { %>
           <span class="text-muted">-</span>
           <% } %>
-        </td>
-        <td>
-          <small><%= formatDate(r.last_polled_at) %></small>
+          <% if (r.last_polled_at) { %>}
+          <div><small><%= formatDate(r.last_polled_at) %></small></div>
+          <% } %>
         </td>
         <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
         <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>

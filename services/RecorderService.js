@@ -1,8 +1,10 @@
 const path = require('path');
 const fs = require('fs');
-const dayjs = require('dayjs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+
+const { templateToStrftime, generateFilename } = require('../lib/utils/tool');
+
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
@@ -15,7 +17,7 @@ const ACTIVE_TASK_TTL = 86400;
 
 /**
  * 录制服务 - 负责直播间录制的业务逻辑协调
- * 
+ *
  * 主要职责：
  * 1. 管理房间状态和缓存
  * 2. 处理录制请求的验证和权限检查
@@ -26,7 +28,7 @@ const ACTIVE_TASK_TTL = 86400;
 class RecorderService {
   /**
    * 生成 Redis 房间缓存键
-   * 
+   *
    * @param {string} roomUrl - 房间URL
    * @returns {string} Redis key
    */
@@ -36,7 +38,7 @@ class RecorderService {
 
   /**
    * 生成 Redis 活跃任务键
-   * 
+   *
    * @param {string} roomKey - 房间唯一标识
    * @returns {string} Redis key
    */
@@ -46,7 +48,7 @@ class RecorderService {
 
   /**
    * 获取房间缓存
-   * 
+   *
    * @param {string} roomUrl - 房间URL
    * @returns {Promise<Object|null>} 房间信息对象或 null
    */
@@ -60,7 +62,7 @@ class RecorderService {
 
   /**
    * 设置房间缓存
-   * 
+   *
    * @param {Object} room - 房间信息对象
    */
   static async setRoomCache(room) {
@@ -71,7 +73,7 @@ class RecorderService {
 
   /**
    * 删除房间缓存
-   * 
+   *
    * @param {string} roomUrl - 房间URL
    */
   static async delRoomCache(roomUrl) {
@@ -82,7 +84,7 @@ class RecorderService {
 
   /**
    * 检查是否存在活跃任务
-   * 
+   *
    * @param {string} roomKey - 房间唯一标识
    * @returns {Promise<boolean>} 是否存在活跃任务
    */
@@ -97,7 +99,7 @@ class RecorderService {
 
   /**
    * 设置活跃任务
-   * 
+   *
    * @param {string} roomKey - 房间唯一标识
    * @param {Object} data - 任务数据
    */
@@ -109,7 +111,7 @@ class RecorderService {
 
   /**
    * 删除活跃任务
-   * 
+   *
    * @param {string} roomKey - 房间唯一标识
    */
   static async delActiveTask(roomKey) {
@@ -120,7 +122,7 @@ class RecorderService {
 
   /**
    * 清理文件名中的非法字符
-   * 
+   *
    * @param {string} name - 原始文件名
    * @returns {string} 清理后的文件名
    */
@@ -132,58 +134,8 @@ class RecorderService {
   }
 
   /**
-   * 根据模板生成文件名
-   * 
-   * @param {string} template - 文件名模板
-   * @param {string} roomName - 房间名称
-   * @param {string} ext - 文件扩展名
-   * @returns {string} 生成的文件名
-   */
-  static generateFilename(template, roomName, ext = '.mp4') {
-    const now = dayjs();
-    const vars = {
-      room_name: this.sanitizeFilename(roomName || 'unknown'),
-      datetime: now.format('YYYYMMDD_HHmmss'),
-      YYYY: now.format('YYYY'),
-      MM: now.format('MM'),
-      DD: now.format('DD'),
-      HH: now.format('HH'),
-      mm: now.format('mm'),
-      ss: now.format('ss'),
-    };
-    let result = template;
-    for (const [key, value] of Object.entries(vars)) {
-      result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
-    }
-    return this.sanitizeFilename(result) + ext;
-  }
-
-  /**
-   * 将模板转换为 strftime 格式
-   * 
-   * @param {string} template - 文件名模板
-   * @param {string} roomName - 房间名称
-   * @param {string} ext - 文件扩展名
-   * @returns {string} strftime 格式的路径
-   */
-  static templateToStrftime(template, roomName, ext = '.mp4') {
-    const roomNameSafe = this.sanitizeFilename(roomName || 'unknown').replace(/%/g, '%%');
-    return (
-      template
-        .replace(/{room_name}/g, roomNameSafe)
-        .replace(/{datetime}/g, '%Y%m%d_%H%M%S')
-        .replace(/{YYYY}/g, '%Y')
-        .replace(/{MM}/g, '%m')
-        .replace(/{DD}/g, '%d')
-        .replace(/{HH}/g, '%H')
-        .replace(/{mm}/g, '%M')
-        .replace(/{ss}/g, '%S') + ext
-    );
-  }
-
-  /**
    * 获取或创建房间记录
-   * 
+   *
    * @param {string} roomUrl - 房间URL
    * @param {string} roomName - 房间名称
    * @returns {Promise<Object>} 房间信息对象
@@ -211,7 +163,7 @@ class RecorderService {
 
   /**
    * 获取系统设置值
-   * 
+   *
    * @param {string} key - 设置键名
    * @param {string} defaultValue - 默认值
    * @returns {Promise<string>} 设置值或默认值
@@ -228,7 +180,7 @@ class RecorderService {
 
   /**
    * 获取线程池大小配置
-   * 
+   *
    * @returns {Promise<number>} 线程池大小
    */
   static async getPoolSize() {
@@ -238,7 +190,7 @@ class RecorderService {
 
   /**
    * 获取当前活跃任务数量
-   * 
+   *
    * @returns {Promise<number>} 活跃任务数量
    */
   static async getActiveTasksCount() {
@@ -252,7 +204,7 @@ class RecorderService {
 
   /**
    * 检查是否可以复用之前的录制会话（续播）
-   * 
+   *
    * @param {Object} room - 房间信息对象
    * @returns {Promise<Object>} 包含 reuseSession 和 resumeCount 的对象
    */
@@ -292,7 +244,7 @@ class RecorderService {
 
   /**
    * 生成输出文件路径
-   * 
+   *
    * @param {Object} downloader - 下载器实例
    * @param {string} template - 文件名模板
    * @param {string} roomName - 房间名称
@@ -303,16 +255,20 @@ class RecorderService {
    * @returns {string} 输出文件路径
    */
   static generateOutputPath(downloader, template, roomName, title, segmentDuration, _reuseSession, _roomOutputPath) {
-    const useSegment = segmentDuration > 0;
+    // useSegment 代表的是输出文件名是否会随时间变量变化
+    // 有的下载器不支持分段下载， useSegment 为 false
+    const useSegment = segmentDuration > 0 && downloader.isSegment();
     const ext = downloader.getExtension();
 
     let outputFilePattern;
 
     if (useSegment) {
-      const strftimeName = this.templateToStrftime(template, roomName || title, ext);
+      // 如果需要切片，则输出文件名使用ffmpeg segements 模板
+      const strftimeName = templateToStrftime(template, roomName || title, ext);
       outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
     } else {
-      const filename = this.generateFilename(template, roomName || title, ext);
+      // 如果不切片，则使用 generateFilename 方法生成固定的文件名
+      const filename = generateFilename(template, roomName || title, ext);
       outputFilePattern = path.join(DOWNLOAD_DIR, filename);
     }
 
@@ -321,7 +277,7 @@ class RecorderService {
 
   /**
    * 完成录制会话的后续处理
-   * 
+   *
    * @param {Object} params - 处理参数
    * @param {number} params.code - 进程退出码
    * @param {Object} params.engine - 下载器引擎实例
@@ -345,7 +301,9 @@ class RecorderService {
     roomKey,
   }) {
     await this.delActiveTask(roomKey);
-    console.log(`[${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`);
+    console.log(
+      `[finishSession][${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`
+    );
 
     try {
       await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
@@ -399,13 +357,13 @@ class RecorderService {
         } catch (_) {}
       }
     } catch (dbErr) {
-      console.error('[api] 录制结束数据库更新失败:', dbErr);
+      console.error('[RecorderService] 录制结束数据库更新失败:', dbErr);
     }
   }
 
   /**
    * 处理分段录制结束的逻辑
-   * 
+   *
    * @param {Object} params - 处理参数
    * @param {Object} params.engine - 下载器引擎实例
    * @param {Object} params.room - 房间信息对象
@@ -415,16 +373,17 @@ class RecorderService {
    * @param {string} params.outputFilePattern - 输出文件路径模式
    */
   static async _handleSegmentFinish({ engine, room, sessionId, sessionStart, reuseSession, outputFilePattern }) {
-    const cutAfterDownloaded = engine.getCutAfterDownloaded();
-    if (cutAfterDownloaded) {
+    const isEngineSegment = engine.isSegment();
+    if (!isEngineSegment) {
+      // 下载器不支持分段，则加入额外的切片处理
       const result = await recordingManager.startSegmentTask({
-        inputFile: '',
+        inputFile: room.output_path,
         outputFilePattern,
         roomKey: room.room_url,
         segmentDuration: room.segment_duration || 0,
       });
-      
-      console.log(`[finishSession] 录制完成，处理切片结果: ${result}`);
+
+      console.log(`[_handleSegmentFinish] 录制完成，处理切片结果: ${result}`);
     }
 
     const thresholdValue = await this.getSetting('filtering_threshold', '10');
@@ -435,7 +394,7 @@ class RecorderService {
     const flvFilesToTranscode = [];
 
     const sessionFiles = await pool.query(
-      'SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = \'completed\'',
+      "SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = 'completed'",
       [sessionId]
     );
 
@@ -455,7 +414,7 @@ class RecorderService {
           console.log(
             `[finishSession] 碎片文件已删除: ${path.basename(filePath)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
           );
-          
+
           await pool.query('DELETE FROM recording_files WHERE file_path = $1', [filePath]);
           await pool.query('DELETE FROM recordings WHERE file_path = $1', [filePath]);
         } catch (err) {
@@ -468,10 +427,10 @@ class RecorderService {
         totalSize += fileSize;
 
         await pool.query(
-          'UPDATE recordings SET file_size = $1, ended_at = NOW(), status = \'completed\' WHERE file_path = $2',
+          "UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE file_path = $2",
           [fileSize, filePath]
         );
-        
+
         newFileCount++;
 
         if (fileSize >= thresholdBytes && filePath.endsWith('.flv')) {
@@ -515,7 +474,7 @@ class RecorderService {
         );
       }
     }
-    console.log(`[api] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+    console.log(`[RecorderService] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
     if (newFileCount > 0) {
       const completedSession = {
@@ -524,15 +483,13 @@ class RecorderService {
         room_name: room.room_name,
         started_at: sessionStart,
       };
-      UploadService.findAndAutoUpload(completedSession).catch((err) =>
-        console.error('[自动投稿] 异常:', err.message)
-      );
+      UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
     }
   }
 
   /**
    * 处理非分段录制结束的逻辑
-   * 
+   *
    * @param {Object} params - 处理参数
    * @param {Object} params.room - 房间信息对象
    * @param {string|number} params.sessionId - 会话ID
@@ -549,7 +506,7 @@ class RecorderService {
       fileSize = stat.size;
       fileExists = true;
     } catch (statErr) {
-      console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
+      console.warn(`[RecorderService] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
     }
 
     const thresholdValue = await this.getSetting('filtering_threshold', '10');
@@ -577,10 +534,10 @@ class RecorderService {
         : null;
 
       if (existingRec?.rows.length > 0) {
-        await pool.query(
-          `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
-          [fileSize, existingRec.rows[0].id]
-        );
+        await pool.query(`UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`, [
+          fileSize,
+          existingRec.rows[0].id,
+        ]);
       } else {
         await pool.query(
           `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
@@ -665,7 +622,7 @@ class RecorderService {
 
   /**
    * 启动录制任务
-   * 
+   *
    * @param {Object} params - 录制参数
    * @param {string} params.url - 直播流地址
    * @param {string} params.title - 直播标题
@@ -674,7 +631,7 @@ class RecorderService {
    * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
    */
   static async startRecording({ url, title, caption, room_url }) {
-    console.log('[api] 收到录制请求:', {
+    console.log('[RecorderService] 收到录制请求:', {
       title,
       room_url,
       url: url?.slice(0, 60),
@@ -682,7 +639,7 @@ class RecorderService {
     });
 
     if (!url || !title) {
-      console.log('[api] 录制请求被拒: 缺少必填参数 (url/title)');
+      console.log('[RecorderService] 录制请求被拒: 缺少必填参数 (url/title)');
       return { error: true, status: 400, code: 400, message: '请提供直播流URL和标题。' };
     }
     if (!DOWNLOAD_DIR) {
@@ -700,7 +657,7 @@ class RecorderService {
     const roomKey = room_url || url;
 
     if (await this.isActiveTask(roomKey)) {
-      console.log('[api] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
+      console.log('[RecorderService] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
       return { error: true, status: 200, code: 400, status_str: 'Already recording', message: '请勿重复开启' };
     }
 
@@ -721,12 +678,12 @@ class RecorderService {
     try {
       room = await this.getOrCreateRoom(roomKey, title);
     } catch (dbErr) {
-      console.error('[api] 数据库操作失败:', dbErr);
+      console.error('[RecorderService] 数据库操作失败:', dbErr);
       return { error: true, status: 200, code: 500, message: '数据库操作失败' };
     }
 
     if (room.monitoring_enabled === false) {
-      console.log('[api] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
+      console.log('[RecorderService] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
       return {
         error: true,
         status: 200,
@@ -737,7 +694,7 @@ class RecorderService {
     }
 
     if (room.status === 'recording' || room.status === 'paused') {
-      console.log('[api] 录制请求被拒: 房间状态=' + room.status + ' (room=' + room.id + ')');
+      console.log('[RecorderService] 录制请求被拒: 房间状态=' + room.status + ' (room=' + room.id + ')');
       return {
         error: true,
         status: 200,
@@ -760,7 +717,7 @@ class RecorderService {
     const downloader = await getActiveDownloader(room.polling_platform);
     const template = room.filename_template || '{room_name}_{datetime}';
     const segmentDuration = room.segment_duration || 0;
-    const useSegment = segmentDuration > 0;
+    const useSegment = segmentDuration > 0 && downloader.isSegment();
 
     const outputFilePattern = this.generateOutputPath(
       downloader,
@@ -777,8 +734,13 @@ class RecorderService {
     console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
 
     const sessionStart = new Date();
-    
-    const { process: dlProcess, logPath, renameLog } = recordingManager.startRecordingProcess({
+
+    // 先启动下载器模块的录制进程
+    const {
+      process: dlProcess,
+      logPath,
+      renameLog,
+    } = recordingManager.startRecordingProcess({
       downloader,
       streamUrl: url,
       outputPath: outputFilePattern,
@@ -793,6 +755,7 @@ class RecorderService {
     let sessionId = null;
 
     try {
+      // 然后新增一个录制会话
       sessionId = await recordingManager.updateSessionToDatabase({
         room,
         outputPath: outputFilePattern,
@@ -805,15 +768,19 @@ class RecorderService {
         streamUrl: url,
       });
 
+      // 返回新增的会话ID
       renameLog(sessionId);
-      console.log(`[api] 日志文件: ${logPath}`);
+      console.log(`[RecorderService] 日志文件: ${logPath}`);
     } catch (dbErr) {
-      console.error('[api] 更新数据库状态失败:', dbErr);
+      console.error('[RecorderService] 更新数据库状态失败:', dbErr);
       dlProcess.kill();
       return { error: true, status: 500, code: 500, message: '更新数据库状态失败' };
     }
 
-    if (!useSegment) {
+    // 不分段的模板直接就是文件名
+    // 有的下载器不支持分段录制，也是直接插入文件名
+    const isEngineSegment = downloader.isSegment();
+    if (!useSegment || !isEngineSegment) {
       await recordingManager.initNonSegmentFileRecord({
         sessionId,
         room,
@@ -830,11 +797,15 @@ class RecorderService {
       downloader: downloader.name,
     });
 
-    const finishSessionWrapper = async (code, engine) => {
-      if (!engine) engine = downloader;
+    const finishSessionWrapper = async (code, signal) => {
+      if (code !== 0) {
+        console.error(`FFmpeg 下载失败，退出码: ${code}, 信号: ${signal}`);
+      } else {
+        console.log('FFmpeg 下载完成');
+      }
       await this.finishSession({
         code,
-        engine,
+        engine: downloader,
         room,
         sessionId,
         sessionStart,
@@ -847,9 +818,10 @@ class RecorderService {
 
     dlProcess.on('close', finishSessionWrapper);
 
-    if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
-      dlProcess.emit('close', dlProcess.exitCode);
-    }
+    // 风险代码，先注释掉
+    // if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
+    //   dlProcess.emit('close', dlProcess.exitCode);
+    // }
 
     notify.recordingStart(room.room_name || title, caption, room.room_url);
 
@@ -863,7 +835,7 @@ class RecorderService {
 
   /**
    * 获取最大恢复重试次数配置
-   * 
+   *
    * @returns {Promise<number>} 最大重试次数
    */
   static async getMaxResumeRetries() {
@@ -876,7 +848,7 @@ class RecorderService {
 
   /**
    * 尝试恢复中断的录制会话
-   * 
+   *
    * @param {Object} session - 会话信息对象
    */
   static async tryResumeSession(session) {
@@ -945,7 +917,3 @@ class RecorderService {
 }
 
 module.exports = RecorderService;
-
-
-
-
