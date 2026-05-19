@@ -225,9 +225,9 @@ class RecorderService {
       ]);
       await this.delRoomCache(room.room_url);
 
-      // 设置录制冷却期（60秒），防止流地址失效导致频繁重启录制
+      // 设置录制冷却期（120秒），防止流地址失效导致频繁重启录制
       const cooldownKey = `polling:recording_cooldown:${room.id}`;
-      await redis.set(cooldownKey, Date.now().toString(), { EX: 60 }).catch(() => {});
+      await redis.set(cooldownKey, Date.now().toString(), { EX: 120 }).catch(() => {});
 
       if (useSegment) {
         let segmentFiles = [];
@@ -277,9 +277,21 @@ class RecorderService {
             fileSize = fs.statSync(filePath).size;
           } catch (_) {}
 
-          // 只有大小>0的文件才处理
+          // 小于阈值的文件直接删除，不进行保存和转码
+          if (fileSize > 0 && fileSize < thresholdBytes) {
+            try {
+              fs.unlinkSync(filePath);
+              console.log(
+                `[finishSession] 碎片文件已删除: ${path.basename(filePath)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+              );
+            } catch (err) {
+              console.error(`[finishSession] 删除碎片文件失败: ${filePath}`, err.message);
+            }
+            continue;
+          }
+
+          // 只有大于等于阈值的文件才保留入库
           if (fileSize > 0) {
-            // 刚刚结束的录制会话，不管文件多小，都保留入库（碎片过滤只在看门狗后台清理时生效）
             totalSize += fileSize;
 
             await pool.query(
@@ -297,21 +309,34 @@ class RecorderService {
             newFileCount++;
 
             // 只有大于阈值的FLV文件才加入转码队列
-            if (fileSize >= thresholdBytes && filePath.endsWith('.flv') && !segmentPathsForTranscode.includes(filePath)) {
+            if (
+              fileSize >= thresholdBytes &&
+              filePath.endsWith('.flv') &&
+              !segmentPathsForTranscode.includes(filePath)
+            ) {
               flvFilesToTranscode.push(filePath);
             }
           }
         }
 
-        // 处理最后一个分段：确保它被加入转码队列（不受碎片阈值限制）
+        // 处理最后一个分段：确保它被加入转码队列（但仍要检查碎片阈值）
         // 使用 lastSegmentPath（当有多个分段时） 或 currentSegmentPath（当只有一段时）
         const actualLastSegment = lastSegmentPath || currentSegmentPath;
         if (actualLastSegment && /\.flv$/i.test(actualLastSegment)) {
-          if (!segmentPathsForTranscode.includes(actualLastSegment) && !flvFilesToTranscode.includes(actualLastSegment)) {
+          if (
+            !segmentPathsForTranscode.includes(actualLastSegment) &&
+            !flvFilesToTranscode.includes(actualLastSegment)
+          ) {
             try {
               const stat = fs.statSync(actualLastSegment);
-              if (stat.size > 0) {
+              if (stat.size > 0 && stat.size >= thresholdBytes) {
                 flvFilesToTranscode.push(actualLastSegment);
+              } else if (stat.size > 0 && stat.size < thresholdBytes) {
+                // 最后一个分段小于阈值也删除
+                fs.unlinkSync(actualLastSegment);
+                console.log(
+                  `[finishSession] 最后一个分段是碎片文件，已删除: ${path.basename(actualLastSegment)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+                );
               }
             } catch (_) {}
           }
@@ -387,102 +412,128 @@ class RecorderService {
         }
       } else {
         let fileSize = 0;
+        let fileExists = false;
         try {
           const stat = fs.statSync(outputFilePattern);
           fileSize = stat.size;
+          fileExists = true;
         } catch (statErr) {
           console.warn(`[api] 无法获取文件大小: ${outputFilePattern}`, statErr.message);
         }
 
-        const existingRec = reuseSession
-          ? await pool.query('SELECT id FROM recordings WHERE session_id = $1 AND file_path = $2', [
-              sessionId,
-              outputFilePattern,
-            ])
-          : null;
+        // 获取阈值
+        const thresholdValue = await this.getSetting('filtering_threshold', '10');
+        const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
-        if (existingRec?.rows.length > 0) {
-          await pool.query(
-            `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
-            [fileSize, existingRec.rows[0].id]
-          );
-        } else {
-          await pool.query(
-            `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
-             VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
-            [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
-          );
-          await pool.query(
-            `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
-             VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
-             ON CONFLICT (file_path) DO NOTHING`,
-            [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern), fileSize]
-          );
+        // 如果文件小于阈值，直接删除
+        if (fileExists && fileSize > 0 && fileSize < thresholdBytes) {
+          try {
+            fs.unlinkSync(outputFilePattern);
+            console.log(
+              `[finishSession] 非分段录制碎片文件已删除: ${path.basename(outputFilePattern)} (${(fileSize / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+            );
+            fileSize = 0;
+            fileExists = false;
+          } catch (err) {
+            console.error(`[finishSession] 删除非分段碎片文件失败: ${outputFilePattern}`, err.message);
+          }
         }
 
-        if (sessionId) {
-          let sessionStatus = 'completed';
-          if (fileSize === 0 && code !== 0) {
-            sessionStatus = 'interrupted';
-          }
+        if (fileExists && fileSize > 0) {
+          const existingRec = reuseSession
+            ? await pool.query('SELECT id FROM recordings WHERE session_id = $1 AND file_path = $2', [
+                sessionId,
+                outputFilePattern,
+              ])
+            : null;
 
-          if (reuseSession) {
+          if (existingRec?.rows.length > 0) {
             await pool.query(
-              `UPDATE recording_sessions
-               SET ended_at = NOW(), status = $1,
-                   total_segments = total_segments + 1,
-                   total_size = total_size + $2
-               WHERE id = $3 AND status = 'recording'`,
-              [sessionStatus, fileSize, sessionId]
+              `UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2`,
+              [fileSize, existingRec.rows[0].id]
             );
-            // 复用会话：只要有累积内容（含前几轮），就视为完成
-            if (sessionStatus === 'interrupted') {
-              const accumulated = await pool.query(
-                'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
-                [sessionId]
-              );
-              if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
-                await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
-              }
-            }
           } else {
             await pool.query(
-              `UPDATE recording_sessions
-               SET ended_at = NOW(), status = $1,
-                   total_segments = 1,
-                   total_size = $2
-               WHERE id = $3 AND status = 'recording'`,
-              [sessionStatus, fileSize, sessionId]
+              `INSERT INTO recordings (session_id, segment_index, room_url, file_path, file_size, started_at, ended_at, status)
+               VALUES ($1, 0, $2, $3, $4, $5, NOW(), 'completed')`,
+              [sessionId, room.room_url, outputFilePattern, fileSize, sessionStart]
+            );
+            await pool.query(
+              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, completed_at)
+               VALUES ($1, $2, $3, $4, $5, 'completed', NOW())
+               ON CONFLICT (file_path) DO NOTHING`,
+              [sessionId, room.room_url, outputFilePattern, path.basename(outputFilePattern), fileSize]
             );
           }
-          await pool.query(
-            `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
-               WHERE session_id = $2 AND file_path = $3`,
-            [fileSize, sessionId, outputFilePattern]
-          );
-        }
 
-        if (/\.flv$/i.test(outputFilePattern)) {
-          const autoTranscode = await this.getSetting('auto_transcode', 'true');
-          if (autoTranscode === 'true') {
-            const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
-            transcodeQueue
-              .enqueue({
-                flvPath: outputFilePattern,
-                mp4Path: mp4Path,
-                sessionId: sessionId,
-              })
-              .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+          if (sessionId) {
+            let sessionStatus = 'completed';
+            if (fileSize === 0 && code !== 0) {
+              sessionStatus = 'interrupted';
+            }
+
+            if (reuseSession) {
+              await pool.query(
+                `UPDATE recording_sessions
+                 SET ended_at = NOW(), status = $1,
+                     total_segments = total_segments + 1,
+                     total_size = total_size + $2
+                 WHERE id = $3 AND status = 'recording'`,
+                [sessionStatus, fileSize, sessionId]
+              );
+              // 复用会话：只要有累积内容（含前几轮），就视为完成
+              if (sessionStatus === 'interrupted') {
+                const accumulated = await pool.query(
+                  'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
+                  [sessionId]
+                );
+                if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
+                  await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
+                }
+              }
+            } else {
+              await pool.query(
+                `UPDATE recording_sessions
+                 SET ended_at = NOW(), status = $1,
+                     total_segments = 1,
+                     total_size = $2
+                 WHERE id = $3 AND status = 'recording'`,
+                [sessionStatus, fileSize, sessionId]
+              );
+            }
+            await pool.query(
+              `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+               WHERE session_id = $2 AND file_path = $3`,
+              [fileSize, sessionId, outputFilePattern]
+            );
           }
-          const completedSession = {
-            id: sessionId,
-            room_url: room.room_url,
-            room_name: room.room_name,
-            started_at: sessionStart,
-          };
-          UploadService.findAndAutoUpload(completedSession).catch((err) =>
-            console.error('[自动投稿] 异常:', err.message)
-          );
+
+          if (/\.flv$/i.test(outputFilePattern)) {
+            const autoTranscode = await this.getSetting('auto_transcode', 'true');
+            if (autoTranscode === 'true') {
+              // 只有大于等于阈值的文件才转码
+              if (fileSize >= thresholdBytes) {
+                const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
+                transcodeQueue
+                  .enqueue({
+                    flvPath: outputFilePattern,
+                    mp4Path: mp4Path,
+                    sessionId: sessionId,
+                  })
+                  .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+              }
+            }
+            const completedSession = {
+              id: sessionId,
+              room_url: room.room_url,
+              room_name: room.room_name,
+              started_at: sessionStart,
+            };
+            // 只有有文件存在时才触发自动投稿
+            UploadService.findAndAutoUpload(completedSession).catch((err) =>
+              console.error('[自动投稿] 异常:', err.message)
+            );
+          }
         }
       }
 
@@ -742,8 +793,14 @@ class RecorderService {
                   }
                   if (stat.size < thresholdBytes) {
                     console.log(
-                      `[边下边转码] 文件小于碎片阈值，跳过: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+                      `[边下边转码] 文件小于碎片阈值，删除: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
                     );
+                    // 删除小于阈值的碎片文件
+                    try {
+                      fs.unlinkSync(lastSegmentPath);
+                    } catch (err) {
+                      console.error(`[边下边转码] 删除碎片文件失败: ${lastSegmentPath}`, err.message);
+                    }
                     return;
                   }
 
