@@ -2,19 +2,15 @@
 
 ## bugfix: 虎牙直播间录制bug
 
-- 虎牙直播间轮询到的直播流无法使用默认的ffmpeg命令下载，下载时会变成很多文件碎片。
-- 导致转码 transcoder 的碎片日志也很多，每一个小文件都被转码了。实际需求是：录制结束状态的小于系统设置中阈值的文件，直接删除，不进行任何转码或保存数据的操作。
-- 虎牙直播间轮询录制时会生成很多个录制会话，时长均很短，但没有一个是正常的录制会话。
+单独为 huya 平台使用 python 下载器，实现方式参考另一个项目：
 
-需要排查原因。
+- 项目目录： /Users/virola/code/projects/completed/DouyinLiveRecorder
 
-- 是否可能是快手的直播流和虎牙直播流的下载方式不一样，考虑是否需要区别处理？
+这是 DouyinLiveRecorder 的源码，它用比较简单的python实现了虎牙直播的下载。
 
-参考项目：
+注意：
 
-- 云端工作区的另一个直播录制+投稿项目 `scriptsmay/biliup`
-- 代码结构比较简单的 python 开发的 github 仓库： [`ihmily/DouyinLiveRecorder`](https://github.com/ihmily/DouyinLiveRecorder)
-- 如果有需要可以看一下其他已完成开发的项目是怎么实现直播流下载的业务实现的？
+- 输出文件的命名要按照直播间设定的文件名模板；
 
 ## 需要确认和评估方案：看门狗定时器和轮询定时器是否冲突？
 

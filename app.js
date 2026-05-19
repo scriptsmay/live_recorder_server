@@ -29,7 +29,7 @@ const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const watchdog = require('./lib/core/watchdog');
 const { pollingManager } = require('./lib/core/polling');
-const RecorderService = require('./services/RecorderService');
+// const RecorderService = require('./services/RecorderService');
 const transcodeQueue = require('./lib/core/TranscodeQueue');
 
 // ──────────────────────────────────────────────
@@ -82,7 +82,8 @@ async function init() {
     await redis.del(key);
   }
 
-  await RecorderService.cleanupStaleRecordings();
+  // TODO: 测试一下，如果不执行开局的录制会话清理，会是什么效果？
+  // await RecorderService.cleanupStaleRecordings();
   await transcodeQueue.init();
   watchdog.start();
   await pollingManager.start();
