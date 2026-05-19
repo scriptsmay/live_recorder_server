@@ -2,9 +2,10 @@ name: Docker Image CI
 
 on:
   push:
-    branches: ['main']
-  push:
-    tags: ['v*']
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
 
 # 定义权限，必须有 write 权限才能推送到 GHCR
 permissions:
