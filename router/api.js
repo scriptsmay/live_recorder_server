@@ -373,7 +373,7 @@ router.get('/recordings/:id/stream', async (req, res) => {
     const stat = fs.statSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
-    // 如果不是mp4文件，就直接拒绝
+    // 如果不是mp4, 就直接拒绝(测试过 ts 也不行)
     if (ext !== '.mp4') {
       return res.status(400).json({ status: 'Error', message: '仅支持播放mp4文件' });
     }

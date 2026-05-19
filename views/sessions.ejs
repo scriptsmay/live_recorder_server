@@ -125,7 +125,14 @@
 
     const playBtn = e.target.closest('.playBtn');
     if (playBtn) {
-      openVideoPlayer('/api/recordings/' + playBtn.dataset.recordingId + '/stream', playBtn.dataset.filename || '视频预览', playBtn.dataset.ext);
+      const res = await fetch('/api/recordings/' + playBtn.dataset.recordingId + '/stream');
+      const json = await res.json();
+      if (res.ok) {
+        openVideoPlayer('/api/recordings/' + playBtn.dataset.recordingId + '/stream', playBtn.dataset.filename || '视频预览', playBtn.dataset.ext);
+      } else {
+        toast(json.message);
+      }
+      
       return;
     }
 

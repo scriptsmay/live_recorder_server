@@ -137,7 +137,7 @@ class RoomService {
       const files = fs.readdirSync(outDir);
       candidates = files
         .filter((f) => {
-          if (!/\.(flv|mp4)$/i.test(f)) return false;
+          if (!/\.(flv|mp4|ts)$/i.test(f)) return false;
           const prefix = nameWithoutExt.replace(/%[YmdHMS]/g, '.*');
           const regex = new RegExp('^' + prefix.replace(/\*/g, '.*') + '.*' + ext.replace(/\./g, '\\.') + '$');
           return regex.test(f);

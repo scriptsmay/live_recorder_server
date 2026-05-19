@@ -261,10 +261,10 @@ class UploadService {
     }
 
     for (const fp of paths) {
-      if (!/\.flv$/i.test(fp)) continue;
+      if (!/\.(flv|ts)$/i.test(fp)) continue;
       try {
         if (!fs.existsSync(fp)) continue;
-        const mp4 = fp.replace(/\.flv$/i, '.mp4');
+        const mp4 = fp.replace(/\.(flv|ts)$/i, '.mp4');
         if (!fs.existsSync(mp4)) return false;
       } catch {
         return false;

@@ -222,7 +222,7 @@ async function cleanup() {
     const tracked = (await pool.query('SELECT file_path FROM recording_files')).rows.map((r) => r.file_path);
     let count = 0;
     for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
-      if (!/\.(flv|mp4)$/i.test(f)) continue;
+      if (!/\.(flv|mp4|ts)$/i.test(f)) continue;
       const fp = path.join(DOWNLOAD_DIR, f);
       if (tracked.includes(fp)) continue;
       let size = 0;

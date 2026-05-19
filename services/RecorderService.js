@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const { SUPPORTED_TRANSCODE_EXT } = require('../config/config');
 
 const { templateToStrftime, generateFilename } = require('../lib/utils/tool');
 
@@ -596,11 +597,11 @@ class RecorderService {
         );
       }
 
-      if (/\.flv$/i.test(outputFilePattern)) {
+      if (SUPPORTED_TRANSCODE_EXT.test(outputFilePattern)) {
         const autoTranscode = await this.getSetting('auto_transcode', 'true');
         if (autoTranscode === 'true') {
           if (fileSize >= thresholdBytes) {
-            const mp4Path = outputFilePattern.replace(/\.flv$/i, '.mp4');
+            const mp4Path = outputFilePattern.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
             transcodeQueue
               .enqueue({
                 flvPath: outputFilePattern,
@@ -610,15 +611,15 @@ class RecorderService {
               .catch((err) => console.error('[转码队列] 入队异常:', err.message));
           }
         }
-        const completedSession = {
-          id: sessionId,
-          room_url: room.room_url,
-          room_name: room.room_name,
-          started_at: sessionStart,
-        };
-        UploadService.findAndAutoUpload(completedSession).catch((err) =>
-          console.error('[自动投稿] 异常:', err.message)
-        );
+        // const completedSession = {
+        //   id: sessionId,
+        //   room_url: room.room_url,
+        //   room_name: room.room_name,
+        //   started_at: sessionStart,
+        // };
+        // UploadService.findAndAutoUpload(completedSession).catch((err) =>
+        //   console.error('[自动投稿] 异常:', err.message)
+        // );
       }
     }
   }
@@ -779,8 +780,13 @@ class RecorderService {
       // 业务逻辑统一监听 'segment' 事件
       downloader.on('segment', async (filePath) => {
         console.log(`[RecorderService] 监测到文件切片: ${filePath}`);
-        // const realPath = path.resolve(filePath);
         // 这里处理你的分片入库逻辑
+        await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
+      });
+
+      downloader.on('file_created', async (filePath) => {
+        console.log(`[RecorderService] 监测到文件创建: ${filePath}`);
+        // 这里处理你的文件创建逻辑
         await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
       });
 
