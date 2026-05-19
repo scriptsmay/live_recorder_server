@@ -339,32 +339,22 @@ class UploadService {
       }
       if (!(await this.checkUploadLimit(session.id))) return;
 
-      const existingRecords = await pool.query(
-        'SELECT id, status FROM upload_records WHERE session_id = $1 LIMIT 1',
-        [session.id]
-      );
+      const existingRecords = await pool.query('SELECT id, status FROM upload_records WHERE session_id = $1 LIMIT 1', [
+        session.id,
+      ]);
       if (existingRecords.rows.length > 0) {
-        console.log(
-          `[投稿] 会话 ${session.id} 已有投稿记录，跳过自动投稿`
-        );
+        console.log(`[投稿] 会话 ${session.id} 已有投稿记录，跳过自动投稿`);
         return;
       }
 
-      const sess = await pool.query(
-        'SELECT status FROM recording_sessions WHERE id = $1',
-        [session.id]
-      );
+      const sess = await pool.query('SELECT status FROM recording_sessions WHERE id = $1', [session.id]);
       if (sess.rows.length === 0 || sess.rows[0].status !== 'completed') {
-        console.log(
-          `[投稿] 会话 ${session.id} 状态非 completed (${sess.rows[0]?.status || '不存在'})，跳过自动投稿`
-        );
+        console.log(`[投稿] 会话 ${session.id} 状态非 completed (${sess.rows[0]?.status || '不存在'})，跳过自动投稿`);
         return;
       }
 
       if (!(await this.isSessionTranscodeComplete(session.id))) {
-        console.log(
-          `[投稿] 会话 ${session.id} 转码未完成，跳过自动投稿（等待看门狗兜底）`
-        );
+        console.log(`[投稿] 会话 ${session.id} 转码未完成，跳过自动投稿（等待看门狗兜底）`);
         return;
       }
 

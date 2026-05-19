@@ -237,9 +237,9 @@ if (isLive && room.status !== 'recording' && (result.streamUrl || result.streamI
 
 | 教训                       | 说明                                               |
 | -------------------------- | -------------------------------------------------- |
-| **不要完全依赖缓存状态**    | 缓存可能过期或不准确，始终以实际状态为准           |
-| **结合多重状态判断**        | 同时检查缓存状态和实际状态，避免被单一状态误导     |
-| **状态更新后重置缓存状态**  | 房间停止录制后，应该重置相关缓存，避免影响下次判断 |
+| **不要完全依赖缓存状态**   | 缓存可能过期或不准确，始终以实际状态为准           |
+| **结合多重状态判断**       | 同时检查缓存状态和实际状态，避免被单一状态误导     |
+| **状态更新后重置缓存状态** | 房间停止录制后，应该重置相关缓存，避免影响下次判断 |
 
 ## 轮询录制循环启动问题：录制冷却期机制
 
@@ -288,11 +288,11 @@ const currentStatus = freshRoom.rows[0]?.status;
 
 ### 经验总结
 
-| 教训                     | 说明                                                                       |
-| ------------------------ | -------------------------------------------------------------------------- |
-| **录制后需要冷却期**     | 录制失败或退出后，应该等待一段时间再重新启动，避免频繁重启                  |
-| **结合多重状态判断**      | 同时检查缓存状态和数据库状态，避免被单一状态误导                            |
-| **流地址有时效性**        | 虎牙等平台的流地址可能需要不断刷新，录制过程中需要处理流中断的情况          |
+| 教训                 | 说明                                                               |
+| -------------------- | ------------------------------------------------------------------ |
+| **录制后需要冷却期** | 录制失败或退出后，应该等待一段时间再重新启动，避免频繁重启         |
+| **结合多重状态判断** | 同时检查缓存状态和数据库状态，避免被单一状态误导                   |
+| **流地址有时效性**   | 虎牙等平台的流地址可能需要不断刷新，录制过程中需要处理流中断的情况 |
 
 ## 自动投稿缺乏完整性检查：在转码完成前就触发投稿
 
@@ -304,12 +304,12 @@ const currentStatus = freshRoom.rows[0]?.status;
 
 系统中有 4 个自动投稿触发点：
 
-| 触发点 | 位置 | 调用时机 | 会话状态 | 转码完成 | 风险 |
-|--------|------|----------|----------|----------|------|
-| finishSession (分段) | RecorderService.js:381 | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
-| finishSession (单FLV) | RecorderService.js:471 | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
-| tryResumeSession | RecorderService.js:1095 | 恢复会话完成 | completed ✅ | ❌ 刚入队 | 上传 FLV |
-| scanPendingAutoUpload | UploadService.js:269 | 看门狗定时 | completed ✅ | ✅ 已检查 | **安全** |
+| 触发点                | 位置                    | 调用时机     | 会话状态     | 转码完成  | 风险     |
+| --------------------- | ----------------------- | ------------ | ------------ | --------- | -------- |
+| finishSession (分段)  | RecorderService.js:381  | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| finishSession (单FLV) | RecorderService.js:471  | 录制结束立即 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| tryResumeSession      | RecorderService.js:1095 | 恢复会话完成 | completed ✅ | ❌ 刚入队 | 上传 FLV |
+| scanPendingAutoUpload | UploadService.js:269    | 看门狗定时   | completed ✅ | ✅ 已检查 | **安全** |
 
 **三个 `findAndAutoUpload` 触发点都在转码完成之前就触发，上传的是未转码的 FLV 文件。**
 
@@ -343,24 +343,24 @@ static async findAndAutoUpload(session) {
 
 ### 投稿安全保障矩阵
 
-| 检查项 | findAndAutoUpload | scanPendingAutoUpload |
-|--------|:---:|:---:|
-| 会话状态 = completed | ✅ 新增 | ✅ SQL WHERE |
-| 转码完成 | ✅ 新增 | ✅ isSessionTranscodeComplete |
-| 无已有投稿记录 | ✅ 已有 | ✅ NOT EXISTS SQL |
-| 投稿次数限制 | ✅ 已有 | ✅ checkUploadLimit |
-| 碎片大小过滤 | ✅ executeUpload 内 | ✅ executeUpload 内 |
-| 文件存在性 | ✅ executeUpload 内 | ✅ executeUpload 内 |
+| 检查项               |  findAndAutoUpload  |     scanPendingAutoUpload     |
+| -------------------- | :-----------------: | :---------------------------: |
+| 会话状态 = completed |       ✅ 新增       |         ✅ SQL WHERE          |
+| 转码完成             |       ✅ 新增       | ✅ isSessionTranscodeComplete |
+| 无已有投稿记录       |       ✅ 已有       |       ✅ NOT EXISTS SQL       |
+| 投稿次数限制         |       ✅ 已有       |      ✅ checkUploadLimit      |
+| 碎片大小过滤         | ✅ executeUpload 内 |      ✅ executeUpload 内      |
+| 文件存在性           | ✅ executeUpload 内 |      ✅ executeUpload 内      |
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
-| **投稿必须等转码** | FLV 文件不能直接投稿，必须转为 MP4 后再上传 |
-| **即时触发 ≠ 安全触发** | 录制结束立即触发看似快捷，实则跳过了关键的前置条件 |
-| **看门狗模式更安全** | `scanPendingAutoUpload` 的定时扫描模式天然保证了前置条件 |
-| **多重检查防竞赛** | 同时检查"已有记录"和"转码完成"避免并发重复投稿 |
-| **兜底机制分层设计** | 即时触发（快速路径）+ 看门狗（兜底保障），但快速路径也必须满足所有条件 |
+| 教训                    | 说明                                                                   |
+| ----------------------- | ---------------------------------------------------------------------- |
+| **投稿必须等转码**      | FLV 文件不能直接投稿，必须转为 MP4 后再上传                            |
+| **即时触发 ≠ 安全触发** | 录制结束立即触发看似快捷，实则跳过了关键的前置条件                     |
+| **看门狗模式更安全**    | `scanPendingAutoUpload` 的定时扫描模式天然保证了前置条件               |
+| **多重检查防竞赛**      | 同时检查"已有记录"和"转码完成"避免并发重复投稿                         |
+| **兜底机制分层设计**    | 即时触发（快速路径）+ 看门狗（兜底保障），但快速路径也必须满足所有条件 |
 
 ## 自动投稿竞态条件：竞态导致同一会话重复投稿
 
@@ -398,15 +398,15 @@ id=17: 2026-05-19 09:31:03.692  ← 仅差 9ms
 ```javascript
 // 之前：进程已退出时直接调用一次
 if (dlProcess.exitCode !== null) {
-  finishSessionWrapper(exitCode);  // 直接执行
+  finishSessionWrapper(exitCode); // 直接执行
 } else {
-  dlProcess.on('close', finishSessionWrapper);  // 异步监听
+  dlProcess.on('close', finishSessionWrapper); // 异步监听
 }
 
 // 之后：先监听再手动触发
-dlProcess.on('close', finishSessionWrapper);  // 注册监听器
+dlProcess.on('close', finishSessionWrapper); // 注册监听器
 if (dlProcess.exitCode !== null) {
-  dlProcess.emit('close', exitCode);  // 手动触发
+  dlProcess.emit('close', exitCode); // 手动触发
 }
 ```
 
@@ -434,17 +434,18 @@ static async findAndAutoUpload(session) {
 ```
 
 `SET NX EX` 保证：
+
 - 第一个调用获得锁 → 继续执行
 - 第二个调用获取锁失败 → 直接跳过
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
-| **异步并发需要锁** | 数据库检查不是原子操作，必须用 Redis 分布式锁兜底 |
-| **先监听再触发有风险** | 事件处理器的注册时机与进程退出时机存在竞态窗口 |
-| **锁的 TTL 要够长** | 300 秒 TTL 确保投稿流程（包括转码检查）有充足时间完成 |
-| **SET NX EX 是原子操作** | Redis 原生命令保证锁获取的原子性，无需 Lua 脚本 |
+| 教训                     | 说明                                                  |
+| ------------------------ | ----------------------------------------------------- |
+| **异步并发需要锁**       | 数据库检查不是原子操作，必须用 Redis 分布式锁兜底     |
+| **先监听再触发有风险**   | 事件处理器的注册时机与进程退出时机存在竞态窗口        |
+| **锁的 TTL 要够长**      | 300 秒 TTL 确保投稿流程（包括转码检查）有充足时间完成 |
+| **SET NX EX 是原子操作** | Redis 原生命令保证锁获取的原子性，无需 Lua 脚本       |
 
 ## 录制中断却通知"录制完成"：通知与状态不同步
 
@@ -486,11 +487,12 @@ notify.recordingComplete(...);  // ← 始终发送"录制完成"，不管实际
 ```javascript
 async function recordingComplete(roomName, fileCount, totalMB, sessionId, roomUrl, status = 'completed') {
   if (status === 'interrupted') {
-    send('⚠️ 录制中断',
-      `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}\n\n录制异常中断，文件可能不完整`);
+    send(
+      '⚠️ 录制中断',
+      `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}\n\n录制异常中断，文件可能不完整`
+    );
   } else {
-    send('✅ 录制完成',
-      `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}`);
+    send('✅ 录制完成', `直播间：${roomName}\n文件：${fileCount} 段\n大小：${totalMB} MB\n会话ID：${sessionId}`);
   }
 }
 ```
@@ -499,21 +501,20 @@ async function recordingComplete(roomName, fileCount, totalMB, sessionId, roomUr
 
 ```javascript
 // 从数据库查询实际更新后的状态，而不是使用局部变量（防止 UPDATE 被 WHERE 条件跳过）
-const sess = await pool.query(
-  'SELECT status, total_segments, total_size FROM recording_sessions WHERE id = $1',
-  [sessionId]
-);
+const sess = await pool.query('SELECT status, total_segments, total_size FROM recording_sessions WHERE id = $1', [
+  sessionId,
+]);
 const status = sess.rows[0]?.status || 'completed';
 notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url, status);
 ```
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
-| **通知和状态必须同步** | 不能在 DB 里写 interrupted，通知却说 completed |
+| 教训                   | 说明                                                        |
+| ---------------------- | ----------------------------------------------------------- |
+| **通知和状态必须同步** | 不能在 DB 里写 interrupted，通知却说 completed              |
 | **查询最新状态再通知** | 从 DB 重新查询状态，避免 UPDATE 被 WHERE 条件跳过导致不一致 |
-| **默认参数保持兼容** | `status = 'completed'` 作为默认值，不影响任何已有调用 |
+| **默认参数保持兼容**   | `status = 'completed'` 作为默认值，不影响任何已有调用       |
 
 ## 会话复用（reuseSession）导致正常录制被误判为中断
 
@@ -528,17 +529,15 @@ notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url, sta
 ```javascript
 let sessionStatus = 'completed';
 if (fileSize === 0 && code !== 0) {
-    sessionStatus = 'interrupted'; // ← 只看当前批次
+  sessionStatus = 'interrupted'; // ← 只看当前批次
 }
 
 // reuseSession 时 UPDATE 用当前批次的状态覆盖
-await pool.query(
-    `UPDATE recording_sessions SET status = $1, ... WHERE id = $2`,
-    [sessionStatus, sessionId]
-);
+await pool.query(`UPDATE recording_sessions SET status = $1, ... WHERE id = $2`, [sessionStatus, sessionId]);
 ```
 
 **问题链条**：
+
 ```
 第1轮: 录了 50MB → total_size=50MB, 会话仍在 recording 状态
 第2轮: 录了 30MB → total_size=80MB, 会话仍在 recording 状态
@@ -553,17 +552,12 @@ await pool.query(
 
 ```javascript
 if (reuseSession && sessionStatus === 'interrupted') {
-    const accumulated = await pool.query(
-        'SELECT total_segments, total_size FROM recording_sessions WHERE id = $1',
-        [sessionId]
-    );
-    if ((accumulated.rows[0]?.total_segments || 0) > 0 ||
-        (accumulated.rows[0]?.total_size || 0) > 0) {
-        await pool.query(
-            `UPDATE recording_sessions SET status = 'completed' WHERE id = $1`,
-            [sessionId]
-        );
-    }
+  const accumulated = await pool.query('SELECT total_segments, total_size FROM recording_sessions WHERE id = $1', [
+    sessionId,
+  ]);
+  if ((accumulated.rows[0]?.total_segments || 0) > 0 || (accumulated.rows[0]?.total_size || 0) > 0) {
+    await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [sessionId]);
+  }
 }
 ```
 
@@ -571,11 +565,11 @@ if (reuseSession && sessionStatus === 'interrupted') {
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
-| **复用会话用累积值判断** | `reuseSession` 时状态不能只看增量，要看累积量 |
-| **增量状态 ≠ 整体状态** | 每批文件的新增状态与整个会话的最终状态是两回事 |
-| **回查数据库修正状态** | UPDATE 后回查累积值，必要时用二次 UPDATE 修正 |
+| 教训                     | 说明                                           |
+| ------------------------ | ---------------------------------------------- |
+| **复用会话用累积值判断** | `reuseSession` 时状态不能只看增量，要看累积量  |
+| **增量状态 ≠ 整体状态**  | 每批文件的新增状态与整个会话的最终状态是两回事 |
+| **回查数据库修正状态**   | UPDATE 后回查累积值，必要时用二次 UPDATE 修正  |
 
 ## 续播时文件名错误：`_resume` 后缀无意义
 
@@ -611,10 +605,10 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
+| 教训                     | 说明                                              |
+| ------------------------ | ------------------------------------------------- |
 | **文件名不应暗示"续传"** | FFmpeg 不支持文件续传，`_resume` 后缀让文件名误导 |
-| **模板优先原则** | 始终用数据库配置的文件名模板，保持一致性 |
+| **模板优先原则**         | 始终用数据库配置的文件名模板，保持一致性          |
 
 ## 全面碎片/脏数据审计：修复 6 个隐藏风险
 
@@ -631,6 +625,7 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 **修复**: 统一 key 格式为 `active_task:${roomUrl}`。
 
 代码位置：
+
 - [RoomService.js:L107](file:///Users/virola/code/projects/live_recorder_server/services/RoomService.js#L107)
 - [RoomService.js:L175](file:///Users/virola/code/projects/live_recorder_server/services/RoomService.js#L175)
 
@@ -638,11 +633,13 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 
 **问题**: `transcode_processing_count` 计数器无 TTL，Node 进程崩溃（OOM、kill -9）后计数永久 +1 不恢复，导致转码队列并发槽永久阻塞。
 
-**修复**: 
+**修复**:
+
 - `decrementProcessingCount` 中 count ≤ 0 时删除 key
 - 启动时调用 `resetProcessingCount` 重置计数器
 
 代码位置：
+
 - [TranscodeQueue.js:L180-L195](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L180-L195)
 - [TranscodeQueue.js:L25](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L25)
 
@@ -653,6 +650,7 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 **修复**: 先注册 `close` handler，再检查是否已退出；已退出则手动 `emit('close')` 触发 handler。
 
 代码位置：
+
 - [RecorderService.js:L867-L870](file:///Users/virola/code/projects/live_recorder_server/services/RecorderService.js#L867-L870)
 
 #### 4. 启动清理遗漏 recording_files 状态更新
@@ -662,6 +660,7 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 **修复**: 同步更新 `recording_files SET status='interrupted'`。
 
 代码位置：
+
 - [RecorderService.js:L1198-L1203](file:///Users/virola/code/projects/live_recorder_server/services/RecorderService.js#L1198-L1203)
 
 #### 5. 碎片清理不递归子目录
@@ -671,6 +670,7 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 **修复**: 用 `fs.readdirSync` + `withFileTypes: true` 递归遍历所有子目录。
 
 代码位置：
+
 - [watchdog.js:L249-L262](file:///Users/virola/code/projects/live_recorder_server/lib/core/watchdog.js#L249-L262)
 
 #### 6. 转码失败残留孤儿 MP4
@@ -680,16 +680,17 @@ outputPath = path.join(DOWNLOAD_DIR, base);
 **修复**: 转码失败后 `fs.unlinkSync(mp4Path)` 清理残留产物。
 
 代码位置：
+
 - [TranscodeQueue.js:L133-L141](file:///Users/virola/code/projects/live_recorder_server/lib/core/TranscodeQueue.js#L133-L141)
 
 ### 未修复的低风险问题（保留观察）
 
-| 问题 | 风险 | 理由 |
-|------|------|------|
-| PollingManager 双重检查无锁 | 低 | 有 `isActiveTask` Redis 兜底，冲突仅产生 400 错误 |
-| .segments_*.txt 残留 | 低 | 文件极小（<1KB），不影响功能 |
-| scanActiveSegments 5 分钟窗口 | 低 | `finishSession` 已正常处理，看门狗仅作二次兜底 |
-| pause/resume 失败后状态不一致 | 低 | 极少触发，且看门狗最终会修正 |
+| 问题                          | 风险 | 理由                                              |
+| ----------------------------- | ---- | ------------------------------------------------- |
+| PollingManager 双重检查无锁   | 低   | 有 `isActiveTask` Redis 兜底，冲突仅产生 400 错误 |
+| .segments\_\*.txt 残留        | 低   | 文件极小（<1KB），不影响功能                      |
+| scanActiveSegments 5 分钟窗口 | 低   | `finishSession` 已正常处理，看门狗仅作二次兜底    |
+| pause/resume 失败后状态不一致 | 低   | 极少触发，且看门狗最终会修正                      |
 
 ## ffmpeg `+discardcorrupt` 导致虎牙直播流全变碎片文件
 
@@ -724,9 +725,9 @@ v1.0 (正常):                          216d46f (碎片):
 
 ### 经验总结
 
-| 教训 | 说明 |
-|------|------|
-| **ffmpeg 参数改一发动全身** | 看似无害的 flag 可能彻底改变流处理行为 |
-| **discardcorrupt ≠ 修复残缺流** | 它只是丢弃，不是修复。非标直播流中的数据被误判为 corruption，丢弃后流就断了 |
-| **err_detect 和 discardcorrupt 不是互补的** | err_detect 在解码层、discardcorrupt 在输入层——后者在前者之前就丢掉了数据 |
-| **回退到已知工作版本是最快修复** | 遇到参数导致的问题，优先比对 git 历史找到破坏性提交 |
+| 教训                                        | 说明                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| **ffmpeg 参数改一发动全身**                 | 看似无害的 flag 可能彻底改变流处理行为                                      |
+| **discardcorrupt ≠ 修复残缺流**             | 它只是丢弃，不是修复。非标直播流中的数据被误判为 corruption，丢弃后流就断了 |
+| **err_detect 和 discardcorrupt 不是互补的** | err_detect 在解码层、discardcorrupt 在输入层——后者在前者之前就丢掉了数据    |
+| **回退到已知工作版本是最快修复**            | 遇到参数导致的问题，优先比对 git 历史找到破坏性提交                         |

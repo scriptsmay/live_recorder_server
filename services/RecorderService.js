@@ -9,6 +9,7 @@ const transcoder = require('../lib/core/transcoder');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const UploadService = require('./UploadService');
 const notify = require('../lib/core/notify');
+const HuyaChecker = require('../lib/core/polling/HuyaChecker');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -225,9 +226,18 @@ class RecorderService {
       ]);
       await this.delRoomCache(room.room_url);
 
-      // 设置录制冷却期（120秒），防止流地址失效导致频繁重启录制
-      const cooldownKey = `polling:recording_cooldown:${room.id}`;
-      await redis.set(cooldownKey, Date.now().toString(), { EX: 120 }).catch(() => {});
+      // 如果录制时长很短（小于5秒），不设置冷却期，以便快速重试获取新的流地址
+      const sessionDuration = Date.now() - sessionStart.getTime();
+      if (sessionDuration >= 5000) {
+        // 设置录制冷却期（30秒），防止流地址失效导致频繁重启录制
+        const cooldownKey = `polling:recording_cooldown:${room.id}`;
+        await redis.set(cooldownKey, Date.now().toString(), { EX: 30 }).catch(() => {});
+      } else {
+        console.log(`[finishSession] 录制时长过短 (${sessionDuration}ms)，跳过冷却期，允许快速重试`);
+        // 记录录制结束时间，供 PollingManager 检测是否需要立即重试
+        const lastEndKey = `polling:last_recording_end:${room.id}`;
+        await redis.set(lastEndKey, Date.now().toString(), { EX: 10 }).catch(() => {});
+      }
 
       if (useSegment) {
         let segmentFiles = [];
@@ -717,7 +727,25 @@ class RecorderService {
 
     console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
-    const downloader = await getActiveDownloader();
+    // 对于虎牙平台，在启动录制前立即重新获取流地址（避免地址过期）
+    let finalUrl = url;
+    if (room.polling_platform === 'huya' && room.room_url) {
+      console.log(`[RecorderService] 虎牙平台，重新获取流地址...`);
+      try {
+        const checker = new HuyaChecker(room.room_url);
+        const streamData = await checker.getStreamFromMpApi();
+        if (streamData && streamData.streamUrl) {
+          finalUrl = streamData.streamUrl;
+          console.log(`[RecorderService] 获取到新流地址: ${finalUrl.slice(0, 80)}...`);
+        } else {
+          console.warn(`[RecorderService] 无法获取新流地址，使用原地址`);
+        }
+      } catch (err) {
+        console.error(`[RecorderService] 重新获取流地址失败:`, err.message);
+      }
+    }
+
+    const downloader = await getActiveDownloader(room.polling_platform);
 
     const template = room.filename_template || '{room_name}_{datetime}';
     const segmentDuration = room.segment_duration || 0;
@@ -745,7 +773,11 @@ class RecorderService {
       );
     }
 
-    const dlArgs = downloader.buildArgs(url, outputFilePattern, { segmentDuration, segmentListPath });
+    const dlArgs = downloader.buildArgs(
+      downloader.name === 'python' ? room.room_url : finalUrl,
+      outputFilePattern,
+      { segmentDuration, segmentListPath, platform: room.polling_platform }
+    );
 
     const procLog = createProcLog(downloader.name);
     const { stream: logStream, rename: renameLog, logCommand } = procLog;
@@ -773,56 +805,60 @@ class RecorderService {
           const segmentMatch = logLine.match(/\[segment @ 0x[0-9a-f]+\] Opening '([^']+)' for writing/);
           if (segmentMatch) {
             const newSegmentPath = segmentMatch[1];
-            console.log(`[分段录制] 检测到新分段: ${newSegmentPath}`);
 
-            // 如果有上一个分段，且它是 FLV 文件，则入队转码
-            if (lastSegmentPath && /\.flv$/i.test(lastSegmentPath)) {
-              // 确保在处理之前先检查 auto_transcode 设置
-              this.getSetting('auto_transcode', 'true').then(async (autoTranscode) => {
-                if (autoTranscode === 'true') {
-                  // 读取碎片大小阈值
-                  const thresholdValue = await this.getSetting('filtering_threshold', '10');
-                  const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
+            // 只有当文件名真正改变时才认为是新分段
+            if (newSegmentPath !== currentSegmentPath) {
+              console.log(`[分段录制] 检测到新分段: ${newSegmentPath}`);
 
-                  // 检查文件大小，只有大于阈值的才入队
-                  let stat;
-                  try {
-                    stat = fs.statSync(lastSegmentPath);
-                  } catch {
-                    return;
-                  }
-                  if (stat.size < thresholdBytes) {
-                    console.log(
-                      `[边下边转码] 文件小于碎片阈值，删除: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
-                    );
-                    // 删除小于阈值的碎片文件
+              // 如果有上一个分段，且它是 FLV 文件，则入队转码
+              if (lastSegmentPath && /\.flv$/i.test(lastSegmentPath)) {
+                // 确保在处理之前先检查 auto_transcode 设置
+                this.getSetting('auto_transcode', 'true').then(async (autoTranscode) => {
+                  if (autoTranscode === 'true') {
+                    // 读取碎片大小阈值
+                    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+                    const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
+
+                    // 检查文件大小，只有大于阈值的才入队
+                    let stat;
                     try {
-                      fs.unlinkSync(lastSegmentPath);
-                    } catch (err) {
-                      console.error(`[边下边转码] 删除碎片文件失败: ${lastSegmentPath}`, err.message);
+                      stat = fs.statSync(lastSegmentPath);
+                    } catch {
+                      return;
                     }
-                    return;
+                    if (stat.size < thresholdBytes) {
+                      console.log(
+                        `[边下边转码] 文件小于碎片阈值，删除: ${path.basename(lastSegmentPath)} (${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdValue}MB)`
+                      );
+                      // 删除小于阈值的碎片文件
+                      try {
+                        fs.unlinkSync(lastSegmentPath);
+                      } catch (err) {
+                        console.error(`[边下边转码] 删除碎片文件失败: ${lastSegmentPath}`, err.message);
+                      }
+                      return;
+                    }
+
+                    const mp4Path = lastSegmentPath.replace(/\.flv$/i, '.mp4');
+                    console.log(`[边下边转码] 入队: ${lastSegmentPath} → ${mp4Path}`);
+                    transcodeQueue
+                      .enqueue({
+                        flvPath: lastSegmentPath,
+                        mp4Path: mp4Path,
+                        sessionId: sessionId, // sessionId 可能还没赋值，但没关系，后面会有记录
+                      })
+                      .catch((err) => console.error('[边下边转码][转码队列] 入队异常:', err.message));
+
+                    // 同时把这个路径记录下来，供 finishSession 做数据库记录时去重（已经入队了就不用再入队了）
+                    segmentPathsForTranscode.push(lastSegmentPath);
                   }
+                });
+              }
 
-                  const mp4Path = lastSegmentPath.replace(/\.flv$/i, '.mp4');
-                  console.log(`[边下边转码] 入队: ${lastSegmentPath} → ${mp4Path}`);
-                  transcodeQueue
-                    .enqueue({
-                      flvPath: lastSegmentPath,
-                      mp4Path: mp4Path,
-                      sessionId: sessionId, // sessionId 可能还没赋值，但没关系，后面会有记录
-                    })
-                    .catch((err) => console.error('[边下边转码][转码队列] 入队异常:', err.message));
-
-                  // 同时把这个路径记录下来，供 finishSession 做数据库记录时去重（已经入队了就不用再入队了）
-                  segmentPathsForTranscode.push(lastSegmentPath);
-                }
-              });
+              // 更新路径追踪
+              lastSegmentPath = currentSegmentPath;
+              currentSegmentPath = newSegmentPath;
             }
-
-            // 更新路径追踪
-            lastSegmentPath = currentSegmentPath;
-            currentSegmentPath = newSegmentPath;
           }
         }
       });

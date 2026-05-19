@@ -255,7 +255,7 @@ router.post('/rooms/:id/resume', async (req, res) => {
 router.post('/rooms/:id/stop', async (req, res) => {
   try {
     const { id } = req.params;
-    const { force } = req.body;
+    const force = req.body?.force === true;
     const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
     if (room.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });

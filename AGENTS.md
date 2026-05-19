@@ -2,17 +2,14 @@
 
 ## 开发工作流
 
-- `npm start` → PM2 生产模式（关闭文件监听），常规启动
-- `npm run stop` → 停止服务
-- `npm run logs` → 查看 PM2 日志
-- `npm run restart` → PM2 生命周期管理
-- `npm run dev` → node `--watch` 开发模式（端口 3001），**不会影响 PM2 生产进程**。按 Ctrl+C 一次即可完全停止
-- 需要重启 PM2 时执行 `npm run stop && npm run start`
+- `npm install` → 安装项目依赖。
+- `npm run dev` → node `--watch` 开发模式（端口 3001），启动开发环境，前台查看日志。
+- `npm run dev:backend` → 以后台模式启动开发环境，输出日志可在 `/tmp/dev-server.log` 中查看。
 - **修改代码后必须更新文档 + 提交代码**：每次完成功能开发或修复后，先更新对应的 `docs/` 文档，再用 `git add`/`git commit` 提交。提交信息格式：`<type>: <description>`
 
 ### 开发环境隔离
 
-`npm run dev` 会自动加载 `.env.dev`，覆盖 `.env` 中的以下配置：
+`npm run dev` 会自动加载 `.env.dev`，覆盖 `.env` 中的以下配置，表中值为举例内容，具体值以项目实际配置为准：
 
 | 配置     | 生产 (.env)          | 开发 (.env.dev)        |
 | -------- | -------------------- | ---------------------- |
@@ -34,21 +31,18 @@ CREATE DATABASE ks_live_recorder_dev;
 ### 开发环境管理命令
 
 ```bash
-npm run dev                          # 前台启动（日志直接看终端，Ctrl+C 一次即停）
+# 方式1：前台运行并查看日志
+npm run dev
 
 # 方式2：后台运行并查看日志
 npm run dev > /tmp/dev-server.log 2>&1 &
 tail -f /tmp/dev-server.log
 
-```
+# 停止开发服务
+kill $(lsof -ti :3001)
 
-其他命令：
-
-```bash
-kill $(lsof -ti :3001)               # 停止开发服务
-lsof -i :3001                        # 检查端口占用
-ps aux | grep nodemon | grep -v grep # 检查是否有旧版 nodemon 孤儿进程
-pkill -f "nodemon.*app.js"           # 杀死所有旧版 nodemon 孤儿进程
+# 检查开发环境端口占用
+lsof -i :3001
 ```
 
 **主动重启后建议清理脏数据：**
@@ -143,7 +137,7 @@ node scripts/cleanup-dev.js
 
 - 启动时自动迁移建表（`db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）
-- `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）、`last_live_status`（最近直播状态，Redis 缓存为主，DB 为兜底）、`last_polled_at`（最近轮询时间）
+- `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
 - `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
 - 连接信息从 `.env` 的 `DB_*` 变量读取
@@ -200,7 +194,7 @@ node scripts/cleanup-dev.js
   - 检测到 **非开播→开播** 状态转换时，自动调用 `RecorderService.startRecording()` 启动录制
   - 直播状态写入 Redis（`polling:live_status:{roomId}`），TTL=`polling_interval * 2`
   - 手动停止录制时自动关闭 `monitoring_enabled`，防止轮询二次触发
-- **平台检测**：前端输入 room_url 时自动识别平台（huya/douyu/bilibili/twitch/douyin/twitcasting），后端也支持根据 URL 自动检测
+- **平台检测**：前端输入 room_url ，后端接收时根据 URL 自动检测轮询平台
 - 轮询间隔可配置（秒），建议 ≥ 30s
 
 ## 下载引擎（Downloader）
@@ -245,4 +239,4 @@ node scripts/cleanup-dev.js
 
 ## TODO 计划
 
-查看文档[TODO.md](docs/TODO.md)
+查看文档[TODO.md](docs/todo/TODO.md)

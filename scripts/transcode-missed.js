@@ -36,10 +36,12 @@ async function updateDbRecords(flvPath, mp4Path, mp4Size) {
   const mp4FileName = path.basename(mp4Path);
 
   try {
-    await pool.query(
-      `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`,
-      [mp4Path, mp4FileName, mp4Size, flvPath]
-    );
+    await pool.query(`UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`, [
+      mp4Path,
+      mp4FileName,
+      mp4Size,
+      flvPath,
+    ]);
     await pool.query(`UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`, [
       mp4Path,
       mp4Size,

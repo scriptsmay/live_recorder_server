@@ -14,7 +14,7 @@ if (!fs.existsSync(TEST_OUTPUT_DIR)) {
 
 async function main() {
   const args = process.argv.slice(2);
-  let testRoomUrl = 'https://www.huya.com/362522';
+  let testRoomUrl = 'https://www.huya.com/kpl';
   let testDuration = 30;
 
   for (let i = 0; i < args.length; i++) {
@@ -28,8 +28,8 @@ async function main() {
       console.log('用法: node test_huya_ffmpeg_download.js [--url <直播间URL>] [--duration <秒数>]');
       console.log('示例:');
       console.log('  node test_huya_ffmpeg_download.js');
-      console.log('  node test_huya_ffmpeg_download.js --url https://www.huya.com/362522');
-      console.log('  node test_huya_ffmpeg_download.js --url https://www.huya.com/362522 --duration 60');
+      console.log('  node test_huya_ffmpeg_download.js --url https://www.huya.com/kpl');
+      console.log('  node test_huya_ffmpeg_download.js --url https://www.huya.com/kpl --duration 60');
       process.exit(0);
     }
   }
