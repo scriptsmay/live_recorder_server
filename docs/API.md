@@ -552,6 +552,54 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ---
 
+## 转码记录
+
+### GET /api/transcode_records
+
+查询转码记录列表。
+
+**参数（Query）：**
+
+| 参数   | 类型    | 必填 | 说明                                                         |
+| ------ | ------- | ---- | ------------------------------------------------------------ |
+| status | string  | 否   | 按状态筛选：`queued` / `processing` / `completed` / `failed` |
+| limit  | integer | 否   | 返回记录数量，默认 100                                       |
+
+**返回字段说明：**
+
+| 字段            | 类型     | 说明                                     |
+| --------------- | -------- | ---------------------------------------- |
+| id              | integer  | 记录 ID                                  |
+| session_id      | integer  | 关联的录制会话 ID                        |
+| original_path   | string   | 原文件路径（FLV）                        |
+| transcoded_path | string   | 转码后文件路径（MP4）                    |
+| status          | string   | 状态：queued/processing/completed/failed |
+| enqueued_at     | datetime | 入队时间                                 |
+| started_at      | datetime | 开始转码时间                             |
+| completed_at    | datetime | 完成转码时间                             |
+| room_name       | string   | 关联的直播间名称                         |
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/transcode_records
+curl http://127.0.0.1:1123/api/transcode_records?status=completed
+```
+
+---
+
+### DELETE /api/transcode_records/:id
+
+删除转码记录。
+
+**示例：**
+
+```bash
+curl -X DELETE http://127.0.0.1:1123/api/transcode_records/1
+```
+
+---
+
 ## 文件名模板
 
 | 占位符        | 说明              | 示例              |

@@ -1,0 +1,81 @@
+<h2>转码记录</h2>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>会话ID</th>
+        <th>直播间</th>
+        <th>原文件</th>
+        <th>转码文件</th>
+        <th>状态</th>
+        <th>入队时间</th>
+        <th>开始时间</th>
+        <th>完成时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (records.length === 0) { %>
+        <tr><td colspan="10" class="text-center text-muted py-4">暂无转码记录</td></tr>
+      <% } else { %>
+        <% records.forEach(r => { %>
+          <% const badge = {
+            queued: '<span class="badge bg-secondary">排队中</span>',
+            processing: '<span class="badge bg-primary">转码中</span>',
+            completed: '<span class="badge bg-success">已完成</span>',
+            failed: '<span class="badge bg-danger">失败</span>',
+          }[r.status] || r.status; %>
+          <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
+          <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
+          <tr>
+            <td><%= r.id %></td>
+            <td><%= r.session_id || '-' %></td>
+            <td>
+              <% if (r.room_name) { %>
+                <small><%= r.room_name %></small>
+              <% } else { %>
+                <span class="text-muted">-</span>
+              <% } %>
+            </td>
+            <td>
+              <small title="<%= r.original_path %>"><%= originalName %></small>
+            </td>
+            <td>
+              <% if (r.transcoded_path) { %>
+                <small title="<%= r.transcoded_path %>"><%= transcodedName %></small>
+              <% } else { %>
+                <span class="text-muted">-</span>
+              <% } %>
+            </td>
+            <td><%- badge %></td>
+            <td>
+              <small><%= formatDate(r.enqueued_at) %></small>
+            </td>
+            <td>
+              <small><%= formatDate(r.started_at) %></small>
+            </td>
+            <td>
+              <small><%= formatDate(r.completed_at) %></small>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
+            </td>
+          </tr>
+        <% }) %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.deleteTranscodeBtn');
+    if (!btn) return;
+
+    if (!confirm('确定删除此记录？')) return;
+    await fetch(`/api/transcode_records/${btn.dataset.id}`, { method: 'DELETE' });
+    window.location.reload();
+  });
+</script>

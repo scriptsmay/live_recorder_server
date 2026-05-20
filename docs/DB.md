@@ -196,6 +196,22 @@
 | bv_id                                  | VARCHAR(50)  | DEFAULT ''                  | B站 BV 号，投稿成功后从输出中提取        |
 | started_at / completed_at / created_at | TIMESTAMP    |                             |                                          |
 
+### transcode_records — 转码记录
+
+每次转码任务的执行记录，记录 FLV 到 MP4 的转换。
+
+| 字段            | 类型          | 约束             | 说明                                       |
+| --------------- | ------------- | ---------------- | ------------------------------------------ |
+| id              | SERIAL        | PRIMARY KEY      |                                            |
+| session_id      | INTEGER       |                  | 关联的录制会话 ID                          |
+| original_path   | VARCHAR(1024) | NOT NULL UNIQUE  | 原文件路径（FLV）                          |
+| transcoded_path | VARCHAR(1024) |                  | 转码后文件路径（MP4）                      |
+| status          | VARCHAR(20)   | DEFAULT 'queued' | `queued` `processing` `completed` `failed` |
+| enqueued_at     | TIMESTAMP     | DEFAULT NOW()    | 入队时间                                   |
+| started_at      | TIMESTAMP     |                  | 开始转码时间                               |
+| completed_at    | TIMESTAMP     |                  | 完成转码时间                               |
+| created_at      | TIMESTAMP     | DEFAULT NOW()    |                                            |
+
 ---
 
 ### settings — 全局设置

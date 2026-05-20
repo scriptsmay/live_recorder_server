@@ -27,6 +27,7 @@ const { router: apiRouter } = require('./router/api');
 const roomsRouter = require('./router/rooms');
 const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
+const transcodeRouter = require('./router/transcode');
 const watchdog = require('./lib/core/watchdog');
 const { pollingManager } = require('./lib/core/polling');
 const RecorderService = require('./services/RecorderService');
@@ -70,6 +71,7 @@ app.use('/api', apiRouter);
 app.use('/api', roomsRouter);
 app.use('/api', uploadRouter);
 app.use('/api', settingsRouter);
+app.use('/api', transcodeRouter);
 
 // ──────────────────────────────────────────────
 // 4. 启动初始化

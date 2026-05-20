@@ -166,12 +166,18 @@ node scripts/cleanup-dev.js
 - `POST /api/sessions/:id/upload` —— 对录制会话执行投稿（需指定模板ID）
 - `GET/DELETE /api/upload_records` —— 投稿记录查询 / 删除
 
+### 转码记录
+
+- `GET /api/transcode_records` —— 查询转码记录列表（支持 `?status=` 筛选）
+- `DELETE /api/transcode_records/:id` —— 删除转码记录
+
 ### 页面
 
 - `GET /apiview` —— 从 `/` 重定向
 - `GET /logs` —— 查看/删除服务器日志
 - `GET /templates` —— 投稿模板管理
 - `GET /upload_records` —— 投稿记录
+- `GET /transcode` —— 转码记录
 - `GET /files` —— 文件管理（孤文件关联会话）
 - `GET /sessions` —— 录制会话（含投稿按钮）
 - `GET /settings` —— 全局设置（录制/上传参数配置）

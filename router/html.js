@@ -109,6 +109,19 @@ router.get('/upload_records', async (req, res) => {
   }
 });
 
+router.get('/transcode', async (req, res) => {
+  try {
+    const records = await DataService.getTranscodeRecords({ limit: 100 });
+    res.render('transcode', {
+      title: '转码记录',
+      records,
+    });
+  } catch (err) {
+    console.error('[html] 转码记录页加载失败:', err);
+    res.status(500).render('transcode', { title: '转码记录', records: [] });
+  }
+});
+
 router.get('/recordings', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';

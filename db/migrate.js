@@ -227,6 +227,28 @@ async function runMigration() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transcode_records (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER,
+        original_path VARCHAR(1024) NOT NULL,
+        transcoded_path VARCHAR(1024) DEFAULT '',
+        status VARCHAR(20) DEFAULT 'queued',
+        enqueued_at TIMESTAMP DEFAULT NOW(),
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transcode_records_original_path_key') THEN
+          ALTER TABLE transcode_records ADD CONSTRAINT transcode_records_original_path_key UNIQUE (original_path);
+        END IF;
+      END $$;
+    `);
+
     const defaultSettings = [
       ['pool_size', '3'],
       ['watchdog_interval', '30'],

@@ -222,6 +222,31 @@ class DataService {
     const result = await pool.query(sql, params);
     return result.rows;
   }
+
+  static async getTranscodeRecords(options = {}) {
+    const { status, limit = 100 } = options;
+    const conditions = [];
+    const params = [];
+
+    if (status) {
+      conditions.push(`status = $${params.length + 1}`);
+      params.push(status);
+    }
+
+    let sql = `
+      SELECT tr.*, rs.room_url, rm.room_name
+      FROM transcode_records tr
+      LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
+      LEFT JOIN rooms rm ON rs.room_url = rm.room_url
+    `;
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ' ORDER BY tr.id DESC';
+    sql += ` LIMIT $${params.length + 1}`;
+    params.push(parseInt(limit, 10));
+
+    const result = await pool.query(sql, params);
+    return result.rows;
+  }
 }
 
 module.exports = DataService;
