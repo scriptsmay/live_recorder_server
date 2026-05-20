@@ -3,6 +3,7 @@
 ## 重构背景
 
 原 `RecorderService.js` 文件包含超过 1000 行代码，其中大量涉及 ffmpeg 外部调用的业务逻辑，导致：
+
 - 文件过长，难以维护
 - 职责不清晰，业务逻辑和进程管理混杂
 - 代码复用性差，相似逻辑在多处重复
@@ -18,6 +19,7 @@
 **文件位置**: `/lib/core/RecordingManager.js`
 
 **主要功能**:
+
 - ✅ 录制进程的启动和监控 (`startRecordingProcess`)
 - ✅ 分段录制任务执行 (`startSegmentTask`)
 - ✅ 会话恢复机制 (`resumeSession`)
@@ -26,6 +28,7 @@
 - ✅ 内部辅助方法（文件名生成、Redis 操作等）
 
 **设计特点**:
+
 - 采用单例模式导出，与 `segmenter`、`transcoder` 保持一致
 - 使用 JSDoc 注释规范，符合项目代码规范
 - 统一的日志管理机制，复用 `createProcLog` 工具
@@ -36,12 +39,14 @@
 **文件位置**: `/services/RecorderService.js`
 
 **移除的内容**:
+
 - ❌ `startSegmentTask` 方法（已移至 RecordingManager）
 - ❌ `tryResumeSession` 的具体实现（委托给 RecordingManager）
 - ❌ 大量的 ffmpeg 进程管理代码
 - ❌ 重复的文件名生成逻辑
 
 **保留的内容**:
+
 - ✅ 房间管理和缓存逻辑
 - ✅ 录制请求验证和权限检查
 - ✅ 业务协调和流程控制
@@ -49,6 +54,7 @@
 - ✅ 通知和自动上传触发
 
 **改进点**:
+
 - 代码行数从 1078 行减少到约 900 行
 - 职责更加清晰：专注于业务协调而非进程管理
 - 通过委托模式调用 RecordingManager 处理底层操作
@@ -56,6 +62,7 @@
 ### 3. 代码质量提升
 
 **遵循的规范**:
+
 - ✅ 所有公共方法都有完整的 JSDoc 注释
 - ✅ 参数类型、含义和返回值说明完整
 - ✅ 重要代码块有总结性注释
@@ -63,6 +70,7 @@
 - ✅ 未改变原有代码逻辑和功能
 
 **架构优化**:
+
 ```
 之前:
 RecorderService (1078行)
@@ -109,16 +117,19 @@ const autoTranscode = await RecorderService.getSetting('auto_transcode', 'true')
 ## 测试建议
 
 ### 单元测试
+
 1. RecordingManager 各方法的独立测试
 2. 进程启动和结束的边界情况
 3. 会话恢复的重试逻辑
 
 ### 集成测试
+
 1. 完整录制流程测试（启动 → 运行 → 结束）
 2. 分段录制和非分段录制的对比测试
 3. 会话恢复功能的端到端测试
 
 ### 回归测试
+
 1. 确保现有 API 接口正常工作
 2. 验证数据库状态更新正确
 3. 检查通知和上传功能正常触发
@@ -146,4 +157,4 @@ const autoTranscode = await RecorderService.getSetting('auto_transcode', 'true')
 ✅ 遵循项目现有的架构模式和代码规范  
 ✅ 保持了所有原有功能和业务逻辑  
 ✅ 提高了代码的可测试性和可扩展性  
-✅ 为后续的功能迭代和优化打下良好基础  
+✅ 为后续的功能迭代和优化打下良好基础

@@ -10,7 +10,6 @@ const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFacto
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
-const RecordingManager = require('../lib/core/RecordingManager');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -378,7 +377,6 @@ class RecorderService {
   static async _handleSegmentFinish({ engine, room, sessionId, _sessionStart, reuseSession, outputFilePattern }) {
     const isEngineSegment = engine.isSegment();
     if (!isEngineSegment) {
-      // 下载器不支持分段，则加入额外的切片处理
       const result = await recordingManager.startSegmentTask({
         inputFile: room.output_path,
         outputFilePattern,
@@ -396,19 +394,25 @@ class RecorderService {
 
     const flvFilesToTranscode = [];
 
-    const sessionFiles = await pool.query(
-      "SELECT file_path, file_size FROM recording_files WHERE session_id = $1 AND status = 'completed'",
+    // 查询数据库中已有的文件记录
+    const { rows: dbFiles } = await pool.query(
+      `SELECT rf.file_path, rf.file_size, r.status as recording_status
+       FROM recording_files rf
+       LEFT JOIN recordings r ON r.file_path = rf.file_path
+       WHERE rf.session_id = $1`,
       [sessionId]
     );
 
-    for (const row of sessionFiles.rows) {
+    for (const row of dbFiles) {
       const filePath = row.file_path;
       let fileSize = row.file_size;
 
       if (fileSize === 0) {
         try {
           fileSize = fs.statSync(filePath).size;
-        } catch (_) {}
+        } catch (_) {
+          continue;
+        }
       }
 
       if (fileSize > 0 && fileSize < thresholdBytes) {
@@ -428,13 +432,12 @@ class RecorderService {
 
       if (fileSize > 0) {
         totalSize += fileSize;
+        newFileCount++;
 
         await pool.query(
           "UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE file_path = $2",
           [fileSize, filePath]
         );
-
-        newFileCount++;
 
         if (fileSize >= thresholdBytes && filePath.endsWith('.flv')) {
           flvFilesToTranscode.push(filePath);
@@ -481,24 +484,9 @@ class RecorderService {
     if (newFileCount === 0) {
       console.log(`[RecorderService] 分段录制完成, 无有效文件`);
     } else {
-      console.log(`[RecorderService] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
-    }
-
-    // 添加分段文件转码逻辑
-    if (flvFilesToTranscode.length > 0) {
-      const autoTranscode = await this.getSetting('auto_transcode', 'true');
-      if (autoTranscode === 'true') {
-        for (const flvPath of flvFilesToTranscode) {
-          const mp4Path = flvPath.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
-          transcodeQueue
-            .enqueue({
-              flvPath: flvPath,
-              mp4Path: mp4Path,
-              sessionId: sessionId,
-            })
-            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
-        }
-      }
+      console.log(
+        `[RecorderService] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`
+      );
     }
   }
 
@@ -788,18 +776,14 @@ class RecorderService {
 
       console.log(`[RecorderService] 日志文件: ${logPath} `);
 
-      // 业务逻辑统一监听 'segment' 事件
-      downloader.on('segment', async (filePath) => {
-        console.log(`[RecorderService] 监测到文件切片: ${filePath}`);
-        // 这里处理你的分片入库逻辑
-        await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
-      });
-
-      downloader.on('file_created', async (filePath) => {
-        console.log(`[RecorderService] 监测到文件创建: ${filePath}`);
-        // 这里处理你的文件创建逻辑
-        await RecordingManager.addRecordingRecord(sessionId, filePath, 'recording');
-      });
+      // 业务层只管会话状态，文件入库全权交给看门狗
+      // downloader.on('segment', async (filePath) => {
+      //   console.log(`[RecorderService] 监测到文件切片: ${filePath}`);
+      // });
+      //
+      // downloader.on('file_created', async (filePath) => {
+      //   console.log(`[RecorderService] 监测到文件创建: ${filePath}`);
+      // });
 
       // 更新 redis 缓存
       await this.setActiveTask(roomKey, {

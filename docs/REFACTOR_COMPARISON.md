@@ -6,28 +6,28 @@
 // 在 RecorderService.startRecording 方法中直接管理 ffmpeg 进程
 static async startRecording({ url, title, caption, room_url }) {
   // ... 验证逻辑 ...
-  
+
   const downloader = await getActiveDownloader(room.polling_platform);
   const dlArgs = downloader.buildArgs(url, outputFilePattern, options);
-  
+
   // ❌ 直接在服务层创建和管理进程
   const procLog = createProcLog(downloader.name);
   const { stream: logStream, rename: renameLog, logCommand } = procLog;
   logCommand(downloader.name, dlArgs);
-  
+
   const dlProcess = downloader.spawn(dlArgs);
-  
+
   if (dlProcess.stderr) {
     dlProcess.stderr.on('data', (chunk) => logStream.write(chunk));
   }
   if (dlProcess.stdout) {
     dlProcess.stdout.on('data', (chunk) => logStream.write(chunk));
   }
-  
+
   dlProcess.on('error', (err) => {
     console.error(`${downloader.name} 启动失败:`, err);
   });
-  
+
   // ... 数据库更新 ...
   // ... 文件记录初始化 ...
   // ... 活跃任务设置 ...
@@ -35,6 +35,7 @@ static async startRecording({ url, title, caption, room_url }) {
 ```
 
 **问题**：
+
 - 进程管理、日志处理、数据库操作混杂在一起
 - 代码冗长，难以维护
 - 相似逻辑在 tryResumeSession 中重复
@@ -50,13 +51,13 @@ class RecordingManager {
    */
   startRecordingProcess({ downloader, streamUrl, outputPath, options, sessionId }) {
     const dlArgs = downloader.buildArgs(streamUrl, outputPath, options);
-    
+
     const procLog = createProcLog(downloader.name, sessionId);
     const { stream: logStream, rename: renameLog, logCommand } = procLog;
-    
+
     logCommand(downloader.name, dlArgs);
     const dlProcess = downloader.spawn(dlArgs);
-    
+
     // 统一处理 stdout/stderr
     if (dlProcess.stderr) {
       dlProcess.stderr.on('data', (chunk) => logStream.write(chunk));
@@ -64,11 +65,11 @@ class RecordingManager {
     if (dlProcess.stdout) {
       dlProcess.stdout.on('data', (chunk) => logStream.write(chunk));
     }
-    
+
     dlProcess.on('error', (err) => {
       console.error(`${downloader.name} 启动失败:`, err);
     });
-    
+
     return {
       process: dlProcess,
       logStream,
@@ -77,7 +78,7 @@ class RecordingManager {
       destroyLog: () => procLog.destroy(),
     };
   }
-  
+
   /**
    * 更新会话到数据库 - 封装数据库操作
    */
@@ -85,7 +86,7 @@ class RecordingManager {
     // ... 数据库更新逻辑 ...
     return finalSessionId;
   }
-  
+
   /**
    * 恢复会话 - 完整的会话恢复逻辑
    */
@@ -100,10 +101,10 @@ class RecordingManager {
 ```javascript
 static async startRecording({ url, title, caption, room_url }) {
   // ... 验证逻辑保持不变 ...
-  
+
   const downloader = await getActiveDownloader(room.polling_platform);
   const outputFilePattern = this.generateOutputPath(...);
-  
+
   // ✅ 委托给 RecordingManager 处理进程启动
   const { process: dlProcess, logPath, renameLog } = recordingManager.startRecordingProcess({
     downloader,
@@ -116,7 +117,7 @@ static async startRecording({ url, title, caption, room_url }) {
     },
     sessionId: null,
   });
-  
+
   // ✅ 委托给 RecordingManager 处理数据库更新
   const sessionId = await recordingManager.updateSessionToDatabase({
     room,
@@ -129,9 +130,9 @@ static async startRecording({ url, title, caption, room_url }) {
     caption,
     streamUrl: url,
   });
-  
+
   renameLog(sessionId);
-  
+
   // ✅ 委托给 RecordingManager 初始化文件记录
   if (!useSegment) {
     await recordingManager.initNonSegmentFileRecord({
@@ -140,7 +141,7 @@ static async startRecording({ url, title, caption, room_url }) {
       outputPath: outputFilePattern,
     });
   }
-  
+
   // ... 后续的业务逻辑保持不变 ...
 }
 
@@ -152,14 +153,14 @@ static async tryResumeSession(session) {
 
 ## 优势对比
 
-| 方面 | 重构前 | 重构后 |
-|------|--------|--------|
-| **职责清晰度** | ❌ 混杂 | ✅ 清晰分离 |
-| **代码行数** | ❌ 1078行 | ✅ ~900行 + 450行独立模块 |
-| **可维护性** | ❌ 难以定位问题 | ✅ 职责明确，易于调试 |
-| **可测试性** | ❌ 难以单独测试 | ✅ 可独立测试各模块 |
-| **代码复用** | ❌ 重复代码多 | ✅ 逻辑集中，易于复用 |
-| **扩展性** | ❌ 修改影响面大 | ✅ 模块化，影响面小 |
+| 方面           | 重构前          | 重构后                    |
+| -------------- | --------------- | ------------------------- |
+| **职责清晰度** | ❌ 混杂         | ✅ 清晰分离               |
+| **代码行数**   | ❌ 1078行       | ✅ ~900行 + 450行独立模块 |
+| **可维护性**   | ❌ 难以定位问题 | ✅ 职责明确，易于调试     |
+| **可测试性**   | ❌ 难以单独测试 | ✅ 可独立测试各模块       |
+| **代码复用**   | ❌ 重复代码多   | ✅ 逻辑集中，易于复用     |
+| **扩展性**     | ❌ 修改影响面大 | ✅ 模块化，影响面小       |
 
 ## 架构层次
 

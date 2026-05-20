@@ -31,9 +31,9 @@ describe('Huya Downloader Module', () => {
       it('should build basic args correctly', () => {
         const url = 'http://example.com/stream.flv';
         const outputPath = '/tmp/test.flv';
-        
+
         const args = downloader.buildArgs(url, outputPath);
-        
+
         expect(args[0]).toContain('huya_downloader.py');
         expect(args).toContain('--url');
         expect(args).toContain(url);
@@ -46,9 +46,9 @@ describe('Huya Downloader Module', () => {
       it('should include segment duration when specified', () => {
         const url = 'http://example.com/stream.flv';
         const outputPath = '/tmp/test.flv';
-        
+
         const args = downloader.buildArgs(url, outputPath, { segmentDuration: 3600 });
-        
+
         expect(args).toContain('--segment-duration');
         expect(args).toContain('3600');
       });
@@ -56,18 +56,18 @@ describe('Huya Downloader Module', () => {
       it('should include is-stream-url flag when specified', () => {
         const url = 'http://example.com/stream.flv';
         const outputPath = '/tmp/test.flv';
-        
+
         const args = downloader.buildArgs(url, outputPath, { isStreamUrl: true });
-        
+
         expect(args).toContain('--is-stream-url');
       });
 
       it('should use custom quality when specified', () => {
         const url = 'http://example.com/stream.flv';
         const outputPath = '/tmp/test.flv';
-        
+
         const args = downloader.buildArgs(url, outputPath, { quality: 'HD' });
-        
+
         expect(args).toContain('--quality');
         expect(args).toContain('HD');
       });
@@ -80,12 +80,12 @@ describe('Huya Downloader Module', () => {
           detached: false,
           pid: 12345,
         };
-        
+
         spawn.mockReturnValue(mockProcess);
-        
+
         const args = ['script.py', '--url', 'test'];
         const result = downloader.spawn(args);
-        
+
         expect(spawn).toHaveBeenCalledWith('python3', args, {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
@@ -97,9 +97,9 @@ describe('Huya Downloader Module', () => {
     describe('parseProgress', () => {
       it('should parse time, size, speed, and frame from stderr line', () => {
         const line = 'frame=  123 fps= 50 q=29.0 size=  10240kB time=00:01:23.45 bitrate=1024.0kbits/s speed=1.5x';
-        
+
         const progress = downloader.parseProgress(line);
-        
+
         expect(progress).toEqual({
           timeSeconds: 83.45,
           sizeBytes: 10240 * 1024,
@@ -116,7 +116,7 @@ describe('Huya Downloader Module', () => {
       it('should handle different units', () => {
         const lineMB = 'size=  10MB';
         const lineGB = 'size=    2GB';
-        
+
         expect(downloader.parseProgress(lineMB).sizeBytes).toBe(10 * 1024 * 1024);
         expect(downloader.parseProgress(lineGB).sizeBytes).toBe(2 * 1024 * 1024 * 1024);
       });
@@ -129,19 +129,19 @@ describe('Huya Downloader Module', () => {
           delayMs: 5000,
           maxRetries: 3,
         });
-        
+
         expect(downloader.getRetryStrategy(131)).toEqual({
           shouldRetry: true,
           delayMs: 5000,
           maxRetries: 3,
         });
-        
+
         expect(downloader.getRetryStrategy(137)).toEqual({
           shouldRetry: true,
           delayMs: 5000,
           maxRetries: 3,
         });
-        
+
         expect(downloader.getRetryStrategy(255)).toEqual({
           shouldRetry: true,
           delayMs: 5000,
@@ -155,7 +155,7 @@ describe('Huya Downloader Module', () => {
           delayMs: 0,
           maxRetries: 0,
         });
-        
+
         expect(downloader.getRetryStrategy(999)).toEqual({
           shouldRetry: false,
           delayMs: 0,
@@ -179,21 +179,21 @@ describe('Huya Downloader Module', () => {
     describe('getActiveDownloader', () => {
       it('should return HuyaPythonDownloader for huya platform', async () => {
         const downloader = await DownloaderFactory.getActiveDownloader('huya');
-        
+
         expect(downloader.name).toBe('huya-python');
         expect(downloader.constructor.name).toBe('HuyaPythonDownloader');
       });
 
       it('should return FFmpegDownloader for other platforms', async () => {
         const downloader = await DownloaderFactory.getActiveDownloader('other');
-        
+
         expect(downloader.name).toBe('ffmpeg');
         expect(downloader.constructor.name).toBe('FFmpegDownloader');
       });
 
       it('should return FFmpegDownloader when no platform specified', async () => {
         const downloader = await DownloaderFactory.getActiveDownloader();
-        
+
         expect(downloader.name).toBe('ffmpeg');
       });
     });
@@ -202,7 +202,7 @@ describe('Huya Downloader Module', () => {
   describe('huya_downloader.py 脚本检查', () => {
     it('should exist in correct location', () => {
       const scriptPath = path.resolve(__dirname, '../lib/core/downloaders/huya_downloader.py');
-      
+
       // Just check that we can resolve the path without error
       expect(scriptPath).toContain('huya_downloader.py');
     });

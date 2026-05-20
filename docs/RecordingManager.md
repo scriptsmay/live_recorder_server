@@ -45,18 +45,23 @@ ffmpeg (外部进程)
 ### 核心方法
 
 #### startRecordingProcess()
+
 启动录制进程，返回进程对象和日志管理接口。
 
 #### startSegmentTask()
+
 执行分段录制任务，调用 segmenter 进行视频切片。
 
 #### resumeSession()
+
 恢复中断的录制会话，包含完整的进程重启和状态同步逻辑。
 
 #### updateSessionToDatabase()
+
 将录制会话状态同步到数据库。
 
 #### initNonSegmentFileRecord()
+
 初始化非分段录制的文件记录。
 
 ## 使用示例
