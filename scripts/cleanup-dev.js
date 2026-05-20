@@ -181,6 +181,14 @@ async function cleanup() {
       console.log('  └─ recording_sessions 已为空');
     }
 
+    // 清空 transcode_records 表
+    const transcodeRecords = await d.query('DELETE FROM transcode_records RETURNING id');
+    if (transcodeRecords.rowCount > 0) {
+      console.log(`  └─ 清空 transcode_records: ${transcodeRecords.rowCount} 条`);
+    } else {
+      console.log('  └─ transcode_records 已为空');
+    }
+
     // 房间复位
     const rooms = await d.query(
       "UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, output_path = '' WHERE status IN ('recording', 'paused') RETURNING id"
