@@ -188,9 +188,9 @@ node scripts/cleanup-dev.js
 
 - **策略模式**：`lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `PollingManager.CHECKERS`
 - **虎牙检查器**：`lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
-- **轮询管理器**：`lib/core/polling/PollingManager.js` — 单例，随 `app.js` 启动自动运行：
-  - 启动时加载所有 `polling_enabled=true` 的房间
-  - 按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
+- **轮询管理器**：`lib/core/polling/PollingManager.js` — 单例
+  - 启动时只检查一次所有 `polling_enabled=true` 房间的状态（无定时器）
+  - `reloadRoom()` 控制定时轮询：新增/修改房间时启动定时器，按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
   - 检测到 **非开播→开播** 状态转换时，自动调用 `RecorderService.startRecording()` 启动录制
   - 直播状态写入 Redis（`polling:live_status:{roomId}`），TTL=`polling_interval * 2`
   - 手动停止录制时自动关闭 `monitoring_enabled`，防止轮询二次触发

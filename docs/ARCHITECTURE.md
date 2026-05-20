@@ -403,15 +403,23 @@ PollingManager (单例)
 app.js init()
   └─ pollingManager.start()
        └─ loadPollingRooms()                       # DB: polling_enabled=true
-            └─ startRoomPolling(room) × N
-                 ├─ pollRoom(room)                   # 首次立即执行（0~5s jitter）
-                 │    └─ checkRoom(room)
-                 │         ├─ PlatformChecker.checkStatus()   # 平台 API
-                 │         ├─ 状态转换检测 (wasLive→isLive)
-                 │         ├─ Redis SET (TTL=interval×2)      # 瞬时状态缓存
-                 │         └─ _tryStartRecording()             # 开播触发录制
-                 └─ setInterval(pollRoom, intervalMs)          # 定时轮询
+            └─ pollRoom(room) × N                   # 仅检查1次，无定时器
+
+router/rooms.js (新增/修改房间)
+  └─ pollingManager.reloadRoom(roomId)
+       └─ startRoomPolling(room)
+            ├─ pollRoom(room)                       # 首次立即执行（0~5s jitter）
+            │    └─ checkRoom(room)
+            │         ├─ PlatformChecker.checkStatus()   # 平台 API
+            │         ├─ 状态转换检测 (wasLive→isLive)
+            │         ├─ Redis SET (TTL=interval×2)      # 瞬时状态缓存
+            │         └─ _tryStartRecording()             # 开播触发录制
+            └─ setInterval(pollRoom, intervalMs)          # 定时轮询
 ```
+
+**说明**：
+- 启动时只检查1次状态，不设定时器
+- 新增或修改房间时由 `reloadRoom()` 控制定时轮询
 
 ### 数据存储策略
 
