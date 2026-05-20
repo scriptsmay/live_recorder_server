@@ -271,7 +271,7 @@ class UploadService {
   }
 
   /**
-   * 看门狗：扫描已完成且转码就绪的会话，按直播间模板自动投稿
+   * 由看门狗调用：扫描已完成且转码就绪的会话，按直播间模板自动投稿
    */
   static async scanPendingAutoUpload() {
     try {
@@ -311,11 +311,11 @@ class UploadService {
           room_name: row.room_name,
           started_at: row.started_at,
         };
-        console.log(`[看门狗][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
+        console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
         await this.executeUpload(session, tmpl);
       }
     } catch (err) {
-      console.error('[看门狗][投稿] 扫描失败:', err.message);
+      console.error('[UploadService][投稿] 扫描失败:', err.message);
     }
   }
 
