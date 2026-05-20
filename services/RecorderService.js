@@ -4,8 +4,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const { SUPPORTED_TRANSCODE_EXT } = require('../config/config');
 
-const { templateToStrftime, generateFilename } = require('../lib/utils/tool');
-
+const { generateOutputPath } = require('../lib/utils/tool');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
@@ -242,39 +241,6 @@ class RecorderService {
     } catch (_) {}
 
     return { reuseSession, resumeCount, session };
-  }
-
-  /**
-   * 生成输出文件路径
-   *
-   * @param {Object} downloader - 下载器实例
-   * @param {string} template - 文件名模板
-   * @param {string} roomName - 房间名称
-   * @param {string} title - 直播标题
-   * @param {number} segmentDuration - 分段时长（秒）
-   * @param {boolean} _reuseSession - 是否复用会话（预留参数）
-   * @param {string} _roomOutputPath - 房间输出路径（预留参数）
-   * @returns {string} 输出文件路径
-   */
-  static generateOutputPath(downloader, template, roomName, title, segmentDuration, _reuseSession, _roomOutputPath) {
-    // useSegment 代表的是输出文件名是否会随时间变量变化
-    // 有的下载器不支持分段下载， useSegment 为 false
-    const useSegment = segmentDuration > 0 && downloader.isSegment();
-    const ext = downloader.getExtension();
-
-    let outputFilePattern;
-
-    if (useSegment) {
-      // 如果需要切片，则输出文件名使用ffmpeg segements 模板
-      const strftimeName = templateToStrftime(template, roomName || title, ext);
-      outputFilePattern = path.join(DOWNLOAD_DIR, strftimeName);
-    } else {
-      // 如果不切片，则使用 generateFilename 方法生成固定的文件名
-      const filename = generateFilename(template, roomName || title, ext);
-      outputFilePattern = path.join(DOWNLOAD_DIR, filename);
-    }
-
-    return outputFilePattern;
   }
 
   /**
@@ -722,7 +688,7 @@ class RecorderService {
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0 && downloader.isSegment();
 
-    const outputFilePattern = this.generateOutputPath(
+    const outputFilePattern = generateOutputPath(
       downloader,
       template,
       room.room_name,
@@ -870,10 +836,10 @@ class RecorderService {
    *    - 如果恢复失败或重试次数已达上限，将会话和文件状态标记为 'interrupted'
    */
   static async cleanupStaleRecordings() {
-    // const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
+    const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
     try {
       const staleRooms = await pool.query(
-        `SELECT id, room_url, room_name, ffmpeg_pid, output_path FROM rooms WHERE status IN ('recording', 'paused')`
+        `SELECT id, room_url, room_name, ffmpeg_pid, polling_platform, output_path FROM rooms WHERE status IN ('recording', 'paused')`
       );
 
       for (const row of staleRooms.rows) {
@@ -910,34 +876,34 @@ class RecorderService {
       }
 
       // TODO： 待验证 - 跳过处理会话
-      // // 录制中状态的会话
-      // const staleSessions = await pool.query(
-      //   `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
-      // );
+      // 录制中状态的会话
+      const staleSessions = await pool.query(
+        `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
+      );
 
-      // for (const session of staleSessions.rows) {
-      //   // if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
-      //   //   try {
-      //   //     console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
-      //   //     await this.tryResumeSession(session);
-      //   //     continue;
-      //   //   } catch (err) {
-      //   //     console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
-      //   //   }
-      //   // }
-      //   // 跳过恢复会话
-      //   // 如果当前时间
+      for (const session of staleSessions.rows) {
+        if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
+          try {
+            console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
+            await this.tryResumeSession(session);
+            continue;
+          } catch (err) {
+            console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
+          }
+        }
+        // 跳过恢复会话
+        // 如果当前时间
 
-      //   console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
-      //   await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
-      //     session.id,
-      //   ]);
-      //   await pool.query(
-      //     `UPDATE recording_files SET status = 'interrupted', completed_at = NOW()
-      //      WHERE session_id = $1 AND status = 'recording'`,
-      //     [session.id]
-      //   );
-      // }
+        console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
+        await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
+          session.id,
+        ]);
+        await pool.query(
+          `UPDATE recording_files SET status = 'interrupted', completed_at = NOW()
+           WHERE session_id = $1 AND status = 'recording'`,
+          [session.id]
+        );
+      }
     } catch (err) {
       console.error('[启动清理] 失败:', err);
     }

@@ -36,3 +36,8 @@ curl -X POST "$SERVER_API" \
 测试到不同情况的 ffmpeg 进程代码 code
 
 - 点击停止录制时，提示：`FFmpeg 下载失败，退出码: 255, 信号: null`;
+- 快手直播间测试，如果是直播停止，ffmpeg 正常返回 0 ：
+
+```
+[finishSession][0] 录制结束，路径: dev_downloads/room_name_%Y%m%d_%H%M%S.flv (日志: logs/ffmpeg_12.log)
+```
