@@ -32,7 +32,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:api": "jest test/api-coverage.test.js --verbose",
-    "check-env": "bash scripts/check-env.sh"
+    "check-env": "bash scripts/check-env.sh",
+    "release:patch": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major"
   },
   "dependencies": {
     "axios": "^1.16.1",
