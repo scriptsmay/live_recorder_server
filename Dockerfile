@@ -1,8 +1,8 @@
 FROM node:22-bookworm-slim
 
 # 设置环境变量，强制系统使用 UTF-8
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 ENV NODE_ENV=production \
     PORT=1123 \
