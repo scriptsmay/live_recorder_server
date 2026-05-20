@@ -666,7 +666,7 @@ class RecorderService {
 
     console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
-    const downloader = await getActiveDownloader(room.polling_platform);
+    const downloader = getActiveDownloader(room.polling_platform);
     const template = room.filename_template || '{room_name}_{datetime}';
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0 && downloader.isSegment();

@@ -177,22 +177,22 @@ describe('Huya Downloader Module', () => {
 
   describe('DownloaderFactory', () => {
     describe('getActiveDownloader', () => {
-      it('should return HuyaPythonDownloader for huya platform', async () => {
-        const downloader = await DownloaderFactory.getActiveDownloader('huya');
+      it('should return HuyaPythonDownloader for huya platform', () => {
+        const downloader = DownloaderFactory.getActiveDownloader('huya');
 
         expect(downloader.name).toBe('huya-python');
         expect(downloader.constructor.name).toBe('HuyaPythonDownloader');
       });
 
-      it('should return FFmpegDownloader for other platforms', async () => {
-        const downloader = await DownloaderFactory.getActiveDownloader('other');
+      it('should return FFmpegDownloader for other platforms', () => {
+        const downloader = DownloaderFactory.getActiveDownloader('other');
 
         expect(downloader.name).toBe('ffmpeg');
         expect(downloader.constructor.name).toBe('FFmpegDownloader');
       });
 
-      it('should return FFmpegDownloader when no platform specified', async () => {
-        const downloader = await DownloaderFactory.getActiveDownloader();
+      it('should return FFmpegDownloader when no platform specified', () => {
+        const downloader = DownloaderFactory.getActiveDownloader();
 
         expect(downloader.name).toBe('ffmpeg');
       });
