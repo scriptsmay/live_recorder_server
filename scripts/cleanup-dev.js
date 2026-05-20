@@ -126,26 +126,18 @@ async function cleanup() {
 
   console.log('\n[3/5] 清理磁盘文件...');
 
-  // 重命名 .part → .flv
+  // 清空下载目录（开发环境）
   if (fs.existsSync(DOWNLOAD_DIR)) {
-    console.log('  └─ 重命名 .part 文件...');
+    console.log(`  └─ 清空下载目录 ${DOWNLOAD_DIR} ...`);
     let count = 0;
     for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
-      if (f.endsWith('.flv.part')) {
-        const src = path.join(DOWNLOAD_DIR, f);
-        const dst = path.join(DOWNLOAD_DIR, f.replace(/\.part$/, ''));
-        try {
-          fs.renameSync(src, dst);
-          count++;
-        } catch (e) {
-          console.warn(`    ⚠️  ${f} 重命名失败: ${e.message}`);
-        }
-      }
+      fs.unlinkSync(path.join(DOWNLOAD_DIR, f));
+      count++;
     }
     if (count > 0) {
-      console.log(`    ✅ 已重命名 ${count} 个文件`);
+      console.log(`    ✅ 删除 ${count} 个文件`);
     } else {
-      console.log('    ✅ 无 .part 文件');
+      console.log('    ✅ 无待处理文件');
     }
   } else {
     console.log('    ⚠️  下载目录不存在');

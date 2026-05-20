@@ -9,8 +9,7 @@ const { templateToStrftime, generateFilename } = require('../lib/utils/tool');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
-
-const UploadService = require('./UploadService');
+const transcodeQueue = require('../lib/core/TranscodeQueue');
 const RecordingManager = require('../lib/core/RecordingManager');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -376,7 +375,7 @@ class RecorderService {
    * @param {boolean} params.reuseSession - 是否复用会话
    * @param {string} params.outputFilePattern - 输出文件路径模式
    */
-  static async _handleSegmentFinish({ engine, room, sessionId, sessionStart, reuseSession, outputFilePattern }) {
+  static async _handleSegmentFinish({ engine, room, sessionId, _sessionStart, reuseSession, outputFilePattern }) {
     const isEngineSegment = engine.isSegment();
     if (!isEngineSegment) {
       // 下载器不支持分段，则加入额外的切片处理
@@ -445,7 +444,7 @@ class RecorderService {
 
     if (sessionId) {
       let sessionStatus = 'completed';
-      if (newFileCount === 0 && downloaderCode !== 0) {
+      if (newFileCount === 0 && code !== 0) {
         sessionStatus = 'interrupted';
       }
 
@@ -478,16 +477,28 @@ class RecorderService {
         );
       }
     }
-    console.log(`[RecorderService] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
-    if (newFileCount > 0) {
-      const completedSession = {
-        id: sessionId,
-        room_url: room.room_url,
-        room_name: room.room_name,
-        started_at: sessionStart,
-      };
-      UploadService.findAndAutoUpload(completedSession).catch((err) => console.error('[自动投稿] 异常:', err.message));
+    if (newFileCount === 0) {
+      console.log(`[RecorderService] 分段录制完成, 无有效文件`);
+    } else {
+      console.log(`[RecorderService] 分段录制完成, 共 ${newFileCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+    }
+
+    // 添加分段文件转码逻辑
+    if (flvFilesToTranscode.length > 0) {
+      const autoTranscode = await this.getSetting('auto_transcode', 'true');
+      if (autoTranscode === 'true') {
+        for (const flvPath of flvFilesToTranscode) {
+          const mp4Path = flvPath.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
+          transcodeQueue
+            .enqueue({
+              flvPath: flvPath,
+              mp4Path: mp4Path,
+              sessionId: sessionId,
+            })
+            .catch((err) => console.error('[转码队列] 入队异常:', err.message));
+        }
+      }
     }
   }
 
