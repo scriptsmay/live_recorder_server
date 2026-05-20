@@ -1,33 +1,26 @@
 # TODO
 
-## 自动转码的功能不能触发了，需要debug一下。
+## 下载完成后自动转码的功能似乎不能触发了，需要debug一下。
 
-会话结束后，文件没有自动转码。
+会话结束后，文件没有自动转码。是否和代码中写死了文件类型有关？
+已经在 config/config.js 中配置了文件类型常量，如有必要将项目中涉及到视频类型的地方统一整理替换。
 
-## docker 镜像中，含有中文的文件名似乎不被biliup能识别，从而导致无法上传【已解决】
+## 关于是否分段的逻辑
 
-已解决，在 Dockerfile 中添加：
+现在由于下载引擎会设定是否能分段（ `isSegment()` ），项目业务中如果有执行分段判断逻辑的时候，需要同时判断直播间轮询平台 downloader 的 `isSegment()` 和直播间表的 `segment_duration > 0` 。
 
-```
-# 设置环境变量，强制系统使用 UTF-8
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-```
+## Downloader 增加了事件触发的功能
 
-已部署的 docker-compose.yml 中添加环境变量:
+现在下载器会根据 ffmpeg 的输入日志，提取到不同类型的事件：
 
-```
-services:
-  your-service-name:
-    image: your-image-name
-    # 添加以下环境变量配置
-    environment:
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
-    # 其他配置...
-    volumes:
-      - /path/on/host:/data/video_downloads
-```
+- 分片文件写入时触发 `segment`
+- 不分片文件写入触发 `file_created`
+
+RecorderService 中会监听这两个事件，将新创建的文件名写入数据库中（recording状态），后续由看门狗定期扫描文件来更新文件大小。但看门狗部分的业务逻辑似乎还没完全实现。
+
+## 由于项目开发中修改了大量系统逻辑，现在需要重新梳理看门狗目前的业务功能
+
+更新项目相关的文档内容。
 
 ## 测试不同情况的 ffmpeg 进程代码 code
 

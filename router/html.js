@@ -112,11 +112,6 @@ router.get('/upload_records', async (req, res) => {
 router.get('/recordings', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
-    // let thresholdBytes = 0;
-    // try {
-    //   const val = await DataService.getSetting('filtering_threshold');
-    //   if (val) thresholdBytes = (parseInt(val, 10) || 10) * 1024 * 1024;
-    // } catch (_) {}
 
     const [recordings, rooms] = await Promise.all([
       DataService.getRecordings({
