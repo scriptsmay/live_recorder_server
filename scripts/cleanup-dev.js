@@ -129,13 +129,21 @@ async function cleanup() {
   // 清空下载目录（开发环境）
   if (fs.existsSync(DOWNLOAD_DIR)) {
     console.log(`  └─ 清空下载目录 ${DOWNLOAD_DIR} ...`);
-    let count = 0;
+    let fileCount = 0;
+    let dirCount = 0;
     for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
-      fs.unlinkSync(path.join(DOWNLOAD_DIR, f));
-      count++;
+      const fullPath = path.join(DOWNLOAD_DIR, f);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        dirCount++;
+      } else {
+        fs.unlinkSync(fullPath);
+        fileCount++;
+      }
     }
-    if (count > 0) {
-      console.log(`    ✅ 删除 ${count} 个文件`);
+    if (fileCount > 0 || dirCount > 0) {
+      console.log(`    ✅ 删除 ${fileCount} 个文件, ${dirCount} 个目录`);
     } else {
       console.log('    ✅ 无待处理文件');
     }
@@ -149,45 +157,28 @@ async function cleanup() {
     const d = await pool.connect();
     await d.query('BEGIN');
 
-    // 删除孤文件 / 缺失记录
-    const orphaned = await d.query("DELETE FROM recording_files WHERE status IN ('orphaned', 'missing') RETURNING id");
-    if (orphaned.rowCount > 0) {
-      console.log(`  └─ 删除孤文件/缺失记录: ${orphaned.rowCount} 条`);
+    // 清空 recording_files 表
+    const recordingFiles = await d.query('DELETE FROM recording_files RETURNING id');
+    if (recordingFiles.rowCount > 0) {
+      console.log(`  └─ 清空 recording_files: ${recordingFiles.rowCount} 条`);
     } else {
-      console.log('  └─ 无孤文件/缺失记录');
+      console.log('  └─ recording_files 已为空');
     }
 
-    // 中断所有 open 的 recording 会话
-    const sessions = await d.query(
-      `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted'
-       WHERE status = 'recording' RETURNING id`
-    );
+    // 清空 recordings 表
+    const recordings = await d.query('DELETE FROM recordings RETURNING id');
+    if (recordings.rowCount > 0) {
+      console.log(`  └─ 清空 recordings: ${recordings.rowCount} 条`);
+    } else {
+      console.log('  └─ recordings 已为空');
+    }
+
+    // 清空 recording_sessions 表
+    const sessions = await d.query('DELETE FROM recording_sessions RETURNING id');
     if (sessions.rowCount > 0) {
-      console.log(`  └─ 中断遗留会话: ${sessions.rowCount} 条`);
+      console.log(`  └─ 清空 recording_sessions: ${sessions.rowCount} 条`);
     } else {
-      console.log('  └─ 无遗留会话');
-    }
-
-    // 中断所有 open 的 recordings
-    const recs = await d.query(
-      `UPDATE recordings SET ended_at = NOW(), status = 'interrupted'
-       WHERE status = 'recording' RETURNING id`
-    );
-    if (recs.rowCount > 0) {
-      console.log(`  └─ 中断遗留录制: ${recs.rowCount} 条`);
-    } else {
-      console.log('  └─ 无遗留录制');
-    }
-
-    // 中断所有 open 的 recording_files
-    const files = await d.query(
-      `UPDATE recording_files SET status = 'interrupted', checked_at = NOW()
-       WHERE status = 'recording' RETURNING id`
-    );
-    if (files.rowCount > 0) {
-      console.log(`  └─ 中断遗留文件: ${files.rowCount} 条`);
-    } else {
-      console.log('  └─ 无遗留文件');
+      console.log('  └─ recording_sessions 已为空');
     }
 
     // 房间复位
