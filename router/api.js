@@ -145,7 +145,7 @@ router.get('/notify/status', async (req, res) => {
     }
     let downloaderEngine = 'ffmpeg';
     try {
-      const dl = getActiveDownloader();
+      const dl = getActiveDownloader(room.polling_platform);
       downloaderEngine = dl.name;
     } catch (_) {}
     const data = {

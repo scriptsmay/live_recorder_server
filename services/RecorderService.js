@@ -215,6 +215,8 @@ class RecorderService {
             reuseSession = true;
             resumeCount = recent.rows[0].id;
             session = recent.rows[0];
+            // 会话没有这个字段，所以把直播间的字段给会话
+            session.polling_platform = room.polling_platform;
             console.log(`[续播] 复用会话 ${recent.rows[0].id} (上次结束在延迟窗口内)`);
           }
           redis.del(lockKey).catch(() => {});
@@ -671,15 +673,7 @@ class RecorderService {
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0 && downloader.isSegment();
 
-    const outputFilePattern = generateOutputPath(
-      downloader,
-      template,
-      room.room_name,
-      title,
-      segmentDuration,
-      reuseSession,
-      room.output_path
-    );
+    const outputFilePattern = generateOutputPath(downloader, template, room.room_name, title, segmentDuration);
 
     console.log(`[任务启动] 文件名模板: ${template}`);
     console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
@@ -791,20 +785,8 @@ class RecorderService {
    * @returns {Promise<number>} 最大重试次数
    */
   static async getMaxResumeRetries() {
-    try {
-      const r = await pool.query("SELECT value FROM settings WHERE key = 'max_resume_retries'");
-      if (r.rows.length) return parseInt(r.rows[0].value, 10) || 3;
-    } catch (_) {}
-    return 3;
-  }
-
-  /**
-   * 尝试恢复中断的录制会话
-   *
-   * @param {Object} session - 会话信息对象
-   */
-  static async tryResumeSession(session) {
-    await recordingManager.resumeSession(session);
+    const maxResumeRetries = await DataService.getSetting('max_resume_retries', 3);
+    return parseInt(maxResumeRetries, 10) || 3;
   }
 
   /**
@@ -831,7 +813,7 @@ class RecorderService {
         let success = false;
         if (reuseSession) {
           try {
-            await this.tryResumeSession(session);
+            await recordingManager.resumeSession(session);
             success = true;
           } catch (resumeErr) {
             console.error(`[清理] 尝试恢复录制会话失败: ${resumeErr}`);
@@ -861,14 +843,14 @@ class RecorderService {
       // TODO： 待验证 - 跳过处理会话
       // 录制中状态的会话
       const staleSessions = await pool.query(
-        `SELECT rs.*, r.id as room_id, r.room_name FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
+        `SELECT rs.*, r.id as room_id, r.room_name, r.polling_platform FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
       );
 
       for (const session of staleSessions.rows) {
         if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
           try {
             console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
-            await this.tryResumeSession(session);
+            await recordingManager.resumeSession(session);
             continue;
           } catch (err) {
             console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);

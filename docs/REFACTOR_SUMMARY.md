@@ -41,7 +41,6 @@
 **移除的内容**:
 
 - ❌ `startSegmentTask` 方法（已移至 RecordingManager）
-- ❌ `tryResumeSession` 的具体实现（委托给 RecordingManager）
 - ❌ 大量的 ffmpeg 进程管理代码
 - ❌ 重复的文件名生成逻辑
 
