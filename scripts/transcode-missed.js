@@ -4,14 +4,14 @@ const pool = require('../db/index');
 const transcoder = require('../lib/core/transcoder');
 
 async function findUntranscodedFlv(downloadDir) {
-  const flvFiles = [];
+  const transVideoFiles = [];
   const mp4Files = new Set();
 
   try {
     const files = fs.readdirSync(downloadDir);
     for (const file of files) {
       if (file.endsWith('.flv')) {
-        flvFiles.push(path.join(downloadDir, file));
+        transVideoFiles.push(path.join(downloadDir, file));
       } else if (file.endsWith('.mp4')) {
         mp4Files.add(file.replace('.mp4', '.flv').toLowerCase());
       }
@@ -22,17 +22,17 @@ async function findUntranscodedFlv(downloadDir) {
   }
 
   const untranscoded = [];
-  for (const flvPath of flvFiles) {
-    const baseName = path.basename(flvPath).toLowerCase();
+  for (const videoPathToTrans of transVideoFiles) {
+    const baseName = path.basename(videoPathToTrans).toLowerCase();
     if (!mp4Files.has(baseName)) {
-      untranscoded.push(flvPath);
+      untranscoded.push(videoPathToTrans);
     }
   }
 
   return untranscoded;
 }
 
-async function updateDbRecords(flvPath, mp4Path, mp4Size) {
+async function updateDbRecords(videoPathToTrans, mp4Path, mp4Size) {
   const mp4FileName = path.basename(mp4Path);
 
   try {
@@ -40,12 +40,12 @@ async function updateDbRecords(flvPath, mp4Path, mp4Size) {
       mp4Path,
       mp4FileName,
       mp4Size,
-      flvPath,
+      videoPathToTrans,
     ]);
     await pool.query(`UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`, [
       mp4Path,
       mp4Size,
-      flvPath,
+      videoPathToTrans,
     ]);
     console.log(`  数据库记录已更新`);
   } catch (err) {
@@ -127,24 +127,24 @@ async function main() {
   let success = 0;
   let failed = 0;
 
-  for (const flvPath of untranscoded) {
-    const mp4Path = flvPath.replace(/\.flv$/i, '.mp4');
-    console.log(`\n转码中: ${path.basename(flvPath)}`);
+  for (const videoPathToTrans of untranscoded) {
+    const mp4Path = videoPathToTrans.replace(/\.flv$/i, '.mp4');
+    console.log(`\n转码中: ${path.basename(videoPathToTrans)}`);
 
     try {
-      const result = await transcoder.fastTranscode(flvPath, mp4Path);
+      const result = await transcoder.fastTranscode(videoPathToTrans, mp4Path);
 
       if (result.success) {
         console.log(`  ✓ 转码成功 (${(result.outputSize / 1024 / 1024).toFixed(1)}MB)`);
         success++;
 
         if (options.updateDb) {
-          await updateDbRecords(flvPath, mp4Path, result.outputSize);
+          await updateDbRecords(videoPathToTrans, mp4Path, result.outputSize);
         }
 
         if (options.deleteOriginal) {
           try {
-            fs.unlinkSync(flvPath);
+            fs.unlinkSync(videoPathToTrans);
             console.log(`  ✓ 已删除原始文件`);
           } catch (err) {
             console.error(`  删除失败:`, err.message);

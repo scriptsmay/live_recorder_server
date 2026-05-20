@@ -56,44 +56,6 @@ ffmpeg (外部进程)
 
 恢复中断的录制会话，包含完整的进程重启和状态同步逻辑。
 
-#### updateSessionToDatabase()
-
-将录制会话状态同步到数据库。
-
-#### initNonSegmentFileRecord()
-
-初始化非分段录制的文件记录。
-
-## 使用示例
-
-```javascript
-const recordingManager = require('../lib/core/RecordingManager');
-
-// 启动录制进程
-const { process, logPath, renameLog } = await recordingManager.startRecordingProcess({
-  downloader,
-  streamUrl: 'rtmp://...',
-  outputPath: '/path/to/output.flv',
-  options: {
-    segmentDuration: 60,
-    platform: 'huya',
-    isStreamUrl: true,
-  },
-  sessionId: null,
-});
-
-// 更新会话到数据库
-const sessionId = await recordingManager.updateSessionToDatabase({
-  room,
-  outputPath,
-  pid: process.pid,
-  // ... 其他参数
-});
-
-// 重命名日志文件
-renameLog(sessionId);
-```
-
 ## 设计原则
 
 1. **单一职责**: 每个方法专注于特定的 ffmpeg 操作

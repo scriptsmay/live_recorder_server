@@ -23,8 +23,6 @@
 - ✅ 录制进程的启动和监控 (`startRecordingProcess`)
 - ✅ 分段录制任务执行 (`startSegmentTask`)
 - ✅ 会话恢复机制 (`resumeSession`)
-- ✅ 数据库会话状态更新 (`updateSessionToDatabase`)
-- ✅ 非分段录制文件记录初始化 (`initNonSegmentFileRecord`)
 - ✅ 内部辅助方法（文件名生成、Redis 操作等）
 
 **设计特点**:

@@ -2,14 +2,13 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
-const { SUPPORTED_TRANSCODE_EXT } = require('../config/config');
 
 const { generateOutputPath } = require('../lib/utils/tool');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
-const transcodeQueue = require('../lib/core/TranscodeQueue');
 const DataService = require('./DataService');
+const RecordingManager = require('../lib/core/RecordingManager');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -149,23 +148,12 @@ class RecorderService {
   }
 
   /**
-   * 获取系统设置值
-   *
-   * @param {string} key - 设置键名
-   * @param {string} defaultValue - 默认值
-   * @returns {Promise<string>} 设置值或默认值
-   */
-  static async getSetting(key, defaultValue) {
-    return DataService.getSetting(key, defaultValue);
-  }
-
-  /**
    * 获取线程池大小配置
    *
    * @returns {Promise<number>} 线程池大小
    */
   static async getPoolSize() {
-    const value = await this.getSetting('pool_size', '3');
+    const value = await DataService.getSetting('pool_size', '3');
     return parseInt(value, 10) || 3;
   }
 
@@ -195,7 +183,7 @@ class RecorderService {
     let session = null;
 
     try {
-      const delayValue = await this.getSetting('delay', '60');
+      const delayValue = await DataService.getSetting('delay', '60');
       const delay = parseInt(delayValue, 10) || 60;
       if (delay > 0) {
         const lockKey = `lock:resume:${room.id}`;
@@ -311,7 +299,7 @@ class RecorderService {
    * @returns {Promise<{fileSize: number, fileCount: number}>} - 文件大小和文件数量
    */
   static async _handleSessionFinish({ sessionId, code }) {
-    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+    const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
     let fileSize = 0;
@@ -350,7 +338,7 @@ class RecorderService {
         );
 
         // 加入自动转码队列
-        this.addTranscodeQueue(sessionId, file.file_path);
+        RecordingManager.addTranscodeQueue(sessionId, file.file_path);
       }
     } catch (statErr) {
       console.warn(`[RecorderService] [会话${sessionId}] 无法获取文件大小`, statErr.message);
@@ -384,35 +372,7 @@ class RecorderService {
   }
 
   /**
-   * 将录制文件添加到转码队列
-   *
-   * 该方法会检查文件格式是否支持转码（flv或ts），并验证自动转码功能是否启用。
-   * 如果条件满足，则生成对应的MP4输出路径，并将转码任务加入队列进行异步处理。
-   *
-   * @param {string} sessionId - 录制会话ID，用于标识和追踪转码任务
-   * @param {string} filePath - 录制文件的完整路径，需要是flv或ts格式
-   * @returns {Promise<void>} 无返回值，异常会在内部捕获并记录日志
-   */
-  static async addTranscodeQueue(sessionId, filePath) {
-    // 仅处理支持转码的文件格式（flv或ts）
-    if (SUPPORTED_TRANSCODE_EXT.test(filePath)) {
-      const autoTranscode = await this.getSetting('auto_transcode', 'true');
-      if (autoTranscode === 'true') {
-        // 生成对应的MP4输出路径
-        const mp4Path = filePath.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
-        transcodeQueue
-          .enqueue({
-            flvPath: filePath,
-            mp4Path: mp4Path,
-            sessionId: sessionId,
-          })
-          .catch((err) => console.error('[转码队列] 入队异常:', err.message));
-      }
-    }
-  }
-
-  /**
-   * 启动录制任务
+   * 启动录制任务，判断参数和前置条件
    *
    * @param {Object} params - 录制参数
    * @param {string} params.url - 直播流地址
@@ -429,8 +389,8 @@ class RecorderService {
       caption,
     });
 
-    if (!url || !title) {
-      console.log('[RecorderService] 录制请求被拒: 缺少必填参数 (url/title)');
+    if (!url || !title || !room_url) {
+      console.log('[RecorderService] 录制请求被拒: 缺少必填参数 (url/title/room_url)');
       return { error: true, status: 400, code: 400, message: '请提供直播流URL和标题。' };
     }
     if (!DOWNLOAD_DIR) {
@@ -445,7 +405,7 @@ class RecorderService {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
 
-    const roomKey = room_url || url;
+    const roomKey = room_url;
 
     if (await this.isActiveTask(roomKey)) {
       console.log('[RecorderService] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
@@ -501,16 +461,28 @@ class RecorderService {
       [room.room_url]
     );
 
-    const { reuseSession, resumeCount } = await this.checkReuseSession(room);
+    return await this.startRoomRecording({ roomId: room.id, caption, url });
+  }
 
-    console.log(`[开始] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
+  /**
+   * 正式启动直播间录制流程
+   * @param {Object} params - 录制参数
+   * @param {string} params.roomId - 房间ID
+   * @param {string} params.caption - 备注信息
+   * @param {string} params.url - 直播流地址
+   * @returns
+   */
+  static async startRoomRecording({ roomId, caption, url, resumeSessionId = null }) {
+    const room = await DataService.getRoomById(roomId);
+    const roomKey = room.room_url;
+    console.log(`[任务启动] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
     const downloader = getActiveDownloader(room.polling_platform);
     const template = room.filename_template || '{room_name}_{datetime}';
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0 && downloader.isSegment();
 
-    const outputFilePattern = generateOutputPath(downloader, template, room.room_name, title, segmentDuration);
+    const outputFilePattern = generateOutputPath(downloader, template, room.room_name, '', segmentDuration);
 
     console.log(`[任务启动] 文件名模板: ${template}`);
     console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
@@ -518,20 +490,27 @@ class RecorderService {
 
     const sessionStart = new Date();
 
-    // 为什么不先新增会话数据库，再启动录制进程呢？
+    // 先新增会话数据库，再启动录制进程
     try {
+      let sessionId = null;
       // 一、新增一个录制会话
-      let sessionId = await recordingManager.createSession({
-        room,
-        outputPath: outputFilePattern,
-        sessionId: null,
-        sessionStart,
-        reuseSession,
-        resumeCount,
-        caption,
-        streamUrl: url,
-      });
-      console.log(`[任务启动] 录制会话: ${sessionId}`);
+      if (resumeSessionId) {
+        console.log(`[任务启动] 恢复录制会话: ${resumeSessionId}`);
+        sessionId = resumeSessionId;
+      } else {
+        const { reuseSession, resumeCount } = await this.checkReuseSession(room);
+        sessionId = await recordingManager.createSession({
+          room,
+          outputPath: outputFilePattern,
+          sessionId: null,
+          sessionStart,
+          reuseSession,
+          resumeCount,
+          caption,
+          streamUrl: url,
+        });
+        console.log(`[任务启动] 录制会话: ${sessionId}`);
+      }
 
       // 二、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
@@ -554,16 +533,7 @@ class RecorderService {
         pid: dlProcess.pid,
       });
 
-      console.log(`[RecorderService] 日志文件: ${logPath} `);
-
-      // 业务层只管会话状态，文件入库全权交给看门狗
-      // downloader.on('segment', async (filePath) => {
-      //   console.log(`[RecorderService] 监测到文件切片: ${filePath}`);
-      // });
-      //
-      // downloader.on('file_created', async (filePath) => {
-      //   console.log(`[RecorderService] 监测到文件创建: ${filePath}`);
-      // });
+      console.log(`[任务启动] 日志文件: ${logPath} `);
 
       // 更新 redis 缓存
       await this.setActiveTask(roomKey, {
@@ -596,11 +566,6 @@ class RecorderService {
 
       dlProcess.on('close', finishSessionWrapper);
 
-      // 风险代码，先注释掉
-      // if (dlProcess.exitCode !== null || dlProcess.signalCode !== null) {
-      //   dlProcess.emit('close', dlProcess.exitCode);
-      // }
-
       notify.recordingStart(room.room_name || title, caption, room.room_url);
 
       return {
@@ -616,15 +581,29 @@ class RecorderService {
     }
   }
 
-  /**
-   * 获取最大恢复重试次数配置
-   *
-   * @returns {Promise<number>} 最大重试次数
-   */
-  static async getMaxResumeRetries() {
-    const maxResumeRetries = await DataService.getSetting('max_resume_retries', 3);
-    return parseInt(maxResumeRetries, 10) || 3;
-  }
+  // static async resumeSession(sessionId) {
+  //   const session = await DataService.getSession(sessionId);
+  //   const room = await DataService.getRoomByUrl(session.room_url);
+
+  //   const result = await this.startRoomRecording({
+  //     roomId: room.id,
+  //     caption: session.caption,
+  //     url: session.stream_url,
+  //   });
+  //   if (result.error) {
+  //     console.log(`[重启会话] 恢复录制失败: ${result.message}`);
+  //   }
+  // }
+
+  // /**
+  //  * 获取最大恢复重试次数配置
+  //  *
+  //  * @returns {Promise<number>} 最大重试次数
+  //  */
+  // static async getMaxResumeRetries() {
+  //   const maxResumeRetries = await DataService.getSetting('max_resume_retries', 3);
+  //   return parseInt(maxResumeRetries, 10) || 3;
+  // }
 
   /**
    * 清理陈旧的录制任务和会话
@@ -638,7 +617,7 @@ class RecorderService {
    *    - 如果恢复失败或重试次数已达上限，将会话和文件状态标记为 'interrupted'
    */
   static async cleanupStaleRecordings() {
-    const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
+    // const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
     try {
       const staleRooms = await pool.query(
         `SELECT id, room_url, room_name, ffmpeg_pid, polling_platform, output_path FROM rooms WHERE status IN ('recording', 'paused')`
@@ -646,23 +625,11 @@ class RecorderService {
 
       for (const row of staleRooms.rows) {
         // 优先尝试续播
-        const { reuseSession, session } = await this.checkReuseSession(row);
-        let success = false;
+        const { reuseSession } = await this.checkReuseSession(row);
         if (reuseSession) {
-          try {
-            await recordingManager.resumeSession(session);
-            success = true;
-          } catch (resumeErr) {
-            console.error(`[清理] 尝试恢复录制会话失败: ${resumeErr}`);
-            // 尝试恢复失败，将状态标记为 'interrupted'
-            await pool.query(
-              `UPDATE recording_sessions SET status = 'interrupted', updated_at = NOW() WHERE id = `,
-              $0
-            );
-          }
+          // 将状态标记为 'interrupted'
+          await pool.query(`UPDATE recording_sessions SET status = 'interrupted', updated_at = NOW() WHERE id = `, $0);
         }
-        // 成功恢复，跳过
-        if (success) continue;
 
         if (row.ffmpeg_pid) {
           // 如果 ffmpeg 进程存在，就暂时不处理，等它自然退出试试
@@ -684,17 +651,17 @@ class RecorderService {
       );
 
       for (const session of staleSessions.rows) {
-        if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
-          try {
-            console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
-            await recordingManager.resumeSession(session);
-            continue;
-          } catch (err) {
-            console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
-          }
-        }
-        // 跳过恢复会话
-        // 如果当前时间
+        // if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
+        //   try {
+        //     console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
+        //     await recordingManager.resumeSession(session);
+        //     continue;
+        //   } catch (err) {
+        //     console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
+        //   }
+        // }
+        // // 跳过恢复会话
+        // // 如果当前时间
 
         console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
         await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
