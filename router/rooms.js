@@ -219,11 +219,11 @@ router.delete('/rooms/:id', async (req, res) => {
 router.post('/rooms/:id/pause', async (req, res) => {
   try {
     const { id } = req.params;
-    const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) {
+    const room = await DataService.getRoomById(id);
+    if (!room) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const result = await RoomService.pauseRecording(room.rows[0].room_url);
+    const result = await RoomService.pauseRecording(room.room_url);
     if (!result.success) {
       return res.status(400).json({ status: 'Error', message: result.message });
     }
@@ -237,11 +237,11 @@ router.post('/rooms/:id/pause', async (req, res) => {
 router.post('/rooms/:id/resume', async (req, res) => {
   try {
     const { id } = req.params;
-    const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) {
+    const room = await DataService.getRoomById(id);
+    if (!room) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const result = await RoomService.resumeRecording(room.rows[0].room_url);
+    const result = await RoomService.resumeRecording(room.room_url);
     if (!result.success) {
       return res.status(400).json({ status: 'Error', message: result.message });
     }
@@ -256,11 +256,11 @@ router.post('/rooms/:id/stop', async (req, res) => {
   try {
     const { id } = req.params;
     const force = req.body?.force === true;
-    const room = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) {
+    const room = await DataService.getRoomById(id);
+    if (!room) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    const result = await RoomService.stopRecording(room.rows[0].room_url, force === true);
+    const result = await RoomService.stopRecording(room.room_url, force === true);
 
     await pool.query('UPDATE rooms SET monitoring_enabled = FALSE WHERE id = $1', [id]);
     await pollingManager.reloadRoom(parseInt(id, 10));

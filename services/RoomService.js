@@ -2,12 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const DataService = require('./DataService');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 
 class RoomService {
   static async getRoomByUrl(roomUrl) {
-    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
-    return result.rows[0] || null;
+    return DataService.getRoomByUrl(roomUrl);
   }
 
   static async upsertRoom(roomUrl, roomName) {

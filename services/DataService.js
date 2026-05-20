@@ -100,9 +100,12 @@ class DataService {
     return { rows: result.rows, map };
   }
 
-  static async getSetting(key) {
-    const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-    return result.rows.length ? result.rows[0].value : null;
+  static async getSetting(key, defaultValue = null) {
+    try {
+      const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+      if (result.rows.length) return result.rows[0].value;
+    } catch (_) {}
+    return defaultValue;
   }
 
   static async getSessions(options = {}) {

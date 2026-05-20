@@ -7,6 +7,7 @@ const transcodeQueue = require('../lib/core/TranscodeQueue');
 const notify = require('../lib/core/notify');
 const { createProcLog } = require('../lib/utils/proc-log');
 const { afterUpload } = require('../lib/core/backup');
+const DataService = require('./DataService');
 
 class UploadService {
   static async getUploadLimit() {
@@ -219,11 +220,7 @@ class UploadService {
   }
 
   static async getSetting(key, def) {
-    try {
-      const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-      if (r.rows.length) return r.rows[0].value;
-    } catch (_) {}
-    return def;
+    return DataService.getSetting(key, def);
   }
 
   static async hasBlockingUploadRecord(sessionId) {

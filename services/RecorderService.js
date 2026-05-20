@@ -9,6 +9,7 @@ const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFacto
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
+const DataService = require('./DataService');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -120,19 +121,6 @@ class RecorderService {
   }
 
   /**
-   * 清理文件名中的非法字符
-   *
-   * @param {string} name - 原始文件名
-   * @returns {string} 清理后的文件名
-   */
-  static sanitizeFilename(name) {
-    return name
-      .replace(/[\\/:\*\?"<>\|\x00-\x1F\x7F]/g, '')
-      .replace(/\s+/g, '_')
-      .replace(/^_+|_+$/g, '');
-  }
-
-  /**
    * 获取或创建房间记录
    *
    * @param {string} roomUrl - 房间URL
@@ -168,13 +156,7 @@ class RecorderService {
    * @returns {Promise<string>} 设置值或默认值
    */
   static async getSetting(key, defaultValue) {
-    try {
-      const ps = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-      if (ps.rows.length) {
-        return ps.rows[0].value;
-      }
-    } catch (_) {}
-    return defaultValue;
+    return DataService.getSetting(key, defaultValue);
   }
 
   /**
@@ -294,6 +276,7 @@ class RecorderService {
 
       if (useSegment) {
         await this._handleSegmentFinish({
+          code,
           engine,
           room,
           sessionId,
@@ -340,7 +323,7 @@ class RecorderService {
    * @param {boolean} params.reuseSession - 是否复用会话
    * @param {string} params.outputFilePattern - 输出文件路径模式
    */
-  static async _handleSegmentFinish({ engine, room, sessionId, _sessionStart, reuseSession, outputFilePattern }) {
+  static async _handleSegmentFinish({ code, engine, room, sessionId, _sessionStart, reuseSession, outputFilePattern }) {
     const isEngineSegment = engine.isSegment();
     if (!isEngineSegment) {
       const result = await recordingManager.startSegmentTask({
