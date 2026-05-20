@@ -86,10 +86,13 @@ async function init() {
   await RecorderService.cleanupStaleRecordings();
   await transcodeQueue.init();
   watchdog.start();
-  await pollingManager.start();
 
   app.listen(port, () => {
     console.log(`Live Recorder Server 已启动，端口 ${port}`);
+  });
+
+  pollingManager.start().catch((err) => {
+    console.error('[PollingManager] 启动失败:', err.message);
   });
 }
 
