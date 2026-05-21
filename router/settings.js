@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
 const DataService = require('../services/DataService');
+const transcodeQueue = require('../lib/core/TranscodeQueue');
 
 router.get('/settings', async (req, res) => {
   try {
@@ -23,6 +24,11 @@ router.put('/settings/:key', async (req, res) => {
        RETURNING *`,
       [key, value]
     );
+
+    if (key === 'transcode_concurrency') {
+      await transcodeQueue.reloadConcurrency();
+    }
+
     res.json({ status: 'ok', data: result.rows[0] });
   } catch (err) {
     console.error('[settings] 更新失败:', err);
@@ -61,6 +67,11 @@ router.put('/settings', async (req, res) => {
     `;
 
     const result = await pool.query(query, values);
+
+    if (updates.transcode_concurrency !== undefined) {
+      await transcodeQueue.reloadConcurrency();
+    }
+
     res.json({ status: 'ok', data: result.rows });
   } catch (err) {
     console.error('[settings] 批量更新失败:', err);

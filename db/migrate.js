@@ -267,7 +267,7 @@ async function runMigration() {
       ['max_resume_retries', '3'],
       ['auto_transcode', 'true'],
       ['transcode_delete_originals', 'true'],
-      ['transcode_concurrency', '3'],
+      ['transcode_concurrency', '1'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(
