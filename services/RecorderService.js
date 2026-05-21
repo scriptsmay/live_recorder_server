@@ -339,22 +339,20 @@ class RecorderService {
       console.warn(`[RecorderService] [会话${sessionId}] 无法获取文件大小`, statErr.message);
     }
 
-    if (fileExists && fileSize > 0) {
-      if (sessionId) {
-        let sessionStatus = 'completed';
-        if (fileSize === 0 && code !== 0) {
-          sessionStatus = 'interrupted';
-        }
+    if (sessionId) {
+      let sessionStatus = 'completed';
+      if (fileSize === 0 && code !== 0) {
+        sessionStatus = 'interrupted';
+      }
 
-        await pool.query(
-          `UPDATE recording_sessions
+      await pool.query(
+        `UPDATE recording_sessions
              SET ended_at = NOW(), status = $1,
                  total_segments = 1,
                  total_size = $2
              WHERE id = $3 AND status = 'recording'`,
-          [sessionStatus, fileSize, sessionId]
-        );
-      }
+        [sessionStatus, fileSize, sessionId]
+      );
     }
 
     if (fileCount === 0) {

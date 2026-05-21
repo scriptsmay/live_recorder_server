@@ -16,8 +16,7 @@
         <th>录制状态</th>
         <th>通知</th>
         <th>监听</th>
-        <th>轮询</th>
-        <th>直播状态</th>
+        <th>轮询状态</th>
         <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
@@ -45,18 +44,16 @@
           <% } else { %>
           <span class="badge bg-secondary">关</span>
           <% } %>
-        </td>
-        <td>
-          <% if (r.last_live_status) { %>
-          <span class="badge bg-danger">🔴 直播中</span>
-          <% } else if (r.polling_enabled) { %>
-          <span class="badge bg-secondary">⚫ 未开播</span>
-          <% } else { %>
-          <span class="text-muted">-</span>
-          <% } %>
-          <% if (r.last_polled_at) { %>
-          <div><small><%= formatDate(r.last_polled_at) %></small></div>
-          <% } %>
+          <div>
+            <% if (r.last_live_status) { %>
+            <span class="badge bg-danger">🔴 直播中</span>
+            <% } else if (r.polling_enabled) { %>
+            <span class="badge bg-secondary">⚫ 未开播</span>
+            <% } %>
+            <% if (r.last_polled_at) { %>
+            <div><small><%= formatDate(r.last_polled_at) %></small></div>
+            <% } %>
+          </div>
         </td>
         <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
         <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
