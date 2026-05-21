@@ -99,27 +99,35 @@
     btn.disabled = true;
     btn.textContent = '保存中...';
 
-    let ok = true;
+    // 收集所有设置
+    const updates = {};
     for (const key of keys) {
       const el = document.getElementById(`set_${key}`);
-      if (!el) continue;
-      const res = await fetch(`/api/settings/${key}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: el.value }),
-      });
-      if (!res.ok) ok = false;
+      if (el) {
+        updates[key] = el.value;
+      }
     }
 
-    if (ok) {
-      btn.textContent = '已保存';
-      btn.className = 'btn btn-success';
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = '保存设置';
-        btn.className = 'btn btn-primary';
-      }, 2000);
-    } else {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (res.ok) {
+        btn.textContent = '已保存';
+        btn.className = 'btn btn-success';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '保存设置';
+          btn.className = 'btn btn-primary';
+        }, 2000);
+      } else {
+        throw new Error('保存失败');
+      }
+    } catch (err) {
+      console.error('保存设置失败:', err);
       btn.textContent = '保存失败';
       btn.className = 'btn btn-danger';
       setTimeout(() => {

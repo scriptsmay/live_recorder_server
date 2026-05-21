@@ -237,7 +237,7 @@ class DataService {
     }
 
     let sql = `
-      SELECT tr.*, rs.room_url, rm.room_name
+      SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name
       FROM transcode_records tr
       LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
       LEFT JOIN rooms rm ON rs.room_url = rm.room_url

@@ -465,6 +465,7 @@ class RecorderService {
    * @param {string} params.roomId - 房间ID
    * @param {string} params.caption - 备注信息
    * @param {string} params.url - 直播流地址
+   * @param {string} params.resumeSessionId - 恢复会话ID
    * @returns
    */
   static async startRoomRecording({ roomId, caption, url, resumeSessionId = null }) {
@@ -482,12 +483,15 @@ class RecorderService {
     // 先新增会话数据库，再启动录制进程
     try {
       let sessionId = null;
+      let reuseSession = false;
       // 一、新增一个录制会话（先创建会话获取 sessionId）
       if (resumeSessionId) {
         console.log(`[任务启动] 恢复录制会话: ${resumeSessionId}`);
         sessionId = resumeSessionId;
+        reuseSession = true;
       } else {
-        const { reuseSession, resumeCount } = await this.checkReuseSession(room);
+        const { reuseSession: resultReuseSession, resumeCount } = await this.checkReuseSession(room);
+        reuseSession = resultReuseSession;
         // 创建会话时还没有输出路径，先传空路径，后续更新
         sessionId = await recordingManager.createSession({
           room,
@@ -569,14 +573,7 @@ class RecorderService {
         }
         await this.finishSession({
           code,
-          engine: downloader,
-          room,
           sessionId,
-          sessionStart,
-          reuseSession,
-          useSegment,
-          outputFilePattern,
-          roomKey,
         });
       };
 

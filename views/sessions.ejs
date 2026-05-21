@@ -18,7 +18,7 @@
   <% sessions.forEach(s => { %>
     <% const uploads = uploadMap[s.id] || []; %>
     <% const hasSuccessUpload = uploads.some(u => u.status === 'success'); %>
-    <% const statusBadge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[s.status] || s.status; %>
+    <% const statusBadge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>', pending: '<span class="badge bg-secondary">录制准备</span>' }[s.status] || s.status; %>
     <% const totalSize = s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -38,7 +38,8 @@
           <div class="col-md-3"><small>大小: <%= totalSize %></small></div>
         </div>
         
-        <div>
+        <div class="mb-2">
+          <div class="mb-2">输出路径：<%= s.output_path %></div>
           <div>直播流: <code style="cursor: pointer;" onclick="copyCode(this, '<%= s.stream_url %>')"><%= (s.stream_url || '').slice(0, 100) + '…' %></code></div>
           <div class="form-text">注：如果录制完成但没有分片文件，可能是录制过程中断导致的。请检查直播间状态和录制日志。</div>
         </div>

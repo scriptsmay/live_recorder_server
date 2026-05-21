@@ -34,6 +34,7 @@
             <td><%= r.session_id || '-' %></td>
             <td>
               <% if (r.room_name) { %>
+                <span class="text-muted">#<%= r.room_id %></span>
                 <small><%= r.room_name %></small>
               <% } else { %>
                 <span class="text-muted">-</span>
