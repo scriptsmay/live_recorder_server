@@ -118,16 +118,27 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 ## 2. 文件追踪
 
-### 文件名生成
+### 文件路径结构
+
+录制文件采用层级目录结构存储：
 
 ```
-非分段: {room_name}_{datetime}.flv
-分段:   {room_name}_%Y%m%d_%H%M%S.flv
+VIDEO_DOWNLOAD_DIR/
+├── [roomId]/                    # 房间ID目录
+│   ├── [sessionId]/             # 会话ID目录
+│   │   ├── {room_name}_{datetime}.ts      # 非分段录制
+│   │   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
 ```
 
-- 录制输出固定为 FLV 格式(经 ffmpeg 录制)
+- 录制输出固定为 TS 格式(经 ffmpeg 录制)，容错性更强
 - 转码后输出 MP4 格式(通过 TranscodeQueue 异步处理)
 - 续播时（非分段 + delay 内）复用上一次的 outputFilePattern
+
+**优势**：
+- 避免文件名冲突：每个会话有独立的目录
+- 便于管理：按房间和会话组织文件
+- 扫描效率提升：看门狗可以只扫描特定会话目录
+- 投稿简化：直接从会话目录获取文件
 
 ### recording_files 表状态流转
 
@@ -189,11 +200,14 @@ FFmpeg 写入分段文件(.flv)
 ### FFmpegDownloader (唯一引擎)
 
 - spawn `ffmpeg` 子进程，`stdio: ['ignore', 'ignore', 'pipe']`, `detached: false`
-- 参数：`-c copy -fflags +genpts -reconnect ...`
-- 分段模式：`-f segment -segment_time N`
-- 扩展名：`.flv` (录制输出) → `.mp4` (转码后)
+- 参数：`-c copy -fflags +genpts+igndts+discardcorrupt -reconnect ...`
+- 分段模式：`-f segment -segment_time N -segment_format mpegts`
+- 扩展名：`.ts` (录制输出，容错性更强) → `.mp4` (转码后)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
+- 支持网络重连：`-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`
+- 用户代理伪装：避免被 CDN 403 拦截
+- 协议白名单：`-protocol_whitelist rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy`
 
 ---
 
