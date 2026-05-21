@@ -31,16 +31,16 @@ Chrome扩展 / 轮询系统
 
 #### 阶段一：入口校验（`startRecording`）
 
-| 检查项 | 实现方式 | 返回 |
-|--------|----------|------|
-| 必填参数 | `if (!url \|\| !title \|\| !room_url)` | 400 |
-| DOWNLOAD_DIR | 环境变量检查 | 500 |
-| 活跃任务去重 | Redis `active_task:{roomKey}` EXISTS 检查 | 400 "请勿重复开启" |
-| 线程池容量 | Redis `keys active_task:*` 数量 ≥ pool_size 设置 | 429 "Pool full" |
-| 数据库可用性 | `getOrCreateRoom` catch | 500 |
-| 监控暂停 | `room.monitoring_enabled === false` | 400 |
-| 重复录制 | `room.status === 'recording' \|\| 'paused'` | 400 |
-| 清理残局 | 更新同 room_url 下所有 `status='recording'` 的会话为 `interrupted` | 继续 |
+| 检查项       | 实现方式                                                           | 返回               |
+| ------------ | ------------------------------------------------------------------ | ------------------ |
+| 必填参数     | `if (!url \|\| !title \|\| !room_url)`                             | 400                |
+| DOWNLOAD_DIR | 环境变量检查                                                       | 500                |
+| 活跃任务去重 | Redis `active_task:{roomKey}` EXISTS 检查                          | 400 "请勿重复开启" |
+| 线程池容量   | Redis `keys active_task:*` 数量 ≥ pool_size 设置                   | 429 "Pool full"    |
+| 数据库可用性 | `getOrCreateRoom` catch                                            | 500                |
+| 监控暂停     | `room.monitoring_enabled === false`                                | 400                |
+| 重复录制     | `room.status === 'recording' \|\| 'paused'`                        | 400                |
+| 清理残局     | 更新同 room_url 下所有 `status='recording'` 的会话为 `interrupted` | 继续               |
 
 **设计思路**：分层防御。Redis 做轻量级去重（TTL=24h），DB 做持久化状态检查，double-check 防止并发推送导致重复启动。
 
@@ -80,13 +80,13 @@ Chrome扩展 / 轮询系统
 
 **关键参数差异**（FFmpegDownloader vs TsDownloader）：
 
-| 维度 | FFmpegDownloader (快手) | TsDownloader (虎牙) |
-|------|------------------------|---------------------|
-| 扩展名 | `.flv` | `.ts` |
-| 分段支持 | `isSegment()=true`，支持 `-f segment` | `isSegment()=false`，不分段 |
-| 超时参数 | `timeout=10000000`, `rw_timeout=10000000` | `rw_timeout=15000000`, `reconnect=1` |
-| 容错 | `+genpts+igndts` | `+genpts+igndts+discardcorrupt`, `-correct_ts_overflow 1` |
-| 特殊 | 无 UA 伪装 | 含 `-user_agent` 伪浏览器 UA 防 403 |
+| 维度     | FFmpegDownloader (快手)                   | TsDownloader (虎牙)                                       |
+| -------- | ----------------------------------------- | --------------------------------------------------------- |
+| 扩展名   | `.flv`                                    | `.ts`                                                     |
+| 分段支持 | `isSegment()=true`，支持 `-f segment`     | `isSegment()=false`，不分段                               |
+| 超时参数 | `timeout=10000000`, `rw_timeout=10000000` | `rw_timeout=15000000`, `reconnect=1`                      |
+| 容错     | `+genpts+igndts`                          | `+genpts+igndts+discardcorrupt`, `-correct_ts_overflow 1` |
+| 特殊     | 无 UA 伪装                                | 含 `-user_agent` 伪浏览器 UA 防 403                       |
 
 #### 阶段四：录制结束（`finishSession`）
 
@@ -245,13 +245,13 @@ runWatchdog()
 
 **存在一定程度的过度设计**，集中体现在：
 
-| 问题 | 表现 | 严重程度 |
-|------|------|----------|
-| **僵尸函数** | `checkStaleRecordings` 查库 + stat 文件后只 LOG 不处理 | 🔴 **高** |
-| **功能重叠** | `scanActiveSegments` 与 `finishSession` 的分段追踪逻辑重复；`checkSessionTranscode` 与 `_handleSessionFinish.addTranscodeQueue` 重复 | 🟡 中 |
-| **目录扫描过频** | `scanActiveSegments` + `cleanupFragmentFiles` 每个周期（默认 30s）遍历活跃目录和全下载目录 | 🟡 中 |
-| **单例状态管理** | `watchdogTimer` 全局变量，在异常抛出时可能悬空 | 🟢 低 |
-| **配置依赖链** | `checkStaleRecordings` 依赖 `watchdog_timeout`（无效配置），`scanActiveSegments` 依赖 `filtering_threshold`——但这些配置也在其他模块中被读取 | 🟢 低 |
+| 问题             | 表现                                                                                                                                        | 严重程度  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **僵尸函数**     | `checkStaleRecordings` 查库 + stat 文件后只 LOG 不处理                                                                                      | 🔴 **高** |
+| **功能重叠**     | `scanActiveSegments` 与 `finishSession` 的分段追踪逻辑重复；`checkSessionTranscode` 与 `_handleSessionFinish.addTranscodeQueue` 重复        | 🟡 中     |
+| **目录扫描过频** | `scanActiveSegments` + `cleanupFragmentFiles` 每个周期（默认 30s）遍历活跃目录和全下载目录                                                  | 🟡 中     |
+| **单例状态管理** | `watchdogTimer` 全局变量，在异常抛出时可能悬空                                                                                              | 🟢 低     |
+| **配置依赖链**   | `checkStaleRecordings` 依赖 `watchdog_timeout`（无效配置），`scanActiveSegments` 依赖 `filtering_threshold`——但这些配置也在其他模块中被读取 | 🟢 低     |
 
 **具体建议**：
 
@@ -318,15 +318,18 @@ runWatchdog()
 整个项目的主业务流程设计清晰、防御完善，分层架构和续播/碎片过滤等机制体现了良好的工程实践。看门狗作为兜底系统覆盖了绝大多数边缘情况，但存在以下可改进点：
 
 **高优先级**：
+
 - `checkStaleRecordings` 要么恢复清理逻辑，要么移除
 - 解决 `scanActiveSegments` 与 `finishSession` 的功能重叠问题
 
 **中优先级**：
+
 - 用 Redis Set 替代 `keys active_task:*` 做活跃任务计数
 - 合并重复的转码入队逻辑
 - 为看门狗的某些 SQL 查询增加最后一次检查时间戳去重
 
 **低优先级**：
+
 - 续播锁 TTL 应随 delay 设置动态调整
 - `cleanupFragmentFiles` 的 `walkDir` 在大目录下的性能评估
 
@@ -336,15 +339,15 @@ runWatchdog()
 
 ### 4.1 优先级排布
 
-| 优先级 | 分类 | 任务 | 预估工时 | 影响范围 | 风险等级 |
-|--------|------|------|----------|----------|----------|
-| 🔴 P0 | Bug | 恢复/移除 `checkStaleRecordings` 僵尸逻辑 | 1h | watchdog.js | 低 |
-| 🟡 P1 | 功能重叠 | 合并 `scanActiveSegments` 与 `finishSession` 的分段追踪 | 3h | watchdog.js + RecorderService.js | 中 |
-| 🟡 P1 | 功能重叠 | 合并 `checkSessionTranscode` 的重复入队逻辑 | 2h | watchdog.js + TranscodeQueue.js | 中 |
-| 🟡 P2 | 性能 | Redis `keys active_task:*` 替代为 Set 或 INCR 计数器 | 1h | RecorderService.js | 低 |
-| 🟢 P3 | 健壮性 | 续播锁 TTL 动态适配 delay 设置 | 0.5h | RecorderService.js | 低 |
-| 🟢 P3 | 性能 | 看门狗循环增加去重标记减少全表扫描 | 2h | watchdog.js | 低 |
-| 🟢 P3 | 清理 | `finishSession` 残留的旧参数代码清理 | 0.5h | RecorderService.js | 低 |
+| 优先级 | 分类     | 任务                                                    | 预估工时 | 影响范围                         | 风险等级 |
+| ------ | -------- | ------------------------------------------------------- | -------- | -------------------------------- | -------- |
+| 🔴 P0  | Bug      | 恢复/移除 `checkStaleRecordings` 僵尸逻辑               | 1h       | watchdog.js                      | 低       |
+| 🟡 P1  | 功能重叠 | 合并 `scanActiveSegments` 与 `finishSession` 的分段追踪 | 3h       | watchdog.js + RecorderService.js | 中       |
+| 🟡 P1  | 功能重叠 | 合并 `checkSessionTranscode` 的重复入队逻辑             | 2h       | watchdog.js + TranscodeQueue.js  | 中       |
+| 🟡 P2  | 性能     | Redis `keys active_task:*` 替代为 Set 或 INCR 计数器    | 1h       | RecorderService.js               | 低       |
+| 🟢 P3  | 健壮性   | 续播锁 TTL 动态适配 delay 设置                          | 0.5h     | RecorderService.js               | 低       |
+| 🟢 P3  | 性能     | 看门狗循环增加去重标记减少全表扫描                      | 2h       | watchdog.js                      | 低       |
+| 🟢 P3  | 清理     | `finishSession` 残留的旧参数代码清理                    | 0.5h     | RecorderService.js               | 低       |
 
 ### 4.2 详细方案
 
@@ -363,9 +366,13 @@ async function checkStaleRecordings() {
 
     // 恢复被注释的清理代码
     if (processAlive && room.ffmpeg_pid) {
-      try { process.kill(room.ffmpeg_pid, 'SIGTERM'); } catch (_) {}
+      try {
+        process.kill(room.ffmpeg_pid, 'SIGTERM');
+      } catch (_) {}
       setTimeout(() => {
-        try { process.kill(room.ffmpeg_pid, 'SIGKILL'); } catch (_) {}
+        try {
+          process.kill(room.ffmpeg_pid, 'SIGKILL');
+        } catch (_) {}
       }, 5000);
     }
 
@@ -378,6 +385,7 @@ async function checkStaleRecordings() {
 **方案 B — 移除此函数**：在 `runWatchdog` 中删除 `checkStaleRecordings()` 调用，保留代码为历史参考。
 
 推荐方案 A，因为：
+
 - 看门狗的核心理念就是兜底，移除了就失去了对 FFmpeg 僵尸进程的处理能力
 - 当前 `cleanupStaleRecordings`（启动时执行）无法覆盖运行中的僵尸进程
 - 恢复开销小，逻辑已有成熟的参考实现
@@ -394,7 +402,7 @@ async function checkStaleRecordings() {
 
 ```diff
 - WHERE r.output_path != ''
-- AND (rs.status = 'recording' OR 
+- AND (rs.status = 'recording' OR
 -       (rs.status = 'completed' AND rs.ended_at >= NOW() - INTERVAL '5 minutes'))
 + WHERE r.output_path != ''
 + AND rs.status = 'recording'
@@ -416,7 +424,7 @@ async function checkStaleRecordings() {
   // 在看门狗中
 + const { rows: sessions } = await pool.query(
 +   `SELECT id FROM recording_sessions
-+    WHERE status = 'completed' 
++    WHERE status = 'completed'
 +      AND ended_at IS NOT NULL
 +      AND finished_processing = false`  // 新增标志位
 + );
@@ -460,15 +468,17 @@ await redis.del(this.activeTaskKey(roomKey));
 为 `finalizeInterruptedSessions` 和 `checkSessionTranscode` 增加轻量去重：
 
 **方案 A（Redis）**：
+
 ```js
 // finalizeInterrupted 最后扫描的 interrupted session 最大 ID
 await redis.set('watchdog:last_interrupted_id', maxId, { EX: 3600 });
 ```
 
 **方案 B（where 条件）**：
+
 ```sql
 -- 只处理上次检查后新出现的 interrupted 会话
-WHERE status = 'interrupted' 
+WHERE status = 'interrupted'
   AND ended_at IS NOT NULL
   AND ended_at < (NOW() - INTERVAL '1 second' * $1)  -- 已超 delay
   AND updated_at > NOW() - INTERVAL '2 hours'          -- 2小时内
@@ -478,22 +488,22 @@ WHERE status = 'interrupted'
 
 ### 4.3 阶段划分 & 发布计划
 
-| 阶段 | 包含任务 | 建议版本号 | 验证方式 |
-|------|----------|-----------|----------|
-| **Phase 1**（立即） | P0: 恢复 checkStaleRecordings | v1.1.6 | 手动 kill ffmpeg 进程，确认看门狗 1 分钟内清理 |
-| **Phase 2**（本周） | P1: scanActiveSegments 去重 + checkSessionTranscode 去重 | v1.2.0 | 录制完成后检查转码队列和 DB 无重复记录 |
-| **Phase 3**（可选） | P2: Redis 计数器优化 + P3 各项改进 | v1.2.1 | 并发推送测试 + 2x 活跃任务时 keys 命令不再调用 |
+| 阶段                | 包含任务                                                 | 建议版本号 | 验证方式                                       |
+| ------------------- | -------------------------------------------------------- | ---------- | ---------------------------------------------- |
+| **Phase 1**（立即） | P0: 恢复 checkStaleRecordings                            | v1.1.6     | 手动 kill ffmpeg 进程，确认看门狗 1 分钟内清理 |
+| **Phase 2**（本周） | P1: scanActiveSegments 去重 + checkSessionTranscode 去重 | v1.2.0     | 录制完成后检查转码队列和 DB 无重复记录         |
+| **Phase 3**（可选） | P2: Redis 计数器优化 + P3 各项改进                       | v1.2.1     | 并发推送测试 + 2x 活跃任务时 keys 命令不再调用 |
 
 ### 4.4 风险与回退
 
-| 改动 | 回退方式 | 判断信号 |
-|------|----------|----------|
-| Phase 1: 恢复清理 | 重新注释 cleanup 代码 + 重启服务 | 录制备份文件被误清理（有 `transcode_delete_originals` 把关，风险低） |
-| Phase 2: scanActiveSegments | 恢复 WHERE 条件 + 重启 | 文件未被追踪（关注 `recording_files` 表 `checked_at` 字段） |
-| Phase 2: checkSessionTranscode | 全程无数据丢失，最多某次投稿延迟一个看门狗周期 | 手动 `POST /api/sessions/:id/upload` 触发 |
+| 改动                           | 回退方式                                       | 判断信号                                                             |
+| ------------------------------ | ---------------------------------------------- | -------------------------------------------------------------------- |
+| Phase 1: 恢复清理              | 重新注释 cleanup 代码 + 重启服务               | 录制备份文件被误清理（有 `transcode_delete_originals` 把关，风险低） |
+| Phase 2: scanActiveSegments    | 恢复 WHERE 条件 + 重启                         | 文件未被追踪（关注 `recording_files` 表 `checked_at` 字段）          |
+| Phase 2: checkSessionTranscode | 全程无数据丢失，最多某次投稿延迟一个看门狗周期 | 手动 `POST /api/sessions/:id/upload` 触发                            |
 
 所有改动建议通过新建 `dev` 分支、在开发数据库上测试后再合并到 `main`。
 
 ---
 
-*下次 Code Review 建议关注点：PollingManager 与 Watchdog 的重叠区间、TsDownloader 不分段后的转码前切割实现*
+_下次 Code Review 建议关注点：PollingManager 与 Watchdog 的重叠区间、TsDownloader 不分段后的转码前切割实现_

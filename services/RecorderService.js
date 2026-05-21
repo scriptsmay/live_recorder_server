@@ -503,8 +503,17 @@ class RecorderService {
       }
 
       // 二、使用 roomId 和 sessionId 生成带层级的输出路径
-      const outputFilePattern = generateOutputPath(downloader, template, room.room_name, '', segmentDuration, null, room.id, sessionId);
-      
+      const outputFilePattern = generateOutputPath(
+        downloader,
+        template,
+        room.room_name,
+        '',
+        segmentDuration,
+        null,
+        room.id,
+        sessionId
+      );
+
       // 创建会话目录
       const sessionDir = require('path').dirname(outputFilePattern);
       if (!require('fs').existsSync(sessionDir)) {
