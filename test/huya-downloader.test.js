@@ -1,95 +1,126 @@
-const path = require('path');
 const { spawn } = require('child_process');
-const HuyaPythonDownloader = require('../lib/core/downloaders/HuyaPythonDownloader');
+const { Readable } = require('stream');
+const FFmpegDownloader = require('../lib/core/downloaders/FFmpegDownloader');
 const DownloaderFactory = require('../lib/core/downloaders/DownloaderFactory');
 
-// Mock child_process.spawn
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
 }));
 
-describe('Huya Downloader Module', () => {
-  describe('HuyaPythonDownloader', () => {
+describe('FFmpeg Downloader Module', () => {
+  describe('FFmpegDownloader', () => {
     let downloader;
 
     beforeEach(() => {
       jest.clearAllMocks();
-      downloader = new HuyaPythonDownloader();
+      downloader = new FFmpegDownloader();
     });
 
     describe('基本属性', () => {
       it('should have correct name', () => {
-        expect(downloader.name).toBe('huya-python');
+        expect(downloader.name).toBe('ffmpeg');
       });
 
       it('should return correct extension', () => {
-        expect(downloader.getExtension()).toBe('.flv');
+        expect(downloader.getExtension()).toBe('.ts');
+      });
+
+      it('should support segment recording', () => {
+        expect(downloader.isSegment()).toBe(true);
       });
     });
 
     describe('buildArgs', () => {
-      it('should build basic args correctly', () => {
+      it('should build basic args correctly for non-segment recording', () => {
         const url = 'http://example.com/stream.flv';
-        const outputPath = '/tmp/test.flv';
+        const outputPath = '/tmp/test.ts';
 
         const args = downloader.buildArgs(url, outputPath);
 
-        expect(args[0]).toContain('huya_downloader.py');
-        expect(args).toContain('--url');
+        expect(args).toContain('-y');
+        expect(args).toContain('-user_agent');
+        expect(args.some(arg => arg.startsWith('Mozilla/5.0'))).toBe(true);
+        expect(args).toContain('-protocol_whitelist');
+        expect(args).toContain('rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy');
+        expect(args).toContain('-i');
         expect(args).toContain(url);
-        expect(args).toContain('--output');
+        expect(args).toContain('-c');
+        expect(args).toContain('copy');
+        expect(args).toContain('-f');
+        expect(args).toContain('mpegts');
         expect(args).toContain(outputPath);
-        expect(args).toContain('--quality');
-        expect(args).toContain('UHD');
       });
 
-      it('should include segment duration when specified', () => {
+      it('should build args correctly for segment recording', () => {
         const url = 'http://example.com/stream.flv';
-        const outputPath = '/tmp/test.flv';
+        const outputPath = '/tmp/test_%Y%m%d_%H%M%S.ts';
 
         const args = downloader.buildArgs(url, outputPath, { segmentDuration: 3600 });
 
-        expect(args).toContain('--segment-duration');
+        expect(args).toContain('-f');
+        expect(args).toContain('segment');
+        expect(args).toContain('-segment_time');
         expect(args).toContain('3600');
+        expect(args).toContain('-strftime');
+        expect(args).toContain('1');
       });
 
-      it('should include is-stream-url flag when specified', () => {
+      it('should include segment list path when specified', () => {
         const url = 'http://example.com/stream.flv';
-        const outputPath = '/tmp/test.flv';
+        const outputPath = '/tmp/test_%Y%m%d_%H%M%S.ts';
+        const segmentListPath = '/tmp/playlist.m3u8';
 
-        const args = downloader.buildArgs(url, outputPath, { isStreamUrl: true });
+        const args = downloader.buildArgs(url, outputPath, { segmentDuration: 3600, segmentListPath });
 
-        expect(args).toContain('--is-stream-url');
+        expect(args).toContain('-segment_list');
+        expect(args).toContain(segmentListPath);
       });
 
-      it('should use custom quality when specified', () => {
+      it('should include reconnection and timeout parameters', () => {
         const url = 'http://example.com/stream.flv';
-        const outputPath = '/tmp/test.flv';
+        const outputPath = '/tmp/test.ts';
 
-        const args = downloader.buildArgs(url, outputPath, { quality: 'HD' });
+        const args = downloader.buildArgs(url, outputPath);
 
-        expect(args).toContain('--quality');
-        expect(args).toContain('HD');
+        expect(args).toContain('-rw_timeout');
+        expect(args).toContain('30000000');
+        expect(args).toContain('-reconnect');
+        expect(args).toContain('1');
+        expect(args).toContain('-reconnect_delay_max');
+        expect(args).toContain('60');
+      });
+
+      it('should include error tolerance and timestamp correction flags', () => {
+        const url = 'http://example.com/stream.flv';
+        const outputPath = '/tmp/test.ts';
+
+        const args = downloader.buildArgs(url, outputPath);
+
+        expect(args).toContain('-fflags');
+        expect(args).toContain('+genpts+igndts+discardcorrupt');
+        expect(args).toContain('-correct_ts_overflow');
+        expect(args).toContain('1');
+        expect(args).toContain('-avoid_negative_ts');
+        expect(args).toContain('1');
       });
     });
 
     describe('spawn', () => {
       it('should call spawn with correct arguments', () => {
+        const mockStderr = new Readable();
+        mockStderr._read = jest.fn();
         const mockProcess = {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
+          stderr: mockStderr,
+          stdio: ['ignore', 'ignore', 'pipe'],
           pid: 12345,
         };
 
         spawn.mockReturnValue(mockProcess);
 
-        const args = ['script.py', '--url', 'test'];
+        const args = ['-i', 'test', '-c', 'copy', 'output.ts'];
         const result = downloader.spawn(args);
 
-        expect(spawn).toHaveBeenCalledWith('python3', args, {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
-        });
+        expect(spawn).toHaveBeenCalledWith('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
         expect(result).toBe(mockProcess);
       });
     });
@@ -119,6 +150,13 @@ describe('Huya Downloader Module', () => {
 
         expect(downloader.parseProgress(lineMB).sizeBytes).toBe(10 * 1024 * 1024);
         expect(downloader.parseProgress(lineGB).sizeBytes).toBe(2 * 1024 * 1024 * 1024);
+      });
+
+      it('should parse partial progress information', () => {
+        const line = 'time=00:01:23.45';
+        const progress = downloader.parseProgress(line);
+
+        expect(progress).toEqual({ timeSeconds: 83.45 });
       });
     });
 
@@ -168,24 +206,108 @@ describe('Huya Downloader Module', () => {
       it('should return default options', () => {
         expect(downloader.getDefaultOptions()).toEqual({
           segmentDuration: 0,
-          quality: 'UHD',
-          isStreamUrl: false,
+          reconnect: true,
+          reconnectDelayMax: 120,
+          timeout: 30,
         });
+      });
+    });
+
+    describe('stop', () => {
+      it('should call process.kill with SIGTERM', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+        
+        downloader.stop(12345);
+        
+        expect(killSpy).toHaveBeenCalledWith(12345, 'SIGTERM');
+        killSpy.mockRestore();
+      });
+
+      it('should not throw error when process does not exist', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+          throw new Error('process not found');
+        });
+        
+        expect(() => downloader.stop(99999)).not.toThrow();
+        killSpy.mockRestore();
+      });
+    });
+
+    describe('pause', () => {
+      it('should call process.kill with SIGSTOP', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+        
+        downloader.pause(12345);
+        
+        expect(killSpy).toHaveBeenCalledWith(12345, 'SIGSTOP');
+        killSpy.mockRestore();
+      });
+
+      it('should not throw error when process does not exist', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+          throw new Error('process not found');
+        });
+        
+        expect(() => downloader.pause(99999)).not.toThrow();
+        killSpy.mockRestore();
+      });
+    });
+
+    describe('resume', () => {
+      it('should call process.kill with SIGCONT', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+        
+        downloader.resume(12345);
+        
+        expect(killSpy).toHaveBeenCalledWith(12345, 'SIGCONT');
+        killSpy.mockRestore();
+      });
+
+      it('should not throw error when process does not exist', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+          throw new Error('process not found');
+        });
+        
+        expect(() => downloader.resume(99999)).not.toThrow();
+        killSpy.mockRestore();
+      });
+    });
+
+    describe('isRunning', () => {
+      it('should return true when process exists', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+        
+        const result = downloader.isRunning(12345);
+        
+        expect(killSpy).toHaveBeenCalledWith(12345, 0);
+        expect(result).toBe(true);
+        killSpy.mockRestore();
+      });
+
+      it('should return false when process does not exist', () => {
+        const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+          throw new Error('process not found');
+        });
+        
+        const result = downloader.isRunning(99999);
+        
+        expect(result).toBe(false);
+        killSpy.mockRestore();
       });
     });
   });
 
   describe('DownloaderFactory', () => {
     describe('getActiveDownloader', () => {
-      it('should return HuyaPythonDownloader for huya platform', () => {
+      it('should return FFmpegDownloader for any platform', () => {
         const downloader = DownloaderFactory.getActiveDownloader('huya');
 
-        expect(downloader.name).toBe('huya-python');
-        expect(downloader.constructor.name).toBe('HuyaPythonDownloader');
+        expect(downloader.name).toBe('ffmpeg');
+        expect(downloader.constructor.name).toBe('FFmpegDownloader');
       });
 
       it('should return FFmpegDownloader for other platforms', () => {
-        const downloader = DownloaderFactory.getActiveDownloader('other');
+        const downloader = DownloaderFactory.getActiveDownloader('bilibili');
 
         expect(downloader.name).toBe('ffmpeg');
         expect(downloader.constructor.name).toBe('FFmpegDownloader');
@@ -196,15 +318,13 @@ describe('Huya Downloader Module', () => {
 
         expect(downloader.name).toBe('ffmpeg');
       });
-    });
-  });
 
-  describe('huya_downloader.py 脚本检查', () => {
-    it('should exist in correct location', () => {
-      const scriptPath = path.resolve(__dirname, '../lib/core/downloaders/huya_downloader.py');
+      it('should return singleton instance', () => {
+        const downloader1 = DownloaderFactory.getActiveDownloader('huya');
+        const downloader2 = DownloaderFactory.getActiveDownloader('bilibili');
 
-      // Just check that we can resolve the path without error
-      expect(scriptPath).toContain('huya_downloader.py');
+        expect(downloader1).toBe(downloader2);
+      });
     });
   });
 });
