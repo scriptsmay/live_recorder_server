@@ -72,6 +72,7 @@ node scripts/cleanup-dev.js
 ├── lib/                 # 核心模块（与业务无关的通用模块）
 │   ├── core/           # 核心功能
 │   │   ├── backup.js   # NAS 备份
+│   │   ├── RecordingManager.js  # 录制进程管理（会话创建/恢复/追踪）
 │   │   ├── downloaders/   # 下载引擎（仅 FFmpeg）
 │   │   │   ├── DownloaderFactory.js
 │   │   │   ├── DownloaderInterface.js
@@ -111,7 +112,7 @@ node scripts/cleanup-dev.js
 **目录组织原则：**
 
 - `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码）
-- `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染）
+- `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染、文件路径生成）
 - `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
 - `services/DataService.js` — 集中封装读库查询，供 API 路由与 `router/html.js` 页面渲染共用，避免重复 `pool.query`
 - `router/` — 路由层，负责接收请求、调用 Service、返回响应
@@ -205,17 +206,37 @@ node scripts/cleanup-dev.js
 
 ## 下载引擎（Downloader）
 
-- **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 固定返回 FFmpeg 实例（stream-gears 已移除，见 `docs/lessons.md`）
+- **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 统一返回 FFmpeg 实例
 - **接口**：`lib/core/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
 - **FFmpeg**：`lib/core/downloaders/FFmpegDownloader.js` — 唯一下载引擎，需单独安装 ffmpeg
+  - 输出格式：`.ts`（容错性更强）
+  - 支持网络重连（`-reconnect 1`）
+  - 用户代理伪装（防止 CDN 403）
+  - 协议白名单支持
 
 ## 转码功能
 
 - **边下边转码**：`services/RecorderService.js` — 监听 FFmpeg stderr 输出，新分段打开时自动入队上一个已完成的分段
 - **转码队列**：`lib/core/TranscodeQueue.js` — Redis 队列 + 并发控制（`transcode_concurrency`），异步处理转码任务
-- **转码器**：`lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（FLV → MP4）
+- **转码器**：`lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（TS → MP4）
 - **转码配置**：`auto_transcode`（启用/禁用）、`transcode_delete_originals`（删除原文件）
 - **双重保障**：边下边转码为主，`finishSession` 批量处理为兜底，确保无遗漏
+
+## 文件路径结构
+
+录制文件采用层级目录结构存储：`VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`
+
+- 每个会话有独立的目录，避免文件名冲突
+- 看门狗按会话目录扫描，提升效率
+- 工具函数：`lib/utils/tool.js` 中的 `generateOutputPath()` / `getSessionDir()` / `getRoomDir()`
+
+```
+VIDEO_DOWNLOAD_DIR/
+├── [roomId]/
+│   ├── [sessionId]/
+│   │   ├── {room_name}_{datetime}.ts      # 非分段录制
+│   │   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+```
 
 ## 日志
 
