@@ -143,6 +143,27 @@ class DataService {
     return result.rows;
   }
 
+  /**
+   * 根据会话ID获取录制会话信息
+   * @param {string|number} sessionId - 会话ID
+   * @returns {Promise<Object|null>} 返回会话对象,如果不存在则返回null
+   */
+  static async getSession(sessionId) {
+    const result = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [parseInt(sessionId)]);
+    return result.rows[0] || null;
+  }
+
+  // static async getRecordingSession(sessionId) {
+  //   const result = await pool.query(
+  //     `SELECT s.*, rm.room_name, rm.polling_platform
+  //     FROM recording_sessions s
+  //     LEFT JOIN rooms rm ON s.room_url = rm.room_url
+  //     WHERE s.id = $1`,
+  //     [parseInt(sessionId)]
+  //   );
+  //   return result.rows[0] || null;
+  // }
+
   static async getUploadRecords(options = {}) {
     const { session_id, status, limit = 100 } = options;
 

@@ -104,38 +104,49 @@ function showConfirm(message, title = '提示') {
 }
 
 /**
- * Bootstrap Toast 提示函数
- * @param {string} message - 要显示的消息内容
- * @returns {void}
- * @description
- * 该函数用于在页面右下角显示一个 Bootstrap Toast 提示框，提示内容由 message 参数提供。
- * Toast 会在 3 秒后自动消失，并且在消失后会从 DOM 中移除，以防止页面上积累过多的 Toast 元素。
- * 使用时需要确保页面中有一个 id 为 'toast-container' 的元素作为 Toast 的容器。
- * 示例用法：toast('这是一个提示消息');
+ * 显示一个 Bootstrap Toast 提示
+ * @param {string} message - Toast 内容
+ * @param {string} title - (可选) 标题，默认显示 "提示"
  * @example
  * // 在页面上显示一个提示消息
  * toast('这是一个提示消息');
  */
-function toast(message) {
-    const container = document.getElementById('toast-container');
-    
-    // 动态创建一个 Bootstrap Toast 的 HTML 结构
+function toast(message, title = '提示') {
+    // 1. 确保页面存在 toast-container，若不存在则创建一个
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        document.body.appendChild(container);
+    }
+
+    // 2. 创建 Toast DOM 结构
     const toastEl = document.createElement('div');
-    toastEl.className = 'toast align-items-center text-white bg-dark border-0 m-2';
+    toastEl.className = 'toast';
     toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    
     toastEl.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">${message}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        <div class="toast-header">
+            <strong class="me-auto">${title}</strong>
+            <small class="text-muted">刚刚</small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+            ${message}
         </div>
     `;
-    
+
     container.appendChild(toastEl);
-    
-    // 初始化并显示
-    const bsToast = new bootstrap.Toast(toastEl, { delay: 3000 }); // 3秒后自动消失
+
+    // 3. 初始化并显示
+    const bsToast = new bootstrap.Toast(toastEl, { delay: 3000 });
     bsToast.show();
-    
-    // 消失后自动从 DOM 中移除，防止页面标签堆积过多
-    toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+
+    // 4. 彻底销毁逻辑：不仅隐藏，还要从 DOM 中移除
+    toastEl.addEventListener('hidden.bs.toast', () => {
+        toastEl.remove();
+    });
 }

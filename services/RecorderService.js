@@ -228,7 +228,7 @@ class RecorderService {
    */
   static async finishSession({ code, sessionId }) {
     // 简化参数，几乎所有数据都可从数据库中查询到，需要保留 sessionId
-    const session = await DataService.getRecordingSession(sessionId);
+    const session = await DataService.getSession(sessionId);
     const roomKey = session.room_url;
     const room = await DataService.getRoomByUrl(session.room_url);
     const sessionStart = session.started_at;
