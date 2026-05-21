@@ -477,26 +477,21 @@ class RecorderService {
     const segmentDuration = room.segment_duration || 0;
     const useSegment = segmentDuration > 0 && downloader.isSegment();
 
-    const outputFilePattern = generateOutputPath(downloader, template, room.room_name, '', segmentDuration);
-
-    console.log(`[任务启动] 文件名模板: ${template}`);
-    console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
-    console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
-
     const sessionStart = new Date();
 
     // 先新增会话数据库，再启动录制进程
     try {
       let sessionId = null;
-      // 一、新增一个录制会话
+      // 一、新增一个录制会话（先创建会话获取 sessionId）
       if (resumeSessionId) {
         console.log(`[任务启动] 恢复录制会话: ${resumeSessionId}`);
         sessionId = resumeSessionId;
       } else {
         const { reuseSession, resumeCount } = await this.checkReuseSession(room);
+        // 创建会话时还没有输出路径，先传空路径，后续更新
         sessionId = await recordingManager.createSession({
           room,
-          outputPath: outputFilePattern,
+          outputPath: null,
           sessionId: null,
           sessionStart,
           reuseSession,
@@ -507,7 +502,24 @@ class RecorderService {
         console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
 
-      // 二、然后启动下载器模块的录制进程
+      // 二、使用 roomId 和 sessionId 生成带层级的输出路径
+      const outputFilePattern = generateOutputPath(downloader, template, room.room_name, '', segmentDuration, null, room.id, sessionId);
+      
+      // 创建会话目录
+      const sessionDir = require('path').dirname(outputFilePattern);
+      if (!require('fs').existsSync(sessionDir)) {
+        require('fs').mkdirSync(sessionDir, { recursive: true });
+        console.log(`[任务启动] 创建会话目录: ${sessionDir}`);
+      }
+
+      console.log(`[任务启动] 文件名模板: ${template}`);
+      console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
+      console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
+
+      // 三、更新会话的输出路径
+      await recordingManager.updateSessionOutputPath(sessionId, outputFilePattern);
+
+      // 四、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
         downloader,
         streamUrl: url,
@@ -521,7 +533,7 @@ class RecorderService {
       });
       console.log(`[任务启动] 输出文件路径: ${outputFilePattern} | PID: ${dlProcess.pid}`);
 
-      // 三、再去更新 session.pid
+      // 五、再去更新 session.pid
       await recordingManager.updateSessionPidToDatabase({
         roomId: room.id,
         sessionId,
