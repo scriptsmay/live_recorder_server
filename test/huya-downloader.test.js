@@ -39,7 +39,7 @@ describe('FFmpeg Downloader Module', () => {
 
         expect(args).toContain('-y');
         expect(args).toContain('-user_agent');
-        expect(args.some(arg => arg.startsWith('Mozilla/5.0'))).toBe(true);
+        expect(args.some((arg) => arg.startsWith('Mozilla/5.0'))).toBe(true);
         expect(args).toContain('-protocol_whitelist');
         expect(args).toContain('rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy');
         expect(args).toContain('-i');
@@ -216,9 +216,9 @@ describe('FFmpeg Downloader Module', () => {
     describe('stop', () => {
       it('should call process.kill with SIGTERM', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
-        
+
         downloader.stop(12345);
-        
+
         expect(killSpy).toHaveBeenCalledWith(12345, 'SIGTERM');
         killSpy.mockRestore();
       });
@@ -227,7 +227,7 @@ describe('FFmpeg Downloader Module', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
           throw new Error('process not found');
         });
-        
+
         expect(() => downloader.stop(99999)).not.toThrow();
         killSpy.mockRestore();
       });
@@ -236,9 +236,9 @@ describe('FFmpeg Downloader Module', () => {
     describe('pause', () => {
       it('should call process.kill with SIGSTOP', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
-        
+
         downloader.pause(12345);
-        
+
         expect(killSpy).toHaveBeenCalledWith(12345, 'SIGSTOP');
         killSpy.mockRestore();
       });
@@ -247,7 +247,7 @@ describe('FFmpeg Downloader Module', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
           throw new Error('process not found');
         });
-        
+
         expect(() => downloader.pause(99999)).not.toThrow();
         killSpy.mockRestore();
       });
@@ -256,9 +256,9 @@ describe('FFmpeg Downloader Module', () => {
     describe('resume', () => {
       it('should call process.kill with SIGCONT', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
-        
+
         downloader.resume(12345);
-        
+
         expect(killSpy).toHaveBeenCalledWith(12345, 'SIGCONT');
         killSpy.mockRestore();
       });
@@ -267,7 +267,7 @@ describe('FFmpeg Downloader Module', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
           throw new Error('process not found');
         });
-        
+
         expect(() => downloader.resume(99999)).not.toThrow();
         killSpy.mockRestore();
       });
@@ -276,9 +276,9 @@ describe('FFmpeg Downloader Module', () => {
     describe('isRunning', () => {
       it('should return true when process exists', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
-        
+
         const result = downloader.isRunning(12345);
-        
+
         expect(killSpy).toHaveBeenCalledWith(12345, 0);
         expect(result).toBe(true);
         killSpy.mockRestore();
@@ -288,9 +288,9 @@ describe('FFmpeg Downloader Module', () => {
         const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
           throw new Error('process not found');
         });
-        
+
         const result = downloader.isRunning(99999);
-        
+
         expect(result).toBe(false);
         killSpy.mockRestore();
       });

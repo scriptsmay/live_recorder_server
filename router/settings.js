@@ -44,10 +44,12 @@ router.put('/settings', async (req, res) => {
 
     // 构造批量插入的 SQL
     const values = [];
-    const placeholders = entries.map(([key, value], index) => {
-      values.push(key, value);
-      return `($${index * 2 + 1}, $${index * 2 + 2})`;
-    }).join(', ');
+    const placeholders = entries
+      .map(([key, value], index) => {
+        values.push(key, value);
+        return `($${index * 2 + 1}, $${index * 2 + 2})`;
+      })
+      .join(', ');
 
     const query = `
       INSERT INTO settings (key, value)
