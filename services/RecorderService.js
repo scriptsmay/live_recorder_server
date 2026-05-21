@@ -234,13 +234,8 @@ class RecorderService {
     const sessionStart = session.started_at;
     const engine = getActiveDownloader(room.polling_platform);
 
-    const outputFilePattern = generateOutputPath(
-      engine,
-      room.filename_template,
-      room.room_name,
-      title,
-      segmentDuration
-    );
+    // 从会话中获取输出路径，避免生成新路径导致变量缺失问题
+    const outputFilePattern = session.output_path || '[路径未知]';
 
     await this.delActiveTask(roomKey);
     console.log(
