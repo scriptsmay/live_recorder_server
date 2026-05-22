@@ -1,11 +1,10 @@
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const notify = require('../lib/core/notify');
-const { createProcLog } = require('../lib/utils/proc-log');
+const biliup = require('../lib/core/biliup');
 const { afterUpload } = require('../lib/core/backup');
 const DataService = require('./DataService');
 
@@ -166,7 +165,7 @@ class UploadService {
     }
 
     // 读取碎片大小阈值
-    const thresholdValue = await this.getSetting('filtering_threshold', '10');
+    const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
     // 过滤掉小于阈值或不存在的文件
@@ -203,104 +202,74 @@ class UploadService {
     );
     const recordId = record.rows[0].id;
 
-    // 构建biliup命令行参数
-    const biliupPath = process.env.BILIUP_PATH || 'biliup';
-    const args = ['-u', tmpl.cookies_path, 'upload'];
-    if (title) args.push('--title', title);
-    if (desc) args.push(`--desc=${desc}`);
-    if (tmpl.tid) args.push('--tid', String(tmpl.tid));
-    if (tags) args.push('--tag', tags);
-    if (tmpl.copyright) args.push('--copyright', String(tmpl.copyright));
-    if (source) args.push('--source', source);
-    if (tmpl.is_only_self) args.push('--is-only-self', String(tmpl.is_only_self));
-    if (tmpl.cover) args.push('--cover', tmpl.cover);
-    if (tmpl.dtime) args.push('--dtime', String(tmpl.dtime));
-    args.push(...files);
-
     // 发送上传开始通知
     notify.uploadStart(session.room_name, tmpl.name, files.length, session.room_url);
-
-    // 创建进程日志
-    const { stream: logStream, logPath } = createProcLog('biliup', recordId);
-    console.log(`[投稿] biliup 日志: ${logPath}`);
-    logStream.write(`# COMMAND: ${biliupPath} ${args.join(' ')}\n`);
-
-    // 启动biliup子进程执行上传
-    const uploadCwd = process.env.BILIUP_WORK_DIR || process.env.HOME || '.';
-    fs.mkdirSync(uploadCwd, { recursive: true });
-    const proc = spawn(biliupPath, args, { cwd: uploadCwd });
-
-    let output = '';
-    proc.stdout.on('data', (d) => {
-      const s = d.toString();
-      output += s;
-      logStream.write(s);
-    });
-    proc.stderr.on('data', (d) => {
-      const s = d.toString();
-      output += s;
-      logStream.write(s);
-    });
-
-    // 处理进程启动失败的情况
-    proc.on('error', async () => {
-      await pool.query(
-        `UPDATE upload_records SET status='failed', error_message=$1, output=$2, completed_at=NOW() WHERE id=$3`,
-        ['进程启动失败', output, recordId]
-      );
-      await notify.uploadFailed(session.room_name, tmpl.name, title, '进程启动失败', session.room_url);
-    });
-
-    // 处理进程结束
-    proc.on('close', async (code) => {
-      const cmdStr = `${biliupPath} ${args.join(' ')}`;
-      const bvMatch = output.match(/BV[0-9A-Za-z]{10}/);
-      const bvId = bvMatch ? bvMatch[0] : '';
-      if (code === 0) {
-        // 上传成功，更新记录并发送通知
-        await pool.query(
-          `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
-          [cmdStr, output, bvId, recordId]
-        );
-        notify.uploadComplete(session.room_name, title, bvId, session.room_url);
-
-        // 延迟10秒后执行上传后处理
-        await new Promise((r) => setTimeout(r, 10000));
-        const postResult = await afterUpload(
-          tmpl.after_upload,
-          files,
-          session.id,
-          tmpl.name,
-          recordId,
-          session.room_name,
-          session.room_url
-        );
-        if (postResult) {
-          output += `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
-          await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [output, recordId]);
-        }
-      } else {
-        // 上传失败，更新记录并发送失败通知
-        await pool.query(
-          `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
-          [cmdStr, output, `exit code ${code}`, recordId]
-        );
-        await notify.uploadFailed(session.room_name, tmpl.name, title, `exit code ${code}`, session.room_url);
-      }
-    });
-
-    await pool.query(`UPDATE upload_records SET command=$1 WHERE id=$2`, [[biliupPath, ...args].join(' '), recordId]);
     console.log(`[投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
-  }
 
-  /**
-   * 获取系统设置值
-   * @param {string} key - 设置键名
-   * @param {string} def - 默认值
-   * @returns {Promise<string>} 返回设置值或默认值
-   */
-  static async getSetting(key, def) {
-    return DataService.getSetting(key, def);
+    // 使用 biliup 模块执行上传
+    const result = await biliup.upload({
+      cookiesPath: tmpl.cookies_path,
+      files,
+      title,
+      desc,
+      tags,
+      source,
+      tid: tmpl.tid,
+      copyright: tmpl.copyright,
+      isOnlySelf: tmpl.is_only_self,
+      cover: tmpl.cover,
+      dtime: tmpl.dtime,
+      recordId,
+    });
+
+    // 更新上传记录
+    const biliupPath = process.env.BILIUP_PATH || 'biliup';
+    const cmdParts = [biliupPath, '-u', tmpl.cookies_path, 'upload'];
+    if (title) cmdParts.push('--title', title);
+    if (desc) cmdParts.push(`--desc=${desc}`);
+    if (tags) cmdParts.push('--tag', tags);
+    if (source) cmdParts.push('--source', source);
+    if (tmpl.tid) cmdParts.push('--tid', String(tmpl.tid));
+    if (tmpl.copyright) cmdParts.push('--copyright', String(tmpl.copyright));
+    if (tmpl.is_only_self) cmdParts.push('--is-only-self', String(tmpl.is_only_self));
+    if (tmpl.cover) cmdParts.push('--cover', tmpl.cover);
+    if (tmpl.dtime) cmdParts.push('--dtime', String(tmpl.dtime));
+    cmdParts.push(...files);
+    const cmdStr = cmdParts.join(' ');
+
+    if (result.success) {
+      // 上传成功，更新记录并发送通知
+      await pool.query(
+        `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
+        [cmdStr, result.output, result.bvId, recordId]
+      );
+      notify.uploadComplete(session.room_name, title, result.bvId, session.room_url);
+
+      // 延迟10秒后执行上传后处理
+      await new Promise((r) => setTimeout(r, 10000));
+      const postResult = await afterUpload(
+        tmpl.after_upload,
+        files,
+        session.id,
+        tmpl.name,
+        recordId,
+        session.room_name,
+        session.room_url
+      );
+      if (postResult) {
+        const finalOutput = result.output + `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
+        await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [finalOutput, recordId]);
+      }
+    } else {
+      // 上传失败，更新记录并发送失败通知
+      await pool.query(
+        `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
+        [cmdStr, result.output, result.error, recordId]
+      );
+      await notify.uploadFailed(session.room_name, tmpl.name, title, result.error, session.room_url);
+    }
+
+    console.log(`[投稿] biliup 日志: ${result.logPath}`);
   }
 
   /**
@@ -322,7 +291,7 @@ class UploadService {
    * @returns {Promise<boolean>} 如果转码完成或未启用自动转码返回true，否则返回false
    */
   static async isSessionTranscodeComplete(sessionId) {
-    const autoTranscode = await this.getSetting('auto_transcode', 'true');
+    const autoTranscode = await DataService.getSetting('auto_transcode', 'true');
     if (autoTranscode !== 'true') return true;
 
     if (await transcodeQueue.hasSessionPending(sessionId)) return false;
