@@ -55,6 +55,33 @@ function checkGitStatus() {
   }
 }
 
+function cleanupOldTags() {
+  const tags = execSync('git tag --list \'v*\'', { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map(t => t.trim());
+
+  const versionTags = tags
+    .filter(t => semverRegex.test(t.slice(1)))
+    .map(t => ({ tag: t, ver: t.slice(1) }))
+    .sort((a, b) => {
+      const [aM, am, ap] = a.ver.split('.').map(Number);
+      const [bM, bm, bp] = b.ver.split('.').map(Number);
+      return bM - aM || bm - am || bp - ap;
+    });
+
+  const KEEP = 5;
+  if (versionTags.length <= KEEP) return [];
+
+  const toDelete = versionTags.slice(KEEP);
+  console.log(`\n--- Cleaning up old tags (keeping latest ${KEEP}) ---`);
+  for (const { tag } of toDelete) {
+    execSync(`git tag -d ${tag}`, { encoding: 'utf8', stdio: 'inherit' });
+  }
+  return toDelete.map(t => t.tag);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const versionType = args[0];
@@ -83,10 +110,15 @@ function main() {
   console.log('\n--- Creating tag ---');
   runCommand(`git tag -a v${newVersion} -m "Release v${newVersion}"`);
 
+  const deletedTags = cleanupOldTags();
+
   console.log('\n=== Release complete! ===');
   console.log('Next steps:');
   console.log(`  git push origin $(git rev-parse --abbrev-ref HEAD)`);
   console.log(`  git push origin v${newVersion}`);
+  if (deletedTags.length) {
+    console.log(`  git push origin --delete ${deletedTags.join(' ')}`);
+  }
 }
 
 main();
