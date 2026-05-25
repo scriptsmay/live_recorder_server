@@ -295,7 +295,7 @@ router.get('/sessions/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    const recordings = await pool.query('SELECT * FROM recordings WHERE session_id = $1 ORDER BY id', [id]);
+    const recordings = await pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id', [id]);
     // 检查文件是否存在
     const recordingsWithExists = recordings.rows.map((rec) => ({
       ...rec,

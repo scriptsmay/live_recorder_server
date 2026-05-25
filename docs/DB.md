@@ -91,10 +91,9 @@
 | deleted_at     | TIMESTAMP     |                                        | 软删除时间                                            |
 | created_at     | TIMESTAMP     | DEFAULT NOW()                          |                                                       |
 
-### recordings — 录制文件（元数据表）
+### recordings — 录制文件（已废弃）
 
-记录每个分片文件的元数据，供流媒体播放、文件大小统计等下游使用。
-**注意**：此表不是会话文件列表的数据源，会话详情以 `recording_files` 为准。
+> **注意**：此表已废弃，数据已迁移到 `recording_files` 表。新代码不再向此表写入数据，建议在确认系统稳定后删除此表。
 
 | 字段          | 类型          | 约束                                           | 说明                        |
 | ------------- | ------------- | ---------------------------------------------- | --------------------------- |
@@ -108,23 +107,29 @@
 | ended_at      | TIMESTAMP     |                                                | 结束时间                    |
 | status        | VARCHAR(20)   | DEFAULT 'recording'                            | `completed` / `interrupted` |
 
-### recording_files — 磁盘文件跟踪（文件列表主表）
+### recording_files — 录制文件（主表）
 
-**会话详情、投稿操作均以此表作为文件列表的数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
+**会话详情、投稿操作、流媒体播放、文件统计均以此表作为数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
 
-| 字段         | 类型          | 约束                                           | 说明                      |
-| ------------ | ------------- | ---------------------------------------------- | ------------------------- |
-| id           | SERIAL        | PRIMARY KEY                                    | 自增主键                  |
-| session_id   | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL） |
-| room_url     | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                |
-| file_path    | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径              |
-| file_name    | VARCHAR(512)  |                                                | 文件名                    |
-| file_size    | BIGINT        | DEFAULT 0                                      | 文件大小（字节）          |
-| status       | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下              |
-| started_at   | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                  |
-| completed_at | TIMESTAMP     |                                                | 完成时间                  |
-| checked_at   | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间          |
-| created_at   | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                  |
+| 字段              | 类型          | 约束                                           | 说明                      |
+| ----------------- | ------------- | ---------------------------------------------- | ------------------------- |
+| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                  |
+| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL） |
+| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                |
+| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径              |
+| file_name         | VARCHAR(512)  |                                                | 文件名                    |
+| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）          |
+| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下              |
+| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                  |
+| ended_at          | TIMESTAMP     |                                                | 结束时间                  |
+| completed_at      | TIMESTAMP     |                                                | 完成时间                  |
+| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间          |
+| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                  |
+| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                |
+| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成            |
+| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径          |
+| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间              |
+| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                  |
 
 **状态流转：**
 
@@ -141,16 +146,16 @@
 
 **写入时机：**
 
-| 场景                         | 写入方式                                         |
-| ---------------------------- | ------------------------------------------------ |
-| 非分段录制完成               | INSERT 为 `completed`（同时也写入 `recordings`） |
-| 分段录制分片完成（看门狗）   | INSERT 为 `completed`（同时也写入 `recordings`） |
-| 分段录制分片完成（进程退出） | INSERT 为 `completed`（同时也写入 `recordings`） |
-| 启动清理追踪遗留文件         | INSERT 为 `completed`（同时也写入 `recordings`） |
-| 磁盘扫描发现未跟踪文件       | INSERT 为 `orphaned`                             |
-| 手动关联孤文件到会话         | UPDATE 为 `completed`（同时也写入 `recordings`） |
-| 看门狗超时判定录制中断       | UPDATE 为 `interrupted`                          |
-| 启动扫描发现文件已丢失       | UPDATE 为 `missing`                              |
+| 场景                         | 写入方式                     |
+| ---------------------------- | ---------------------------- |
+| 非分段录制完成               | INSERT/UPDATE 为 `completed` |
+| 分段录制分片完成（看门狗）   | INSERT 为 `completed`        |
+| 分段录制分片完成（进程退出） | INSERT 为 `completed`        |
+| 启动清理追踪遗留文件         | INSERT 为 `completed`        |
+| 磁盘扫描发现未跟踪文件       | INSERT 为 `orphaned`         |
+| 手动关联孤文件到会话         | UPDATE 为 `completed`        |
+| 看门狗超时判定录制中断       | UPDATE 为 `interrupted`      |
+| 启动扫描发现文件已丢失       | UPDATE 为 `missing`          |
 
 ### upload_templates — 投稿模板
 

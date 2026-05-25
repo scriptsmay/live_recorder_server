@@ -203,22 +203,22 @@ class DataService {
     const params = [];
 
     if (thresholdBytes > 0) {
-      conditions.push(`r.file_size >= $${params.length + 1}`);
+      conditions.push(`rf.file_size >= $${params.length + 1}`);
       params.push(thresholdBytes);
     }
     if (room_url) {
-      conditions.push(`r.room_url = $${params.length + 1}`);
+      conditions.push(`rf.room_url = $${params.length + 1}`);
       params.push(room_url);
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     const result = await pool.query(
-      `SELECT r.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
-       FROM recordings r
-       LEFT JOIN rooms rm ON r.room_url = rm.room_url
-       LEFT JOIN recording_sessions rs ON r.session_id = rs.id
+      `SELECT rf.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
+       FROM recording_files rf
+       LEFT JOIN rooms rm ON rf.room_url = rm.room_url
+       LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
        ${where}
-       ORDER BY r.id DESC
+       ORDER BY rf.id DESC
        LIMIT $${params.length + 1}`,
       [...params, parseInt(limit, 10)]
     );

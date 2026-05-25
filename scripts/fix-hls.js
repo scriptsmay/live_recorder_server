@@ -62,9 +62,7 @@ async function fixHLS() {
 
     // 3. 验证结果
     console.log('步骤 3: 验证结果');
-    const { rows: recordings } = await pool.query('SELECT COUNT(*) FROM recordings WHERE is_hls_ready = TRUE');
     const { rows: rf } = await pool.query('SELECT COUNT(*) FROM recording_files WHERE is_hls_ready = TRUE');
-    console.log(`   recordings 表中还有 ${recordings[0].count} 个 HLS 就绪的记录`);
     console.log(`   recording_files 表中还有 ${rf[0].count} 个 HLS 就绪的记录`);
     console.log('');
 
@@ -74,7 +72,6 @@ async function fixHLS() {
     console.log('      或者你也可以通过以下方式手动触发 HLS 生成:');
     console.log('      1. 在前端播放界面点击播放按钮');
     console.log('      2. 调用 API: POST /api/recordings/{id}/generate-hls');
-
   } catch (err) {
     console.error('HLS 修复失败:', err);
   } finally {

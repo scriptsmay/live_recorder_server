@@ -300,24 +300,11 @@ router.put('/recording_files/:id/associate', async (req, res) => {
 
     const fileData = file.rows[0];
 
-    await pool.query("UPDATE recording_files SET session_id = $1, status = 'completed' WHERE id = $2", [
+    await pool.query("UPDATE recording_files SET session_id = $1, room_url = $2, status = 'completed' WHERE id = $3", [
       session_id,
+      fileData.room_url || session.rows[0].room_url,
       id,
     ]);
-
-    await pool.query(
-      `INSERT INTO recordings (session_id, room_url, file_path, file_size, started_at, ended_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'completed')
-       ON CONFLICT (file_path) DO UPDATE SET session_id = $1, status = 'completed'`,
-      [
-        session_id,
-        fileData.room_url || session.rows[0].room_url,
-        fileData.file_path,
-        fileData.file_size,
-        fileData.created_at,
-        fileData.completed_at || new Date(),
-      ]
-    );
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -339,7 +326,7 @@ router.delete('/recording_files/missing', async (req, res) => {
 router.delete('/recordings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM recordings WHERE id = $1', [id]);
+    const result = await pool.query('DELETE FROM recording_files WHERE id = $1', [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ status: 'Error', message: '记录不存在' });
     }
@@ -354,13 +341,8 @@ router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
 
-    let fileResult = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [id]);
-    let filePath = fileResult.rows[0]?.file_path;
-
-    if (!filePath) {
-      fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
-      filePath = fileResult.rows[0]?.file_path;
-    }
+    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+    const filePath = fileResult.rows[0]?.file_path;
 
     if (!filePath) {
       return res.status(404).json({ status: 'Error', message: '文件不存在' });
@@ -423,21 +405,11 @@ router.get('/recordings/:id/hls', async (req, res) => {
   try {
     const { id } = req.params;
 
-    let result = await pool.query(
-      'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recordings WHERE id = $1',
+    const result = await pool.query(
+      'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recording_files WHERE id = $1',
       [id]
     );
-    let recording = result.rows[0];
-    let recordingType = 'recording';
-
-    if (!recording) {
-      result = await pool.query(
-        'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recording_files WHERE id = $1',
-        [id]
-      );
-      recording = result.rows[0];
-      recordingType = 'recording_file';
-    }
+    const recording = result.rows[0];
 
     if (!recording) {
       return res.status(404).json({ status: 'Error', message: '录制不存在' });
@@ -455,8 +427,8 @@ router.get('/recordings/:id/hls', async (req, res) => {
             playlist_path: recording.hls_playlist_path,
             relative_path: relativePath,
             generated_at: recording.hls_generated_at,
-            type: recordingType,
-          }
+            type: 'recording_file',
+          },
         });
       }
     }
@@ -466,8 +438,8 @@ router.get('/recordings/:id/hls', async (req, res) => {
       data: {
         is_ready: false,
         source_file: recording.file_path,
-        type: recordingType,
-      }
+        type: 'recording_file',
+      },
     });
   } catch (err) {
     console.error('[api] HLS 状态查询失败:', err);
@@ -479,13 +451,7 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
   try {
     const { id } = req.params;
 
-    let recordingResult = await pool.query('SELECT id, file_path FROM recordings WHERE id = $1', [id]);
-    let recordingType = 'recording';
-
-    if (recordingResult.rows.length === 0) {
-      recordingResult = await pool.query('SELECT id, file_path FROM recording_files WHERE id = $1', [id]);
-      recordingType = 'recording_file';
-    }
+    const recordingResult = await pool.query('SELECT id, file_path FROM recording_files WHERE id = $1', [id]);
 
     if (recordingResult.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '录制不存在' });
@@ -497,8 +463,8 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '源文件不存在' });
     }
 
-    console.log(`[api] 开始生成 HLS: recording_id=${id}, type=${recordingType}`);
-    const genResult = await hlsGenerator.generateForRecording(id, recordingType);
+    console.log(`[api] 开始生成 HLS: recording_id=${id}`);
+    const genResult = await hlsGenerator.generateForRecording(id, 'recording_file');
 
     if (genResult.success) {
       res.json({
@@ -506,7 +472,7 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
         data: {
           playlist_path: genResult.playlistPath,
           already_exists: genResult.alreadyExists || false,
-        }
+        },
       });
     } else {
       res.status(500).json({ status: 'Error', message: genResult.error || 'HLS 生成失败' });

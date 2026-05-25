@@ -144,25 +144,14 @@ class UploadService {
     const tags = this.renderTemplate(tmpl.tags || '', vars);
     const source = this.renderTemplate(tmpl.source || '{room_url}', vars);
 
-    // 从recordings表查询已完成的录制文件
-    let recs = await pool.query(
-      `SELECT DISTINCT ON (file_path) * FROM recordings
+    // 从recording_files表查询已完成的录制文件
+    const recs = await pool.query(
+      `SELECT DISTINCT ON (file_path) * FROM recording_files
        WHERE session_id = $1 AND status IN ('completed', 'interrupted')
        ORDER BY file_path`,
       [session.id]
     );
     let files = recs.rows.map((r) => r.file_path).filter(Boolean);
-
-    // 如果没有找到文件，则从recording_files表查询作为备选
-    if (files.length === 0) {
-      const fallback = await pool.query(
-        `SELECT DISTINCT file_path, file_size FROM recording_files
-         WHERE session_id = $1 AND status IN ('recording', 'interrupted', 'completed')
-         ORDER BY file_path`,
-        [session.id]
-      );
-      files = fallback.rows.map((r) => r.file_path).filter(Boolean);
-    }
 
     // 读取碎片大小阈值
     const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
@@ -297,23 +286,12 @@ class UploadService {
     if (await transcodeQueue.hasSessionPending(sessionId)) return false;
 
     // 从recording_files表获取文件路径
-    let paths = [];
     const files = await pool.query(
       `SELECT file_path FROM recording_files
        WHERE session_id = $1 AND status NOT IN ('missing', 'deleted')`,
       [sessionId]
     );
-    paths = files.rows.map((r) => r.file_path).filter(Boolean);
-
-    // 如果没有找到文件，则从recordings表查询
-    if (paths.length === 0) {
-      const recs = await pool.query(
-        `SELECT file_path FROM recordings
-         WHERE session_id = $1 AND status IN ('completed', 'interrupted')`,
-        [sessionId]
-      );
-      paths = recs.rows.map((r) => r.file_path).filter(Boolean);
-    }
+    const paths = files.rows.map((r) => r.file_path).filter(Boolean);
 
     // 检查所有FLV/TS文件是否都有对应的MP4文件
     for (const fp of paths) {

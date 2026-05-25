@@ -312,7 +312,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 ### GET /api/recordings/:id/stream
 
 流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。
-查询优先级：先查 `recordings` 表，未命中则查 `recording_files` 表。
+数据源：`recording_files` 表
 
 **返回：**
 
@@ -323,7 +323,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 ### GET /api/recordings/:id/hls
 
 查询录制文件的 HLS 播放状态。
-查询优先级：先查 `recordings` 表，未命中则查 `recording_files` 表。
+数据源：`recording_files` 表
 
 **返回（HLS 已就绪）：**
 
@@ -358,7 +358,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 ### POST /api/recordings/:id/generate-hls
 
 手动触发生成 HLS 播放文件。
-查询优先级：先查 `recordings` 表，未命中则查 `recording_files` 表。
+数据源：`recording_files` 表
 
 **返回（成功）：**
 
@@ -383,7 +383,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 ---
 
-### GET /api/hls/*
+### GET /api/hls/\*
 
 HLS 文件服务，提供 `.m3u8` 播放列表和 `.ts` 分片文件。
 
@@ -496,11 +496,11 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 | `threads`                    | string | `8`      | 上传线程数                                                   |
 | `pool2_size`                 | string | `1`      | 上传线程池大小                                               |
 | `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                                 |
-| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件               |
-| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                       |
-| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                          |
+| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件                |
+| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                        |
+| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                           |
 | `hls_cleanup_days`           | number | `30`     | HLS 文件自动清理天数，超过此时长自动删除                     |
-| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                            |
+| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                             |
 
 ---
 

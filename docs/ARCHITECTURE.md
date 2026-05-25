@@ -75,7 +75,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 ## 1. 会话生命周期
 
-**会话的文件列表以 `recording_files` 表为数据源**（而非 `recordings` 表）。`recording_files` 跟踪实际磁盘文件，`recordings` 仅为元数据表供流媒体播放等下游使用。
+**会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
 
 ```
                       ┌── 新录制请求 ──────────────────┐
@@ -86,10 +86,10 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
               │  (recording) │◄────────────────────────┘
               │              │
               │  看门狗实时   │── 每 30s ──→ scanActiveSegments()
-              │  追踪分片     │             写入 recording_files + recordings
+              │  追踪分片     │             写入 recording_files
               │              │
               │  GET /api    │── 会话详情直接查询 recording_files
-              │  /sessions   │   （不查 recordings 表）
+              │  /sessions   │
               └──────┬───────┘
                      │
         ┌────────────┼────────────┐
@@ -167,7 +167,6 @@ FFmpeg 写入分段文件(.flv)
         ▼
   [1] scanActiveSegments (看门狗 30s 周期)
       → 发现新 .flv，写入 recording_files (completed)
-      → 写入 recordings
       → 更新 session total_segments + 1
 
   [2] close handler (进程退出时)
@@ -180,7 +179,7 @@ FFmpeg 写入分段文件(.flv)
   [3] TranscodeQueue (异步转码)
       → 从 Redis 队列取出任务(并发3)
       → ffmpeg -i input.flv -c copy output.mp4
-      → 更新 recording_files 和 recordings 表路径
+      → 更新 recording_files 表路径
       → 删除原 FLV 文件(如果配置了 transcode_delete_originals=true)
 ```
 
@@ -358,7 +357,7 @@ startup()
 ### scanActiveSegments()
 
 - 同步 `fs.readdirSync` + `fs.statSync` 扫描所有活跃录制房间的输出目录
-- 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + recordings + 更新 session 合计
+- 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + 更新 session 合计
 - **mtime 稳定期**：文件最近 2 分钟内有修改则跳过（防止标记还在写入的当前分段）
 - 小于 `filtering_threshold` 的碎片跳过不追踪
 
@@ -367,7 +366,7 @@ startup()
 - 同步 `fs.readdirSync` + `fs.statSync` 扫描整个 `VIDEO_DOWNLOAD_DIR`
 - 找到小于 `filtering_threshold` 的 `.flv`/`.mp4` 文件
 - 跳过创建不足 2 分钟的新文件（防止误删刚完成的分片），跳过刚由 `.part` 重命名而来的文件
-- 删除磁盘文件 + 关联的 `recordings` + `recording_files` 记录
+- 删除磁盘文件 + 关联的 `recording_files` 记录
 - 更新 session 合计
 
 ### syncMissingFiles()
@@ -468,7 +467,7 @@ router/rooms.js (新增/修改房间)
 2. **追踪遗留文件**：将 untracked 的 `.flv`/`.mp4` 写入 `recording_files`
 3. **房间复位**：`status = 'idle'`, `ffmpeg_pid = NULL`, `output_path = ''`
 4. **尝试恢复会话**：对 `status='recording'` 的会话调用 `tryResumeSession`（最多 3 次）
-5. **标记录制中断**：`recordings` + `recording_files` 中 `status='recording'` 的标为 `interrupted`
+5. **标记录制中断**：`recording_files` 中 `status='recording'` 的标为 `interrupted`
 
 ---
 

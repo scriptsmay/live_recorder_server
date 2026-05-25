@@ -241,6 +241,17 @@ async function runMigration() {
       ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_generated_at TIMESTAMP
     `);
 
+    // 添加 recordings 表缺少的字段到 recording_files 表
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_index INTEGER DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS duration_seconds INTEGER DEFAULT 0
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         id SERIAL PRIMARY KEY,

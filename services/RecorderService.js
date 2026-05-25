@@ -321,13 +321,8 @@ class RecorderService {
         fileExists = true;
 
         // 有文件，更新数据库记录
-        await pool.query("UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2", [
-          stat.size,
-          file.id,
-        ]);
-        // 更新文件记录
         await pool.query(
-          `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+          `UPDATE recording_files SET file_size = $1, status = 'completed', ended_at = NOW(), completed_at = NOW()
            WHERE session_id = $2 AND file_path = $3`,
           [stat.size, sessionId, file.file_path]
         );
