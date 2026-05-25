@@ -4,38 +4,38 @@
 
 ### 两个表的字段对比
 
-| 字段 | recordings | recording_files | 说明 |
-|------|-----------|-----------------|------|
-| id | ✅ | ✅ | 主键 |
-| session_id | ✅ | ✅ | 关联会话 |
-| room_url | ✅ | ✅ | 关联直播间 |
-| file_path | ✅ | ✅ | 文件路径（两个表都有唯一约束） |
-| file_size | ✅ | ✅ | 文件大小 |
-| status | ✅ | ✅ | 状态 |
-| started_at | ✅ | ✅ | 开始时间 |
-| ended_at | ✅ | ❌ | 结束时间（只有 recordings 有） |
-| segment_index | ✅ | ❌ | 分片索引（只有 recordings 有） |
-| duration_seconds | ✅ | ❌ | 时长（只有 recordings 有） |
-| file_name | ❌ | ✅ | 文件名（只有 recording_files 有） |
-| checked_at | ❌ | ✅ | 检查时间（只有 recording_files 有） |
-| is_hls_ready | ✅ | ✅ | HLS 就绪状态 |
-| hls_playlist_path | ✅ | ✅ | HLS 播放列表路径 |
-| hls_generated_at | ✅ | ✅ | HLS 生成时间 |
+| 字段              | recordings | recording_files | 说明                                |
+| ----------------- | ---------- | --------------- | ----------------------------------- |
+| id                | ✅         | ✅              | 主键                                |
+| session_id        | ✅         | ✅              | 关联会话                            |
+| room_url          | ✅         | ✅              | 关联直播间                          |
+| file_path         | ✅         | ✅              | 文件路径（两个表都有唯一约束）      |
+| file_size         | ✅         | ✅              | 文件大小                            |
+| status            | ✅         | ✅              | 状态                                |
+| started_at        | ✅         | ✅              | 开始时间                            |
+| ended_at          | ✅         | ❌              | 结束时间（只有 recordings 有）      |
+| segment_index     | ✅         | ❌              | 分片索引（只有 recordings 有）      |
+| duration_seconds  | ✅         | ❌              | 时长（只有 recordings 有）          |
+| file_name         | ❌         | ✅              | 文件名（只有 recording_files 有）   |
+| checked_at        | ❌         | ✅              | 检查时间（只有 recording_files 有） |
+| is_hls_ready      | ✅         | ✅              | HLS 就绪状态                        |
+| hls_playlist_path | ✅         | ✅              | HLS 播放列表路径                    |
+| hls_generated_at  | ✅         | ✅              | HLS 生成时间                        |
 
 ### 实际使用场景分析
 
-| 功能模块 | 使用 recordings | 使用 recording_files |
-|---------|----------------|---------------------|
-| /recordings 页面 | ✅ 主要数据源 | ❌ |
-| HLS 生成 | ✅ 优先查询 | ✅ 备选 |
-| 文件流播放 | ✅ 优先查询 | ✅ 备选 |
-| 孤文件管理 | ❌ | ✅ |
-| 会话详情 | ❌ | ✅ |
-| 文件关联操作 | ✅ 同时更新 | ✅ 同时更新 |
-| 转码功能 | ✅ 备选 | ✅ 主要数据源 |
-| 上传功能 | ✅ 优先查询 | ✅ 备选 |
-| 看门狗分片追踪 | ✅ 同时写入 | ✅ 同时写入 |
-| 文件扫描 | ✅ 同时写入 | ✅ 同时写入 |
+| 功能模块         | 使用 recordings | 使用 recording_files |
+| ---------------- | --------------- | -------------------- |
+| /recordings 页面 | ✅ 主要数据源   | ❌                   |
+| HLS 生成         | ✅ 优先查询     | ✅ 备选              |
+| 文件流播放       | ✅ 优先查询     | ✅ 备选              |
+| 孤文件管理       | ❌              | ✅                   |
+| 会话详情         | ❌              | ✅                   |
+| 文件关联操作     | ✅ 同时更新     | ✅ 同时更新          |
+| 转码功能         | ✅ 备选         | ✅ 主要数据源        |
+| 上传功能         | ✅ 优先查询     | ✅ 备选              |
+| 看门狗分片追踪   | ✅ 同时写入     | ✅ 同时写入          |
+| 文件扫描         | ✅ 同时写入     | ✅ 同时写入          |
 
 ### 核心问题
 
@@ -51,6 +51,7 @@
 ### 决策：保留 `recording_files` 表
 
 保留 `recording_files` 表的原因：
+
 - 它有 `orphaned` 状态管理，这是核心功能
 - 有 `file_name` 和 `checked_at` 字段，更适合文件生命周期管理
 - 是会话详情的主要数据源
@@ -175,33 +176,45 @@ async function migrateData() {
   let migratedCount = 0;
   for (const rec of recordings) {
     // 检查 recording_files 表是否已经有该文件
-    const { rows: existing } = await pool.query(
-      'SELECT id FROM recording_files WHERE file_path = $1',
-      [rec.file_path]
-    );
+    const { rows: existing } = await pool.query('SELECT id FROM recording_files WHERE file_path = $1', [rec.file_path]);
 
     if (existing.length === 0) {
       // 如果不存在，插入
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO recording_files (
           session_id, room_url, file_path, file_name, file_size, status,
           started_at, ended_at, segment_index, duration_seconds,
           is_hls_ready, hls_playlist_path, hls_generated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      `, [
-        rec.session_id, rec.room_url, rec.file_path,
-        path.basename(rec.file_path), rec.file_size, rec.status,
-        rec.started_at, rec.ended_at, rec.segment_index, rec.duration_seconds,
-        rec.is_hls_ready, rec.hls_playlist_path, rec.hls_generated_at
-      ]);
+      `,
+        [
+          rec.session_id,
+          rec.room_url,
+          rec.file_path,
+          path.basename(rec.file_path),
+          rec.file_size,
+          rec.status,
+          rec.started_at,
+          rec.ended_at,
+          rec.segment_index,
+          rec.duration_seconds,
+          rec.is_hls_ready,
+          rec.hls_playlist_path,
+          rec.hls_generated_at,
+        ]
+      );
       migratedCount++;
     } else {
       // 如果存在，更新缺少的字段
-      await pool.query(`
+      await pool.query(
+        `
         UPDATE recording_files
         SET ended_at = $1, segment_index = $2, duration_seconds = $3
         WHERE file_path = $4
-      `, [rec.ended_at, rec.segment_index, rec.duration_seconds, rec.file_path]);
+      `,
+        [rec.ended_at, rec.segment_index, rec.duration_seconds, rec.file_path]
+      );
     }
   }
 
@@ -259,23 +272,27 @@ static async getRecordings(options = {}) {
 ### 步骤 5：更新 HLS 生成器
 
 修改 `lib/core/hls-generator.js`：
+
 - 移除 `recordingType` 参数
 - 始终操作 `recording_files` 表
 
 ### 步骤 6：更新看门狗
 
 修改 `lib/core/watchdog.js`：
+
 - `scanActiveSegments` - 移除 recordings 表双写
 - `checkSessionHLS` - 只查询 recording_files 表
 
 ### 步骤 7：更新文件扫描
 
 修改 `lib/core/scan-files.js`：
+
 - 移除 recordings 表的插入逻辑
 
 ### 步骤 8：更新上传服务
 
 修改 `services/UploadService.js`：
+
 - `executeUpload` - 只查询 recording_files 表
 - `isSessionTranscodeComplete` - 只查询 recording_files 表
 
@@ -330,4 +347,3 @@ static async getRecordings(options = {}) {
 1. 表名优化：考虑将 `recording_files` 重命名为更简洁的 `recordings`（在完全迁移后）
 2. 索引优化：根据查询模式添加适当的索引
 3. 清理冗余代码：移除所有双表操作的代码
-

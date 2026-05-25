@@ -84,14 +84,14 @@ class HLSGenerator {
    * @returns {Promise<Object>} 生成结果
    */
   async generate(inputPath, outputDir, sessionId)
-  
+
   /**
    * 检查是否已生成 HLS
    * @param {string} outputDir - HLS 输出目录
    * @returns {boolean}
    */
   isHLSAvailable(outputDir)
-  
+
   /**
    * 清理过期的 HLS 文件
    */
@@ -159,6 +159,7 @@ ffmpeg -i input.ts \
 ```
 
 **参数说明**：
+
 - `-c copy`：直接复制音视频流，不重新编码
 - `-f hls`：输出格式为 HLS
 - `-hls_time 10`：每个分段 10 秒
@@ -208,10 +209,12 @@ ffmpeg -hwaccel qsv -i input.ts ...
 ## 7. 文件清单（需要修改/新增）
 
 ### 新增文件
+
 - `lib/core/hls-generator.js` - HLS 生成器
 - `docs/HLS_PLAYBACK_PLAN.md` - 本方案文档
 
 ### 修改文件
+
 1. `db/migrate.js` - 数据库迁移
 2. `lib/core/TranscodeQueue.js` - 转码队列集成 HLS
 3. `router/api.js` - 新增 HLS 相关 API
@@ -242,12 +245,12 @@ ffmpeg -hwaccel qsv -i input.ts ...
 
 ## 10. 风险评估
 
-| 风险 | 影响 | 概率 | 缓解措施 |
-|------|------|------|----------|
-| FFmpeg 命令失败 | 高 | 低 | 完善错误处理和日志记录 |
-| 磁盘空间占用增加 | 中 | 高 | 设置过期清理策略 |
-| 首次播放延迟 | 中 | 中 | 后台预生成或显示加载提示 |
-| 浏览器兼容性 | 低 | 低 | 使用 HLS.js + Safari 原生支持双方案 |
+| 风险             | 影响 | 概率 | 缓解措施                            |
+| ---------------- | ---- | ---- | ----------------------------------- |
+| FFmpeg 命令失败  | 高   | 低   | 完善错误处理和日志记录              |
+| 磁盘空间占用增加 | 中   | 高   | 设置过期清理策略                    |
+| 首次播放延迟     | 中   | 中   | 后台预生成或显示加载提示            |
+| 浏览器兼容性     | 低   | 低   | 使用 HLS.js + Safari 原生支持双方案 |
 
 ---
 
