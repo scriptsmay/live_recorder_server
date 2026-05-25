@@ -39,19 +39,20 @@
         <td><%- statusBadge %></td>
         <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
         <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
-        <td><% if (r.polling_enabled) { %>
-          <span class="badge bg-info text-dark">开</span>
-          <% } else { %>
-          <span class="badge bg-secondary">关</span>
-          <% } %>
-          <div>
+        <td>
+          <div><% if (r.polling_enabled) { %>
+            <span class="badge bg-info text-dark">开</span>
+            <% } else { %>
+            <span class="badge bg-secondary">关</span>
+            <% } %>
             <% if (r.last_live_status) { %>
             <span class="badge bg-danger">🔴 直播中</span>
             <% } else if (r.polling_enabled) { %>
             <span class="badge bg-secondary">⚫ 未开播</span>
-            <% } %>
+            <% } %></div>
+          <div>
             <% if (r.last_polled_at) { %>
-            <div><small><%= formatDate(r.last_polled_at) %></small></div>
+            <div><small><%= formatDate(r.last_polled_at, 'MM/DD HH:mm:ss') %></small></div>
             <% } %>
           </div>
         </td>

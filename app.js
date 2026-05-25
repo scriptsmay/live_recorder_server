@@ -4,6 +4,7 @@
 require('./config/env').initEnv();
 
 const path = require('path');
+const fs = require('fs');
 
 const express = require('express');
 const cors = require('cors');
@@ -34,6 +35,15 @@ const RecorderService = require('./services/RecorderService');
 const transcodeQueue = require('./lib/core/TranscodeQueue');
 
 // ──────────────────────────────────────────────
+// 系统信息
+// ──────────────────────────────────────────────
+const SERVER_START_TIME = new Date();
+const PACKAGE_JSON_PATH = path.join(__dirname, 'package.json');
+const PACKAGE_JSON = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+const APP_VERSION = PACKAGE_JSON.version;
+const DOCKER_IMAGE_VERSION = process.env.DOCKER_IMAGE_VERSION || APP_VERSION;
+
+// ──────────────────────────────────────────────
 // 2. Express 配置
 // ──────────────────────────────────────────────
 const app = express();
@@ -59,7 +69,41 @@ app.use((req, res, next) => {
   res.locals.path = req.path;
   res.locals.title = 'Live Recorder Server';
   res.locals.dayjs = dayjs;
-  res.locals.formatDate = (date) => (date ? dayjs(date).format('YYYY-MM-DD HH:mm:ss') : '-');
+
+  res.locals.formatDate = (date, format = 'YYYY-MM-DD HH:mm:ss') => {
+    if (!date) return '-';
+
+    // 1. 如果输入是字符串，先尝试检查它是否是“纯数字”形式的时间戳
+    // 避免将包含连字符或时间的字符串误解析为数字
+    if (typeof date === 'string' && /^\d+$/.test(date)) {
+      date = parseFloat(date);
+    }
+
+    let parsedDate;
+    if (typeof date === 'number') {
+      // 处理时间戳逻辑
+      // 增加一个简单的范围判断，避免把小数字（年份等）误判为时间戳
+      if (date > 10000000000) {
+        // 13位及以上，视为毫秒
+        parsedDate = dayjs(date);
+      } else {
+        // 10位，视为秒
+        parsedDate = dayjs.unix(date);
+      }
+    } else {
+      // 传入的是日期字符串（如 ISO 格式）
+      parsedDate = dayjs(date);
+    }
+
+    if (!parsedDate.isValid()) {
+      return '-';
+    }
+
+    return parsedDate.format(format);
+  };
+  res.locals.serverStartTime = SERVER_START_TIME;
+  res.locals.appVersion = APP_VERSION;
+  res.locals.dockerImageVersion = DOCKER_IMAGE_VERSION;
   next();
 });
 

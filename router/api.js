@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const express = require('express');
 const router = express.Router();
@@ -346,9 +348,6 @@ router.delete('/recordings/:id', async (req, res) => {
     res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
-
-const fs = require('fs');
-const path = require('path');
 
 router.get('/recordings/:id/stream', async (req, res) => {
   try {

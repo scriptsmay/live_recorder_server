@@ -56,15 +56,15 @@ function checkGitStatus() {
 }
 
 function cleanupOldTags() {
-  const tags = execSync('git tag --list \'v*\'', { encoding: 'utf8' })
+  const tags = execSync("git tag --list 'v*'", { encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map(t => t.trim());
+    .map((t) => t.trim());
 
   const versionTags = tags
-    .filter(t => semverRegex.test(t.slice(1)))
-    .map(t => ({ tag: t, ver: t.slice(1) }))
+    .filter((t) => semverRegex.test(t.slice(1)))
+    .map((t) => ({ tag: t, ver: t.slice(1) }))
     .sort((a, b) => {
       const [aM, am, ap] = a.ver.split('.').map(Number);
       const [bM, bm, bp] = b.ver.split('.').map(Number);
@@ -79,7 +79,7 @@ function cleanupOldTags() {
   for (const { tag } of toDelete) {
     execSync(`git tag -d ${tag}`, { encoding: 'utf8', stdio: 'inherit' });
   }
-  return toDelete.map(t => t.tag);
+  return toDelete.map((t) => t.tag);
 }
 
 function main() {
