@@ -9,6 +9,9 @@
       <% }) %>
     </select>
   </div>
+  <div class="col-md-4 ms-auto">
+    <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  </div>
 </div>
 
 <div class="table-responsive">
@@ -29,7 +32,7 @@
     </thead>
     <tbody>
       <% if (recordings.length === 0) { %>
-        <tr><td colspan="9" class="text-center text-muted py-4">暂无录制记录</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">暂无录制记录</td></tr>
       <% } else { %>
         <% recordings.forEach(r => { %>
           <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
@@ -59,14 +62,41 @@
     </tbody>
   </table>
 </div>
-<%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
+
+<% if (pagination.totalPages > 1) { %>
+<nav aria-label="录制文件分页">
+  <ul class="pagination pagination-sm justify-content-center">
+    <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+      <a class="page-link" href="?page=<%= pagination.page - 1 %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>">上一页</a>
+    </li>
+    <% 
+      const maxPages = 7;
+      let startPage = Math.max(1, pagination.page - 3);
+      let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+      if (endPage - startPage < maxPages - 1) {
+        startPage = Math.max(1, endPage - maxPages + 1);
+      }
+      for (let i = startPage; i <= endPage; i++) { 
+    %>
+      <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+        <a class="page-link" href="?page=<%= i %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>"><%= i %></a>
+      </li>
+    <% } %>
+    <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+      <a class="page-link" href="?page=<%= pagination.page + 1 %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>">下一页</a>
+    </li>
+  </ul>
+</nav>
+<% } %>
 
 <script src="/js/recording-player.js"></script>
 <%- include('partials/_video_player') %>
 
 <script>
   document.getElementById('roomFilter').addEventListener('change', e => {
-    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '/recordings';
+    const url = e.target.value 
+      ? '?room_url=' + encodeURIComponent(e.target.value)
+      : '/recordings';
     window.location.href = url;
   });
 
