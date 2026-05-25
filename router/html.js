@@ -3,6 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const DataService = require('../services/DataService');
+const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 
 const md = require('../lib/utils/markdown');
 
@@ -50,10 +51,11 @@ router.get('/sessions', async (req, res) => {
 router.get('/rooms', async (req, res) => {
   try {
     const { rows: rooms } = await DataService.getRooms();
-    res.render('rooms', { title: '直播间管理', rooms });
+    const downloader = getActiveDownloader().name;
+    res.render('rooms', { title: '直播间管理', rooms, downloader });
   } catch (err) {
     console.error('[html] 直播间页加载失败:', err);
-    res.status(500).render('rooms', { title: '直播间管理', rooms: [] });
+    res.status(500).render('rooms', { title: '直播间管理', rooms: [], downloader: 'FFmpegDownloader' });
   }
 });
 
