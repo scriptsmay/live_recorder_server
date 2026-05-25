@@ -35,7 +35,16 @@
         <tr><td colspan="10" class="text-center text-muted py-4">暂无录制记录</td></tr>
       <% } else { %>
         <% recordings.forEach(r => { %>
-          <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
+          <% 
+            const statusMap = { 
+              recording: '<span class="badge bg-primary">录制中</span>', 
+              completed: '<span class="badge bg-success">已完成</span>', 
+              interrupted: '<span class="badge bg-danger">中断</span>' 
+            };
+            
+            // 使用模板字符串 `${r.status}` 动态显示原始状态值
+            const badge = statusMap[r.status] || `<span class="badge bg-secondary">${r.status}</span>`; 
+          %>
           <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
           <% const hlsBadge = r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>'; %>
           <% const filename = r.file_path ? r.file_path.split('/').pop() : ''; %>
