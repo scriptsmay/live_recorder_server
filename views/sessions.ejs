@@ -76,6 +76,9 @@
 
 <%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
 
+<script src="/js/recording-player.js"></script>
+<%- include('partials/_video_player') %>
+
 <script>
   document.getElementById('roomFilter')?.addEventListener('change', (e) => {
     const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
@@ -160,8 +163,9 @@
     btn.disabled = !sel.value;
   });
 
-  RecordingPlayer.init();
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof RecordingPlayer !== 'undefined') {
+      RecordingPlayer.init();
+    }
+  });
 </script>
-
-<script src="/js/recording-player.js"></script>
-<%- include('partials/_video_player') %>
