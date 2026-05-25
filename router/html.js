@@ -17,7 +17,7 @@ router.get('/sessions', async (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = 50;
 
-    const [sessionsResult, uploadRecords, rooms, templates] = await Promise.all([
+    const [sessionsResult, uploadResult, rooms, templates] = await Promise.all([
       DataService.getSessions({ room_url: roomFilter, page, limit }),
       DataService.getUploadRecords({ limit: 200 }),
       DataService.getRoomList(),
@@ -25,7 +25,7 @@ router.get('/sessions', async (req, res) => {
     ]);
 
     const uploadMap = {};
-    for (const u of uploadRecords) {
+    for (const u of uploadResult.rows) {
       if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
       uploadMap[u.session_id].push(u);
     }
