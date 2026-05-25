@@ -50,12 +50,26 @@ router.get('/sessions', async (req, res) => {
 
 router.get('/rooms', async (req, res) => {
   try {
-    const { rows: rooms } = await DataService.getRooms();
-    const downloader = getActiveDownloader().name;
-    res.render('rooms', { title: '直播间管理', rooms, downloader });
+    const [{ rows: rooms }, templates, { map: settingsMap }] = await Promise.all([
+      DataService.getRooms(),
+      DataService.getTemplates(),
+      DataService.getSettings(),
+    ]);
+    const downloader = settingsMap.downloader || getActiveDownloader().name;
+    res.render('rooms', {
+      title: '直播间管理',
+      rooms,
+      templates,
+      downloader,
+    });
   } catch (err) {
     console.error('[html] 直播间页加载失败:', err);
-    res.status(500).render('rooms', { title: '直播间管理', rooms: [], downloader: 'FFmpegDownloader' });
+    res.status(500).render('rooms', {
+      title: '直播间管理',
+      rooms: [],
+      templates: [],
+      downloader: 'FFmpegDownloader',
+    });
   }
 });
 
