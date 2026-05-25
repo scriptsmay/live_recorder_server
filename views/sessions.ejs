@@ -119,17 +119,17 @@
       const container = document.getElementById('files_' + sid);
       container.classList.toggle('d-none');
       if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
-        const res = await fetch('/api/sessions/' + sid);
+        const res = await fetch('/api/recording_files?session_id=' + sid);
         const json = await res.json();
         container.innerHTML = '';
-        if (!json.data || !json.data.recordings || json.data.recordings.length === 0) {
+        if (!json.data || json.data.length === 0) {
           container.innerHTML = '<small class="text-muted">无分片文件</small>';
           return;
         }
         const table = document.createElement('table');
         table.className = 'table table-sm mb-0';
         table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          json.data.recordings.map(r => '<tr>' +
+          json.data.map(r => '<tr>' +
             '<td>' + r.id + '</td>' +
             '<td><small>' + (r.file_path || '-') + '</small></td>' +
             '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +

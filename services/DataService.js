@@ -253,7 +253,10 @@ class DataService {
     sql += ' ORDER BY id DESC';
 
     const result = await pool.query(sql, params);
-    return result.rows;
+    return result.rows.map((rec) => ({
+      ...rec,
+      file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
+    }));
   }
 
   static async getTranscodeRecords(options = {}) {
