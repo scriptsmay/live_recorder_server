@@ -29,6 +29,7 @@ const roomsRouter = require('./router/rooms');
 const uploadRouter = require('./router/upload');
 const settingsRouter = require('./router/settings');
 const transcodeRouter = require('./router/transcode');
+const hlsRouter = require('./router/hls');
 const watchdog = require('./lib/core/watchdog');
 const { pollingManager } = require('./lib/core/polling');
 const RecorderService = require('./services/RecorderService');
@@ -110,6 +111,9 @@ app.use((req, res, next) => {
 // ──────────────────────────────────────────────
 // 3. 路由
 // ──────────────────────────────────────────────
+// HLS 文件服务需要在 htmlRouter 之前注册，避免被前端路由拦截
+app.use(hlsRouter);
+
 app.use('/', htmlRouter);
 app.use('/api', apiRouter);
 app.use('/api', roomsRouter);

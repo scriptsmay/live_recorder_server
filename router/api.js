@@ -11,6 +11,7 @@ const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
+const hlsGenerator = require('../lib/core/hls-generator');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../package.json');
@@ -415,6 +416,157 @@ router.get('/recordings/:id/stream', async (req, res) => {
   } catch (err) {
     console.error('[api] 流播放失败:', err);
     res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
+router.get('/recordings/:id/hls', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let result = await pool.query(
+      'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recordings WHERE id = $1',
+      [id]
+    );
+    let recording = result.rows[0];
+    let recordingType = 'recording';
+
+    if (!recording) {
+      result = await pool.query(
+        'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recording_files WHERE id = $1',
+        [id]
+      );
+      recording = result.rows[0];
+      recordingType = 'recording_file';
+    }
+
+    if (!recording) {
+      return res.status(404).json({ status: 'Error', message: '录制不存在' });
+    }
+
+    if (recording.is_hls_ready && recording.hls_playlist_path) {
+      const exists = fs.existsSync(recording.hls_playlist_path);
+      if (exists) {
+        const videoDownloadDir = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '.');
+        const relativePath = path.relative(videoDownloadDir, recording.hls_playlist_path);
+        return res.json({
+          status: 'ok',
+          data: {
+            is_ready: true,
+            playlist_path: recording.hls_playlist_path,
+            relative_path: relativePath,
+            generated_at: recording.hls_generated_at,
+            type: recordingType,
+          }
+        });
+      }
+    }
+
+    res.json({
+      status: 'ok',
+      data: {
+        is_ready: false,
+        source_file: recording.file_path,
+        type: recordingType,
+      }
+    });
+  } catch (err) {
+    console.error('[api] HLS 状态查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+router.post('/recordings/:id/generate-hls', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let recordingResult = await pool.query('SELECT id, file_path FROM recordings WHERE id = $1', [id]);
+    let recordingType = 'recording';
+
+    if (recordingResult.rows.length === 0) {
+      recordingResult = await pool.query('SELECT id, file_path FROM recording_files WHERE id = $1', [id]);
+      recordingType = 'recording_file';
+    }
+
+    if (recordingResult.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制不存在' });
+    }
+
+    const recording = recordingResult.rows[0];
+
+    if (!recording.file_path || !fs.existsSync(recording.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '源文件不存在' });
+    }
+
+    console.log(`[api] 开始生成 HLS: recording_id=${id}, type=${recordingType}`);
+    const genResult = await hlsGenerator.generateForRecording(id, recordingType);
+
+    if (genResult.success) {
+      res.json({
+        status: 'ok',
+        data: {
+          playlist_path: genResult.playlistPath,
+          already_exists: genResult.alreadyExists || false,
+        }
+      });
+    } else {
+      res.status(500).json({ status: 'Error', message: genResult.error || 'HLS 生成失败' });
+    }
+  } catch (err) {
+    console.error('[api] HLS 生成失败:', err);
+    res.status(500).json({ status: 'Error', message: 'HLS 生成失败' });
+  }
+});
+
+router.get(/\/hls\/(.+)/, async (req, res) => {
+  try {
+    const filePathParam = req.params[0];
+    const safePath = path.normalize(filePathParam).replace(/^(\.\.(\/|\\|$))+/, '');
+    const videoDownloadDir = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '.');
+    const fullPath = path.join(videoDownloadDir, safePath);
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ status: 'Error', message: '文件不存在' });
+    }
+
+    const ext = path.extname(fullPath).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.m3u8') {
+      contentType = 'application/vnd.apple.mpegurl';
+    } else if (ext === '.ts') {
+      contentType = 'video/mp2t';
+    }
+
+    const stat = fs.statSync(fullPath);
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunksize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': contentType,
+      });
+
+      const stream = fs.createReadStream(fullPath, { start, end });
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+
+      const stream = fs.createReadStream(fullPath);
+      stream.pipe(res);
+    }
+  } catch (err) {
+    console.error('[api] HLS 文件服务失败:', err);
+    res.status(500).json({ status: 'Error', message: '文件服务失败' });
   }
 });
 

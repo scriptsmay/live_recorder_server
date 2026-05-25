@@ -23,8 +23,17 @@
     {
       title: '转码设置',
       items: [
-        { key: 'auto_transcode', label: '自动转码', desc: '录制完成后自动将 FLV 转换为 MP4', type: 'select', options: ['true', 'false'] },
-        { key: 'transcode_delete_originals', label: '转码后删除原始文件', desc: '转码成功后自动删除 FLV 原始文件', type: 'select', options: ['true', 'false'] },
+        { key: 'auto_transcode', label: '自动转码', desc: '录制完成后自动将 FLV/TS 转换为 MP4', type: 'select', options: ['true', 'false'] },
+        { key: 'transcode_delete_originals', label: '转码后删除原始文件', desc: '转码成功后自动删除 FLV/TS 原始文件', type: 'select', options: ['true', 'false'] },
+        { key: 'transcode_concurrency', label: '转码并发数', desc: '转码队列的最大并发数', type: 'number', attrs: 'min="1" max="10"' },
+      ],
+    },
+    {
+      title: 'HLS 设置',
+      items: [
+        { key: 'auto_generate_hls', label: '自动生成 HLS', desc: '转码完成后自动生成 HLS 索引（推荐开启，零重编码，速度极快）', type: 'select', options: ['true', 'false'] },
+        { key: 'hls_segment_duration', label: 'HLS 分段时长（秒）', desc: '每个 HLS 分段的时间长度，默认 10 秒', type: 'number', attrs: 'min="5" max="60"' },
+        { key: 'hls_cleanup_days', label: 'HLS 清理天数', desc: '超过此天数的 HLS 文件将被自动清理，设为 0 则不清理', type: 'number', attrs: 'min="0" max="365"' },
       ],
     },
     {
@@ -42,7 +51,7 @@
 
 <div class="row">
   <% groups.forEach(group => { %>
-    <div class="col-md-4 mb-4">
+    <div class="col-md-3 col-sm-6 mb-4">
       <div class="card">
         <div class="card-header"><h5 class="mb-0"><%= group.title %></h5></div>
         <div class="card-body">
@@ -88,6 +97,10 @@
       'max_resume_retries',
       'auto_transcode',
       'transcode_delete_originals',
+      'transcode_concurrency',
+      'auto_generate_hls',
+      'hls_segment_duration',
+      'hls_cleanup_days',
       'submit_api',
       'lines',
       'threads',

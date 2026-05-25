@@ -98,11 +98,12 @@
         }
         const table = document.createElement('table');
         table.className = 'table table-sm mb-0';
-        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
           json.data.recordings.map(r => '<tr>' +
             '<td>' + r.id + '</td>' +
             '<td><small>' + (r.file_path || '-') + '</small></td>' +
             '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
+            '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
             '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
             '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
             '</tr>'
@@ -126,23 +127,30 @@
 
     const playBtn = e.target.closest('.playBtn');
     if (playBtn) {
-      const src = '/api/recordings/' + playBtn.dataset.recordingId + '/stream';
+      const recordingId = playBtn.dataset.recordingId;
       const filename = playBtn.dataset.filename || '视频预览';
       const ext = playBtn.dataset.ext;
-      
+
       try {
-        // 发起请求，通过 Range 头部只请求 0-1 字节来检查接口是否正常
-        const res = await fetch(src, { headers: { 'Range': 'bytes=0-1' } });
-        if (res.ok || res.status === 206) {
-          openVideoPlayer(src, filename, ext);
+        const hlsRes = await fetch('/api/recordings/' + recordingId + '/hls');
+        const hlsJson = await hlsRes.json();
+
+        if (hlsJson.data && hlsJson.data.is_ready) {
+          const hlsSrc = '/hls/' + hlsJson.data.relative_path;
+          openVideoPlayer(hlsSrc, filename, 'm3u8');
         } else {
-          // 尝试解析错误信息
-          let errorMsg = '视频加载失败，状态码：' + res.status;
-          if (res.headers.get('content-type')?.includes('application/json')) {
-            const json = await res.json();
-            errorMsg = json.message || errorMsg;
+          const src = '/api/recordings/' + recordingId + '/stream';
+          const res = await fetch(src, { headers: { 'Range': 'bytes=0-1' } });
+          if (res.ok || res.status === 206) {
+            openVideoPlayer(src, filename, ext);
+          } else {
+            let errorMsg = '视频加载失败，状态码：' + res.status;
+            if (res.headers.get('content-type')?.includes('application/json')) {
+              const json = await res.json();
+              errorMsg = json.message || errorMsg;
+            }
+            toast(errorMsg);
           }
-          toast(errorMsg);
         }
       } catch (err) {
         toast('视频加载失败：' + (err.message || '未知错误'));

@@ -19,6 +19,7 @@
         <th>直播间</th>
         <th>文件路径</th>
         <th>大小</th>
+        <th>HLS</th>
         <th>状态</th>
         <th>开始时间</th>
         <th>结束时间</th>
@@ -27,17 +28,19 @@
     </thead>
     <tbody>
       <% if (recordings.length === 0) { %>
-        <tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">暂无录制记录</td></tr>
       <% } else { %>
         <% recordings.forEach(r => { %>
           <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
           <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
           <% const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-'); %>
+          <% const hlsBadge = r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>'; %>
           <tr>
             <td><%= r.id %></td>
             <td><%- roomDisplay %></td>
             <td><small><%= r.file_path || '-' %></small></td>
             <td><%= size %></td>
+            <td><%- hlsBadge %></td>
             <td><%- badge %></td>
             <td><small><%= formatDate(r.session_started_at || r.started_at) %></small></td>
             <td><small><%= formatDate(r.session_ended_at || r.ended_at) %></small></td>
