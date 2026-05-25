@@ -483,8 +483,6 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
   }
 });
 
-
-
 module.exports = {
   router,
 };

@@ -12,12 +12,20 @@ const morgan = require('morgan');
 const ejsLayouts = require('express-ejs-layouts');
 const dayjs = require('dayjs');
 
+const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
+
 if (process.env.NODE_ENV === 'development') {
-  const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
   ['log', 'warn', 'error'].forEach((method) => {
     const orig = console[method];
     console[method] = (...args) => orig(`[${ts()}]`, ...args);
   });
+}
+
+// 默认日志格式为 'dev'，生产环境使用自定义格式
+let moganFormat = 'dev';
+if (process.env.NODE_ENV === 'production') {
+  morgan.token('local-date', ts);
+  moganFormat = ':local-date :method :url :status :response-time ms';
 }
 
 const migrate = require('./db/migrate');
@@ -64,7 +72,8 @@ app.use(express.static('public'));
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(morgan('dev'));
+// 日志记录格式
+app.use(morgan(moganFormat));
 
 app.use((req, res, next) => {
   res.locals.path = req.path;

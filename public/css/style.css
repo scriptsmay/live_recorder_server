@@ -58,11 +58,9 @@ img {
 
 .page-wrap {
   background: #ffffff;
-  /* border-radius: 16px; */
-  box-shadow: 0 4px 24px var(--theme-shadow);
 }
 .page-main {
-  padding: 16px;
+  min-height: calc(100vh - 140px);
 }
 
 .navbar {

@@ -74,7 +74,34 @@
 <% } %>
 </div>
 
-<%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
+<% if (pagination.totalPages > 1) { %>
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  <nav aria-label="录制会话分页">
+    <ul class="pagination pagination-sm mb-0">
+      <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page - 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">上一页</a>
+      </li>
+      <%
+        const maxPages = 7;
+        let startPage = Math.max(1, pagination.page - 3);
+        let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+        if (endPage - startPage < maxPages - 1) {
+          startPage = Math.max(1, endPage - maxPages + 1);
+        }
+        for (let i = startPage; i <= endPage; i++) {
+      %>
+        <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+          <a class="page-link" href="?page=<%= i %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>"><%= i %></a>
+        </li>
+      <% } %>
+      <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page + 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">下一页</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+<% } %>
 
 <script src="/js/recording-player.js"></script>
 <%- include('partials/_video_player') %>

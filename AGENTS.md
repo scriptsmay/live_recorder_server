@@ -187,7 +187,6 @@ npm run lint && npm run format && npm run test
 - `GET /templates` —— 投稿模板管理
 - `GET /upload_records` —— 投稿记录
 - `GET /transcode` —— 转码记录
-- `GET /files` —— 文件管理（孤文件关联会话）
 - `GET /sessions` —— 录制会话（含投稿按钮）
 - `GET /settings` —— 全局设置（录制/上传参数配置）
 

@@ -14,8 +14,11 @@ router.get('/', (req, res) => {
 router.get('/sessions', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
-    const [sessions, uploadRecords, rooms, templates] = await Promise.all([
-      DataService.getSessions({ room_url: roomFilter }),
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const [sessionsResult, uploadRecords, rooms, templates] = await Promise.all([
+      DataService.getSessions({ room_url: roomFilter, page, limit }),
       DataService.getUploadRecords({ limit: 200 }),
       DataService.getRoomList(),
       DataService.getTemplates(),
@@ -27,13 +30,15 @@ router.get('/sessions', async (req, res) => {
       uploadMap[u.session_id].push(u);
     }
 
+    const totalPages = Math.ceil(sessionsResult.total / limit);
     res.render('sessions', {
       title: '录制会话',
-      sessions,
+      sessions: sessionsResult.rows,
       uploadMap,
       rooms,
       templates,
       currentRoomUrl: roomFilter,
+      pagination: { page, limit, total: sessionsResult.total, totalPages },
     });
   } catch (err) {
     console.error('[html] 会话页加载失败:', err);
@@ -44,23 +49,29 @@ router.get('/sessions', async (req, res) => {
       rooms: [],
       templates: [],
       currentRoomUrl: '',
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
     });
   }
 });
 
 router.get('/rooms', async (req, res) => {
   try {
-    const [{ rows: rooms }, templates, { map: settingsMap }] = await Promise.all([
-      DataService.getRooms(),
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const [{ rows: rooms, total }, templates, { map: settingsMap }] = await Promise.all([
+      DataService.getRooms({ page, limit }),
       DataService.getTemplates(),
       DataService.getSettings(),
     ]);
     const downloader = settingsMap.downloader || getActiveDownloader().name;
+    const totalPages = Math.ceil(total / limit);
     res.render('rooms', {
       title: '直播间管理',
       rooms,
       templates,
       downloader,
+      pagination: { page, limit, total, totalPages },
     });
   } catch (err) {
     console.error('[html] 直播间页加载失败:', err);
@@ -69,6 +80,7 @@ router.get('/rooms', async (req, res) => {
       rooms: [],
       templates: [],
       downloader: 'FFmpegDownloader',
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
     });
   }
 });
@@ -84,8 +96,8 @@ router.get('/dashboard', async (req, res) => {
     res.render('dashboard', {
       title: '仪表盘',
       rooms,
-      recentSessions: sessions,
-      recentUploads: uploadRecords,
+      recentSessions: sessions.rows || sessions,
+      recentUploads: uploadRecords.rows || uploadRecords,
     });
   } catch (err) {
     console.error('[html] 仪表盘加载失败:', err);
@@ -100,11 +112,23 @@ router.get('/dashboard', async (req, res) => {
 
 router.get('/transcode', async (req, res) => {
   try {
-    const records = await DataService.getTranscodeRecords({ limit: 200 });
-    res.render('transcode', { title: '转码记录', records });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const result = await DataService.getTranscodeRecords({ page, limit });
+    const totalPages = Math.ceil(result.total / limit);
+    res.render('transcode', {
+      title: '转码记录',
+      records: result.rows,
+      pagination: { page, limit, total: result.total, totalPages },
+    });
   } catch (err) {
     console.error('[html] 转码记录页加载失败:', err);
-    res.status(500).render('transcode', { title: '转码记录', records: [] });
+    res.status(500).render('transcode', {
+      title: '转码记录',
+      records: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 
@@ -112,7 +136,7 @@ router.get('/recordings', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 50;
+    const limit = 50;
 
     const [result, rooms] = await Promise.all([
       DataService.getRecordings({
@@ -153,10 +177,6 @@ router.get('/_/rooms/table', async (req, res) => {
   res.render('partials/_rooms_table', { rooms, layout: false });
 });
 
-router.get('/files', (req, res) => {
-  res.render('files', { title: '文件管理' });
-});
-
 router.get('/settings', async (req, res) => {
   try {
     const { rows: settings } = await DataService.getSettings();
@@ -183,7 +203,11 @@ router.get('/logs', async (req, res) => {
   const logsDir = path.join(__dirname, '..', 'logs');
   let files = [];
   try {
-    files = fs.readdirSync(logsDir).filter((f) => f.endsWith('.log')).sort().reverse();
+    files = fs
+      .readdirSync(logsDir)
+      .filter((f) => f.endsWith('.log'))
+      .sort()
+      .reverse();
   } catch (_) {}
   const logFile = req.query.file;
   let logContent = '';
@@ -235,11 +259,23 @@ router.get('/templates', async (req, res) => {
 
 router.get('/upload_records', async (req, res) => {
   try {
-    const records = await DataService.getUploadRecords({ limit: 200 });
-    res.render('upload_records', { title: '投稿记录', records });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const result = await DataService.getUploadRecords({ page, limit });
+    const totalPages = Math.ceil(result.total / limit);
+    res.render('upload_records', {
+      title: '投稿记录',
+      records: result.rows,
+      pagination: { page, limit, total: result.total, totalPages },
+    });
   } catch (err) {
     console.error('[html] 投稿记录页加载失败:', err);
-    res.status(500).render('upload_records', { title: '投稿记录', records: [] });
+    res.status(500).render('upload_records', {
+      title: '投稿记录',
+      records: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 

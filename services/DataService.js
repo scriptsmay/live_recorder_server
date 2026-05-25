@@ -122,16 +122,11 @@ class DataService {
       params.push(status);
     }
 
-    let sql = `
-      SELECT s.*, rm.room_name
-      FROM recording_sessions s
-      LEFT JOIN rooms rm ON s.room_url = rm.room_url
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY s.id DESC
-    `;
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+    let sql = `SELECT s.*, rm.room_name FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url${where} ORDER BY s.id DESC`;
 
     if (page) {
-      const pageSize = parseInt(options.limit || 20, 10);
+      const pageSize = parseInt(limit, 10);
       sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
       params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
     } else {
@@ -140,7 +135,16 @@ class DataService {
     }
 
     const result = await pool.query(sql, params);
-    return result.rows;
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM recording_sessions s${where}`,
+      params.slice(0, params.length - (page ? 2 : 1))
+    );
+
+    return {
+      rows: result.rows,
+      total: parseInt(countResult.rows[0].count, 10),
+    };
   }
 
   static async getSession(sessionId) {
@@ -149,36 +153,42 @@ class DataService {
   }
 
   static async getUploadRecords(options = {}) {
-    const { session_id, status, limit = 100 } = options;
+    const { session_id, status, limit = 50, page } = options;
+    const conditions = [];
+    const params = [];
 
-    if (session_id || status) {
-      const conditions = [];
-      const params = [];
-      if (session_id) {
-        conditions.push(`ur.session_id = $${params.length + 1}`);
-        params.push(session_id);
-      }
-      if (status) {
-        conditions.push(`ur.status = $${params.length + 1}`);
-        params.push(status);
-      }
-      let sql = 'SELECT * FROM upload_records';
-      if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-      sql += ` ORDER BY id DESC LIMIT $${params.length + 1}`;
-      params.push(parseInt(limit, 10));
-      const result = await pool.query(sql, params);
-      return result.rows;
+    if (session_id) {
+      conditions.push(`ur.session_id = $${params.length + 1}`);
+      params.push(session_id);
+    }
+    if (status) {
+      conditions.push(`ur.status = $${params.length + 1}`);
+      params.push(status);
     }
 
-    const result = await pool.query(
-      `SELECT ur.*, ut.name as template_name
-       FROM upload_records ur
-       LEFT JOIN upload_templates ut ON ur.template_id = ut.id
-       ORDER BY ur.id DESC
-       LIMIT $1`,
-      [parseInt(limit, 10)]
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+    let sql = `SELECT ur.*, ut.name as template_name FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id${where} ORDER BY ur.id DESC`;
+
+    if (page) {
+      const pageSize = parseInt(limit, 10);
+      sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+    } else {
+      sql += ` LIMIT $${params.length + 1}`;
+      params.push(parseInt(limit, 10));
+    }
+
+    const result = await pool.query(sql, params);
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM upload_records ur${where}`,
+      params.slice(0, params.length - (page ? 2 : 1))
     );
-    return result.rows;
+
+    return {
+      rows: result.rows,
+      total: parseInt(countResult.rows[0].count, 10),
+    };
   }
 
   static async getRecordings(options = {}) {
@@ -247,28 +257,41 @@ class DataService {
   }
 
   static async getTranscodeRecords(options = {}) {
-    const { status, limit = 100 } = options;
+    const { status, limit = 50, page } = options;
     const conditions = [];
     const params = [];
 
     if (status) {
-      conditions.push(`status = $${params.length + 1}`);
+      conditions.push(`tr.status = $${params.length + 1}`);
       params.push(status);
     }
 
-    let sql = `
-      SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name
-      FROM transcode_records tr
-      LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
-      LEFT JOIN rooms rm ON rs.room_url = rm.room_url
-    `;
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ' ORDER BY tr.id DESC';
-    sql += ` LIMIT $${params.length + 1}`;
-    params.push(parseInt(limit, 10));
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+    let sql = `SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name
+       FROM transcode_records tr
+       LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
+       LEFT JOIN rooms rm ON rs.room_url = rm.room_url${where} ORDER BY tr.id DESC`;
+
+    if (page) {
+      const pageSize = parseInt(limit, 10);
+      sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+    } else {
+      sql += ` LIMIT $${params.length + 1}`;
+      params.push(parseInt(limit, 10));
+    }
 
     const result = await pool.query(sql, params);
-    return result.rows;
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM transcode_records tr${where}`,
+      params.slice(0, params.length - (page ? 2 : 1))
+    );
+
+    return {
+      rows: result.rows,
+      total: parseInt(countResult.rows[0].count, 10),
+    };
   }
 }
 
