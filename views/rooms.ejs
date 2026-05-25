@@ -330,7 +330,7 @@
         resume: '确定恢复此直播间？',
       } [action];
       if (!confirmMsg) return;
-      showConfirm(confirmMsg).then(confirmed => {
+      showConfirm(confirmMsg, `提示 #${id}`).then(confirmed => {
         if (!confirmed) return;
         apiAction(`/api/rooms/${id}/${action}`, 'POST').then(r => {
           if (r.ok) location.reload();

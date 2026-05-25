@@ -103,7 +103,7 @@
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.deleteRecBtn');
     if (!btn) return;
-    showConfirm('确定删除此录制记录？').then(async confirmed => {
+    showConfirm('确定删除此录制记录？', `#${btn.dataset.id}`).then(async confirmed => {
       if (!confirmed) return;
       const id = btn.dataset.id;
       const res = await fetch('/api/recordings/' + id, { method: 'DELETE' });

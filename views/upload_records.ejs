@@ -132,9 +132,11 @@
     if (!btn) return;
 
     if (btn.classList.contains('deleteRecBtn')) {
-      if (!confirm('确定删除此记录？')) return;
-      await fetch(`/api/upload_records/${btn.dataset.id}`, { method: 'DELETE' });
-      window.location.reload();
+      showConfirm('确定删除此投稿记录？', `#${btn.dataset.id}`).then(async confirmed => {
+        if (!confirmed) return;
+        await fetch(`/api/upload_records/${btn.dataset.id}`, { method: 'DELETE' });
+        window.location.reload();
+      });
       return;
     }
 
