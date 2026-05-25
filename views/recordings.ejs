@@ -1,4 +1,4 @@
-<h2>录制历史</h2>
+<h2>录制文件</h2>
 
 <div class="row mb-3">
   <div class="col-md-4">
@@ -35,6 +35,8 @@
           <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
           <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
           <% const hlsBadge = r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>'; %>
+          <% const filename = r.file_path ? r.file_path.split('/').pop() : ''; %>
+          <% const ext = r.file_path ? (r.file_path.split('.').pop() || '') : ''; %>
           <tr>
             <td><%= r.id %></td>
             <td><%- r.room_name %><br><small class="text-muted"><%= r.room_url %></small></td>
@@ -45,7 +47,12 @@
             <td><%- badge %></td>
             <td><small><%= formatDate(r.session_started_at || r.started_at) %></small></td>
             <td><small><%= formatDate(r.session_ended_at || r.ended_at) %></small></td>
-            <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button></td>
+            <td>
+              <% if (r.status === 'completed' && r.file_path) { %>
+                <button class="btn btn-sm btn-outline-info playRecBtn me-1" data-recording-id="<%= r.id %>" data-filename="<%= filename %>" data-ext="<%= ext %>">▶</button>
+              <% } %>
+              <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button>
+            </td>
           </tr>
         <% }) %>
       <% } %>
@@ -72,4 +79,9 @@
       window.location.reload();
     });
   });
+
+  RecordingPlayer.init();
 </script>
+
+<script src="/js/recording-player.js"></script>
+<%- include('partials/_video_player') %>

@@ -105,7 +105,7 @@
             '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
             '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
             '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
-            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
+            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playRecBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
             '</tr>'
           ).join('') + '</tbody>';
         container.appendChild(table);
@@ -122,39 +122,6 @@
         if (!res.ok) { toast(json.message); return; }
         location.reload();
       });
-      return;
-    }
-
-    const playBtn = e.target.closest('.playBtn');
-    if (playBtn) {
-      const recordingId = playBtn.dataset.recordingId;
-      const filename = playBtn.dataset.filename || '视频预览';
-      const ext = playBtn.dataset.ext;
-
-      try {
-        const hlsRes = await fetch('/api/recordings/' + recordingId + '/hls');
-        const hlsJson = await hlsRes.json();
-
-        if (hlsJson.data && hlsJson.data.is_ready) {
-          const hlsSrc = '/hls/' + hlsJson.data.relative_path;
-          openVideoPlayer(hlsSrc, filename, 'm3u8');
-        } else {
-          const src = '/api/recordings/' + recordingId + '/stream';
-          const res = await fetch(src, { headers: { 'Range': 'bytes=0-1' } });
-          if (res.ok || res.status === 206) {
-            openVideoPlayer(src, filename, ext);
-          } else {
-            let errorMsg = '视频加载失败，状态码：' + res.status;
-            if (res.headers.get('content-type')?.includes('application/json')) {
-              const json = await res.json();
-              errorMsg = json.message || errorMsg;
-            }
-            toast(errorMsg);
-          }
-        }
-      } catch (err) {
-        toast('视频加载失败：' + (err.message || '未知错误'));
-      }
       return;
     }
 
@@ -192,6 +159,9 @@
     const btn = sel.parentElement.querySelector('.uploadBtn');
     btn.disabled = !sel.value;
   });
+
+  RecordingPlayer.init();
 </script>
 
+<script src="/js/recording-player.js"></script>
 <%- include('partials/_video_player') %>
