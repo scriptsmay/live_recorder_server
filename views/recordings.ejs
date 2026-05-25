@@ -17,6 +17,7 @@
       <tr>
         <th>ID</th>
         <th>直播间</th>
+        <th>会话ID</th>
         <th>文件路径</th>
         <th>大小</th>
         <th>HLS</th>
@@ -33,11 +34,11 @@
         <% recordings.forEach(r => { %>
           <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
           <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
-          <% const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-'); %>
           <% const hlsBadge = r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>'; %>
           <tr>
             <td><%= r.id %></td>
-            <td><%- roomDisplay %></td>
+            <td><%- r.room_name %><br><small class="text-muted"><%= r.room_url %></small></td>
+            <td><%= r.session_id %></td>
             <td><small><%= r.file_path || '-' %></small></td>
             <td><%= size %></td>
             <td><%- hlsBadge %></td>
