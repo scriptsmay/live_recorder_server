@@ -39,7 +39,6 @@ a:hover {
 }
 
 ul {
-  list-style-type: none;
   padding-left: 0;
 }
 
@@ -126,6 +125,10 @@ h2 {
   font-size: 1.35rem;
   position: relative;
   padding-bottom: 8px;
+}
+
+h3 {
+  font-size: 1.2rem;
 }
 
 .card {
@@ -483,6 +486,9 @@ hr {
   color: var(--theme-primary) !important;
 }
 
+.markdown-content {
+  font-size: 0.9rem;
+}
 .markdown-content h2 {
   border-bottom: 2px solid var(--theme-primary);
   padding-bottom: 8px;

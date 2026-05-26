@@ -5,7 +5,7 @@ const fs = require('fs');
 const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 
-const md = require('../lib/utils/markdown');
+// const md = require('../lib/utils/markdown');
 
 router.get('/', (req, res) => {
   res.redirect('/sessions');
@@ -189,13 +189,14 @@ router.get('/settings', async (req, res) => {
 
 router.get('/apiview', (req, res) => {
   const mdPath = path.join(__dirname, '..', 'docs', 'API.md');
-  let content = '';
-  try {
-    const raw = fs.readFileSync(mdPath, 'utf-8');
-    content = md.render(raw);
-  } catch (_) {
-    content = '<div class="alert alert-danger">无法加载 API.md 文档</div>';
-  }
+  let content = fs.readFileSync(mdPath, 'utf-8');
+  // try {
+  //   const raw = fs.readFileSync(mdPath, 'utf-8');
+  //   // content = md.render(raw);
+  //   content = raw;
+  // } catch (_) {
+  //   content = '<div class="alert alert-danger">无法加载 API.md 文档</div>';
+  // }
   res.render('apiview', { title: 'API 文档', content });
 });
 
