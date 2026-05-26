@@ -49,9 +49,14 @@ async function generateReleaseNoteAI(commits) {
 
   console.log('🤖 正在呼叫 AI 总结 Changelog...');
 
-  const prompt = `你是一个资深的程序员。请将以下 git commits 整理成一份精简、面向用户的 Release Note。
-要求：用中文；过滤掉 chore 等琐碎提交；按“✨ 新特性”、“🐛 问题修复”、“🔧 优化”分类。
-提交记录如下：\n${commits}`;
+  const prompt = `你是一个只输出最终结果的纯文本转换器。请将以下 git commits 整理为面向用户的 Release Note。
+【绝对规则】：
+1. 严禁任何开场白、寒暄或结尾提示（绝对不要输出“以下是”、“根据提供”、“已过滤”、“如有需要”等废话）。
+2. 第一行必须直接以“✨ 新特性”、“🐛 问题修复”或“🔧 优化”开头。
+3. 绝对不要使用 \`\`\`markdown 等代码块包裹内容。
+4. 不要自己发明主标题。
+
+commits 记录如下：\n${commits}`;
 
   try {
     // 这里以 DeepSeek 或本地 Ollama 为例，如果是 Gemini 换成对应的 endpoint 和 payload 即可
