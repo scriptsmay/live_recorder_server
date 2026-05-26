@@ -6,6 +6,7 @@ VIDEO_DOWNLOAD_DIR="${VIDEO_DOWNLOAD_DIR:-$APP_DATA_DIR/video_downloads}"
 BILIUP_WORK_DIR="${BILIUP_WORK_DIR:-$APP_DATA_DIR/biliup}"
 
 mkdir -p "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
+chown -R nodeuser:nodeuser "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
 
 wait_for_postgres() {
   node <<'NODE'

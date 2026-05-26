@@ -19,8 +19,12 @@ const dayjs = require('dayjs');
 const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
 
 const LOG_DIR = path.join(__dirname, 'logs');
-if (!fs.existsSync(LOG_DIR)) {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.error('[Logger] Failed to create logs directory:', err);
 }
 
 let serverLogStream = null;
