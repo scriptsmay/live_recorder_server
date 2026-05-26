@@ -42,7 +42,10 @@ async function generateReleaseNoteAI(commits) {
   // 从环境变量中获取 AI 配置
   const apiKey = process.env.AI_API_KEY;
   const apiBase = process.env.AI_API_BASE || 'https://api.deepseek.com';
-  const model = process.env.AI_MODEL || 'deepseek-v4-flash';
+  const aiModel = process.env.AI_MODEL || 'deepseek/deepseek-v4-flash';
+
+  // 提取模型名称（兼容 LiteLLM 格式 provider/model_name）
+  const model = aiModel.includes('/') ? aiModel.split('/')[1] : aiModel;
 
   // 增加一道安全校验，防止没配变量直接运行报错
   if (!apiKey) {
@@ -85,7 +88,17 @@ ${commits}
       }),
     });
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('AI API 请求失败:', response.status, response.statusText, errorData);
+      return null;
+    }
+
     const data = await response.json();
+    if (!data.choices || data.choices.length === 0) {
+      console.error('AI 返回数据格式异常:', data);
+      return null;
+    }
     return data.choices[0].message.content.trim();
   } catch (error) {
     console.error('AI 生成失败，回退到普通模式:', error.message);
