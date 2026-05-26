@@ -3,11 +3,79 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 const packagePath = path.join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
 const semverRegex = /^(\d+)\.(\d+)\.(\d+)$/;
+
+// 封装一个等待终端输入的 Promise 函数
+function askQuestion(query) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) =>
+    rl.question(query, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    })
+  );
+}
+
+// 获取两次 tag 之间的 commit 记录
+function getRecentCommits() {
+  try {
+    const lastTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8' }).trim();
+    const commits = execSync(`git log ${lastTag}..HEAD --pretty=format:"%h - %s"`, { encoding: 'utf8' }).trim();
+    return commits || '无新提交';
+  } catch (e) {
+    // 如果是第一次发版，没有上一个 tag 的兜底
+    return execSync('git log --oneline', { encoding: 'utf8' }).trim();
+  }
+}
+
+// 调用大模型生成 Release Note (以兼容 OpenAI 格式的 API 为例)
+async function generateReleaseNoteAI(commits) {
+  // 从环境变量中获取 API Key
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  // 增加一道安全校验，防止没配变量直接运行报错
+  if (!apiKey) {
+    console.warn('⚠️ 警告: 未检测到 DEEPSEEK_API_KEY 环境变量，跳过 AI 生成。');
+    return null;
+  }
+
+  console.log('🤖 正在呼叫 AI 总结 Changelog...');
+
+  const prompt = `你是一个资深的程序员。请将以下 git commits 整理成一份精简、面向用户的 Release Note。
+要求：用中文；过滤掉 chore 等琐碎提交；按“✨ 新特性”、“🐛 问题修复”、“🔧 优化”分类。
+提交记录如下：\n${commits}`;
+
+  try {
+    // 这里以 DeepSeek 或本地 Ollama 为例，如果是 Gemini 换成对应的 endpoint 和 payload 即可
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      // 换成你的目标 API 地址
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`, // 替换为你的 API Key
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+      }),
+    });
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('AI 生成失败，回退到普通模式:', error.message);
+    return null;
+  }
+}
 
 function bumpVersion(currentVersion, type) {
   const match = currentVersion.match(semverRegex);
@@ -82,7 +150,7 @@ function cleanupOldTags() {
   return toDelete.map((t) => t.tag);
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const versionType = args[0];
 
@@ -100,6 +168,26 @@ function main() {
   const newVersion = bumpVersion(packageJson.version, versionType);
   console.log(`New version: ${newVersion}`);
 
+  // 1. 获取近期 commit
+  const rawCommits = getRecentCommits();
+
+  // 2. 尝试用 AI 生成摘要
+  let aiSummary = await generateReleaseNoteAI(rawCommits);
+
+  // 3. 打印 AI 结果，并给人工一次确认或修改的机会
+  if (aiSummary) {
+    console.log('\n--- AI 建议的 Release Note ---');
+    console.log(aiSummary);
+    console.log('------------------------------\n');
+  }
+
+  const userNote = await askQuestion('请确认或输入更新说明 (回车默认使用AI结果/默认格式): ');
+
+  // 决定最终的 tag 信息
+  let finalMessage = userNote || aiSummary || `Release v${newVersion}`;
+  // 注意：git tag -m 如果内容包含换行，最好把内容写入一个临时文件，再用 git tag -F 引用
+  fs.writeFileSync('.tag_tmp', finalMessage);
+
   packageJson.version = newVersion;
   fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
 
@@ -108,7 +196,8 @@ function main() {
   runCommand(`git commit -m "chore: bump version to v${newVersion}"`);
 
   console.log('\n--- Creating tag ---');
-  runCommand(`git tag -a v${newVersion} -m "Release v${newVersion}"`);
+  runCommand(`git tag -a v${newVersion} -F .tag_tmp`);
+  fs.unlinkSync('.tag_tmp'); // 用完删掉临时文件
 
   const deletedTags = cleanupOldTags();
 
