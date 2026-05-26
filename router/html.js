@@ -8,7 +8,32 @@ const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFacto
 // const md = require('../lib/utils/markdown');
 
 router.get('/', (req, res) => {
-  res.redirect('/sessions');
+  res.redirect('/dashboard');
+});
+
+router.get('/dashboard', async (req, res) => {
+  try {
+    const [rooms, sessions, uploadRecords] = await Promise.all([
+      DataService.getRoomList(),
+      DataService.getSessions({ limit: 10 }),
+      DataService.getUploadRecords({ limit: 20 }),
+    ]);
+
+    res.render('dashboard', {
+      title: '仪表盘',
+      rooms,
+      recentSessions: sessions.rows || sessions,
+      recentUploads: uploadRecords.rows || uploadRecords,
+    });
+  } catch (err) {
+    console.error('[html] 仪表盘加载失败:', err);
+    res.status(500).render('dashboard', {
+      title: '仪表盘',
+      rooms: [],
+      recentSessions: [],
+      recentUploads: [],
+    });
+  }
 });
 
 router.get('/sessions', async (req, res) => {
@@ -81,31 +106,6 @@ router.get('/rooms', async (req, res) => {
       templates: [],
       downloader: 'FFmpegDownloader',
       pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
-    });
-  }
-});
-
-router.get('/dashboard', async (req, res) => {
-  try {
-    const [rooms, sessions, uploadRecords] = await Promise.all([
-      DataService.getRoomList(),
-      DataService.getSessions({ limit: 10 }),
-      DataService.getUploadRecords({ limit: 20 }),
-    ]);
-
-    res.render('dashboard', {
-      title: '仪表盘',
-      rooms,
-      recentSessions: sessions.rows || sessions,
-      recentUploads: uploadRecords.rows || uploadRecords,
-    });
-  } catch (err) {
-    console.error('[html] 仪表盘加载失败:', err);
-    res.status(500).render('dashboard', {
-      title: '仪表盘',
-      rooms: [],
-      recentSessions: [],
-      recentUploads: [],
     });
   }
 });
