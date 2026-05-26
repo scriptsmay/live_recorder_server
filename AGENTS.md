@@ -18,29 +18,37 @@
 ## 目录结构
 
 ```
-├── app.js              # 主入口文件
-├── lib/                 # 核心模块（与业务无关的通用模块）
-│   ├── core/           # 核心功能
-│   │   ├── backup.js   # NAS 备份
-│   │   ├── RecordingManager.js  # 录制进程管理（会话创建/恢复/追踪）
-│   │   ├── downloaders/   # 下载引擎（仅 FFmpeg）
-│   │   │   ├── DownloaderFactory.js
-│   │   │   ├── DownloaderInterface.js
-│   │   │   └── FFmpegDownloader.js
-│   │   ├── notify.js      # 通知服务
-│   │   ├── polling/       # 直播轮询检测
-│   │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
-│   │   │   ├── HuyaChecker.js       # 虎牙平台检查器
-│   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
-│   │   │   └── index.js
-│   │   ├── proc-log.js     # 进程日志
-│   │   ├── scan-files.js   # 文件扫描
-│   │   ├── transcoder.js   # 视频转码
-│   │   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
-│   │   └── watchdog.js     # 看门狗
-│   └── utils/          # 工具类
-│       └── markdown.js
+├── app.js              # 主入口文件（仅做启动编排）
+├── config/             # 配置
+│   ├── env.js          # 环境变量加载
+│   └── app-info.js     # 应用版本信息
+├── middleware/         # Express 中间件
+│   ├── access-log.js    # Morgan access log 中间件
+│   └── view-locals.js  # 模板上下文（res.locals）
+├── lib/core/          # 核心功能模块
+│   ├── logger.js       # 日志系统（console 包装、轮转流）
+│   ├── lifecycle.js     # 启动/关闭生命周期
+│   ├── backup.js       # NAS 备份
+│   ├── RecordingManager.js  # 录制进程管理（会话创建/恢复/追踪）
+│   ├── downloaders/    # 下载引擎（仅 FFmpeg）
+│   │   ├── DownloaderFactory.js
+│   │   ├── DownloaderInterface.js
+│   │   └── FFmpegDownloader.js
+│   ├── notify.js       # 通知服务
+│   ├── polling/       # 直播轮询检测
+│   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
+│   │   ├── HuyaChecker.js       # 虎牙平台检查器
+│   │   ├── PollingManager.js    # 轮询管理器（定时调度）
+│   │   └── index.js
+│   ├── proc-log.js     # 进程日志
+│   ├── scan-files.js   # 文件扫描
+│   ├── transcoder.js   # 视频转码
+│   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
+│   └── watchdog.js     # 看门狗
+├── lib/utils/         # 工具类
+│   └── markdown.js
 ├── router/             # 路由层（API + 页面）
+│   └── index.js       # 统一路由挂载
 ├── services/           # 业务服务层
 │   ├── DataService.js      # 公共数据查询（rooms/settings/sessions 等）
 │   ├── RecorderService.js  # 录制服务
@@ -61,11 +69,13 @@
 
 **目录组织原则：**
 
-- `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码）
+- `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码、日志、生命周期）
 - `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染、文件路径生成）
 - `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
 - `services/DataService.js` — 集中封装读库查询，供 API 路由与 `router/html.js` 页面渲染共用，避免重复 `pool.query`
 - `router/` — 路由层，负责接收请求、调用 Service、返回响应
+- `middleware/` — Express 中间件（如模板上下文、access log）
+- `config/` — 配置层（环境变量、应用信息）
 
 **页面渲染**：`templates`、`rooms`、`settings`、`sessions`、`upload_records`、`recordings` 由 `router/html.js` 后端 EJS 渲染；`dashboard` 保留前端 fetch（轮询/交互需求）。
 

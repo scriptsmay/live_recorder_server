@@ -308,13 +308,13 @@ await transcodeQueue.getCurrentProcessingCount();
 | `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`） |
 | `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件        |
 
-### 不属于看门狗（但在 `app.js` 启动时运行）
+### 不属于看门狗（但在 `app.js` 启动时通过 `lifecycle.js` 运行）
 
-| 函数                       | 所在文件            | 触发       | 职责                                                       |
-| -------------------------- | ------------------- | ---------- | ---------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
-| `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                            |
-| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
+| 函数                       | 所在文件                | 触发       | 职责                                                       |
+| -------------------------- | ----------------------- | ---------- | ---------------------------------------------------------- |
+| `cleanupStaleRecordings()` | `lib/core/lifecycle.js` | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
+| `cleanupStaleRedis()`      | `lib/core/lifecycle.js` | 启动       | 清理 Redis 过期 `active_task:*`                            |
+| `scanRecordingFiles()`     | `lib/scan-files.js`     | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
 
 ### 周期性执行链
 
@@ -332,13 +332,14 @@ watchdog.start()
 ### 启动时执行链（非周期）
 
 ```
-startup()
-  ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
-  ├─ cleanupStaleRedis()            ← 清理 Redis 过期 active_task
-  ├─ cleanupStaleRecordings()       ← 重命名 .part、恢复会话
-  ├─ transcodeQueue.init()          ← 初始化转码队列(加载并发配置)
-  ├─ pollingManager.start()         ← 启动轮询管理器(加载 polling_enabled 房间)
-  └─ watchdog.start()               ← 启动看门狗
+app.js
+  └─ bootstrap()
+       ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
+       ├─ cleanupStaleRedis()             ← 清理 Redis 过期 active_task
+       ├─ cleanupStaleRecordings()        ← 重命名 .part、恢复会话
+       ├─ transcodeQueue.init()           ← 初始化转码队列(加载并发配置)
+       ├─ watchdog.start()                ← 启动看门狗
+       └─ pollingManager.start()          ← 启动轮询管理器(加载 polling_enabled 房间)
 ```
 
 ### checkStaleRecordings()
@@ -414,10 +415,11 @@ PollingManager (单例)
 ### 轮询流程
 
 ```
-app.js init()
-  └─ pollingManager.start()
-       └─ loadPollingRooms()                       # DB: polling_enabled=true
-            └─ pollRoom(room) × N                   # 仅检查1次，无定时器
+app.js
+  └─ bootstrap()
+       └─ pollingManager.start()
+            └─ loadPollingRooms()                       # DB: polling_enabled=true
+                 └─ pollRoom(room) × N                   # 仅检查1次，无定时器
 
 router/rooms.js (新增/修改房间)
   └─ pollingManager.reloadRoom(roomId)
