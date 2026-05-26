@@ -200,54 +200,6 @@ router.get('/apiview', (req, res) => {
   res.render('apiview', { title: 'API 文档', content });
 });
 
-router.get('/logs', async (req, res) => {
-  const logsDir = path.join(__dirname, '..', 'logs');
-  let files = [];
-  try {
-    files = fs
-      .readdirSync(logsDir)
-      .filter((f) => f.endsWith('.log'))
-      .sort()
-      .reverse();
-  } catch (_) {}
-  const logFile = req.query.file;
-  let logContent = '';
-  if (logFile && files.includes(logFile)) {
-    try {
-      logContent = fs.readFileSync(path.join(logsDir, logFile), 'utf-8');
-      const maxLines = 2000;
-      const lines = logContent.split('\n');
-      if (lines.length > maxLines) {
-        logContent = lines.slice(-maxLines).join('\n');
-      }
-    } catch (_) {}
-  }
-  if (req.xhr || req.headers.accept?.includes('json')) {
-    res.json({ files, logFile, logContent });
-  } else {
-    res.render('logs', { title: '日志查看', files, logFile, logContent });
-  }
-});
-
-router.delete('/logs', (req, res) => {
-  const logsDir = path.join(__dirname, '..', 'logs');
-  let { file } = req.body || {};
-  if (!file) return res.status(400).json({ error: '缺少 file 参数' });
-  const safeFile = path.basename(file);
-  const fullPath = path.join(logsDir, safeFile);
-  if (!fullPath.startsWith(logsDir)) return res.status(403).json({ error: '路径非法' });
-  try {
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-      res.json({ status: 'ok' });
-    } else {
-      res.status(404).json({ error: '文件不存在' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 router.get('/templates', async (req, res) => {
   try {
     const templates = await DataService.getTemplates();

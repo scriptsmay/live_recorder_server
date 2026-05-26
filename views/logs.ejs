@@ -1,11 +1,10 @@
 <h1>日志文件列表</h1>
 <div class="row">
-  <!-- 左侧菜单 -->
   <div class="col-md-3 mb-4">
     <div class="list-group">
       <% logFiles.forEach(file => { %>
       <a
-        href="/logs?file=<%= file %>"
+        href="/logs?file=<%= encodeURIComponent(file) %>"
         class="list-group-item list-group-item-action <%= selectedFileName === file ? 'active' : '' %>"
       >
         <%= file %>
@@ -14,28 +13,114 @@
     </div>
   </div>
 
-  <!-- 右侧内容 -->
   <div class="col-md-9">
     <% if (selectedFileName) { %>
-    <div class="row mb-2">
-      <h2 class="col-md-8">文件名: <%= selectedFileName %></h2>
-      <div class="col-md-4">
-        <a
-          class="btn btn-danger float-end"
-          href="/logs/delete?file=<%= selectedFileName %>"
-          onclick="return confirm('确定要删除此文件吗？')"
-          >删除</a
-        >
+    <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+      <h2 class="h4 mb-0 text-break">文件名: <%= selectedFileName %></h2>
+      <button class="btn btn-outline-danger btn-sm" id="delete-log-btn" type="button">删除</button>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="live-toggle" />
+        <label class="form-check-label" for="live-toggle">实时查看</label>
       </div>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="auto-scroll-toggle" checked />
+        <label class="form-check-label" for="auto-scroll-toggle">自动滚动</label>
+      </div>
+      <span class="text-muted small" id="log-status"><%= truncated ? '仅显示文件尾部内容' : '已加载' %></span>
     </div>
-    <div
-      class="overflow-auto border rounded bg-light"
-      style="max-height: 500px"
-    >
-      <pre class="p-3"><%= selectedFileContent %></pre>
+
+    <div class="overflow-auto border rounded bg-light" id="log-panel" style="max-height: 500px">
+      <pre class="p-3 mb-0" id="log-content"><%= selectedFileContent %></pre>
     </div>
+
+    <script>
+      (() => {
+        const selectedFile = <%- JSON.stringify(selectedFileName) %>;
+        const liveToggle = document.getElementById('live-toggle');
+        const autoScrollToggle = document.getElementById('auto-scroll-toggle');
+        const deleteButton = document.getElementById('delete-log-btn');
+        const logPanel = document.getElementById('log-panel');
+        const logContent = document.getElementById('log-content');
+        const logStatus = document.getElementById('log-status');
+        let source = null;
+
+        function scrollToBottom() {
+          if (autoScrollToggle.checked) {
+            logPanel.scrollTop = logPanel.scrollHeight;
+          }
+        }
+
+        function appendLine(line) {
+          logContent.textContent += `${logContent.textContent ? '\n' : ''}${line}`;
+          scrollToBottom();
+        }
+
+        function closeStream() {
+          if (source) {
+            source.close();
+            source = null;
+          }
+        }
+
+        function openStream() {
+          closeStream();
+          source = new EventSource(`/api/logs/stream?file=${encodeURIComponent(selectedFile)}&tail=0`);
+          logStatus.textContent = '实时查看已开启';
+
+          source.addEventListener('log', (event) => {
+            const data = JSON.parse(event.data);
+            appendLine(data.line);
+          });
+
+          source.addEventListener('reset', () => {
+            logContent.textContent = '';
+            logStatus.textContent = '日志文件已轮转，已重新接入';
+          });
+
+          source.addEventListener('log-error', (event) => {
+            const data = JSON.parse(event.data);
+            logStatus.textContent = data.message || '日志读取失败';
+          });
+
+          source.addEventListener('error', () => {
+            logStatus.textContent = '实时连接中断，浏览器会自动重连';
+          });
+        }
+
+        liveToggle.addEventListener('change', () => {
+          if (liveToggle.checked) {
+            openStream();
+          } else {
+            closeStream();
+            logStatus.textContent = '实时查看已关闭';
+          }
+        });
+
+        deleteButton.addEventListener('click', async () => {
+          if (!confirm(`确定要删除 ${selectedFile} 吗？`)) return;
+
+          const res = await fetch('/api/logs', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: selectedFile }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            alert(data.error || '删除失败');
+            return;
+          }
+          window.location.href = '/logs';
+        });
+
+        window.addEventListener('beforeunload', closeStream);
+        scrollToBottom();
+      })();
+    </script>
     <% } else { %>
-    <p class="text-muted">请从左侧选择一个日志文件以查看其内容。</p>
+    <p class="text-muted">暂无日志文件。</p>
     <% } %>
   </div>
 </div>
