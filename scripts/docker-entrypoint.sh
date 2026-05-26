@@ -5,6 +5,7 @@ APP_DATA_DIR="${APP_DATA_DIR:-/data}"
 VIDEO_DOWNLOAD_DIR="${VIDEO_DOWNLOAD_DIR:-$APP_DATA_DIR/video_downloads}"
 BILIUP_WORK_DIR="${BILIUP_WORK_DIR:-$APP_DATA_DIR/biliup}"
 
+# 此时是 root 身份，创建目录并纠正权限（即使 NAS 挂载进来的目录权限不对也会被强制修复）
 mkdir -p "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
 chown -R nodeuser:nodeuser "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
 
@@ -122,4 +123,12 @@ NODE
 wait_for_postgres
 wait_for_redis
 
+# ==========================================
+# [重要修改] 核心：使用 gosu 降权安全启动主程序
+# ==========================================
+if [ "$1" = "node" ]; then
+    exec gosu nodeuser "$@"
+fi
+
+# 如果是传入了其他命令（如 bash 调试），则直接用 root 执行
 exec "$@"

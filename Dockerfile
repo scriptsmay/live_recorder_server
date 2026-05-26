@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 build-essential && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # 阶段 2: 运行环境
 FROM node:22-bookworm-slim
@@ -20,9 +20,9 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# 合并安装系统依赖，减少镜像层数
+# [修改] 在 apt-get install 中增加了 gosu
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl ffmpeg python3 python3-pip \
+    ca-certificates curl ffmpeg python3 python3-pip gosu \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -31,11 +31,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
-# 设置非 root 用户 (示例)
+# 设置非 root 用户
 RUN groupadd -r nodeuser && useradd -r -g nodeuser nodeuser \
     && mkdir -p /data/video_downloads /data/biliup /app/logs \
     && chown -R nodeuser:nodeuser /data /app
-USER nodeuser
+
+# ⚠️ [重要修改] 注释掉这里的 USER 限制，允许 entrypoint 以 root 身份启动来修正权限
+# USER nodeuser
 
 RUN chmod +x scripts/docker-entrypoint.sh
 
