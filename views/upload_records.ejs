@@ -7,12 +7,11 @@
         <th>ID</th>
         <th>会话ID</th>
         <th>标题</th>
-        <th>模板</th>
-        <th>文件数</th>
-        <th>大小</th>
+        <th>投稿文件</th>
         <th>状态</th>
         <th>BV号</th>
-        <th>时间</th>
+        <th>开始时间</th>
+        <th>结束时间</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -32,17 +31,16 @@
             <td><%= r.id %></td>
             <td><%= r.session_id || '-' %></td>
             <td>
-              <small><%= r.title || '-' %>
+              <div><%= r.title || '-' %>
                 <% if (r.template_name) { %><br><span class="text-muted small"><%= r.template_name %></span><% } %>
-              </small>
+              </div>
             </td>
-            <td><%= r.template_name || '-' %></td>
             <td>
-              <button class="btn btn-sm btn-link p-0 viewFilesBtn" data-files='<%= encodeURIComponent(r.upload_files || "[]") %>' data-id="<%= r.id %>">
-                <%= r.file_count %>
+              <button class="btn btn-md btn-link p-0 viewFilesBtn" data-files='<%= encodeURIComponent(r.upload_files || "[]") %>' data-id="<%= r.id %>">
+                <%= r.file_count %>个
               </button>
+              <span class="small text-muted ml-2">[<%= size %>]</span>
             </td>
-            <td><%= size %></td>
             <td><%- badge %></td>
             <td>
               <% if (r.bv_id) { %>
@@ -54,7 +52,10 @@
               <% } %>
             </td>
             <td>
-              <small><%= formatDate(r.completed_at || r.started_at) %></small>
+              <div class="small"><%= formatDate(r.started_at) %></div>
+            </td>
+            <td>
+              <div class="small"><%= formatDate(r.completed_at) %></div>
             </td>
             <td>
               <button class="btn btn-sm btn-outline-info viewOutputBtn" data-id="<%= r.id %>" data-output="<%= encodeURIComponent(r.output || '') %>">输出</button>

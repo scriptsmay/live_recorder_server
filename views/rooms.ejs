@@ -17,9 +17,9 @@
         <th>通知</th>
         <th>监听</th>
         <th>轮询状态</th>
-        <th>投稿模板</th>
         <th>文件名模板</th>
         <th>分段时间</th>
+        <th>投稿模板</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -40,25 +40,34 @@
         <td><% if (r.notification_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
         <td><% if (r.monitoring_enabled !== false) { %><span class="badge bg-info text-dark">开</span><% } else { %><span class="badge bg-secondary">关</span><% } %></td>
         <td>
-          <div><% if (r.polling_enabled) { %>
+          <div>
+            <% if (r.polling_enabled) { %>
             <span class="badge bg-info text-dark">开</span>
+            <span class="status-tooltip"
+                    data-bs-toggle="tooltip" data-bs-placement="top"
+                    data-bs-title="<%= formatDate(r.last_polled_at, 'YY/MM/DD HH:mm:ss') %>">
+              <% if (r.last_live_status) { %>
+              <span class="badge bg-danger">🔴直播中</span>
+              <% } else { %>
+              <span class="badge bg-secondary">⚫未开播</span>
+              <% } %>
+            </span>
             <% } else { %>
             <span class="badge bg-secondary">关</span>
             <% } %>
-            <% if (r.last_live_status) { %>
-            <span class="badge bg-danger">🔴 直播中</span>
-            <% } else if (r.polling_enabled) { %>
-            <span class="badge bg-secondary">⚫ 未开播</span>
-            <% } %></div>
+          </div>
           <div>
             <% if (r.last_polled_at) { %>
-            <div><small><%= formatDate(r.last_polled_at, 'MM/DD HH:mm:ss') %></small></div>
+            <div><small class="text-secondary"></small></div>
             <% } %>
           </div>
         </td>
-        <td><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></td>
+        
         <td><code><%= r.filename_template || '{room_name}_{datetime}' %></code></td>
         <td><%= seg ? (seg >= 3600 ? Math.round(seg/3600)+'h' : seg+'s') : '-' %></td>
+        <td>
+          <small class="text-secondary"><%= r.upload_template_name || (r.upload_template_id ? '#' + r.upload_template_id : '-') %></small>
+        </td>
         <td class="text-nowrap">
           <% if (r.status === 'idle') { %>
           <button class="btn btn-sm btn-outline-primary editBtn" data-id="<%= r.id %>">编辑</button>
@@ -194,25 +203,6 @@
       toast(json.message || '操作失败');
     }
     return res;
-  }
-
-  function detectPlatform(url) {
-    const platformMap = {
-      'huya.com': 'huya',
-      'douyu.com': 'douyu',
-      'live.bilibili.com': 'bilibili',
-      'twitch.tv': 'twitch',
-      'douyin.com': 'douyin',
-      'twitcasting.tv': 'twitcasting'
-    };
-
-    for (const [domain, platform] of Object.entries(platformMap)) {
-      const regex = new RegExp(`^(?:https?:\\/\\/)?.*?${domain}\\/(.+?)$`, 'i');
-      if (regex.test(url)) {
-        return platform;
-      }
-    }
-    return null;
   }
 
   function setRoomFormMode(limited) {

@@ -56,13 +56,7 @@
         <% } %>
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
         <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted')) { %>
-          <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="<%= s.id %>">
-            <option value="">选择模板投稿</option>
-            <% templates.forEach(t => { %>
-              <option value="<%= t.id %>"><%= t.name %><%= t.room_url ? ' [' + (t.room_name || t.room_url) + ']' : '' %></option>
-            <% }) %>
-          </select>
-          <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="<%= s.id %>" disabled>投稿</button>
+          <button class="btn btn-sm btn-outline-success uploadBtn mx-2" data-session-id="<%= s.id %>">投稿</button>
         <% } %>
         <button class="btn btn-sm btn-outline-danger float-end deleteSessionBtn" data-session-id="<%= s.id %>">删除</button>
         <div class="mt-2 d-none filesContainer" id="files_<%= s.id %>">
@@ -103,6 +97,43 @@
 </div>
 <% } %>
 
+<!-- 将投稿部分做成modal投稿 -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg"> 
+    <div class="modal-content"> 
+      <div class="modal-header">
+        <h5 class="modal-title" id="uploadModalLabel">投稿录制会话<span class="text-muted ml-2" id="uploadSessionIdText"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="uploadForm">
+          <input type="hidden" id="uploadSessionId">
+          <div class="mb-3">
+            <label for="uploadTmplSelect" class="form-label">选择投稿模板</label>
+            <select id="uploadTmplSelect" class="form-select form-select-sm d-inline-block mx-1" required>
+              <option value="">选择模板投稿</option>
+              <% templates.forEach(t => { %>
+                <option value="<%= t.id %>"><%= t.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <button type="submit" id="uploadSubmitBtn" class="btn btn-primary" disabled>提交投稿</button>
+          </div>
+          <div class="mb-3" id="uploadResultText"></div>
+        </form>
+        
+        <div id="uploadStatusContainer" class="mt-3 d-none text-primary">
+          <div class="spinner-border spinner-border-sm" role="status">
+            <span class="visually-hidden">正在提交投稿...</span>
+          </div>
+          <span id="uploadStatus" class="ms-1">正在提交投稿...请稍候</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/js/recording-player.js"></script>
 <%- include('partials/_video_player') %>
 
@@ -112,6 +143,7 @@
     window.location.href = '/sessions' + url;
   });
 
+  // 列表中的操作按钮事件代理
   document.addEventListener('click', async (e) => {
     const toggle = e.target.closest('.toggleFiles');
     if (toggle) {
@@ -155,44 +187,114 @@
       return;
     }
 
-    const uploadBtn = e.target.closest('.uploadBtn');
-    if (uploadBtn && !uploadBtn.disabled) {
-      showConfirm('确认投稿？').then(async confirmed => {
-        if (!confirmed) return;
-        const sessionId = uploadBtn.dataset.sessionId;
-        const sel = uploadBtn.parentElement.querySelector('.uploadTmplSelect');
-        const templateId = sel.value;
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = '投稿中...';
+  });
+
+
+</script>
+
+<script>
+  // 声明一个全局的 modal 实例变量
+  let uploadModalInstance = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. 初始化相关组件
+    if (typeof RecordingPlayer !== 'undefined') {
+      RecordingPlayer.init();
+    }
+
+    const modalEl = document.getElementById('uploadModal');
+    if (modalEl) {
+      uploadModalInstance = new bootstrap.Modal(modalEl);
+    }
+
+    // 2. 监听模板选择，控制提交按钮状态
+    document.getElementById('uploadTmplSelect')?.addEventListener('change', (e) => {
+      document.getElementById('uploadSubmitBtn').disabled = !e.target.value;
+    });
+
+    // 3. 监听表单提交事件（而不是按钮点击）
+    document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault(); // 关键：阻止表单默认提交刷新页面
+
+      const confirmed = await showConfirm('确认投稿？'); // 假设 showConfirm 返回 Promise
+      if (!confirmed) return;
+
+      const sessionId = document.getElementById('uploadSessionId').value;
+      const templateId = document.getElementById('uploadTmplSelect').value;
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      const resultText = document.getElementById('uploadResultText');
+      const statusContainer = document.getElementById('uploadStatusContainer');
+
+      // 提交前的 UI 状态更新
+      resultText.textContent = '';
+      resultText.className = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = '投稿中...';
+      statusContainer.classList.remove('d-none'); // 显示加载动画
+
+      try {
         const res = await fetch('/api/sessions/' + sessionId + '/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ template_id: parseInt(templateId) }),
+          body: JSON.stringify({ template_id: parseInt(templateId, 10) }),
         });
+        
         const json = await res.json();
-        if (res.ok) {
-          uploadBtn.textContent = '已提交';
-          uploadBtn.className = 'btn btn-sm btn-success';
+        
+        if (!res.ok || json.status !== 'ok') {
+          resultText.textContent = json.message || '投稿失败';
+          resultText.className = 'text-danger';
         } else {
-          toast(json.message || '投稿失败');
-          uploadBtn.disabled = false;
-          uploadBtn.textContent = '投稿';
+          uploadModalInstance.hide();
+          toast(json.message || '投稿任务已提交');
+          // 延迟一点关闭并刷新页面以显示最新状态（比如 BV 号或 uploading 标签）
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
         }
-        return;
-      });
-    }
+
+        // 成功状态
+        submitBtn.textContent = '已提交';
+        submitBtn.classList.replace('btn-primary', 'btn-success');
+
+      } catch (error) {
+        // 异常处理
+        console.error('Upload error:', error);
+        toast(error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '重新投稿';
+      } finally {
+        // 无论成功失败，隐藏加载动画
+        statusContainer.classList.add('d-none');
+      }
+    });
   });
 
-  document.addEventListener('change', (e) => {
-    const sel = e.target.closest('.uploadTmplSelect');
-    if (!sel) return;
-    const btn = sel.parentElement.querySelector('.uploadBtn');
-    btn.disabled = !sel.value;
+  // 全局事件代理 (保留你原有的 filter, toggleFiles, deleteBtn)
+  document.getElementById('roomFilter')?.addEventListener('change', (e) => {
+    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
+    window.location.href = '/sessions' + url;
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
-    if (typeof RecordingPlayer !== 'undefined') {
-      RecordingPlayer.init();
+  document.addEventListener('click', async (e) => {
+    
+    // 打开投稿模态框
+    const uploadBtn = e.target.closest('.uploadBtn');
+    if (uploadBtn && !uploadBtn.disabled) {
+      // 在显示之前，重置表单的状态，防止上一次的输入或错误提示残留
+      document.getElementById('uploadSessionId').value = uploadBtn.dataset.sessionId;
+      document.getElementById('uploadTmplSelect').value = '';
+      document.getElementById('uploadResultText').textContent = '';
+      document.getElementById('uploadSessionIdText').textContent = '#' + uploadBtn.dataset.sessionId;
+      
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交投稿';
+      submitBtn.className = 'btn btn-primary'; // 恢复默认颜色
+      
+      document.getElementById('uploadStatusContainer').classList.add('d-none');
+
+      uploadModalInstance?.show();
     }
   });
 </script>

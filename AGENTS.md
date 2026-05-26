@@ -1,62 +1,5 @@
 # Live Recorder Server — 智能体备忘录
 
-## 开发工作流
-
-- `npm install` → 安装项目依赖。
-- `npm run dev` → node `--watch` 开发模式（端口 3001），启动开发环境，前台查看日志。
-- `npm run dev:backend` → 以后台模式启动开发环境，输出日志可在 `/tmp/dev-server.log` 中查看。
-- **修改代码后必须更新文档 + 提交代码**：每次完成功能开发或修复后，先更新对应的 `docs/` 文档，再用 `git add`/`git commit` 提交。提交信息格式：`<type>: <description>`
-
-### 开发环境隔离
-
-`npm run dev` 会自动加载 `.env.dev`，覆盖 `.env` 中的以下配置，表中值为举例内容，具体值以项目实际配置为准：
-
-| 配置     | 生产 (.env)          | 开发 (.env.dev)        |
-| -------- | -------------------- | ---------------------- |
-| 端口     | `1123`               | `3001`（命令行指定）   |
-| 数据库   | `ks_live_recorder`   | `ks_live_recorder_dev` |
-| Redis DB | `1`                  | `2`                    |
-| 下载目录 | `VIDEO_DOWNLOAD_DIR` | `./dev_downloads`      |
-
-**首次使用前需创建开发数据库：**
-
-```sql
-CREATE DATABASE ks_live_recorder_dev;
-```
-
-（表结构会在启动时自动迁移创建）
-
-`dev_downloads/` 和 `dev_biliup/` 目录在项目根目录下自动创建，已加入 `.gitignore`。
-
-### 开发环境管理命令
-
-```bash
-# 方式1：前台运行并查看日志
-npm run dev
-
-# 方式2：后台运行并查看日志
-npm run dev > /tmp/dev-server.log 2>&1 &
-tail -f /tmp/dev-server.log
-
-# 停止开发服务
-kill $(lsof -ti :3001)
-
-# 检查开发环境端口占用
-lsof -i :3001
-```
-
-**主动重启后建议清理脏数据：**
-
-```bash
-node scripts/cleanup-dev.js
-```
-
-该脚本会：杀死孤儿进程 → 重命名 `.part` → 清除孤文件 DB 记录 → 中断遗留会话 → 追踪遗留文件到 recording_files。具体实现见 `scripts/cleanup-dev.js`。
-
-- 录制进程日志（ffmpeg 输出）在 `logs/` 目录
-- 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
-- Redis DB 编号：`2`（生产使用 `1`）
-
 ## 技术栈
 
 - Express 5（CommonJS）、EJS 模板、morgan、cors
@@ -64,6 +7,13 @@ node scripts/cleanup-dev.js
 - Redis（`redis` 模块）—— 客户端在 `db/redis.js`
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
 - **Jest**（v30.4.2）—— 单元测试和 API 集成测试框架
+
+## 开发工作流
+
+- `npm install` → 安装项目依赖。
+- `npm run dev` → node `--watch` 开发模式（端口 3001），启动开发环境，前台查看日志。
+- `npm run dev:backend` → 以后台模式启动开发环境，输出日志可在 `/tmp/dev-server.log` 中查看。
+- **修改代码后必须更新文档 + 提交代码**：每次完成功能开发或修复后，先更新对应的 `docs/` 文档，再用 `git add`/`git commit` 提交。提交信息格式：`<type>: <description>`
 
 ## 目录结构
 
@@ -117,7 +67,7 @@ node scripts/cleanup-dev.js
 - `services/DataService.js` — 集中封装读库查询，供 API 路由与 `router/html.js` 页面渲染共用，避免重复 `pool.query`
 - `router/` — 路由层，负责接收请求、调用 Service、返回响应
 
-**页面渲染**：`templates`、`rooms`、`settings`、`sessions`、`upload_records`、`recordings` 由 `router/html.js` 后端 EJS 渲染；`dashboard`、`files` 保留前端 fetch（轮询/交互需求）。
+**页面渲染**：`templates`、`rooms`、`settings`、`sessions`、`upload_records`、`recordings` 由 `router/html.js` 后端 EJS 渲染；`dashboard` 保留前端 fetch（轮询/交互需求）。
 
 ## 代码规范
 
@@ -133,7 +83,6 @@ node scripts/cleanup-dev.js
 ### 测试规范
 
 项目使用 **Jest** 框架进行单元测试和 API 集成测试。
-[测试用例编写文档](./docs/TEST.md)
 
 #### CI/CD 集成
 
@@ -260,17 +209,25 @@ VIDEO_DOWNLOAD_DIR/
 - **设计原则**：保持轻量。避免引入 chokidar / Worker Thread / EventEmitter / 复杂状态机。同步 fs 操作在典型负载下完全够用。
 - **Redis 缓存策略**：瞬时状态（直播状态、轮询时间、活跃任务）用 Redis 缓存带 TTL，持久数据（房间配置、文件路径）存 DB
 
-## 关联项目
+## 参考项目和文档
+
+### 关联项目
 
 - **Chrome 扩展**（直播监听 + URL 推送）：`../chrome_live_listener/`
   - 向 `POST /api/notify/live_download` 推送直播流 URL
   - 向 `GET /api/notify/status` 查询录制状态
   - 两端 API 契约变更时需同步修改
 
-## 踩坑记录
+### 开发和测试文档
+
+- 数据库文档：[docs/DB.md](docs/DB.md)
+- 开发工作文档：[docs/DEV.md](docs/DEV.md)
+- 测试用例编写文档：[docs/TEST.md](docs/TEST.md)
+
+### 踩坑记录
 
 开发中遇到的典型问题及解决方案见 [docs/lessons.md](docs/lessons.md)。
 
-## TODO 计划
+### TODO 计划
 
-查看文档[TODO.md](docs/todo/TODO.md)
+查看TODO文档[TODO.md](docs/todo/TODO.md)

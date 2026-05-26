@@ -131,9 +131,14 @@ class UploadService {
    * @returns {Promise<void>}
    */
   static async executeUpload(session, tmpl) {
+    let message;
     if (await this.isSessionDeleted(session.id)) {
-      console.log(`[投稿] 会话 ${session.id} 已删除，跳过`);
-      return;
+      message = `[投稿] 会话 ${session.id} 已被删除，跳过执行`;
+      console.log(message);
+      return {
+        error: true,
+        message,
+      };
     }
 
     // 渲染模板变量，生成投稿元数据
@@ -170,8 +175,12 @@ class UploadService {
     files = files.map((fp) => path.resolve(fp));
 
     if (files.length === 0) {
-      console.log(`[投稿] 会话 ${session.id} 无有效文件（或均小于碎片阈值），跳过`);
-      return;
+      message = `[投稿] 会话 ${session.id} 无有效文件（或均小于碎片阈值${thresholdValue}MB），跳过`;
+      console.log(message);
+      return {
+        error: true,
+        message,
+      };
     }
 
     // 计算文件总大小
@@ -259,6 +268,10 @@ class UploadService {
     }
 
     console.log(`[投稿] biliup 日志: ${result.logPath}`);
+    return {
+      error: false,
+      message: `[投稿] ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已开始`,
+    };
   }
 
   /**
