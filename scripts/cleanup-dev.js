@@ -33,6 +33,7 @@ require('../config/env').initEnv({ mode: env });
 const pool = require('../db/index');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
+const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
 const DEV_PORT = process.env.PORT || '3001';
 
 console.log('========================================');
@@ -160,6 +161,26 @@ async function cleanup() {
     }
   } else {
     console.log('    ⚠️  下载目录不存在');
+  }
+
+  // 清空日志目录（开发环境）
+  if (fs.existsSync(LOG_DIR)) {
+    console.log(`  └─ 清空日志目录 ${LOG_DIR} ...`);
+    let logFileCount = 0;
+    for (const f of fs.readdirSync(LOG_DIR)) {
+      const fullPath = path.join(LOG_DIR, f);
+      if (fs.statSync(fullPath).isFile()) {
+        fs.unlinkSync(fullPath);
+        logFileCount++;
+      }
+    }
+    if (logFileCount > 0) {
+      console.log(`    ✅ 删除 ${logFileCount} 个日志文件`);
+    } else {
+      console.log('    ✅ 无待处理日志文件');
+    }
+  } else {
+    console.log('    ⚠️  日志目录不存在');
   }
 
   console.log('\n[4/5] 清理数据库...');
