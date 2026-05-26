@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+require('../config/env').initEnv();
 
 const packagePath = path.join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
@@ -36,39 +37,49 @@ function getRecentCommits() {
   }
 }
 
-// 调用大模型生成 Release Note (以兼容 OpenAI 格式的 API 为例)
+// 调用大模型生成 Release Note (支持 LiteLLM 格式配置)
 async function generateReleaseNoteAI(commits) {
-  // 从环境变量中获取 API Key
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  // 从环境变量中获取 AI 配置
+  const apiKey = process.env.AI_API_KEY;
+  const apiBase = process.env.AI_API_BASE || 'https://api.deepseek.com';
+  const model = process.env.AI_MODEL || 'deepseek-v4-flash';
 
   // 增加一道安全校验，防止没配变量直接运行报错
   if (!apiKey) {
-    console.warn('⚠️ 警告: 未检测到 DEEPSEEK_API_KEY 环境变量，跳过 AI 生成。');
+    console.warn('⚠️ 警告: 未检测到 AI_API_KEY 环境变量，跳过 AI 生成。');
     return null;
   }
 
   console.log('🤖 正在呼叫 AI 总结 Changelog...');
 
-  const prompt = `你是一个只输出最终结果的纯文本转换器。请将以下 git commits 整理为面向用户的 Release Note。
-【绝对规则】：
-1. 严禁任何开场白、寒暄或结尾提示（绝对不要输出“以下是”、“根据提供”、“已过滤”、“如有需要”等废话）。
-2. 第一行必须直接以“✨ 新特性”、“🐛 问题修复”或“🔧 优化”开头。
-3. 绝对不要使用 \`\`\`markdown 等代码块包裹内容。
-4. 不要自己发明主标题。
+  const prompt = `
+你是一个精简、专业的技术文档撰写助手。请将输入的 Git commits 整理为面向用户的 Release Note。
 
-commits 记录如下：\n${commits}`;
+【处理逻辑】：
+1. 语义归纳：合并相似的提交（例如：将多个针对同一模块的修复合并为一条），提取核心意图。
+2. 内容润色：将 commit message 的技术用语转化为用户易懂的自然语言。
+
+【格式要求】：
+1. 绝对禁止任何开场白、结尾或代码块包裹（直接输出纯文本）。
+2. 使用以下分类进行归纳，若分类下无内容则忽略该分类：
+   ✨ 新特性：新增功能或重要的 API 变更。
+   🐛 问题修复：修复 Bug 或异常行为。
+   🔧 优化：性能提升、重构、依赖更新或开发者体验提升。
+3. 每一项内容保持单行，句式简洁（如：“修复了由于 XXX 导致的 YYY 问题”）。
+
+【输入数据】：
+${commits}
+`;
 
   try {
-    // 这里以 DeepSeek 或本地 Ollama 为例，如果是 Gemini 换成对应的 endpoint 和 payload 即可
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      // 换成你的目标 API 地址
+    const response = await fetch(`${apiBase}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`, // 替换为你的 API Key
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
       }),
