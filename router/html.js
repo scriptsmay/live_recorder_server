@@ -56,9 +56,12 @@ router.get('/sessions', async (req, res) => {
     }
 
     const totalPages = Math.ceil(sessionsResult.total / limit);
+
+    const downloader = getActiveDownloader().name;
     res.render('sessions', {
       title: '录制会话',
       sessions: sessionsResult.rows,
+      downloader,
       uploadMap,
       rooms,
       templates,

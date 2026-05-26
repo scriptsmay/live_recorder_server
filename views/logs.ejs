@@ -1,51 +1,93 @@
-<h1>日志文件列表</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">日志查看</h2>
+</div>
+
 <div class="row">
-  <div class="col-md-3 mb-4">
-    <div class="list-group">
+  <div class="col-md-3 col-lg-2 mb-3 mb-md-0">
+    <div class="list-group" id="log-file-list">
       <% logFiles.forEach(file => { %>
       <a
         href="/logs?file=<%= encodeURIComponent(file) %>"
-        class="list-group-item list-group-item-action <%= selectedFileName === file ? 'active' : '' %>"
+        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <%= selectedFileName === file ? 'active' : '' %>"
       >
-        <%= file %>
+        <span class="text-truncate me-2"><%= file %></span>
       </a>
       <% }) %>
+      <% if (logFiles.length === 0) { %>
+      <div class="list-group-item text-muted">暂无日志文件</div>
+      <% } %>
     </div>
   </div>
 
-  <div class="col-md-9">
+  <div class="col-md-9 col-lg-10">
     <% if (selectedFileName) { %>
-    <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
-      <h2 class="h4 mb-0 text-break">文件名: <%= selectedFileName %></h2>
-      <button class="btn btn-outline-danger btn-sm" id="delete-log-btn" type="button">删除</button>
-    </div>
-
-    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-      <div class="form-check form-switch mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="live-toggle" />
-        <label class="form-check-label" for="live-toggle">实时查看</label>
+    <div class="card">
+      <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <h5 class="mb-0 text-break"><%= selectedFileName %></h5>
+          <span class="badge bg-secondary" id="file-size-badge">加载中...</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="live-toggle" />
+            <label class="form-check-label small" for="live-toggle">实时查看</label>
+          </div>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="auto-scroll-toggle" checked />
+            <label class="form-check-label small" for="auto-scroll-toggle">自动滚动</label>
+          </div>
+          <button class="btn btn-sm btn-outline-danger" id="delete-log-btn" type="button">删除</button>
+        </div>
       </div>
-      <div class="form-check form-switch mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="auto-scroll-toggle" checked />
-        <label class="form-check-label" for="auto-scroll-toggle">自动滚动</label>
+      <div class="card-body p-0">
+        <div id="log-status-bar" class="px-3 py-2 border-bottom bg-light small text-muted">
+          <span id="log-status"><%= truncated ? '仅显示文件尾部内容（完整内容请下载查看）' : '已加载完整内容' %></span>
+        </div>
+        <div class="overflow-auto" id="log-panel" style="max-height: 60vh; min-height: 300px">
+          <pre class="mb-0 p-3" id="log-content" style="font-size: 12px; line-height: 1.4;"><%= selectedFileContent %></pre>
+        </div>
       </div>
-      <span class="text-muted small" id="log-status"><%= truncated ? '仅显示文件尾部内容' : '已加载' %></span>
     </div>
 
-    <div class="overflow-auto border rounded bg-light" id="log-panel" style="max-height: 500px">
-      <pre class="p-3 mb-0" id="log-content"><%= selectedFileContent %></pre>
-    </div>
-
+    <input type="hidden" id="selected-file-name" value="<%= selectedFileName %>" />
     <script>
       (() => {
-        const selectedFile = <%- JSON.stringify(selectedFileName) %>;
+        const selectedFile = document.getElementById('selected-file-name').value;
         const liveToggle = document.getElementById('live-toggle');
         const autoScrollToggle = document.getElementById('auto-scroll-toggle');
         const deleteButton = document.getElementById('delete-log-btn');
         const logPanel = document.getElementById('log-panel');
         const logContent = document.getElementById('log-content');
         const logStatus = document.getElementById('log-status');
+        const fileSizeBadge = document.getElementById('file-size-badge');
         let source = null;
+        
+        // 修复：初始化时精确获取已有日志行数
+        const initialText = logContent.textContent;
+        let lineCount = initialText ? initialText.split('\n').length : 0;
+
+        async function fetchFileSize() {
+          try {
+            const res = await fetch(`/api/logs/content?file=${encodeURIComponent(selectedFile)}&tail=0`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.lines !== undefined) {
+                fileSizeBadge.textContent = data.offset ? formatBytes(data.offset) : '-';
+              }
+            }
+          } catch (_) {}
+        }
+
+        function formatBytes(bytes) {
+          if (!bytes) return '-';
+          const units = ['B', 'KB', 'MB', 'GB'];
+          let i = 0;
+          while (bytes >= 1024 && i < units.length - 1) {
+            bytes /= 1024;
+            i++;
+          }
+          return bytes.toFixed(1) + ' ' + units[i];
+        }
 
         function scrollToBottom() {
           if (autoScrollToggle.checked) {
@@ -54,8 +96,19 @@
         }
 
         function appendLine(line) {
-          logContent.textContent += `${logContent.textContent ? '\n' : ''}${line}`;
+          lineCount++;
+          const prefix = lineCount > 1 ? '\n' : '';
+          
+          // 优化：使用 appendChild 替代 textContent += 避免全量重绘
+          logContent.appendChild(document.createTextNode(prefix + line));
           scrollToBottom();
+
+          if (lineCount > 5000) {
+            const lines = logContent.textContent.split('\n');
+            logContent.textContent = lines.slice(-4000).join('\n');
+            lineCount = 4000;
+            logStatus.textContent = '内容过长，已自动截断旧日志';
+          }
         }
 
         function closeStream() {
@@ -68,7 +121,7 @@
         function openStream() {
           closeStream();
           source = new EventSource(`/api/logs/stream?file=${encodeURIComponent(selectedFile)}&tail=0`);
-          logStatus.textContent = '实时查看已开启';
+          logStatus.textContent = '实时查看已开启，新内容将自动追加';
 
           source.addEventListener('log', (event) => {
             const data = JSON.parse(event.data);
@@ -77,16 +130,24 @@
 
           source.addEventListener('reset', () => {
             logContent.textContent = '';
+            lineCount = 0;
             logStatus.textContent = '日志文件已轮转，已重新接入';
           });
 
           source.addEventListener('log-error', (event) => {
             const data = JSON.parse(event.data);
-            logStatus.textContent = data.message || '日志读取失败';
+            logStatus.textContent = '错误: ' + (data.message || '日志读取失败');
+          });
+
+          source.addEventListener('ready', (event) => {
+            const data = JSON.parse(event.data);
+            if (data.truncated) {
+              logStatus.textContent = '实时查看已开启，仅显示新增内容（' + formatBytes(data.offset) + '）';
+            }
           });
 
           source.addEventListener('error', () => {
-            logStatus.textContent = '实时连接中断，浏览器会自动重连';
+            logStatus.textContent = '实时连接中断，浏览器将自动重连...';
           });
         }
 
@@ -99,28 +160,45 @@
           }
         });
 
-        deleteButton.addEventListener('click', async () => {
-          if (!confirm(`确定要删除 ${selectedFile} 吗？`)) return;
-
-          const res = await fetch('/api/logs', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file: selectedFile }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            alert(data.error || '删除失败');
-            return;
+        autoScrollToggle.addEventListener('change', () => {
+          if (autoScrollToggle.checked) {
+            scrollToBottom();
           }
-          window.location.href = '/logs';
+        });
+
+        deleteButton.addEventListener('click', async () => {
+          const confirmed = await showConfirm(`确定要删除 ${selectedFile} 吗？此操作不可恢复。`);
+          if (!confirmed) return;
+
+          try {
+            const res = await fetch('/api/logs', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file: selectedFile }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              alert(data.error || '删除失败');
+              return;
+            }
+            window.location.href = '/logs';
+          } catch (err) {
+            alert('删除失败: ' + err.message);
+          }
         });
 
         window.addEventListener('beforeunload', closeStream);
         scrollToBottom();
+        fetchFileSize();
       })();
     </script>
     <% } else { %>
-    <p class="text-muted">暂无日志文件。</p>
+    <div class="card">
+      <div class="card-body text-center text-muted py-5">
+        <p class="mb-0">请从左侧列表选择要查看的日志文件</p>
+        <small>日志文件保存在 <code>logs/</code> 目录</small>
+      </div>
+    </div>
     <% } %>
   </div>
 </div>
