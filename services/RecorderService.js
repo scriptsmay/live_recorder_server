@@ -496,7 +496,7 @@ class RecorderService {
           caption,
           streamUrl: url,
         });
-        console.log(`[任务启动] 录制会话: ${sessionId}`);
+        // console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
 
       // 二、使用 roomId 和 sessionId 生成带层级的输出路径
@@ -518,10 +518,6 @@ class RecorderService {
         console.log(`[任务启动] 创建会话目录: ${sessionDir}`);
       }
 
-      console.log(`[任务启动] 文件名模板: ${template}`);
-      console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
-      console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
-
       // 三、更新会话的输出路径
       await recordingManager.updateSessionOutputPath(sessionId, outputFilePattern);
 
@@ -537,7 +533,13 @@ class RecorderService {
         },
         sessionId,
       });
-      console.log(`[任务启动] 输出文件路径: ${outputFilePattern} | PID: ${dlProcess.pid}`);
+      console.log(
+        `[任务启动] 文件名模板: ${template}` +
+          `| 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}` +
+          `| 输出文件路径: ${outputFilePattern}` +
+          `| PID: ${dlProcess.pid}` +
+          `| 日志路径: ${logPath}`
+      );
 
       // 五、再去更新 session.pid
       await recordingManager.updateSessionPidToDatabase({
@@ -545,8 +547,6 @@ class RecorderService {
         sessionId,
         pid: dlProcess.pid,
       });
-
-      console.log(`[任务启动] 日志文件: ${logPath} `);
 
       // 更新 redis 缓存
       await this.setActiveTask(roomKey, {

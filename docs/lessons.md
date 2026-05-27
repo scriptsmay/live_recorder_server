@@ -417,3 +417,83 @@ async function runWatchdog() {
 | **简单可靠** | 单一触发点，易于理解和维护               |
 | **及时响应** | 看门狗30秒扫描，能及时发现可投稿的会话   |
 | **避免重复** | 统一检查机制，防止重复投稿               |
+
+## 斗鱼签名方案优化
+
+### 问题
+
+原斗鱼签名实现（`signers/douyu.js`）采用从网页 HTML 提取 `ub98484234` JavaScript 签名函数，在 `vm.createContext` 沙箱中执行的方式。这种方式存在以下问题：
+
+1. **依赖网页结构**：签名函数嵌入在 HTML 中，格式可能随斗鱼前端更新而变化
+2. **复杂度高**：需要正则提取、eval 移除、VM 沙箱执行等多步骤处理
+3. **调试困难**：签名失败时难以定位是提取问题还是执行问题
+
+### 解决方案
+
+参考 biliup 项目（`crates/biliup/src/downloader/extractor/douyu.rs`），改用 `hlsH5Preview` API：
+
+```js
+// 签名算法：md5(room_id + timestamp)
+const sign = md5Hash(`${rid}${time}`);
+
+// POST 请求到 hlsH5Preview API
+const url = `https://playweb.douyucdn.cn/lapi/live/hlsH5Preview/${rid}`;
+const data = await fetch(url, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    rid: String(rid),
+    time,
+    auth: sign,
+  },
+  body: new URLSearchParams({ did, rid: String(rid) }).toString(),
+});
+
+// 从 rtmp_live 提取 key 构建 FLV 地址
+const key = rtmpLive.match(/(\d{1,8}[0-9a-zA-Z]+)_?\d{0,4}(\/playlist|\.m3u8)/)[1];
+const streamUrl = `https://hw-tct.douyucdn.cn/live/${key}.flv`;
+```
+
+### 优势
+
+| 优势             | 说明                                             |
+| ---------------- | ------------------------------------------------ |
+| **简单稳定**     | 签名算法为简单 MD5，不受前端 JS 变更影响         |
+| **无需 VM**      | 移除 vm 沙箱执行，减少安全风险和复杂度           |
+| **易于调试**     | 签名失败只需检查时间戳和 MD5 计算                |
+| **与 biliup 一致** | 参考成熟项目实现，经过实际验证                   |
+
+### 斗鱼流地址获取方式
+
+**问题**：FFmpeg 录制斗鱼直播时返回 HTTP 404 错误。
+
+**分析过程**：
+1. 最初参考 biliup Rust 版本，使用 `hlsH5Preview` API 并从 `rtmp_live` 提取 key 构建 FLV URL
+2. 添加 `?uuid=` 参数后仍然 404
+3. 对比 biliup Python 版本发现：应该直接使用 `rtmp_url/rtmp_live` 拼接
+
+**biliup Python 版本的实现**：
+```python
+self.raw_stream_url = f"{play_info['rtmp_url']}/{play_info['rtmp_live']}"
+```
+
+**最终实现**：
+```js
+const streamUrl = `${rtmpUrl}/${rtmpLive}`;
+```
+
+**关键发现**：
+- `hlsH5Preview` API 返回的 `rtmp_url` 和 `rtmp_live` 字段可以直接拼接使用
+- 返回的可能是 HLS 流（.m3u8）而非 FLV 流，FFmpeg 都能处理
+- biliup 的 Rust 版本和 Python 版本实现方式不同，Python 版本更简洁可靠
+
+**经验**：
+1. 参考成熟项目时，优先参考主分支/最新版本的实现
+2. 不同语言版本的实现可能有差异，选择更简洁的方案
+3. 添加调试日志查看 API 实际返回数据有助于定位问题
+
+### 经验总结
+
+1. **优先选择稳定 API**：当平台有多个 API 端点时，优先选择签名方式简单、不依赖前端 JS 的端点
+2. **参考成熟项目**：biliup 等开源项目已经过大量用户验证，其实现方式值得参考
+3. **简化优于复杂**：能用简单 MD5 签名解决的问题，无需引入 VM 沙箱等复杂方案

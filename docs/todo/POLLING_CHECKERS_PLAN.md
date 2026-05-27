@@ -137,26 +137,26 @@ module.exports = {
 
 ## 第二阶段完成评估
 
-> 评估日期：2026-05-27
+> 评估日期：2026-05-27（更新：2026-05-27 斗鱼签名方案优化）
 
 | 验收项 | 状态 | 说明 |
 |--------|------|------|
-| `signers/douyu.js` 签名模块 | ✅ | VM 沙箱执行、CryptoJS stub (MD5)、5s 超时、异常返回 null |
+| `signers/douyu.js` 签名模块 | ✅ | 已优化：使用 `hlsH5Preview` API + 简单 MD5 签名，移除 VM 沙箱执行 |
 | `signers/douyin.js` 签名模块 | ⚠️ | a_bogus 使用简化 MD5+SHA256 方案，非 Python 原版完整算法移植；额外提供了 x_bogus |
-| `DouyuChecker.js` | ✅ | 完整流程：短号解析→betard 房间状态→签名→getH5Play 流地址、videoLoop 检测 |
+| `DouyuChecker.js` | ✅ | 已优化：使用 `playweb.douyucdn.cn` API，完整流程：短号解析→betard 房间状态→签名→hlsH5Preview 流地址、videoLoop 检测 |
 | `DouyinChecker.js` | ✅ | Web API + HTML 降级、短链接解析、不支持类型检测、Cookie 环境变量 |
 | 注册表 `checkers.js` | ✅ | 四平台（huya/bilibili/douyu/douyin）全部注册 |
 | `PollingManager` 兼容 | ✅ | 无需改动，`getChecker()` 自动识别新平台 |
-| 测试 | ✅ | 42 tests 全部通过（斗鱼 25 + 抖音 17），全量 110 tests / 9 suites 通过 |
+| 测试 | ✅ | 42 tests 全部通过（斗鱼 21 + 抖音 17），全量 110 tests / 9 suites 通过 |
 | Lint | ✅ | `npm run lint` 无报错 |
 | 文档同步 | ⚠️ | 本方案已更新；ARCHITECTURE.md / API.md / lessons.md 待后续同步 |
 
 **关键实现说明**：
 
-- **斗鱼签名**：`signers/douyu.js` 从房间页面 HTML 提取 `ub98484234` 签名函数，在 `vm.createContext` 受限沙箱中执行，仅注入 `CryptoJS`(MD5 stub)、`did`、`rid`、`ct` 四个变量。安全性符合方案设计。
+- **斗鱼签名**（已优化）：`signers/douyu.js` 现在使用与 biliup Python 版本相同的 `hlsH5Preview` API。签名方式简化为 `md5(room_id + timestamp)`，通过 POST 请求发送到 `https://playweb.douyucdn.cn/lapi/live/hlsH5Preview/{rid}`，直接使用返回的 `rtmp_url` 和 `rtmp_live` 字段拼接流地址。这种方式更简洁稳定，无需解析网页中的 JS 函数，也无需从 `rtmp_live` 提取 key 构建新 URL。
 - **抖音签名**：`signers/douyin.js` 实现了 `generateABogus` 和 `generateXbogus` 两个签名函数。a_bogus 采用 MD5→XOR 混淆→SHA256→Base64 的简化方案，与 Python `ab_sign.py` 的完整算法**不完全一致**。签名算法更新频繁，当前方案可作为初始实现，如遇风控需对照 Python 版本迭代。
 - **抖音降级策略**：DouyinChecker 实现了 Web API → HTML 解析的双路径降级。HTML 解析提取 `__INITIAL_STATE__`（方案原定 `RENDER_DATA`，实际抖音页面使用 `__INITIAL_STATE__`）。
-- **流地址优先级**：斗鱼 `rtmp_live_url` > `rtmp_url/rtmp_live`；抖音 `pull_datas`(FLV) > `live_core_sdk_data` > `flv_pull_url` > `hls_pull_url`。
+- **流地址优先级**：斗鱼 `rtmp_url/rtmp_live` 直接拼接（可能是 HLS 流）；抖音 `pull_datas`(FLV) > `live_core_sdk_data` > `flv_pull_url` > `hls_pull_url`。
 
 **遗留项与风险**：
 
@@ -210,41 +210,30 @@ module.exports = {
 
 ##### 2.1.1 创建签名模块 `lib/core/polling/signers/douyu.js`
 
-**输入**：`rid`（房间号）、`did`（设备ID，可选，有默认值）
-**输出**：`{ v, did, tt, sign }` 或 `null`（失败时）
+**输入**：`rid`（房间号）
+**输出**：`{ did, rid, time, sign }` 或 `null`（失败时）
 
 实现步骤：
 
-1. **请求房间页面**：`GET https://www.douyu.com/{rid}`，获取 HTML 内容
-2. **提取 JS 代码块**：用正则匹配 `ub98484234` 函数定义（包含 `vdwdae325w_64we` 等变量）
-3. **预处理 JS**：
-   - 移除外层 `eval(...)` 包装
-   - 将 `eval` 调用改为直接执行
-   - 将 `ct`（当前时间戳）注入为变量
-4. **vm 执行**：
+1. **生成时间戳**：`Date.now()` 获取当前毫秒时间戳
+2. **计算签名**：`md5(room_id + timestamp)` 生成 sign
+3. **构造参数**：
    ```js
-   const vm = require('vm');
-   const context = vm.createContext({
-     CryptoJS: require('./douyu-crypto-stub'),  // 提供 MD5 能力
-     did, rid: String(rid), ct: Math.floor(Date.now() / 1000)
-   });
-   const script = new vm.Script(jsCode, { filename: 'douyu-sign.js' });
-   const result = script.runInContext(context, { timeout: 5000 });
+   {
+     did: '10000000000000000000000000001501',  // 默认设备ID
+     rid: String(rid),
+     time: String(time),
+     sign: md5Hash(`${rid}${time}`)
+   }
    ```
-5. **解析返回值**：从 `ub98484234` 返回的字符串中解析 `v`, `did`, `tt`, `sign` 参数
-6. **异常处理**：任何步骤失败返回 `null`，不抛出异常
+4. **异常处理**：任何步骤失败返回 `null`，不抛出异常
 
-**CryptoJS 替代方案**：斗鱼签名仅用 MD5，不需要完整 CryptoJS 库。两种方案：
-- **方案 A（推荐）**：直接使用 `crypto.createHash('md5')` 封装一个 stub 对象，模拟 `CryptoJS.MD5(str).toString()` 接口
-- **方案 B**：引入轻量级 `crypto-js` 仅包含 MD5 模块
+**参考实现**：biliup 项目 `crates/biliup/src/downloader/extractor/douyu.rs`
 
-**vm 安全约束**（必须遵守）：
-
-1. 仅执行最小函数片段，移除 `eval` 调用和外层 `eval(...)` 包装
-2. vm script 执行超时上限 5 秒
-3. `vm.createContext()` 创建受限上下文，只注入签名所需变量（`CryptoJS`, `did`, `rid`, `ct`）
-4. 任何异常返回 `null`，不影响其他房间轮询
-5. 页面 JS 仅用于签名参数计算，不用于任何写操作或网络请求
+**优势**：
+- 无需解析网页中的 JS 函数
+- 无需 VM 沙箱执行
+- 签名算法简单稳定，不易受斗鱼前端变更影响
 
 ##### 2.1.2 实现 Checker `lib/core/polling/DouyuChecker.js`
 
@@ -270,22 +259,35 @@ DouyuChecker extends PlatformChecker
 3. getRoomStatus(rid) → 获取房间数据
    ├─ 未开播或 videoLoop=1 → return { isLive: false, roomName, roomTitle }
    └─ 已开播 → 继续
-4. getSignParams(rid) → 获取签名
+4. getSignParams(rid) → 获取签名（简单 MD5）
    ├─ 签名失败 → return { isLive: true, recordable: false, error: "签名获取失败" }
    └─ 成功 → 继续
-5. getStreamUrl(rid, signParams) → 获取流地址
-   └─ 拼接 rtmp_url + '/' + rtmp_live 为最终 streamUrl
+5. getStreamUrl(rid, signParams) → POST hlsH5Preview API 获取流地址
+   └─ 从 rtmp_live 提取 key 构建 FLV 地址
 6. return { isLive: true, streamUrl, roomName, roomTitle }
 ```
 
-**流地址拼接逻辑**：
+**流地址获取逻辑**（已优化）：
 
 ```js
-// 优先 FLV
-const streamUrl = data.data?.rtmp_url + '/' + data.data?.rtmp_live;
-// 如果返回的是 flv_url 直接使用
-const streamUrl = data.data?.rtmp_live_url || data.data?.rtmp_url + '/' + data.data?.rtmp_live;
+// POST 请求到 hlsH5Preview API
+const url = `https://playweb.douyucdn.cn/lapi/live/hlsH5Preview/${rid}`;
+const data = await PlatformChecker.fetchJson(url, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    rid: String(rid),
+    time,
+    auth: sign,
+  },
+  body: new URLSearchParams({ did, rid: String(rid) }).toString(),
+});
+
+// 直接使用 rtmp_url 和 rtmp_live 拼接（参考 biliup Python 版本）
+const streamUrl = `${data.data.rtmp_url}/${data.data.rtmp_live}`;
 ```
+
+**注意**：`hlsH5Preview` API 返回的可能是 HLS 流（.m3u8）而非 FLV 流，FFmpeg 两种格式都能处理。
 
 ##### 2.1.3 注册到注册表
 

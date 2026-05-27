@@ -132,39 +132,37 @@ describe('DouyuChecker', () => {
       const mockData = {
         error: 0,
         data: {
-          rtmp_url: 'rtmp://example.com/live',
-          rtmp_live: 'stream123',
+          rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
+          rtmp_live: '12345678abcdef_0',
         },
       };
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { v: '1.0', did: '123', tt: '123456', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
 
-      expect(result).toEqual({ streamUrl: 'rtmp://example.com/live/stream123', format: 'flv' });
+      expect(result).toEqual({ streamUrl: 'rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0', format: 'flv' });
     });
 
-    it('should use rtmp_live_url if available', async () => {
+    it('should return null when rtmp_live is missing', async () => {
       const mockData = {
         error: 0,
         data: {
-          rtmp_url: 'rtmp://example.com/live',
-          rtmp_live: 'stream123',
-          rtmp_live_url: 'https://cdn.example.com/live.flv',
+          rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
         },
       };
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { v: '1.0', did: '123', tt: '123456', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
 
-      expect(result).toEqual({ streamUrl: 'https://cdn.example.com/live.flv', format: 'flv' });
+      expect(result).toBeNull();
     });
 
     it('should return null on API failure', async () => {
       PlatformChecker.fetchJson.mockResolvedValue({ error: -1, msg: 'error' });
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { v: '1.0', did: '123', tt: '123456', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
       expect(result).toBeNull();
     });
   });
@@ -229,19 +227,19 @@ describe('DouyuChecker', () => {
         .mockResolvedValueOnce({
           error: 0,
           data: {
-            rtmp_url: 'rtmp://example.com/live',
-            rtmp_live: 'stream123',
+            rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
+            rtmp_live: '12345678abcdef_0',
           },
         });
 
-      getSignParams.mockResolvedValue({ v: '1.0', did: '123', tt: '123456', sign: 'abc' });
+      getSignParams.mockResolvedValue({ did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
       const result = await checker.checkStatus();
 
       expect(result.isLive).toBe(true);
       expect(result.recordable).toBe(true);
-      expect(result.streamUrl).toBe('rtmp://example.com/live/stream123');
+      expect(result.streamUrl).toBe('rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0');
     });
 
     it('should return recordable: false when sign fails', async () => {
