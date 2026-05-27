@@ -19,7 +19,7 @@ class DataService {
 
     let sql = `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id`;
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ` ORDER BY r.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    sql += ` ORDER BY r.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
 
     const result = await pool.query(sql, params);
