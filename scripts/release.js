@@ -181,10 +181,12 @@ function cleanupOldTags() {
 
 async function main() {
   const args = process.argv.slice(2);
-  const versionType = args[0];
+  const versionType = args.find((arg) => ['patch', 'minor', 'major'].includes(arg));
+  const isAuto = args.includes('--auto');
 
-  if (!versionType || !['patch', 'minor', 'major'].includes(versionType)) {
-    console.log(`Usage: node ${path.basename(__filename)} <patch|minor|major>`);
+  if (!versionType) {
+    console.log(`Usage: node ${path.basename(__filename)} <patch|minor|major> [--auto]`);
+    console.log(`  --auto  跳过确认，直接使用 AI 生成的 Release Note`);
     console.log(`Current version: ${packageJson.version}`);
     process.exit(1);
   }
@@ -210,10 +212,14 @@ async function main() {
     console.log('------------------------------\n');
   }
 
-  const userNote = await askQuestion('请确认或输入更新说明 (回车默认使用AI结果/默认格式): ');
-
-  // 决定最终的 tag 信息
-  let finalMessage = userNote || aiSummary || `Release v${newVersion}`;
+  let finalMessage;
+  if (isAuto) {
+    finalMessage = aiSummary || `Release v${newVersion}`;
+    console.log(`\n--- 自动模式，使用 AI 结果 ---`);
+  } else {
+    const userNote = await askQuestion('请确认或输入更新说明 (回车默认使用AI结果/默认格式): ');
+    finalMessage = userNote || aiSummary || `Release v${newVersion}`;
+  }
   // 注意：git tag -m 如果内容包含换行，最好把内容写入一个临时文件，再用 git tag -F 引用
   fs.writeFileSync('.tag_tmp', finalMessage);
 
