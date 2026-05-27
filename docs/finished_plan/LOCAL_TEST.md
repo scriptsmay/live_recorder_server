@@ -1,10 +1,12 @@
-# 测试
+# 本地直播推流测试的记录文档
 
 ## 步骤
 
 首先，搭建一个本地的RTMP推流服务器（例如使用nginx-rtmp-module），地址是：
 
+```
 rtmp://127.0.0.1:1935/live
+```
 
 准备一个本地视频文件，执行推流命令（根据实际环境调整ffmpeg路径和视频文件路径）：
 
@@ -22,7 +24,7 @@ SERVER_API="http://127.0.0.1:3001/api/notify/live_download"
 
 curl -X POST "$SERVER_API" \
   -H "Content-Type: application/json" \
-  -d "{\"url\": \"$STREAM_URL\", \"title\": \"测试直播间\", \"caption\": \"测试直播标题\", \"room_url\": \"https://live.example.com/room1\"}"
+  -d "{\"url\": \"$STREAM_URL\", \"title\": \"测试直播间\", \"caption\": \"测试直播标题\", \"room_url\": \"http://127.0.0.1:1935/live/mystream\"}"
 ```
 
 接下来就可以观察不同情况下系统数据的表现了：
@@ -35,9 +37,9 @@ curl -X POST "$SERVER_API" \
 
 测试到不同情况的 ffmpeg 进程代码 code
 
-- 点击停止录制时，提示：`FFmpeg 下载失败，退出码: 255, 信号: null`;
+- 主动点击停止录制时，提示：`FFmpeg 下载失败，退出码: 255, 信号: null`;
 - 快手直播间测试，如果是直播停止，ffmpeg 正常返回 0 ：
 
 ```
-[finishSession][0] 录制结束，路径: dev_downloads/room_name_%Y%m%d_%H%M%S.flv (日志: logs/ffmpeg_12.log)
+[finishSession][0] 录制结束，路径: dev_downloads/room_name_%Y%m%d_%H%M%S.ts (日志: logs/ffmpeg_12.log)
 ```
