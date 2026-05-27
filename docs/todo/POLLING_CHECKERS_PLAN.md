@@ -115,7 +115,59 @@ module.exports = {
 
 ## 平台支持优先级
 
-### 第一阶段：建议立即实现
+## 第一阶段完成评估
+
+> 评估日期：2026-05-27
+
+| 验收项 | 状态 | 说明 |
+|--------|------|------|
+| `checkers.js` 注册表 | ✅ | 已创建，`PollingManager` 通过 `require('./checkers')` 获取 Checker |
+| `PlatformChecker` 增强 | ✅ | `fetchJson`/`fetchText`/`normalizeResult`/`extractLastPathSegment` 全部实现 |
+| `BilibiliChecker` | ✅ | room_init 短号解析、主播信息、房间标题、双版本流地址获取（V1→V2 降级）、FLV/HLS |
+| `PollingManager` 使用注册表 | ✅ | `getChecker()` 读注册表，`_extractStreamUrl()` 移除平台特判 |
+| `recordable` 字段支持 | ✅ | `checkRoom()` 中 `recordable !== false` 时才触发录制 |
+| 测试 | ✅ | 68 tests / 7 suites 全部通过，mock fetch 方式合理 |
+| Lint | ✅ | `npm run lint` 无报错 |
+| 文档同步 | ⚠️ | ARCHITECTURE.md / API.md / DB.md 已更新；`lessons.md` 未补充（可后续补） |
+
+**遗留项**：
+
+- `lessons.md` 未记录 B站相关经验（API 降级路径、CDN 优先选择策略等），建议在第二阶段一并补充。
+- `_extractStreamUrl()` fallback 路径在 `streamInfo` 存在时会重复调用 `checkStatus()`，有冗余 API 请求，不影响正确性，可后续优化。
+
+## 第二阶段完成评估
+
+> 评估日期：2026-05-27
+
+| 验收项 | 状态 | 说明 |
+|--------|------|------|
+| `signers/douyu.js` 签名模块 | ✅ | VM 沙箱执行、CryptoJS stub (MD5)、5s 超时、异常返回 null |
+| `signers/douyin.js` 签名模块 | ⚠️ | a_bogus 使用简化 MD5+SHA256 方案，非 Python 原版完整算法移植；额外提供了 x_bogus |
+| `DouyuChecker.js` | ✅ | 完整流程：短号解析→betard 房间状态→签名→getH5Play 流地址、videoLoop 检测 |
+| `DouyinChecker.js` | ✅ | Web API + HTML 降级、短链接解析、不支持类型检测、Cookie 环境变量 |
+| 注册表 `checkers.js` | ✅ | 四平台（huya/bilibili/douyu/douyin）全部注册 |
+| `PollingManager` 兼容 | ✅ | 无需改动，`getChecker()` 自动识别新平台 |
+| 测试 | ✅ | 42 tests 全部通过（斗鱼 25 + 抖音 17），全量 110 tests / 9 suites 通过 |
+| Lint | ✅ | `npm run lint` 无报错 |
+| 文档同步 | ⚠️ | 本方案已更新；ARCHITECTURE.md / API.md / lessons.md 待后续同步 |
+
+**关键实现说明**：
+
+- **斗鱼签名**：`signers/douyu.js` 从房间页面 HTML 提取 `ub98484234` 签名函数，在 `vm.createContext` 受限沙箱中执行，仅注入 `CryptoJS`(MD5 stub)、`did`、`rid`、`ct` 四个变量。安全性符合方案设计。
+- **抖音签名**：`signers/douyin.js` 实现了 `generateABogus` 和 `generateXbogus` 两个签名函数。a_bogus 采用 MD5→XOR 混淆→SHA256→Base64 的简化方案，与 Python `ab_sign.py` 的完整算法**不完全一致**。签名算法更新频繁，当前方案可作为初始实现，如遇风控需对照 Python 版本迭代。
+- **抖音降级策略**：DouyinChecker 实现了 Web API → HTML 解析的双路径降级。HTML 解析提取 `__INITIAL_STATE__`（方案原定 `RENDER_DATA`，实际抖音页面使用 `__INITIAL_STATE__`）。
+- **流地址优先级**：斗鱼 `rtmp_live_url` > `rtmp_url/rtmp_live`；抖音 `pull_datas`(FLV) > `live_core_sdk_data` > `flv_pull_url` > `hls_pull_url`。
+
+**遗留项与风险**：
+
+- 抖音 a_bogus 签名算法为简化版本，可能无法通过抖音风控验证，需实测验证。如签名被拒，需对照 `../DouyinLiveRecorder/src/ab_sign.py` 重写完整算法。
+- HTML 降级路径使用 `__INITIAL_STATE__` 正则提取，若抖音 SSR 结构变化可能失效。
+- `lessons.md` 仍未补充斗鱼/抖音相关经验，建议在联调后一并记录。
+- 尚未进行真实环境联调验证，需手动测试斗鱼和抖音实际录制。
+
+---
+
+### 第一阶段（已完成）：BilibiliChecker
 
 #### 1. BilibiliChecker
 
@@ -150,140 +202,305 @@ module.exports = {
 
 第二阶段目标是实现斗鱼和抖音两个平台的轮询检测与自动录制。这两个平台的复杂度比 B站高，主要因为需要实现平台特定的签名逻辑。
 
-#### 斗鱼平台 (DouyuChecker)
+**注意**：不可录制的开播状态（VR/连麦/轮播等）会触发开播通知，但不会启动录制。`PollingManager` 检测到 `recordable: false` 时会跳过录制但仍更新 Redis 缓存。
 
-##### 签名模块设计
+---
 
-斗鱼 H5 流地址需要签名参数，参考 `DouyinLiveRecorder/src/spider.py` 的 `get_token_js` 函数：
+#### 2.1 斗鱼平台 (DouyuChecker)
 
-```javascript
-// lib/core/polling/signers/douyu.js 架构
-async function getSignParams(rid, did = '10000000000000000000000000003306') {
-  // 1. 请求房间页面 https://www.douyu.com/{rid}
-  // 2. 提取页面中的 JS 代码块（vdwdae325w_64we...ub98484234...）
-  // 3. 使用 Node vm 模块执行 JS 获取 sign 参数
-  // 4. 解析返回值获取 v, did, tt, sign
-  // 5. 返回 { v, did, tt, sign }
+##### 2.1.1 创建签名模块 `lib/core/polling/signers/douyu.js`
+
+**输入**：`rid`（房间号）、`did`（设备ID，可选，有默认值）
+**输出**：`{ v, did, tt, sign }` 或 `null`（失败时）
+
+实现步骤：
+
+1. **请求房间页面**：`GET https://www.douyu.com/{rid}`，获取 HTML 内容
+2. **提取 JS 代码块**：用正则匹配 `ub98484234` 函数定义（包含 `vdwdae325w_64we` 等变量）
+3. **预处理 JS**：
+   - 移除外层 `eval(...)` 包装
+   - 将 `eval` 调用改为直接执行
+   - 将 `ct`（当前时间戳）注入为变量
+4. **vm 执行**：
+   ```js
+   const vm = require('vm');
+   const context = vm.createContext({
+     CryptoJS: require('./douyu-crypto-stub'),  // 提供 MD5 能力
+     did, rid: String(rid), ct: Math.floor(Date.now() / 1000)
+   });
+   const script = new vm.Script(jsCode, { filename: 'douyu-sign.js' });
+   const result = script.runInContext(context, { timeout: 5000 });
+   ```
+5. **解析返回值**：从 `ub98484234` 返回的字符串中解析 `v`, `did`, `tt`, `sign` 参数
+6. **异常处理**：任何步骤失败返回 `null`，不抛出异常
+
+**CryptoJS 替代方案**：斗鱼签名仅用 MD5，不需要完整 CryptoJS 库。两种方案：
+- **方案 A（推荐）**：直接使用 `crypto.createHash('md5')` 封装一个 stub 对象，模拟 `CryptoJS.MD5(str).toString()` 接口
+- **方案 B**：引入轻量级 `crypto-js` 仅包含 MD5 模块
+
+**vm 安全约束**（必须遵守）：
+
+1. 仅执行最小函数片段，移除 `eval` 调用和外层 `eval(...)` 包装
+2. vm script 执行超时上限 5 秒
+3. `vm.createContext()` 创建受限上下文，只注入签名所需变量（`CryptoJS`, `did`, `rid`, `ct`）
+4. 任何异常返回 `null`，不影响其他房间轮询
+5. 页面 JS 仅用于签名参数计算，不用于任何写操作或网络请求
+
+##### 2.1.2 实现 Checker `lib/core/polling/DouyuChecker.js`
+
+类结构：
+
+```
+DouyuChecker extends PlatformChecker
+  ├─ static canHandleUrl(url)          // /douyu\.com/i
+  ├─ static getPlatformId()            // 'douyu'
+  ├─ getRoomId()                       // 从 URL 提取，缓存
+  ├─ resolveRealRoomId(shortId)        // 短号→真实 rid（https://m.douyu.com/{shortId}）
+  ├─ getRoomStatus(rid)                // GET /betard/{rid}，无需签名
+  ├─ getStreamUrl(rid, signParams)     // POST /lapi/live/getH5Play/{rid}
+  ├─ isVideoLoop(roomData)             // 检测 videoLoop=1（轮播视为未开播）
+  └─ checkStatus()                     // 主流程
+```
+
+`checkStatus()` 主流程：
+
+```
+1. getRoomId() → 提取短号
+2. resolveRealRoomId() → 获取真实 rid
+3. getRoomStatus(rid) → 获取房间数据
+   ├─ 未开播或 videoLoop=1 → return { isLive: false, roomName, roomTitle }
+   └─ 已开播 → 继续
+4. getSignParams(rid) → 获取签名
+   ├─ 签名失败 → return { isLive: true, recordable: false, error: "签名获取失败" }
+   └─ 成功 → 继续
+5. getStreamUrl(rid, signParams) → 获取流地址
+   └─ 拼接 rtmp_url + '/' + rtmp_live 为最终 streamUrl
+6. return { isLive: true, streamUrl, roomName, roomTitle }
+```
+
+**流地址拼接逻辑**：
+
+```js
+// 优先 FLV
+const streamUrl = data.data?.rtmp_url + '/' + data.data?.rtmp_live;
+// 如果返回的是 flv_url 直接使用
+const streamUrl = data.data?.rtmp_live_url || data.data?.rtmp_url + '/' + data.data?.rtmp_live;
+```
+
+##### 2.1.3 注册到注册表
+
+更新 `lib/core/polling/checkers.js`：
+
+```js
+const DouyuChecker = require('./DouyuChecker');
+
+module.exports = {
+  huya: HuyaChecker,
+  bilibili: BilibiliChecker,
+  douyu: DouyuChecker,
+};
+```
+
+##### 2.1.4 测试 `test/polling-douyu.test.js`
+
+测试用例设计：
+
+| 测试组 | 用例 | mock 数据来源 |
+|--------|------|--------------|
+| 静态方法 | `canHandleUrl` 各类 douyu.com URL | 无需 mock |
+| `getRoomId` | 标准 URL / 带查询参数 / 带路径 | 无需 mock |
+| `resolveRealRoomId` | 短号解析为数字 rid | 无需 mock |
+| 签名模块 | 正常签名返回 `{ v, did, tt, sign }` | mock 房间页面 HTML |
+| 签名模块 | JS 提取失败返回 `null` | mock 无 ub98484234 的 HTML |
+| 签名模块 | vm 超时返回 `null` | mock 包含死循环的 JS |
+| `getRoomStatus` | 正常返回房间信息 | mock betard API |
+| `getRoomStatus` | videoLoop=1 视为未开播 | mock betard API |
+| `getStreamUrl` | 正常获取流地址 | mock getH5Play API |
+| `getStreamUrl` | 签名失效返回 null | mock API 返回错误 |
+| `checkStatus` | 完整开播流程 | 链式 mock |
+| `checkStatus` | 签名失败降级 | mock 签名失败 |
+| `checkStatus` | API 异常不崩溃 | mock fetch 拒绝 |
+
+##### 2.1.5 环境变量
+
+斗鱼暂无必需环境变量。如后续需要 Cookie 支持，预留 `POLLING_DOUYIN_COOKIE`（见下方抖音）。
+
+---
+
+#### 2.2 抖音平台 (DouyinChecker)
+
+##### 2.2.1 创建签名模块 `lib/core/polling/signers/douyin.js`
+
+**参考**：`../DouyinLiveRecorder/src/ab_sign.py`
+
+**输入**：`queryString`（URL 查询字符串）、`userAgent`（浏览器 UA 字符串）
+**输出**：`a_bogus` 签名字符串 或 `null`（失败时）
+
+移植步骤：
+
+1. **分析 `ab_sign.py` 核心逻辑**：
+   - 字符串处理和哈希计算（基于 SHA256 和自定义混淆）
+   - Base64 编码
+   - 位运算和混淆处理
+2. **逐一对应移植为 Node.js**：
+   - Python `hashlib` → Node `crypto.createHash`
+   - Python `base64.b64encode` → Node `Buffer.from().toString('base64')`
+   - Python 位运算 → JS 位运算（注意 JS 32 位整数限制，使用 `>>> 0` 强制无符号）
+3. **封装为纯函数**：`generateABogus(queryString, userAgent)`
+4. **单元测试**：用 Python 版本生成对照用例，验证 Node.js 版本输出一致
+
+**注意**：a_bogus 签名更新频繁，抖音可能随时更换算法。签名模块应：
+- 所有异常返回 `null`，不阻塞轮询
+- 日志中记录签名失败但不打印敏感参数
+
+##### 2.2.2 实现 Checker `lib/core/polling/DouyinChecker.js`
+
+类结构：
+
+```
+DouyinChecker extends PlatformChecker
+  ├─ static canHandleUrl(url)          // /douyin\.com/i
+  ├─ static getPlatformId()            // 'douyin'
+  ├─ getRoomId()                       // 从 URL 提取 web_rid
+  ├─ resolveShortUrl(url)              // 短链 → 直链（douyin.com/xxx → live.douyin.com/web_rid）
+  ├─ getRoomInfoViaWebAPI(webRid)      // Web Enter API + a_bogus 签名
+  ├─ getRoomInfoViaHTML(webRid)        // HTML 备用解析（提取 SSR 内嵌 JSON）
+  ├─ parseStreamData(apiResponse)      // 从 API 响应提取 streamUrl
+  ├─ checkUnsupportedType(roomData)    // 检测 VR/连麦等不支持类型
+  └─ checkStatus()                     // 主流程
+```
+
+`checkStatus()` 主流程：
+
+```
+1. getRoomId() → 提取 web_rid
+   ├─ 如果是短链接 → resolveShortUrl() → 重新提取
+   └─ 继续
+2. getRoomInfoViaWebAPI(webRid)
+   ├─ 构建查询参数 + generateABogus() 签名
+   ├─ 请求 /webcast/room/web/enter/
+   ├─ 成功 → parseStreamData()
+   └─ 失败 → 降级到 HTML 备用
+3. (降级) getRoomInfoViaHTML(webRid)
+   ├─ 请求 live.douyin.com/{web_rid} HTML 页面
+   ├─ 正则提取 SSR 内嵌 JSON（RENDER_DATA 或 __RENDER_DATA__）
+   ├─ 解析房间状态和流地址
+   └─ 失败 → return { error: "..." }
+4. checkUnsupportedType(roomData)
+   ├─ VR/连麦 → return { isLive: true, recordable: false, error: "不支持的直播类型" }
+   └─ 正常 → 继续
+5. status === 2 → 开播，提取 streamUrl
+   status !== 2 → 未开播
+6. return 标准化结果
+```
+
+**Web Enter API 请求构造**：
+
+```js
+const params = new URLSearchParams({
+  aid: '6383',
+  app_name: 'douyin_web',
+  live_id: '1',
+  device_platform: 'web',
+  language: 'zh-CN',
+  browser_language: 'zh-CN',
+  browser_platform: 'Win32',
+  browser_name: 'Chrome',
+  browser_version: '116.0.0.0',
+  web_rid: webRid,
+  msToken: '',
+  a_bogus: generateABogus(params.toString(), userAgent),
+});
+```
+
+**流地址提取优先级**：
+1. `data.data?.stream_url?.pull_datas` 中的 FLV 地址
+2. `data.data?.live_core_sdk_data?.pull_data?.stream_data` JSON 解析
+3. 都没有 → `recordable: false`
+
+##### 2.2.3 注册到注册表
+
+更新 `lib/core/polling/checkers.js`：
+
+```js
+const DouyinChecker = require('./DouyinChecker');
+
+module.exports = {
+  huya: HuyaChecker,
+  bilibili: BilibiliChecker,
+  douyu: DouyuChecker,
+  douyin: DouyinChecker,
+};
+```
+
+##### 2.2.4 测试 `test/polling-douyin.test.js`
+
+测试用例设计：
+
+| 测试组 | 用例 | mock 数据来源 |
+|--------|------|--------------|
+| 静态方法 | `canHandleUrl` 各类 douyin.com URL | 无需 mock |
+| `getRoomId` | 标准 URL / 短链接 | 无需 mock |
+| 签名模块 | 正常生成 a_bogus | 对照 Python 版本输出 |
+| 签名模块 | 输入为空/异常返回 null | 边界测试 |
+| `getRoomInfoViaWebAPI` | 正常返回开播状态 | mock Web Enter API |
+| `getRoomInfoViaWebAPI` | 签名失败降级 | mock 返回错误 |
+| `getRoomInfoViaHTML` | SSR JSON 解析 | mock HTML 页面 |
+| `getRoomInfoViaHTML` | 页面格式变化返回 null | mock 无 RENDER_DATA 的 HTML |
+| `parseStreamData` | FLV 流地址提取 | mock API 响应 |
+| `parseStreamData` | 格式变化返回 null | mock 异常结构 |
+| `checkUnsupportedType` | VR 房间返回 recordable: false | mock 响应 |
+| `checkStatus` | Web API 成功流程 | 链式 mock |
+| `checkStatus` | Web API 失败降级 HTML | 链式 mock |
+| `checkStatus` | 两种方式均失败返回 error | 链式 mock |
+
+##### 2.2.5 环境变量
+
+在 `config/env.js` 中添加可选环境变量（有值时才使用，无值不限制）：
+
+| 变量 | 用途 | 是否必需 |
+|------|------|----------|
+| `POLLING_DOUYIN_COOKIE` | 抖音请求 Cookie | 否，有则提升稳定性 |
+| `POLLING_DEFAULT_USER_AGENT` | 覆盖默认桌面 UA | 否 |
+
+DouyinChecker 中读取逻辑：
+```js
+const cookie = process.env.POLLING_DOUYIN_COOKIE;
+if (cookie) {
+  headers.Cookie = cookie;
 }
 ```
 
-**实现方案**：使用 Node.js 内置 `vm` 模块执行斗鱼页面中的 JS 函数 `ub98484234`，避免引入 `execjs` 等外部依赖。
+---
 
-**vm 执行安全约束**（必须遵守）：
+#### 第二阶段实施顺序
 
-1. **仅执行最小函数片段**：提取 `ub98484234` 函数后，移除 `eval` 调用和外层 `eval(...)` 包装，只执行签名核心逻辑
-2. **设置超时**：vm script 执行超时上限 5 秒，超时则降级为 `error`
-3. **禁用外部上下文**：使用 `vm.createContext()` 创建空上下文，阻止访问 `process`、`require`、`global` 等
-4. **失败降级**：任何 vm 执行异常都返回 `error`，不影响其他房间轮询
-5. **不信任远端代码**：页面 JS 仅用于签名参数计算，不应被用于任何写操作或网络请求
+| 步骤 | 任务 | 预计文件 | 依赖 |
+|------|------|----------|------|
+| 1 | 创建 `lib/core/polling/signers/` 目录 | 目录 | 无 |
+| 2 | 实现 `signers/douyu.js` 签名模块 | `signers/douyu.js` | 无 |
+| 3 | 实现 `DouyuChecker.js` | `DouyuChecker.js` | 步骤 2 |
+| 4 | 注册斗鱼到 `checkers.js` | `checkers.js` | 步骤 3 |
+| 5 | 编写斗鱼测试 | `test/polling-douyu.test.js` | 步骤 4 |
+| 6 | 联调验证斗鱼录制（手动） | - | 步骤 5 |
+| 7 | 移植 `signers/douyin.js` 签名模块 | `signers/douyin.js` | 无（可与步骤 2 并行） |
+| 8 | 实现 `DouyinChecker.js` | `DouyinChecker.js` | 步骤 7 |
+| 9 | 注册抖音到 `checkers.js` | `checkers.js` | 步骤 8 |
+| 10 | 编写抖音测试 | `test/polling-douyin.test.js` | 步骤 9 |
+| 11 | 联调验证抖音录制（手动） | - | 步骤 10 |
+| 12 | 更新文档 + lessons.md | `docs/` | 步骤 11 |
 
-##### 关键 API
+**建议**：斗鱼和抖音可以各自独立开发（步骤 2-6 和 7-11 互不依赖），两个签名模块可以并行实现。
 
-| 用途 | API | 认证 |
-|------|-----|------|
-| 房间状态检测 | `GET https://www.douyu.com/betard/{rid}` | 无需签名 |
-| 流地址获取 | `POST https://www.douyu.com/lapi/live/getH5Play/{rid}` | 需要 sign |
-| 流地址拼接 | `streamUrl = rtmp_url + '/' + rtmp_live` | - |
+#### 第二阶段验收标准
 
-##### 流地址获取参数
-
-```javascript
-{
-  v: '签名结果',
-  did: '设备ID（固定值）',
-  tt: '时间戳（秒）',
-  sign: 'MD5签名',
-  ver: '22011191',
-  rid: '房间ID',
-  rate: '0'  // 0蓝光、3超清、2高清、-1默认
-}
-```
-
-##### 斗鱼风险处理
-
-| 风险 | 处理方式 |
-|------|----------|
-| 签名 JS 更新 | Checker 返回 `error`，日志记录，不崩溃 |
-| 签名有效期 10 分钟 | 每次请求前重新生成签名 |
-| 短房间号解析 | 先请求 `https://m.douyu.com/{shortId}` 解析真实 rid |
-| videoLoop=1（轮播） | 视为未开播 |
-
-#### 抖音平台 (DouyinChecker)
-
-##### 签名模块设计
-
-抖音 Web 接口需要 `a_bogus` Anti-Bot 签名，参考 `DouyinLiveRecorder/src/spider.py` 和 `src/ab_sign.py`：
-
-```javascript
-// lib/core/polling/signers/douyin.js 架构
-function generateABogus(queryString, userAgent) {
-  // 1. 字符串处理和哈希计算
-  // 2. Base64 编码
-  // 3. 混淆处理
-  // 4. 返回 a_bogus 签名字符串
-}
-```
-
-**实现方案**：将 Python 的 `ab_sign.py` 移植为纯 Node.js 实现，不引入 headless browser。
-
-##### 关键 API
-
-| 用途 | API | 认证 |
-|------|-----|------|
-| Web Enter API | `GET https://live.douyin.com/webcast/room/web/enter/` | 需要 a_bogus |
-| 状态判断 | `status === 2` 表示开播 | - |
-| 流地址 | `stream_url.pull_datas` 或 `live_core_sdk_data` | - |
-
-##### Web Enter API 请求参数
-
-```javascript
-{
-  aid: "6383",
-  app_name: "douyin_web",
-  live_id: "1",
-  device_platform: "web",
-  language: "zh-CN",
-  browser_language: "zh-CN",
-  browser_platform: "Win32",
-  browser_name: "Chrome",
-  browser_version: "116.0.0.0",
-  web_rid: "房间ID",
-  msToken: "",
-  a_bogus: "签名结果"
-}
-```
-
-##### 抖音风险处理
-
-| 风险 | 处理方式 |
-|------|----------|
-| a_bogus 签名失效 | 返回 `error`，日志记录，不崩溃 |
-| VR/连麦/强风控房间 | 返回 `isLive: true, recordable: false, error: "不支持的直播类型"` |
-| Cookie 缺失 | 支持但不强制配置（无 Cookie 可能受限） |
-| 短链/分享链接 | 先解析为 `live.douyin.com/{web_rid}` 直链 |
-| 页面解析备用 | Web Enter API 失败后尝试解析 HTML 内嵌状态 |
-
-**注意**：不可录制的开播状态会触发开播通知，但不会启动录制。`PollingManager` 检测到 `recordable: false` 时会跳过录制但仍更新 Redis 缓存。
-
-#### 第二阶段实施步骤
-
-##### 第一步：实现斗鱼 Checker
-
-1. 创建 `lib/core/polling/signers/douyu.js` 签名模块
-2. 实现 `DouyuChecker.js`：
-   - `canHandleUrl()` 支持 `douyu.com`
-   - `checkStatus()` 实现房间状态和流地址获取
-3. 注册到 `checkers.js`
-4. 测试签名模块和 Checker
-
-##### 第二步：实现抖音 Checker
-
-1. 创建 `lib/core/polling/signers/douyin.js` 签名模块（移植 `ab_sign.py`）
-2. 实现 `DouyinChecker.js`：
-   - `canHandleUrl()` 支持 `live.douyin.com`
-   - `checkStatus()` 实现 Web Enter API + HTML 备用解析
-3. 注册到 `checkers.js`
-4. 测试签名模块和 Checker
+- `PollingManager` 注册并识别 `douyu`、`douyin`。
+- 斗鱼房间：签名获取流地址成功时自动录制，签名失败返回 `isLive: true, recordable: false`。
+- 抖音房间：a_bogus 签名成功时自动录制，签名失败优雅降级（尝试 HTML 备用解析）。
+- VR/连麦/强风控房间返回 `recordable: false` + `error` 提示。
+- 签名模块异常不导致轮询中断或进程崩溃。
+- `npm run lint` 和 `npm run test` 通过。
+- 文档同步更新（ARCHITECTURE.md / API.md / DB.md / lessons.md）并提交代码。
 
 ## 暂缓平台
 
@@ -296,91 +513,45 @@ Shopee、淘宝、京东等大量平台。当前项目的 `platform-detector` �
 
 ## 文件改动清单
 
-第一阶段预计改动：
+第一阶段已完成的改动：
 
 ```text
 lib/core/polling/
-├── BilibiliChecker.js
-├── checkers.js
-├── PlatformChecker.js          # 增加通用 fetch/normalize 工具
-└── PollingManager.js           # 使用 checkers.js 注册表
+├── BilibiliChecker.js               ✅ 已创建
+├── checkers.js                      ✅ 已创建
+├── PlatformChecker.js               ✅ 已增强（fetch/normalize 工具）
+└── PollingManager.js                ✅ 已改为读取注册表
 
-lib/utils/platform-detector.js  # 如需补充域名别名
+lib/utils/platform-detector.js       ✅ 已支持 bilibili
 
 test/
-└── polling-bilibili.test.js
+└── polling-bilibili.test.js         ✅ 已创建
 
 docs/
-├── ARCHITECTURE.md             # 更新轮询架构支持平台
-├── API.md                      # 更新 polling_platform 说明
-└── DB.md                       # 更新 polling_platform 枚举说明
+├── ARCHITECTURE.md                  ✅ 已更新
+├── API.md                           ✅ 已更新
+└── DB.md                            ✅ 已更新
 ```
 
-第二阶段预计新增：
+第二阶段已完成的改动：
 
 ```text
 lib/core/polling/
-├── DouyuChecker.js
-├── DouyinChecker.js
+├── DouyuChecker.js                    ✅ 已创建
+├── DouyinChecker.js                   ✅ 已创建
+├── checkers.js                        ✅ 已更新（新增 douyu/douyin 注册）
 └── signers/
-    ├── douyu.js
-    └── douyin.js
+    ├── douyu.js                       ✅ 已创建（VM 沙箱签名）
+    └── douyin.js                      ✅ 已创建（a_bogus/x_bogus 签名）
 
 test/
-├── polling-douyu.test.js
-└── polling-douyin.test.js
+├── polling-douyu.test.js              ✅ 已创建（25 tests）
+└── polling-douyin.test.js             ✅ 已创建（17 tests）
 ```
 
 ## 实施步骤
 
-### 第一步：整理 Checker 基础设施
-
-1. 新增 `checkers.js` 注册表。
-2. `PollingManager.getChecker()` 改为读取注册表。
-3. `_extractStreamUrl()` 移除虎牙特判，改成按平台重新调用对应 Checker。
-4. `PlatformChecker` 增加通用工具方法。
-
-### 第二步：实现第一阶段平台
-
-1. 实现 `BilibiliChecker`。
-2. 保持单文件、低依赖、CommonJS。
-
-### 第三步：补测试
-
-测试不直接依赖真实平台网络，优先 mock `fetch`：
-
-- URL 识别测试。
-- 离线响应解析测试。
-- 在线响应解析测试。
-- API 异常/字段缺失测试。
-- `PollingManager` 能从注册表找到对应 Checker。
-
-可选增加手动联调脚本，但不作为 Jest 必跑项。
-
-### 第四步：文档同步
-
-更新：
-
-- `docs/ARCHITECTURE.md`：轮询架构与支持平台。
-- `docs/API.md`：`polling_platform` 支持值。
-- `docs/DB.md`：`rooms.polling_platform` 说明。
-- `docs/lessons.md`：记录平台风控、Cookie、签名相关踩坑。
-
-### 实施优先级
-
-斗鱼和抖音在第一阶段完成后再进入实施，优先级取决于实际使用需求：
-
-1. 如果更需要国内平台覆盖，先做斗鱼。
-2. 如果更需要抖音，先准备 Cookie/签名和真实样本房间。
-
-#### 推荐排期
-
-| 阶段 | 平台 | 原因 |
-|------|------|------|
-| 第一阶段 | B站 | 无需登录，实现简单 |
-| 第二阶段第一批 | 斗鱼 | 实现复杂度适中，签名逻辑相对稳定 |
-| 第二阶段第二批 | 抖音 | a_bogus 签名更新频繁，维护成本较高 |
-| 后续 | 快手、TikTok、小红书 | 按实际房间需求扩展 |
+第一阶段已全部完成（见上方评估）。第二阶段代码已完成，详见 2.1 和 2.2 各小节。联调验证待手动执行。
 
 ## 统一返回规范
 
@@ -420,20 +591,10 @@ test/
 
 ## 验收标准
 
-### 第一阶段验收标准
+### 第一阶段验收标准 ✅ 已通过
 
-- `PollingManager` 注册并识别 `huya`、`bilibili`。
-- 这些平台的 URL 开启轮询后，不再出现"不支持的平台"。
-- 开播状态转换能触发 `RecorderService.startRecording()`。
-- 离线、接口异常、字段缺失不会中断轮询管理器。
-- `npm run lint` 和 `npm run test` 通过。
-- 文档同步更新并提交代码。
+详见上方"第一阶段完成评估"。
 
 ### 第二阶段验收标准
 
-- `PollingManager` 注册并识别 `douyu`、`douyin`。
-- 斗鱼房间支持签名获取流地址，未签名时返回 `error`。
-- 抖音房间支持 a_bogus 获取流地址，签名失败时优雅降级。
-- VR/连麦/强风控房间返回 `isLive: false` + `error` 提示。
-- `npm run lint` 和 `npm run test` 通过。
-- 文档同步更新并提交代码。
+详见上方"第二阶段完成评估"。代码实现已完成，联调验证待执行。
