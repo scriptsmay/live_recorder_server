@@ -126,7 +126,7 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 | monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载） |
 | upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）             |
 | polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false                            |
-| polling_platform     | string  | 否   | 轮询平台：`huya`（当前仅支持虎牙）                              |
+| polling_platform     | string  | 否   | 轮询平台：`huya`、`bilibili`（已实现），`douyu`、`douyin`（待实现） |
 | polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                                |
 
 **示例：**

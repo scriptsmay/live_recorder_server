@@ -390,20 +390,38 @@ app.js
 ```
 PollingManager (单例)
 ├── CHECKERS 注册表
-│   ├── huya  → HuyaChecker  (mp.huya.com/cache.php)
-│   ├── douyu → (待实现)
-│   └── ...
+│   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
+│   ├── bilibili → BilibiliChecker (api.live.bilibili.com)
+│   ├── douyu    → (待实现)
+│   └── douyin   → (待实现)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
 ```
 
 ### PlatformChecker 基类
 
-| 方法                       | 说明                                               |
-| -------------------------- | -------------------------------------------------- |
-| `static getPlatformId()`   | 平台标识符，如 `'huya'`                            |
-| `static canHandleUrl(url)` | 判断 URL 是否属于本平台                            |
-| `async checkStatus()`      | 返回 `{ isLive, roomName, roomTitle, streamInfo }` |
+| 方法                          | 说明                                                   |
+| ----------------------------- | ------------------------------------------------------ |
+| `static getPlatformId()`      | 平台标识符，如 `'huya'`                                |
+| `static canHandleUrl(url)`    | 判断 URL 是否属于本平台                                |
+| `static fetchJson()`          | 统一 HTTP GET 请求（JSON，含超时、UA、错误处理）       |
+| `static fetchText()`          | 统一 HTTP GET 请求（Text，用于 HTML 解析）             |
+| `static normalizeResult()`     | 补齐默认字段，返回统一格式                             |
+| `static extractLastPathSegment()` | 提取 URL 路径最后一段（房间号）                      |
+| `async checkStatus()`         | 返回 `{ isLive, recordable, roomName, roomTitle, streamUrl, streamInfo, error }` |
+
+### 统一返回规范
+
+| 字段        | 必填 | 说明                                                     |
+| ----------- | ---- | -------------------------------------------------------- |
+| `isLive`    | 是   | 是否开播（主播正在直播）                                  |
+| `recordable` | 否   | 是否可录制，默认 `true`；设为 `false` 表示开播但无法获取流 |
+| `roomName`  | 否   | 主播名或房间名                                           |
+| `roomTitle` | 否   | 直播标题                                                 |
+| `roomCover` | 否   | 封面地址                                                 |
+| `streamUrl` | 否   | FFmpeg 可录制地址；不可录制时返回 `null`                   |
+| `streamInfo` | 否   | 平台、画质、CDN、原始接口字段摘要                         |
+| `error`     | 否   | 非致命错误说明（如签名失败、不可录制类型）                  |
 
 ### HuyaChecker 实现要点
 
@@ -411,6 +429,14 @@ PollingManager (单例)
 - 自动解析短房间号（字符串 ID → 数字 ID）
 - 流地址构建：`{sFlvUrl}/{streamName}.{sFlvUrlSuffix}?{sFlvAntiCode}`
 - **去掉 `-imgplus`**：移动端 anticode 会导致 ffmpeg ~6 秒断连
+
+### BilibiliChecker 实现要点
+
+- 通过 B站 公开 API 查询，无需登录
+- API 调用顺序：`room_init` → `Master/info` → `getH5InfoByRoom` → `playUrl`
+- 自动处理短房间号映射（通过 `room_init` 返回真实 room_id）
+- 流地址优先选择 FLV，无 FLV 时使用 HLS
+- 回退到 `getRoomPlayInfo` V2 接口获取更完整的流信息
 
 ### 轮询流程
 
