@@ -392,7 +392,7 @@ PollingManager (单例)
 ├── CHECKERS 注册表
 │   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
 │   ├── bilibili → BilibiliChecker (api.live.bilibili.com)
-│   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview)
+│   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
 │   └── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)

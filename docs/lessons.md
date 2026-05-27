@@ -420,6 +420,8 @@ async function runWatchdog() {
 
 ## 斗鱼签名方案优化
 
+> **⚠️ 状态：不可用** — 虽然签名和流地址获取已实现，但斗鱼平台流存在约 2 分钟自动切断的问题（即使 segment_duration 设为 0 也无法避免）。该问题非代码层面可解决，疑似斗鱼平台对 HLS/RTMP 流的强制超时限制。biliup 项目中也没有针对 2 分钟的特殊处理。暂时标记为不可用。
+
 ### 问题
 
 原斗鱼签名实现（`signers/douyu.js`）采用从网页 HTML 提取 `ub98484234` JavaScript 签名函数，在 `vm.createContext` 沙箱中执行的方式。这种方式存在以下问题：

@@ -9,7 +9,7 @@
 本方案只纳入以下平台：
 
 - `huya`
-- `douyu`
+- `douyu`（⚠️ 不可用 — 平台流约 2 分钟自动切断，非代码问题）
 - `bilibili`
 - `douyin`
 
@@ -137,15 +137,15 @@ module.exports = {
 
 ## 第二阶段完成评估
 
-> 评估日期：2026-05-27（更新：2026-05-27 斗鱼签名方案优化）
+> 评估日期：2026-05-27（更新：2026-05-27 斗鱼标记为不可用 — 平台流2分钟超时问题）
 
 | 验收项 | 状态 | 说明 |
 |--------|------|------|
-| `signers/douyu.js` 签名模块 | ✅ | 已优化：使用 `hlsH5Preview` API + 简单 MD5 签名，移除 VM 沙箱执行 |
-| `signers/douyin.js` 签名模块 | ⚠️ | a_bogus 使用简化 MD5+SHA256 方案，非 Python 原版完整算法移植；额外提供了 x_bogus |
-| `DouyuChecker.js` | ✅ | 已优化：使用 `playweb.douyucdn.cn` API，完整流程：短号解析→betard 房间状态→签名→hlsH5Preview 流地址、videoLoop 检测 |
-| `DouyinChecker.js` | ✅ | Web API + HTML 降级、短链接解析、不支持类型检测、Cookie 环境变量 |
-| 注册表 `checkers.js` | ✅ | 四平台（huya/bilibili/douyu/douyin）全部注册 |
+| `signers/douyu.js` 签名模块 | ❌ | 已优化但不可用：平台流约 2 分钟自动切断，疑似平台强制超时限制 |
+| `signers/douyin.js` 签名模块 | ✅ | a_bogus 使用简化 MD5+SHA256 方案，经测试可用；额外提供了 x_bogus |
+| `DouyuChecker.js` | ❌ | 已优化但不可用：平台流约 2 分钟自动切断，录制无法持续 |
+| `DouyinChecker.js` | ✅ | Web API + HTML 降级、短链接解析、不支持类型检测、Cookie 环境变量，测试通过 |
+| 注册表 `checkers.js` | ⚠️ | 四平台（huya/bilibili/douyu/douyin）全部注册，但 douyu 因平台流超时问题不可用 |
 | `PollingManager` 兼容 | ✅ | 无需改动，`getChecker()` 自动识别新平台 |
 | 测试 | ✅ | 42 tests 全部通过（斗鱼 21 + 抖音 17），全量 110 tests / 9 suites 通过 |
 | Lint | ✅ | `npm run lint` 无报错 |
