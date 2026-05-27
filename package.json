@@ -1,6 +1,6 @@
 {
   "name": "live_recorder_server",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "description": "express server",
   "keywords": [
     "express"
