@@ -89,9 +89,7 @@ describe('DouyinChecker', () => {
       const checker = new DouyinChecker('https://live.douyin.com/123456');
       const apiResponse = {
         stream_url: {
-          pull_datas: [
-            { pull_url: 'https://example.com/live.flv' },
-          ],
+          pull_datas: [{ pull_url: 'https://example.com/live.flv' }],
         },
       };
       const result = checker.parseStreamData(apiResponse);
@@ -102,10 +100,7 @@ describe('DouyinChecker', () => {
       const checker = new DouyinChecker('https://live.douyin.com/123456');
       const apiResponse = {
         stream_url: {
-          pull_datas: [
-            { pull_url: 'https://example.com/live.m3u8' },
-            { pull_url: 'https://example.com/live.flv' },
-          ],
+          pull_datas: [{ pull_url: 'https://example.com/live.m3u8' }, { pull_url: 'https://example.com/live.flv' }],
         },
       };
       const result = checker.parseStreamData(apiResponse);

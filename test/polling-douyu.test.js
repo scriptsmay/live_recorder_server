@@ -23,6 +23,13 @@ jest.mock('../lib/core/polling/signers/douyu', () => ({
   getSignParams: jest.fn(),
 }));
 
+jest.mock('../lib/core/polling/signers/douyu-vip', () => ({
+  getVipSignParams: jest.fn(),
+  fetchVipJsCode: jest.fn(),
+}));
+
+const { getVipSignParams, fetchVipJsCode } = require('../lib/core/polling/signers/douyu-vip');
+
 describe('DouyuChecker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -42,6 +49,27 @@ describe('DouyuChecker', () => {
     it('should not handle non-douyu URLs', () => {
       expect(DouyuChecker.canHandleUrl('https://www.huya.com/123456')).toBe(false);
       expect(DouyuChecker.canHandleUrl('https://live.bilibili.com/123456')).toBe(false);
+    });
+  });
+
+  describe('构造函数', () => {
+    it('should use default options', () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      expect(checker.options).toEqual({
+        cdn: 'hw-h5',
+        rate: 0,
+        detectInteractiveGame: false,
+      });
+    });
+
+    it('should accept custom options', () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456', {
+        cdn: 'tct',
+        rate: 0,
+        detectInteractiveGame: true,
+      });
+      expect(checker.options.cdn).toBe('tct');
+      expect(checker.options.detectInteractiveGame).toBe(true);
     });
   });
 
@@ -95,6 +123,7 @@ describe('DouyuChecker', () => {
           room_pic: 'https://example.com/cover.jpg',
           show_status: 1,
           videoLoop: 0,
+          isVip: 0,
         },
       };
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
@@ -108,7 +137,27 @@ describe('DouyuChecker', () => {
         roomCover: 'https://example.com/cover.jpg',
         status: 1,
         videoLoop: 0,
+        isVip: false,
       });
+    });
+
+    it('should detect VIP rooms', async () => {
+      const mockData = {
+        data: {
+          owner_name: 'VipAnchor',
+          room_name: 'VIP Room',
+          room_pic: 'https://example.com/cover.jpg',
+          show_status: 1,
+          videoLoop: 0,
+          isVip: 1,
+        },
+      };
+      PlatformChecker.fetchJson.mockResolvedValue(mockData);
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.getRoomStatus('123456');
+
+      expect(result.isVip).toBe(true);
     });
 
     it('should return null on API failure', async () => {
@@ -127,21 +176,152 @@ describe('DouyuChecker', () => {
     });
   });
 
+  describe('isInteractiveGame', () => {
+    it('should return false when disabled', async () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.isInteractiveGame('123456');
+      expect(result).toBe(false);
+    });
+
+    it('should detect interactive games when enabled', async () => {
+      PlatformChecker.fetchJson.mockResolvedValue({ data: { gift: 'info' } });
+      const checker = new DouyuChecker('https://www.douyu.com/123456', { detectInteractiveGame: true });
+      const result = await checker.isInteractiveGame('123456');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when no interactive game data', async () => {
+      PlatformChecker.fetchJson.mockResolvedValue({ data: {} });
+      const checker = new DouyuChecker('https://www.douyu.com/123456', { detectInteractiveGame: true });
+      const result = await checker.isInteractiveGame('123456');
+      expect(result).toBe(false);
+    });
+
+    it('should return false on API failure', async () => {
+      PlatformChecker.fetchJson.mockRejectedValue(new Error('Network error'));
+      const checker = new DouyuChecker('https://www.douyu.com/123456', { detectInteractiveGame: true });
+      const result = await checker.isInteractiveGame('123456');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('buildPlayQuery', () => {
+    it('should build query with default options', () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const query = checker.buildPlayQuery('123456');
+      expect(query).toEqual({
+        cdn: 'hw-h5',
+        rate: '0',
+        ver: 'Douyu_new',
+        iar: '0',
+        ive: '0',
+        rid: '123456',
+        hevc: '0',
+        fa: '0',
+        sov: '0',
+      });
+    });
+
+    it('should use custom CDN and rate', () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456', { cdn: 'tct', rate: 0 });
+      const query = checker.buildPlayQuery('123456');
+      expect(query.cdn).toBe('tct');
+      expect(query.rate).toBe('0');
+    });
+  });
+
   describe('getStreamUrl', () => {
-    it('should return stream url correctly', async () => {
+    it('should return stream url with format detection (flv)', async () => {
       const mockData = {
         error: 0,
         data: {
           rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
           rtmp_live: '12345678abcdef_0',
+          rtmp_cdn: 'hw-h5',
+          rate: 0,
         },
       };
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', {
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
 
-      expect(result).toEqual({ streamUrl: 'rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0', format: 'flv' });
+      expect(result).toEqual({
+        streamUrl: 'rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0',
+        format: 'flv',
+        cdn: 'hw-h5',
+        rate: 0,
+      });
+    });
+
+    it('should detect HLS format from m3u8 URL', async () => {
+      const mockData = {
+        error: 0,
+        data: {
+          rtmp_url: 'http://example.com/live',
+          rtmp_live: 'stream.m3u8',
+          rtmp_cdn: 'hw-h5',
+          rate: 0,
+        },
+      };
+      PlatformChecker.fetchJson.mockResolvedValue(mockData);
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.getStreamUrl('123456', {
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
+
+      expect(result.format).toBe('hls');
+    });
+
+    it('should switch CDN when scdn detected', async () => {
+      const scdnData = {
+        rtmp_url: 'rtmp://scdn.example.com/live',
+        rtmp_live: '12345678abcdef_0',
+        rtmp_cdn: 'scdn-h5',
+        rate: 0,
+        cdnsWithName: [{ cdn: 'scdn-h5' }, { cdn: 'tct-h5' }],
+      };
+
+      const normalData = {
+        rtmp_url: 'rtmp://tct.example.com/live',
+        rtmp_live: 'stream_54321',
+        rtmp_cdn: 'tct-h5',
+        rate: 0,
+      };
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const calls = [];
+      checker._fetchStreamUrl = async function (rid, signParams, query) {
+        calls.push({ rid, query: { ...query } });
+        return calls.length === 1 ? scdnData : normalData;
+      };
+
+      const result = await checker.getStreamUrl('123456', {
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
+
+      // Should have retried with new CDN
+      expect(calls).toHaveLength(2);
+
+      // Verify CDN was switched in the second call
+      expect(calls[1].query.cdn).toBe('tct-h5');
+
+      // Should return the result from the second call
+      expect(result).not.toBeNull();
+      expect(result.cdn).toBe('tct-h5');
+      expect(result.streamUrl).toBe('rtmp://tct.example.com/live/stream_54321');
     });
 
     it('should return null when rtmp_live is missing', async () => {
@@ -154,7 +334,12 @@ describe('DouyuChecker', () => {
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', {
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
 
       expect(result).toBeNull();
     });
@@ -162,7 +347,18 @@ describe('DouyuChecker', () => {
     it('should return null on API failure', async () => {
       PlatformChecker.fetchJson.mockResolvedValue({ error: -1, msg: 'error' });
       const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.getStreamUrl('123456', { did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
+      const result = await checker.getStreamUrl('123456', {
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('should return null when signParams is null', async () => {
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.getStreamUrl('123456', null);
       expect(result).toBeNull();
     });
   });
@@ -185,6 +381,7 @@ describe('DouyuChecker', () => {
           room_pic: 'https://example.com/cover.jpg',
           show_status: 0,
           videoLoop: 0,
+          isVip: 0,
         },
       });
 
@@ -204,6 +401,7 @@ describe('DouyuChecker', () => {
           room_pic: 'https://example.com/cover.jpg',
           show_status: 1,
           videoLoop: 1,
+          isVip: 0,
         },
       });
 
@@ -222,6 +420,7 @@ describe('DouyuChecker', () => {
             room_pic: 'https://example.com/cover.jpg',
             show_status: 1,
             videoLoop: 0,
+            isVip: 0,
           },
         })
         .mockResolvedValueOnce({
@@ -229,10 +428,17 @@ describe('DouyuChecker', () => {
           data: {
             rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
             rtmp_live: '12345678abcdef_0',
+            rtmp_cdn: 'hw-h5',
+            rate: 0,
           },
         });
 
-      getSignParams.mockResolvedValue({ did: '10000000000000000000000000001501', rid: '123456', time: '1234567890', sign: 'abc' });
+      getSignParams.mockResolvedValue({
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
       const result = await checker.checkStatus();
@@ -240,6 +446,89 @@ describe('DouyuChecker', () => {
       expect(result.isLive).toBe(true);
       expect(result.recordable).toBe(true);
       expect(result.streamUrl).toBe('rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0');
+      expect(result.streamInfo).toEqual({
+        format: 'flv',
+        cdn: 'hw-h5',
+        rate: 0,
+        isFallback: undefined,
+      });
+    });
+
+    it('should use VIP signing for VIP rooms', async () => {
+      PlatformChecker.fetchJson
+        .mockResolvedValueOnce({
+          data: {
+            owner_name: 'VipAnchor',
+            room_name: 'VIP Room',
+            room_pic: 'https://example.com/cover.jpg',
+            show_status: 1,
+            videoLoop: 0,
+            isVip: 1,
+          },
+        })
+        .mockResolvedValueOnce({
+          error: 0,
+          data: {
+            rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
+            rtmp_live: '12345678abcdef_0',
+            rtmp_cdn: 'hw-h5',
+            rate: 0,
+          },
+        });
+
+      fetchVipJsCode.mockResolvedValue('function ub98484234() { return ["sign", "v"]; }');
+      getVipSignParams.mockResolvedValue({
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'vip_sign',
+        isVip: true,
+      });
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.checkStatus();
+
+      expect(fetchVipJsCode).toHaveBeenCalledWith('123456');
+      expect(getVipSignParams).toHaveBeenCalledWith('123456', 'function ub98484234() { return ["sign", "v"]; }');
+      expect(getSignParams).not.toHaveBeenCalled();
+      expect(result.isLive).toBe(true);
+    });
+
+    it('should fallback to normal signing when VIP signing fails', async () => {
+      PlatformChecker.fetchJson
+        .mockResolvedValueOnce({
+          data: {
+            owner_name: 'VipAnchor',
+            room_name: 'VIP Room',
+            room_pic: 'https://example.com/cover.jpg',
+            show_status: 1,
+            videoLoop: 0,
+            isVip: 1,
+          },
+        })
+        .mockResolvedValueOnce({
+          error: 0,
+          data: {
+            rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
+            rtmp_live: '12345678abcdef_0',
+            rtmp_cdn: 'hw-h5',
+            rate: 0,
+          },
+        });
+
+      fetchVipJsCode.mockRejectedValue(new Error('fetch failed'));
+      getSignParams.mockResolvedValue({
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+      });
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.checkStatus();
+
+      expect(getSignParams).toHaveBeenCalledWith('123456');
+      expect(result.isLive).toBe(true);
     });
 
     it('should return recordable: false when sign fails', async () => {
@@ -250,6 +539,7 @@ describe('DouyuChecker', () => {
           room_pic: 'https://example.com/cover.jpg',
           show_status: 1,
           videoLoop: 0,
+          isVip: 0,
         },
       });
 
@@ -270,6 +560,42 @@ describe('DouyuChecker', () => {
       const result = await checker.checkStatus();
 
       expect(result.error).toBe('无法获取房间状态');
+    });
+
+    it('should report fallback signing in streamInfo', async () => {
+      PlatformChecker.fetchJson
+        .mockResolvedValueOnce({
+          data: {
+            owner_name: 'TestAnchor',
+            room_name: 'Test Title',
+            room_pic: 'https://example.com/cover.jpg',
+            show_status: 1,
+            videoLoop: 0,
+            isVip: 0,
+          },
+        })
+        .mockResolvedValueOnce({
+          error: 0,
+          data: {
+            rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
+            rtmp_live: '12345678abcdef_0',
+            rtmp_cdn: 'hw-h5',
+            rate: 0,
+          },
+        });
+
+      getSignParams.mockResolvedValue({
+        did: '10000000000000000000000000001501',
+        rid: '123456',
+        time: '1234567890',
+        sign: 'abc',
+        _fallback: true,
+      });
+
+      const checker = new DouyuChecker('https://www.douyu.com/123456');
+      const result = await checker.checkStatus();
+
+      expect(result.streamInfo.isFallback).toBe(true);
     });
   });
 });

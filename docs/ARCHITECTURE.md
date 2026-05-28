@@ -206,8 +206,14 @@ FFmpeg 写入分段文件(.flv)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
 - 支持网络重连：`-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`
-- 用户代理伪装：避免被 CDN 403 拦截
+- 用户代理伪装：通过 `lib/core/config/userAgents.js` 配置化，避免被 CDN 403 拦截
 - 协议白名单：`-protocol_whitelist rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy`
+- **流类型自动检测**：支持 FLV 和 HLS/m3u8 两种流格式
+  - URL 特征检测（`.m3u8`、`.flv`、`/hls/`、`/flv/` 路径）
+  - HTTP 头检测（Content-Type + 响应体 `#EXTM3U` 标记）
+  - `detectStreamType(url)` 异步方法供外部预检
+  - `buildArgs()` 根据 `streamType` 选项选择参数策略
+- **HLS 专用参数**：更长超时（60s）、`-live_start_index -1`、`-avoid_negative_ts make_zero`、协议白名单含 `hls`
 
 ---
 
@@ -393,6 +399,8 @@ PollingManager (单例)
 │   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
 │   ├── bilibili → BilibiliChecker (api.live.bilibili.com)
 │   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
+│   │                          signers/douyu.js (完整签名 + 单飞机制)
+│   │                          signers/douyu-vip.js (VIP房间 JS 签名)
 │   └── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
@@ -400,28 +408,28 @@ PollingManager (单例)
 
 ### PlatformChecker 基类
 
-| 方法                          | 说明                                                   |
-| ----------------------------- | ------------------------------------------------------ |
-| `static getPlatformId()`      | 平台标识符，如 `'huya'`                                |
-| `static canHandleUrl(url)`    | 判断 URL 是否属于本平台                                |
-| `static fetchJson()`          | 统一 HTTP GET 请求（JSON，含超时、UA、错误处理）       |
-| `static fetchText()`          | 统一 HTTP GET 请求（Text，用于 HTML 解析）             |
-| `static normalizeResult()`     | 补齐默认字段，返回统一格式                             |
-| `static extractLastPathSegment()` | 提取 URL 路径最后一段（房间号）                      |
-| `async checkStatus()`         | 返回 `{ isLive, recordable, roomName, roomTitle, streamUrl, streamInfo, error }` |
+| 方法                              | 说明                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| `static getPlatformId()`          | 平台标识符，如 `'huya'`                                                          |
+| `static canHandleUrl(url)`        | 判断 URL 是否属于本平台                                                          |
+| `static fetchJson()`              | 统一 HTTP GET 请求（JSON，含超时、UA、错误处理）                                 |
+| `static fetchText()`              | 统一 HTTP GET 请求（Text，用于 HTML 解析）                                       |
+| `static normalizeResult()`        | 补齐默认字段，返回统一格式                                                       |
+| `static extractLastPathSegment()` | 提取 URL 路径最后一段（房间号）                                                  |
+| `async checkStatus()`             | 返回 `{ isLive, recordable, roomName, roomTitle, streamUrl, streamInfo, error }` |
 
 ### 统一返回规范
 
-| 字段        | 必填 | 说明                                                     |
-| ----------- | ---- | -------------------------------------------------------- |
-| `isLive`    | 是   | 是否开播（主播正在直播）                                  |
+| 字段         | 必填 | 说明                                                       |
+| ------------ | ---- | ---------------------------------------------------------- |
+| `isLive`     | 是   | 是否开播（主播正在直播）                                   |
 | `recordable` | 否   | 是否可录制，默认 `true`；设为 `false` 表示开播但无法获取流 |
-| `roomName`  | 否   | 主播名或房间名                                           |
-| `roomTitle` | 否   | 直播标题                                                 |
-| `roomCover` | 否   | 封面地址                                                 |
-| `streamUrl` | 否   | FFmpeg 可录制地址；不可录制时返回 `null`                   |
-| `streamInfo` | 否   | 平台、画质、CDN、原始接口字段摘要                         |
-| `error`     | 否   | 非致命错误说明（如签名失败、不可录制类型）                  |
+| `roomName`   | 否   | 主播名或房间名                                             |
+| `roomTitle`  | 否   | 直播标题                                                   |
+| `roomCover`  | 否   | 封面地址                                                   |
+| `streamUrl`  | 否   | FFmpeg 可录制地址；不可录制时返回 `null`                   |
+| `streamInfo` | 否   | 平台、画质、CDN、原始接口字段摘要                          |
+| `error`      | 否   | 非致命错误说明（如签名失败、不可录制类型）                 |
 
 ### HuyaChecker 实现要点
 
@@ -437,6 +445,17 @@ PollingManager (单例)
 - 自动处理短房间号映射（通过 `room_init` 返回真实 room_id）
 - 流地址优先选择 FLV，无 FLV 时使用 HLS
 - 回退到 `getRoomPlayInfo` V2 接口获取更完整的流信息
+
+### DouyuChecker 实现要点
+
+- 通过斗鱼 betard API 查询房间状态，hlsH5Preview API 获取流地址
+- **完整签名算法** (`signers/douyu.js`)：从 `getEncryption` 接口获取密钥，MD5 迭代生成签名
+- **单飞机制**：密钥缓存（5分钟 TTL）+ 并发请求合并，避免 Thundering Herd
+- **VIP 房间支持** (`signers/douyu-vip.js`)：通过 `vm` 模块执行 JS 签名代码（`ub98484234()`）
+- **CDN 自动选择**：检测到 scdn 时自动切换到可用 CDN
+- **互动游戏检测**：可选启用，通过 interactive API 排除非直播内容
+- **画质选择**：支持 `rate` 参数选择画质等级
+- **流格式检测**：自动判断 HLS (m3u8) 或 FLV 格式
 
 ### 轮询流程
 

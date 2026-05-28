@@ -35,6 +35,7 @@ npx jest path/to/file.test.js
 CommonJS modules throughout. Express 5 (not 4 - has native async error handling).
 
 **Data flow:**
+
 ```
 Chrome Extension / PollingManager
     → POST /api/notify/live_download
@@ -47,6 +48,7 @@ Chrome Extension / PollingManager
 ```
 
 **Key layers:**
+
 - `router/` — Express route handlers (thin, delegate to services)
 - `services/` — Business logic (RecorderService, RoomService, UploadService, DataService)
 - `lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications

@@ -458,38 +458,43 @@ const streamUrl = `https://hw-tct.douyucdn.cn/live/${key}.flv`;
 
 ### 优势
 
-| 优势             | 说明                                             |
-| ---------------- | ------------------------------------------------ |
-| **简单稳定**     | 签名算法为简单 MD5，不受前端 JS 变更影响         |
-| **无需 VM**      | 移除 vm 沙箱执行，减少安全风险和复杂度           |
-| **易于调试**     | 签名失败只需检查时间戳和 MD5 计算                |
-| **与 biliup 一致** | 参考成熟项目实现，经过实际验证                   |
+| 优势               | 说明                                     |
+| ------------------ | ---------------------------------------- |
+| **简单稳定**       | 签名算法为简单 MD5，不受前端 JS 变更影响 |
+| **无需 VM**        | 移除 vm 沙箱执行，减少安全风险和复杂度   |
+| **易于调试**       | 签名失败只需检查时间戳和 MD5 计算        |
+| **与 biliup 一致** | 参考成熟项目实现，经过实际验证           |
 
 ### 斗鱼流地址获取方式
 
 **问题**：FFmpeg 录制斗鱼直播时返回 HTTP 404 错误。
 
 **分析过程**：
+
 1. 最初参考 biliup Rust 版本，使用 `hlsH5Preview` API 并从 `rtmp_live` 提取 key 构建 FLV URL
 2. 添加 `?uuid=` 参数后仍然 404
 3. 对比 biliup Python 版本发现：应该直接使用 `rtmp_url/rtmp_live` 拼接
 
 **biliup Python 版本的实现**：
+
 ```python
 self.raw_stream_url = f"{play_info['rtmp_url']}/{play_info['rtmp_live']}"
 ```
 
 **最终实现**：
+
 ```js
 const streamUrl = `${rtmpUrl}/${rtmpLive}`;
 ```
 
 **关键发现**：
+
 - `hlsH5Preview` API 返回的 `rtmp_url` 和 `rtmp_live` 字段可以直接拼接使用
 - 返回的可能是 HLS 流（.m3u8）而非 FLV 流，FFmpeg 都能处理
 - biliup 的 Rust 版本和 Python 版本实现方式不同，Python 版本更简洁可靠
 
 **经验**：
+
 1. 参考成熟项目时，优先参考主分支/最新版本的实现
 2. 不同语言版本的实现可能有差异，选择更简洁的方案
 3. 添加调试日志查看 API 实际返回数据有助于定位问题

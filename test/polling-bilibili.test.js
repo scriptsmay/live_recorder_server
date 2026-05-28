@@ -178,10 +178,7 @@ describe('BilibiliChecker', () => {
       const mockData = {
         code: 0,
         data: {
-          durl: [
-            { url: 'https://d1--cn-gotcha.example.com/live.flv' },
-            { url: 'https://other.example.com/live.flv' },
-          ],
+          durl: [{ url: 'https://d1--cn-gotcha.example.com/live.flv' }, { url: 'https://other.example.com/live.flv' }],
         },
       };
       PlatformChecker.fetchJson.mockResolvedValue(mockData);
@@ -199,22 +196,26 @@ describe('BilibiliChecker', () => {
         data: {
           playurl_info: {
             playurl: {
-              stream: [{
-                format: [{
-                  codec: [{
-                    current_qn: 10000,
-                    base_url: '/live.flv',
-                    url_info: [{ host: 'https://example.com', extra: '?token=abc' }],
-                  }],
-                }],
-              }],
+              stream: [
+                {
+                  format: [
+                    {
+                      codec: [
+                        {
+                          current_qn: 10000,
+                          base_url: '/live.flv',
+                          url_info: [{ host: 'https://example.com', extra: '?token=abc' }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
             },
           },
         },
       };
-      PlatformChecker.fetchJson
-        .mockResolvedValueOnce(mockData1)
-        .mockResolvedValueOnce(mockData2);
+      PlatformChecker.fetchJson.mockResolvedValueOnce(mockData1).mockResolvedValueOnce(mockData2);
 
       const checker = new BilibiliChecker('https://live.bilibili.com/123456');
       const result = await checker.getStreamUrl('123456');

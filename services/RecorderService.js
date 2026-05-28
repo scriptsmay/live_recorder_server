@@ -521,7 +521,17 @@ class RecorderService {
       // 三、更新会话的输出路径
       await recordingManager.updateSessionOutputPath(sessionId, outputFilePattern);
 
-      // 四、然后启动下载器模块的录制进程
+      // 四、异步流类型检测
+      let streamType = 'flv';
+      try {
+        const detection = await downloader.detectStreamType(url);
+        streamType = detection.type;
+        console.log(`[流类型检测] ${url.slice(0, 60)} -> ${streamType} (via ${detection.metadata.source})`);
+      } catch (err) {
+        console.warn(`[流类型检测] 失败，使用默认类型 flv:`, err.message);
+      }
+
+      // 五、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
         downloader,
         streamUrl: url,
@@ -530,6 +540,7 @@ class RecorderService {
           segmentDuration,
           platform: room.polling_platform,
           isStreamUrl: true,
+          streamType,
         },
         sessionId,
       });
