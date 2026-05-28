@@ -418,89 +418,80 @@ async function runWatchdog() {
 | **及时响应** | 看门狗30秒扫描，能及时发现可投稿的会话   |
 | **避免重复** | 统一检查机制，防止重复投稿               |
 
-## 斗鱼签名方案优化
+## 斗鱼直播流录制
 
-> **⚠️ 状态：不可用** — 虽然签名和流地址获取已实现，但斗鱼平台流存在约 2 分钟自动切断的问题（即使 segment_duration 设为 0 也无法避免）。该问题非代码层面可解决，疑似斗鱼平台对 HLS/RTMP 流的强制超时限制。biliup 项目中也没有针对 2 分钟的特殊处理。暂时标记为不可用。
+> **✅ 状态：可用**（2026-05-28 修复）
 
-### 问题
+### 历史演进
 
-原斗鱼签名实现（`signers/douyu.js`）采用从网页 HTML 提取 `ub98484234` JavaScript 签名函数，在 `vm.createContext` 沙箱中执行的方式。这种方式存在以下问题：
+| 阶段   | 方案                                   | 状态                 |
+| ------ | -------------------------------------- | -------------------- |
+| v1     | `ub98484234.js` + VM 沙箱执行          | ❌ 前端 JS 已 404    |
+| v2     | `hlsH5Preview` API + 简化 MD5 签名     | ❌ API 已废弃        |
+| v3     | `getEncryption` + `hlsH5Preview`       | ❌ 鉴权失败          |
+| **v4** | **`getEncryption` + `getH5PlayV1`**    | **✅ 当前方案**      |
 
-1. **依赖网页结构**：签名函数嵌入在 HTML 中，格式可能随斗鱼前端更新而变化
-2. **复杂度高**：需要正则提取、eval 移除、VM 沙箱执行等多步骤处理
-3. **调试困难**：签名失败时难以定位是提取问题还是执行问题
+### 问题排查过程（2026-05-28）
 
-### 解决方案
+**现象**：直播间 `https://www.douyu.com/1863767` 无法录制，不走 VIP 签名 2 分钟切断，走 VIP 签名直接报错。
 
-参考 biliup 项目（`crates/biliup/src/downloader/extractor/douyu.rs`），改用 `hlsH5Preview` API：
+**排查步骤**：
 
-```js
-// 签名算法：md5(room_id + timestamp)
-const sign = md5Hash(`${rid}${time}`);
+1. **VIP 签名失效**：`https://www.douyu.com/ub98484234.js` 返回 404，斗鱼已全面迁移到 Next.js 架构，旧签名 JS 不复存在
+2. **旧 API 废弃**：`hlsH5Preview` 返回 `{"error":2005,"msg":"鉴权失败"}`
+3. **逆向新版加密 JS**：分析 `web-encrypt-*.js`（18KB minified），发现新 API 端点为 `getH5PlayV1`
+4. **UA 不匹配**：`getSignParams` 用 `getOptimalUserAgent()`（Mac Chrome）生成 `enc_data`，但 `_fetchStreamUrl` 硬编码 Windows UA。**斗鱼服务端现在校验 `enc_data` 中的 UA 与请求头 UA 是否一致**，不一致返回 403
 
-// POST 请求到 hlsH5Preview API
-const url = `https://playweb.douyucdn.cn/lapi/live/hlsH5Preview/${rid}`;
-const data = await fetch(url, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    rid: String(rid),
-    time,
-    auth: sign,
-  },
-  body: new URLSearchParams({ did, rid: String(rid) }).toString(),
-});
+### 当前签名方案
 
-// 从 rtmp_live 提取 key 构建 FLV 地址
-const key = rtmpLive.match(/(\d{1,8}[0-9a-zA-Z]+)_?\d{0,4}(\/playlist|\.m3u8)/)[1];
-const streamUrl = `https://hw-tct.douyucdn.cn/live/${key}.flv`;
-```
-
-### 优势
-
-| 优势               | 说明                                     |
-| ------------------ | ---------------------------------------- |
-| **简单稳定**       | 签名算法为简单 MD5，不受前端 JS 变更影响 |
-| **无需 VM**        | 移除 vm 沙箱执行，减少安全风险和复杂度   |
-| **易于调试**       | 签名失败只需检查时间戳和 MD5 计算        |
-| **与 biliup 一致** | 参考成熟项目实现，经过实际验证           |
-
-### 斗鱼流地址获取方式
-
-**问题**：FFmpeg 录制斗鱼直播时返回 HTTP 404 错误。
-
-**分析过程**：
-
-1. 最初参考 biliup Rust 版本，使用 `hlsH5Preview` API 并从 `rtmp_live` 提取 key 构建 FLV URL
-2. 添加 `?uuid=` 参数后仍然 404
-3. 对比 biliup Python 版本发现：应该直接使用 `rtmp_url/rtmp_live` 拼接
-
-**biliup Python 版本的实现**：
-
-```python
-self.raw_stream_url = f"{play_info['rtmp_url']}/{play_info['rtmp_live']}"
-```
-
-**最终实现**：
+签名算法不变（`getEncryption` → MD5 迭代），但 API 端点和请求格式有变化：
 
 ```js
-const streamUrl = `${rtmpUrl}/${rtmpLive}`;
+// 1. 获取加密密钥（不变）
+const { key, rand_str, enc_time, enc_data } =
+  await fetch('https://www.douyu.com/wgapi/livenc/liveweb/websec/getEncryption?did=xxx');
+
+// 2. MD5 签名（不变）
+let secret = rand_str;
+for (let i = 0; i < enc_time; i++) secret = md5(secret + key);
+const auth = md5(secret + key + rid + ts);
+
+// 3. 请求流地址（端点和格式变了！）
+//    旧: POST /lapi/live/hlsH5Preview/{rid}
+//    新: POST /lapi/live/getH5PlayV1/{rid}
+const body = [
+  `enc_data=${enc_data}`,  // 签名参数在前
+  `tt=${ts}`,
+  `did=${did}`,
+  `auth=${auth}`,
+  'cdn=hw-h5',             // 其他参数在后
+  'ver=Douyu_new',
+  'rate=0',
+  // ... 不再传 rid（在 URL 中）
+].join('&');
+
+// 4. UA 必须与 getEncryption 请求时一致！
+const streamUrl = `${rtmp_url}/${rtmp_live}`;
 ```
 
-**关键发现**：
+### 关键踩坑点
 
-- `hlsH5Preview` API 返回的 `rtmp_url` 和 `rtmp_live` 字段可以直接拼接使用
-- 返回的可能是 HLS 流（.m3u8）而非 FLV 流，FFmpeg 都能处理
-- biliup 的 Rust 版本和 Python 版本实现方式不同，Python 版本更简洁可靠
+1. **`enc_data` 绑定 UA**：`getEncryption` 返回的 `enc_data` 中包含请求时的 User-Agent，后续 `getH5PlayV1` 请求必须使用相同 UA，否则返回 403
+2. **请求体格式**：签名参数（`enc_data`/`tt`/`did`/`auth`）必须放在其他参数前面
+3. **`rid` 不在 body 中**：新版 API 只从 URL 路径读取 `rid`，body 中传 `rid` 会导致鉴权失败
+4. **VIP 签名已废弃**：`ub98484234.js` 返回 404，`douyu-vip.js` 不再被引用
 
-**经验**：
+### 架构说明
 
-1. 参考成熟项目时，优先参考主分支/最新版本的实现
-2. 不同语言版本的实现可能有差异，选择更简洁的方案
-3. 添加调试日志查看 API 实际返回数据有助于定位问题
+```
+signers/douyu.js          # 签名算法（getEncryption + MD5）
+signers/douyu-vip.js      # [已废弃] ub98484234 VM 沙箱签名
+DouyuChecker.js           # 平台检查器（调用签名 + 请求流地址）
+```
 
 ### 经验总结
 
-1. **优先选择稳定 API**：当平台有多个 API 端点时，优先选择签名方式简单、不依赖前端 JS 的端点
-2. **参考成熟项目**：biliup 等开源项目已经过大量用户验证，其实现方式值得参考
-3. **简化优于复杂**：能用简单 MD5 签名解决的问题，无需引入 VM 沙箱等复杂方案
+1. **平台 API 变更要及时跟进**：斗鱼从传统 SPA 迁移到 Next.js，大量旧 API 和前端 JS 失效
+2. **逆向加密 JS 是最后手段**：通过分析 minified JS 中的关键词（API 端点、参数名）定位变更点，比完整逆向高效
+3. **UA 一致性是隐性鉴权**：`enc_data` 绑定了 UA，两端必须一致——这类问题在文档中不会说明，只能通过对比实际请求发现
+4. **保留旧签名代码**：`douyu-vip.js` 虽然废弃，但保留作为参考，万一斗鱼恢复类似机制

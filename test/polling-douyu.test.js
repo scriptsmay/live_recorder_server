@@ -23,13 +23,6 @@ jest.mock('../lib/core/polling/signers/douyu', () => ({
   getSignParams: jest.fn(),
 }));
 
-jest.mock('../lib/core/polling/signers/douyu-vip', () => ({
-  getVipSignParams: jest.fn(),
-  fetchVipJsCode: jest.fn(),
-}));
-
-const { getVipSignParams, fetchVipJsCode } = require('../lib/core/polling/signers/douyu-vip');
-
 describe('DouyuChecker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -213,12 +206,9 @@ describe('DouyuChecker', () => {
         cdn: 'hw-h5',
         rate: '0',
         ver: 'Douyu_new',
-        iar: '0',
         ive: '0',
-        rid: '123456',
         hevc: '0',
         fa: '0',
-        sov: '0',
       });
     });
 
@@ -300,8 +290,8 @@ describe('DouyuChecker', () => {
 
       const checker = new DouyuChecker('https://www.douyu.com/123456');
       const calls = [];
-      checker._fetchStreamUrl = async function (rid, signParams, query) {
-        calls.push({ rid, query: { ...query } });
+      checker._fetchStreamUrl = async function (rid) {
+        calls.push({ rid });
         return calls.length === 1 ? scdnData : normalData;
       };
 
@@ -315,8 +305,8 @@ describe('DouyuChecker', () => {
       // Should have retried with new CDN
       expect(calls).toHaveLength(2);
 
-      // Verify CDN was switched in the second call
-      expect(calls[1].query.cdn).toBe('tct-h5');
+      // Verify CDN was switched in options (new API stores cdn in this.options)
+      expect(checker.options.cdn).toBe('tct-h5');
 
       // Should return the result from the second call
       expect(result).not.toBeNull();
@@ -454,7 +444,7 @@ describe('DouyuChecker', () => {
       });
     });
 
-    it('should use VIP signing for VIP rooms', async () => {
+    it('should use unified signing for all rooms (VIP rooms included)', async () => {
       PlatformChecker.fetchJson
         .mockResolvedValueOnce({
           data: {
@@ -476,47 +466,6 @@ describe('DouyuChecker', () => {
           },
         });
 
-      fetchVipJsCode.mockResolvedValue('function ub98484234() { return ["sign", "v"]; }');
-      getVipSignParams.mockResolvedValue({
-        did: '10000000000000000000000000001501',
-        rid: '123456',
-        time: '1234567890',
-        sign: 'vip_sign',
-        isVip: true,
-      });
-
-      const checker = new DouyuChecker('https://www.douyu.com/123456');
-      const result = await checker.checkStatus();
-
-      expect(fetchVipJsCode).toHaveBeenCalledWith('123456');
-      expect(getVipSignParams).toHaveBeenCalledWith('123456', 'function ub98484234() { return ["sign", "v"]; }');
-      expect(getSignParams).not.toHaveBeenCalled();
-      expect(result.isLive).toBe(true);
-    });
-
-    it('should fallback to normal signing when VIP signing fails', async () => {
-      PlatformChecker.fetchJson
-        .mockResolvedValueOnce({
-          data: {
-            owner_name: 'VipAnchor',
-            room_name: 'VIP Room',
-            room_pic: 'https://example.com/cover.jpg',
-            show_status: 1,
-            videoLoop: 0,
-            isVip: 1,
-          },
-        })
-        .mockResolvedValueOnce({
-          error: 0,
-          data: {
-            rtmp_url: 'rtmp://hdltctwk.douyucdn.cn/live',
-            rtmp_live: '12345678abcdef_0',
-            rtmp_cdn: 'hw-h5',
-            rate: 0,
-          },
-        });
-
-      fetchVipJsCode.mockRejectedValue(new Error('fetch failed'));
       getSignParams.mockResolvedValue({
         did: '10000000000000000000000000001501',
         rid: '123456',
@@ -529,6 +478,7 @@ describe('DouyuChecker', () => {
 
       expect(getSignParams).toHaveBeenCalledWith('123456');
       expect(result.isLive).toBe(true);
+      expect(result.streamUrl).toBe('rtmp://hdltctwk.douyucdn.cn/live/12345678abcdef_0');
     });
 
     it('should return recordable: false when sign fails', async () => {
