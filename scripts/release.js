@@ -52,8 +52,7 @@ async function generateReleaseNoteAI(commits) {
     console.warn('⚠️ 警告: 未检测到 AI_API_KEY 环境变量，跳过 AI 生成。');
     return null;
   }
-
-  console.log('🤖 正在呼叫 AI 总结 Changelog...');
+  console.log(`🤖 正在使用 AI 模型 "${model}" 生成 Release Note...`);
 
   const prompt = `
 你是一个精简、专业的技术文档撰写助手。请将输入的 Git commits 整理为面向用户的 Release Note。
@@ -82,7 +81,7 @@ ${commits}
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: model,
+        model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
       }),
@@ -207,15 +206,15 @@ async function main() {
 
   // 3. 打印 AI 结果，并给人工一次确认或修改的机会
   if (aiSummary) {
-    console.log('\n--- AI 建议的 Release Note ---');
+    console.log('------ AI 建议的 Release Note ------');
     console.log(aiSummary);
-    console.log('------------------------------\n');
+    console.log('-------------------------------------\n');
   }
 
   let finalMessage;
   if (isAuto) {
     finalMessage = aiSummary || `Release v${newVersion}`;
-    console.log(`\n--- 自动模式，使用 AI 结果 ---`);
+    console.log(`\n--- 自动模式，直接使用 AI 结果 ---`);
   } else {
     const userNote = await askQuestion('请确认或输入更新说明 (回车默认使用AI结果/默认格式): ');
     finalMessage = userNote || aiSummary || `Release v${newVersion}`;
