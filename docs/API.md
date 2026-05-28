@@ -362,6 +362,34 @@ curl http://127.0.0.1:1123/api/sessions/25
 | status     | string  | 否   | 按状态筛选：`pending` / `recording` / `completed` / `interrupted` / `missing` / `orphaned` |
 | session_id | integer | 否   | 按会话 ID 筛选                                                                             |
 
+### DELETE /api/recordings/:id
+
+删除录制文件记录。
+
+**参数（Query）：**
+
+| 参数        | 类型   | 必填 | 说明                                                         |
+| ----------- | ------ | ---- | ------------------------------------------------------------ |
+| delete_file | string | 否   | 设为 `true` 时同时删除本地文件（主文件 + HLS 目录），默认仅删除数据库记录 |
+
+**删除本地文件时的行为：**
+
+1. 删除 `file_path` 对应的主文件（.ts/.flv/.mp4 等）
+2. 若 `is_hls_ready` 为 true，删除 `hls_playlist_path` 所在目录（含所有分片）
+3. 同步清理 `recordings` 表中的对应记录
+
+**示例：**
+
+```bash
+# 仅删除数据库记录
+curl -X DELETE http://127.0.0.1:1123/api/recordings/42
+
+# 同时删除本地文件
+curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
+```
+
+---
+
 ### GET /api/recordings/:id/stream
 
 流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。

@@ -326,11 +326,61 @@ router.delete('/recording_files/missing', async (req, res) => {
 router.delete('/recordings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM recording_files WHERE id = $1', [id]);
-    if (result.rowCount === 0) {
+    const deleteFile = req.query.delete_file === 'true';
+
+    // 先查询记录，获取文件路径信息
+    const fileResult = await pool.query(
+      `SELECT id, file_path, is_hls_ready, hls_playlist_path FROM recording_files WHERE id = $1`,
+      [id],
+    );
+
+    if (fileResult.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '记录不存在' });
     }
-    res.json({ status: 'ok' });
+
+    const file = fileResult.rows[0];
+
+    // 删除本地文件
+    if (deleteFile) {
+      const deletedPaths = [];
+
+      // 删除主文件
+      if (file.file_path) {
+        try {
+          if (fs.existsSync(file.file_path)) {
+            fs.unlinkSync(file.file_path);
+            deletedPaths.push(file.file_path);
+          }
+        } catch (err) {
+          console.warn(`[api] 删除文件失败: ${file.file_path}`, err.message);
+        }
+
+        // 同时删除 recordings 表中的对应记录
+        try {
+          await pool.query('DELETE FROM recordings WHERE file_path = $1', [file.file_path]);
+        } catch (_) {}
+      }
+
+      // 删除 HLS 目录
+      if (file.is_hls_ready && file.hls_playlist_path) {
+        try {
+          const hlsDir = path.dirname(file.hls_playlist_path);
+          if (fs.existsSync(hlsDir)) {
+            fs.rmSync(hlsDir, { recursive: true, force: true });
+            deletedPaths.push(hlsDir);
+          }
+        } catch (err) {
+          console.warn(`[api] 删除 HLS 目录失败: ${file.hls_playlist_path}`, err.message);
+        }
+      }
+
+      console.log(`[api] 已删除本地文件: ${deletedPaths.join(', ') || '(无)'}`);
+    }
+
+    // 删除数据库记录
+    await pool.query('DELETE FROM recording_files WHERE id = $1', [id]);
+
+    res.json({ status: 'ok', deletedFile: deleteFile });
   } catch (err) {
     console.error('[api] 删除录制记录失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });

@@ -66,7 +66,7 @@
               <% if (r.status === 'completed' && r.file_path && /\.(ts|flv|m2ts)$/i.test(r.file_path)) { %>
                 <button class="btn btn-sm btn-outline-warning transcodeRecBtn me-1" data-id="<%= r.id %>" data-filename="<%= filename %>">转码</button>
               <% } %>
-              <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button>
+              <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>" data-filename="<%= filename %>">删除</button>
             </td>
           </tr>
         <% }) %>
@@ -115,14 +115,23 @@
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.deleteRecBtn');
     if (!btn) return;
-    showConfirm('确定删除此录制记录？', `#${btn.dataset.id}`).then(async confirmed => {
-      if (!confirmed) return;
-      const id = btn.dataset.id;
-      const res = await fetch('/api/recordings/' + id, { method: 'DELETE' });
-      const json = await res.json();
-      if (!res.ok) return toast(json.message || '删除失败');
-      window.location.reload();
-    });
+    const filename = btn.dataset.filename || '';
+    const msg = '确定删除此录制记录？'
+      + (filename ? `<br><small class="text-muted">${filename}</small>` : '')
+      + '<div class="form-check mt-3">'
+      + '<input class="form-check-input" type="checkbox" id="deleteFileCheckbox">'
+      + '<label class="form-check-label" for="deleteFileCheckbox">同时删除本地文件</label>'
+      + '</div>';
+    const confirmed = await showConfirm(msg, `#${btn.dataset.id}`);
+    if (!confirmed) return;
+    const deleteFile = document.getElementById('deleteFileCheckbox')?.checked || false;
+    const id = btn.dataset.id;
+    const url = '/api/recordings/' + id + (deleteFile ? '?delete_file=true' : '');
+    const res = await fetch(url, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) return toast(json.message || '删除失败');
+    toast(deleteFile ? '已删除记录及本地文件' : '已删除记录');
+    window.location.reload();
   });
 
   document.addEventListener('click', async e => {
