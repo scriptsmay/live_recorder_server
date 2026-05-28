@@ -447,6 +447,8 @@ router.get('/recordings/:id/hls', async (req, res) => {
   }
 });
 
+const SUPPORTED_TRANSCODE_EXT = /\.(ts|flv|m2ts)$/i;
+
 router.post('/recordings/:id/generate-hls', async (req, res) => {
   try {
     const { id } = req.params;
@@ -480,6 +482,58 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
   } catch (err) {
     console.error('[api] HLS 生成失败:', err);
     res.status(500).json({ status: 'Error', message: 'HLS 生成失败' });
+  }
+});
+
+router.post('/recordings/:id/transcode', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT rf.id, rf.file_path, rf.session_id
+       FROM recording_files rf
+       WHERE rf.id = $1`,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
+    }
+
+    const file = result.rows[0];
+
+    if (!file.file_path || !fs.existsSync(file.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '源文件不存在于磁盘' });
+    }
+
+    if (!SUPPORTED_TRANSCODE_EXT.test(file.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '仅支持 .ts / .flv / .m2ts 文件转码' });
+    }
+
+    // 检查是否已存在转码记录（queued 或 processing 状态）
+    const existingRecord = await pool.query(
+      `SELECT id, status FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing')`,
+      [file.file_path],
+    );
+
+    if (existingRecord.rows.length > 0) {
+      return res.status(409).json({ status: 'Error', message: '该文件已在转码队列中' });
+    }
+
+    const mp4Path = file.file_path.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
+
+    await transcodeQueue.enqueue({
+      videoPathToTrans: file.file_path,
+      mp4Path,
+      sessionId: file.session_id,
+      force: true,
+    });
+
+    console.log(`[api] 手动转码入队: ${file.file_path}`);
+    res.json({ status: 'ok', message: '已加入转码队列' });
+  } catch (err) {
+    console.error('[api] 手动转码失败:', err);
+    res.status(500).json({ status: 'Error', message: '手动转码失败' });
   }
 });
 

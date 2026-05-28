@@ -63,6 +63,9 @@
               <% if (r.status === 'completed' && r.file_path) { %>
                 <button class="btn btn-sm btn-outline-info playRecBtn me-1" data-recording-id="<%= r.id %>" data-filename="<%= filename %>" data-ext="<%= ext %>">▶</button>
               <% } %>
+              <% if (r.status === 'completed' && r.file_path && /\.(ts|flv|m2ts)$/i.test(r.file_path)) { %>
+                <button class="btn btn-sm btn-outline-warning transcodeRecBtn me-1" data-id="<%= r.id %>" data-filename="<%= filename %>">转码</button>
+              <% } %>
               <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button>
             </td>
           </tr>
@@ -120,6 +123,30 @@
       if (!res.ok) return toast(json.message || '删除失败');
       window.location.reload();
     });
+  });
+
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.transcodeRecBtn');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const filename = btn.dataset.filename;
+    const confirmed = await showConfirm(`确定将文件加入转码队列？`, filename);
+    if (!confirmed) return;
+    btn.disabled = true;
+    btn.textContent = '处理中…';
+    try {
+      const res = await fetch('/api/recordings/' + id + '/transcode', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) return toast(json.message || '转码失败');
+      toast(json.message || '已加入转码队列');
+      btn.textContent = '已入队';
+      btn.classList.remove('btn-outline-warning');
+      btn.classList.add('btn-outline-secondary');
+    } catch (err) {
+      toast('请求失败');
+      btn.disabled = false;
+      btn.textContent = '转码';
+    }
   });
 
   document.addEventListener('DOMContentLoaded', () => {
