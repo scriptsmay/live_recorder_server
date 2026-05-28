@@ -1,4 +1,4 @@
-# Live Recorder Server 开发计划文档 - FFmpeg兼容性与DouyuChecker修复
+# 开发计划文档 - FFmpeg兼容性与DouyuChecker修复
 
 ## 概述
 
