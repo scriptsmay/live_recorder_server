@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl ffmpeg python3 python3-pip gosu \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
+    && ln -sf /root/.local/share/uv/bin/biliup /usr/local/bin/biliup \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制依赖和源码
