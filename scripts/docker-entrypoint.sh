@@ -127,6 +127,11 @@ wait_for_redis
 # [重要修改] 核心：使用 gosu 降权安全启动主程序
 # ==========================================
 if [ "$1" = "node" ]; then
+    # 设置 HOME 为 nodeuser 的主目录，否则 biliup 等工具会在 /root 下创建锁文件导致权限错误
+    NODEUSER_HOME=$(grep '^nodeuser:' /etc/passwd | cut -d: -f6)
+    export HOME="$NODEUSER_HOME"
+    mkdir -p "$NODEUSER_HOME/.local/share/biliup/locks"
+    chown -R nodeuser:nodeuser "$NODEUSER_HOME"
     exec gosu nodeuser "$@"
 fi
 

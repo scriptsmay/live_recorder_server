@@ -33,9 +33,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
 # 设置非 root 用户
-RUN groupadd -r nodeuser && useradd -r -g nodeuser nodeuser \
+RUN groupadd -r nodeuser && useradd -r -m -g nodeuser nodeuser \
     && mkdir -p /data/video_downloads /data/biliup /app/logs \
-    && chown -R nodeuser:nodeuser /data /app
+    && chown -R nodeuser:nodeuser /data /app /home/nodeuser
 
 # ⚠️ [重要修改] 注释掉这里的 USER 限制，允许 entrypoint 以 root 身份启动来修正权限
 # USER nodeuser
