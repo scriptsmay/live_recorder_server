@@ -331,7 +331,7 @@ router.delete('/recordings/:id', async (req, res) => {
     // 先查询记录，获取文件路径信息
     const fileResult = await pool.query(
       `SELECT id, file_path, is_hls_ready, hls_playlist_path FROM recording_files WHERE id = $1`,
-      [id],
+      [id]
     );
 
     if (fileResult.rows.length === 0) {
@@ -543,7 +543,7 @@ router.post('/recordings/:id/transcode', async (req, res) => {
       `SELECT rf.id, rf.file_path, rf.session_id
        FROM recording_files rf
        WHERE rf.id = $1`,
-      [id],
+      [id]
     );
 
     if (result.rows.length === 0) {
@@ -563,7 +563,7 @@ router.post('/recordings/:id/transcode', async (req, res) => {
     // 检查是否已存在转码记录（queued 或 processing 状态）
     const existingRecord = await pool.query(
       `SELECT id, status FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing')`,
-      [file.file_path],
+      [file.file_path]
     );
 
     if (existingRecord.rows.length > 0) {

@@ -1,6 +1,6 @@
 /**
  * 应用信息配置模块
- * 
+ *
  * 从 package.json 读取应用版本信息，并提供 Docker 镜像版本和应用启动时间
  */
 const path = require('path');

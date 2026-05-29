@@ -370,13 +370,13 @@ ffmpeg -y \
 
 #### HLS 与标准 FLV 参数差异
 
-| 参数                 | FLV 标准值      | HLS 专用值       | 说明                       |
-| -------------------- | --------------- | ---------------- | -------------------------- |
-| `-rw_timeout`        | 30000000 (30s)  | 60000000 (60s)   | HLS 播放列表刷新需要更长时间 |
-| `-reconnect_delay_max` | 60            | 30               | HLS 重连更积极             |
-| `-live_start_index`  | (无)            | -1               | 从最新直播片段开始         |
-| `-protocol_whitelist` | (不含 hls)     | (含 hls)         | 需要 hls 协议支持          |
-| `-avoid_negative_ts` | 1               | make_zero        | HLS 推荐 make_zero 模式    |
+| 参数                   | FLV 标准值     | HLS 专用值     | 说明                         |
+| ---------------------- | -------------- | -------------- | ---------------------------- |
+| `-rw_timeout`          | 30000000 (30s) | 60000000 (60s) | HLS 播放列表刷新需要更长时间 |
+| `-reconnect_delay_max` | 60             | 30             | HLS 重连更积极               |
+| `-live_start_index`    | (无)           | -1             | 从最新直播片段开始           |
+| `-protocol_whitelist`  | (不含 hls)     | (含 hls)       | 需要 hls 协议支持            |
+| `-avoid_negative_ts`   | 1              | make_zero      | HLS 推荐 make_zero 模式      |
 
 #### 流类型检测流程
 

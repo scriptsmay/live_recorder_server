@@ -424,12 +424,12 @@ async function runWatchdog() {
 
 ### 历史演进
 
-| 阶段   | 方案                                   | 状态                 |
-| ------ | -------------------------------------- | -------------------- |
-| v1     | `ub98484234.js` + VM 沙箱执行          | ❌ 前端 JS 已 404    |
-| v2     | `hlsH5Preview` API + 简化 MD5 签名     | ❌ API 已废弃        |
-| v3     | `getEncryption` + `hlsH5Preview`       | ❌ 鉴权失败          |
-| **v4** | **`getEncryption` + `getH5PlayV1`**    | **✅ 当前方案**      |
+| 阶段   | 方案                                | 状态              |
+| ------ | ----------------------------------- | ----------------- |
+| v1     | `ub98484234.js` + VM 沙箱执行       | ❌ 前端 JS 已 404 |
+| v2     | `hlsH5Preview` API + 简化 MD5 签名  | ❌ API 已废弃     |
+| v3     | `getEncryption` + `hlsH5Preview`    | ❌ 鉴权失败       |
+| **v4** | **`getEncryption` + `getH5PlayV1`** | **✅ 当前方案**   |
 
 ### 问题排查过程（2026-05-28）
 
@@ -448,8 +448,9 @@ async function runWatchdog() {
 
 ```js
 // 1. 获取加密密钥（不变）
-const { key, rand_str, enc_time, enc_data } =
-  await fetch('https://www.douyu.com/wgapi/livenc/liveweb/websec/getEncryption?did=xxx');
+const { key, rand_str, enc_time, enc_data } = await fetch(
+  'https://www.douyu.com/wgapi/livenc/liveweb/websec/getEncryption?did=xxx'
+);
 
 // 2. MD5 签名（不变）
 let secret = rand_str;
@@ -460,11 +461,11 @@ const auth = md5(secret + key + rid + ts);
 //    旧: POST /lapi/live/hlsH5Preview/{rid}
 //    新: POST /lapi/live/getH5PlayV1/{rid}
 const body = [
-  `enc_data=${enc_data}`,  // 签名参数在前
+  `enc_data=${enc_data}`, // 签名参数在前
   `tt=${ts}`,
   `did=${did}`,
   `auth=${auth}`,
-  'cdn=hw-h5',             // 其他参数在后
+  'cdn=hw-h5', // 其他参数在后
   'ver=Douyu_new',
   'rate=0',
   // ... 不再传 rid（在 URL 中）
