@@ -543,8 +543,9 @@ router/rooms.js (新增/修改房间)
 
 ### 执行
 
+- API 接口立即返回，上传在后台异步执行（`UploadService._runUpload`）
 - 调用 `biliup upload` 子进程
-- 输出记录到 `upload_records` 表
+- 输出记录到 `upload_records` 表，状态流转：`uploading` → `success` / `failed`
 - 解析 BV 号（正则 `/BV[0-9A-Za-z]{10}/`），关联到投稿记录
 
 ---

@@ -204,74 +204,91 @@ class UploadService {
     notify.uploadStart(session.room_name, tmpl.name, files.length, session.room_url);
     console.log(`[投稿] 会话 ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已启动`);
 
-    // 使用 biliup 模块执行上传
-    const result = await biliup.upload({
-      cookiesPath: tmpl.cookies_path,
-      files,
-      title,
-      desc,
-      tags,
-      source,
-      tid: tmpl.tid,
-      copyright: tmpl.copyright,
-      isOnlySelf: tmpl.is_only_self,
-      cover: tmpl.cover,
-      dtime: tmpl.dtime,
-      recordId,
+    // 后台执行上传，不阻塞 HTTP 响应
+    this._runUpload(recordId, session, tmpl, files, title, desc, tags, source).catch((err) => {
+      console.error(`[投稿] 会话 ${session.id} 后台上传异常:`, err);
     });
 
-    // 更新上传记录
-    const biliupPath = process.env.BILIUP_PATH || 'biliup';
-    const cmdParts = [biliupPath, '-u', tmpl.cookies_path, 'upload'];
-    if (title) cmdParts.push('--title', title);
-    if (desc) cmdParts.push(`--desc=${desc}`);
-    if (tags) cmdParts.push('--tag', tags);
-    if (source) cmdParts.push('--source', source);
-    if (tmpl.tid) cmdParts.push('--tid', String(tmpl.tid));
-    if (tmpl.copyright) cmdParts.push('--copyright', String(tmpl.copyright));
-    if (tmpl.is_only_self) cmdParts.push('--is-only-self', String(tmpl.is_only_self));
-    if (tmpl.cover) cmdParts.push('--cover', tmpl.cover);
-    if (tmpl.dtime) cmdParts.push('--dtime', String(tmpl.dtime));
-    cmdParts.push(...files);
-    const cmdStr = cmdParts.join(' ');
-
-    if (result.success) {
-      // 上传成功，更新记录并发送通知
-      await pool.query(
-        `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
-        [cmdStr, result.output, result.bvId, recordId]
-      );
-      notify.uploadComplete(session.room_name, title, result.bvId, session.room_url);
-
-      // 延迟10秒后执行上传后处理
-      await new Promise((r) => setTimeout(r, 10000));
-      const postResult = await afterUpload(
-        tmpl.after_upload,
-        files,
-        session.id,
-        tmpl.name,
-        recordId,
-        session.room_name,
-        session.room_url
-      );
-      if (postResult) {
-        const finalOutput = result.output + `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
-        await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [finalOutput, recordId]);
-      }
-    } else {
-      // 上传失败，更新记录并发送失败通知
-      await pool.query(
-        `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
-        [cmdStr, result.output, result.error, recordId]
-      );
-      await notify.uploadFailed(session.room_name, tmpl.name, title, result.error, session.room_url);
-    }
-
-    console.log(`[投稿] biliup 日志: ${result.logPath}`);
     return {
       error: false,
       message: `[投稿] ${session.id} → 模板 ${tmpl.id}「${tmpl.name}」已开始`,
     };
+  }
+
+  /**
+   * 后台执行 biliup 上传流程
+   */
+  static async _runUpload(recordId, session, tmpl, files, title, desc, tags, source) {
+    try {
+      const result = await biliup.upload({
+        cookiesPath: tmpl.cookies_path,
+        files,
+        title,
+        desc,
+        tags,
+        source,
+        tid: tmpl.tid,
+        copyright: tmpl.copyright,
+        isOnlySelf: tmpl.is_only_self,
+        cover: tmpl.cover,
+        dtime: tmpl.dtime,
+        recordId,
+      });
+
+      // 构建命令字符串用于记录
+      const biliupPath = process.env.BILIUP_PATH || 'biliup';
+      const cmdParts = [biliupPath, '-u', tmpl.cookies_path, 'upload'];
+      if (title) cmdParts.push('--title', title);
+      if (desc) cmdParts.push(`--desc=${desc}`);
+      if (tags) cmdParts.push('--tag', tags);
+      if (source) cmdParts.push('--source', source);
+      if (tmpl.tid) cmdParts.push('--tid', String(tmpl.tid));
+      if (tmpl.copyright) cmdParts.push('--copyright', String(tmpl.copyright));
+      if (tmpl.is_only_self) cmdParts.push('--is-only-self', String(tmpl.is_only_self));
+      if (tmpl.cover) cmdParts.push('--cover', tmpl.cover);
+      if (tmpl.dtime) cmdParts.push('--dtime', String(tmpl.dtime));
+      cmdParts.push(...files);
+      const cmdStr = cmdParts.join(' ');
+
+      if (result.success) {
+        await pool.query(
+          `UPDATE upload_records SET status='success', command=$1, output=$2, bv_id=$3, completed_at=NOW() WHERE id=$4`,
+          [cmdStr, result.output, result.bvId, recordId]
+        );
+        notify.uploadComplete(session.room_name, title, result.bvId, session.room_url);
+
+        await new Promise((r) => setTimeout(r, 10000));
+        const postResult = await afterUpload(
+          tmpl.after_upload,
+          files,
+          session.id,
+          tmpl.name,
+          recordId,
+          session.room_name,
+          session.room_url
+        );
+        if (postResult) {
+          const finalOutput = result.output + `\n--- 投稿后处理 ---\n${JSON.stringify(postResult)}`;
+          await pool.query(`UPDATE upload_records SET output=$1 WHERE id=$2`, [finalOutput, recordId]);
+        }
+      } else {
+        await pool.query(
+          `UPDATE upload_records SET status='failed', command=$1, output=$2, error_message=$3, completed_at=NOW() WHERE id=$4`,
+          [cmdStr, result.output, result.error, recordId]
+        );
+        await notify.uploadFailed(session.room_name, tmpl.name, title, result.error, session.room_url);
+      }
+
+      console.log(`[投稿] biliup 日志: ${result.logPath}`);
+    } catch (err) {
+      console.error(`[投稿] _runUpload 异常:`, err);
+      await pool
+        .query(`UPDATE upload_records SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2`, [
+          err.message,
+          recordId,
+        ])
+        .catch(() => {});
+    }
   }
 
   /**

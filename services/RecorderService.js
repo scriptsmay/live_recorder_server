@@ -304,7 +304,13 @@ class RecorderService {
       const recordingFiles = await DataService.getRecordingFiles({ sessionId });
 
       for (const file of recordingFiles) {
-        const stat = fs.statSync(file.file_path);
+        let stat;
+        try {
+          stat = fs.statSync(file.file_path);
+        } catch {
+          console.warn(`[finishSession] 文件不存在，跳过: ${file.file_path}`);
+          continue;
+        }
         if (stat.size < thresholdBytes) {
           try {
             fs.unlinkSync(file.file_path);
@@ -343,10 +349,10 @@ class RecorderService {
       await pool.query(
         `UPDATE recording_sessions
              SET ended_at = NOW(), status = $1,
-                 total_segments = 1,
-                 total_size = $2
-             WHERE id = $3 AND status = 'recording'`,
-        [sessionStatus, fileSize, sessionId]
+                 total_segments = $2,
+                 total_size = $3
+             WHERE id = $4 AND status = 'recording'`,
+        [sessionStatus, fileCount, fileSize, sessionId]
       );
     }
 
