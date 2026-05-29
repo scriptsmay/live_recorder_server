@@ -235,12 +235,23 @@ async function main() {
 
   const deletedTags = cleanupOldTags();
 
-  console.log('\n=== Release complete! ===');
-  console.log('Next steps:');
-  console.log(`  git push origin $(git rev-parse --abbrev-ref HEAD)`);
-  console.log(`  git push origin v${newVersion}`);
-  if (deletedTags.length) {
-    console.log(`  git push origin --delete ${deletedTags.join(' ')}`);
+  if (isAuto) {
+    console.log('\n--- Pushing to remote ---');
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+    runCommand(`git push origin ${branch}`);
+    runCommand(`git push origin v${newVersion}`);
+    if (deletedTags.length) {
+      runCommand(`git push origin --delete ${deletedTags.join(' ')}`);
+    }
+    console.log('\n=== Release complete! ===');
+  } else {
+    console.log('\n=== Release complete! ===');
+    console.log('Next steps:');
+    console.log(`  git push origin $(git rev-parse --abbrev-ref HEAD)`);
+    console.log(`  git push origin v${newVersion}`);
+    if (deletedTags.length) {
+      console.log(`  git push origin --delete ${deletedTags.join(' ')}`);
+    }
   }
 }
 
