@@ -70,7 +70,13 @@ NAS 上建议创建独立目录，例如：
 ## biliup
 
 镜像内已安装 Python、`uv`，并通过 `uv tool install biliup` 安装
-`biliup`。默认不需要设置 `BILIUP_PATH`。
+`biliup`。安装后会自动创建软链接到 `/usr/local/bin/biliup`。
+
+如果在容器内找不到 `biliup` 命令，可在 `docker-compose.yml` 中手动指定完整路径：
+
+```env
+BILIUP_PATH=/root/.local/share/uv/tools/biliup/bin/biliup
+```
 
 默认工作目录为 `/data/biliup`，宿主机对应 `./data/biliup`。建议将
 cookie 文件放在：

@@ -495,3 +495,28 @@ DouyuChecker.js           # 平台检查器（调用签名 + 请求流地址）
 2. **逆向加密 JS 是最后手段**：通过分析 minified JS 中的关键词（API 端点、参数名）定位变更点，比完整逆向高效
 3. **UA 一致性是隐性鉴权**：`enc_data` 绑定了 UA，两端必须一致——这类问题在文档中不会说明，只能通过对比实际请求发现
 4. **保留旧签名代码**：`douyu-vip.js` 虽然废弃，但保留作为参考，万一斗鱼恢复类似机制
+
+## Docker 容器中 biliup 投稿失败排查【已解决】
+
+### 现象
+
+自动投稿一直失败，biliup 日志无输出或报权限错误。
+
+### 排查过程
+
+1. **biliup 命令找不到**：`uv tool install biliup` 将二进制安装到 `/root/.local/share/uv/tools/biliup/bin/`，但容器以非 root 用户运行时 PATH 中没有此路径。通过 `BILIUP_PATH` 环境变量或创建 `/usr/local/bin/biliup` 软链接解决。
+
+2. **上传锁权限错误**：biliup（Rust 二进制）通过 `dirs::data_local_dir()` 获取锁文件目录，在 Linux 下返回 `$HOME/.local/share/biliup/locks/`。当容器使用 `gosu` 降权时，`HOME` 环境变量仍指向 `/root`，非 root 用户无权写入。
+
+3. **根本原因**：Dockerfile 中 `gosu` 降权方案与 biliup 的 Rust 二进制存在权限冲突——降权改变了进程 uid 但未改变 `HOME` 环境变量。
+
+### 最终方案
+
+去掉 `nodeuser` 和 `gosu`，容器以 root 运行。对于私有部署的录制服务，这是最简单可靠的方案。
+
+### 经验总结
+
+1. **`gosu` 降权不改变环境变量**：`gosu user cmd` 只改变 uid/gid，`HOME` 等环境变量需要手动设置
+2. **Rust 的 `dirs` crate 依赖 `HOME`**：不是从 `/etc/passwd` 读取，而是直接读 `HOME` 环境变量
+3. **`uv tool install` 安装位置取决于执行用户**：root 执行时装到 `/root/.local/share/uv/`，需要显式链接到全局 PATH
+4. **非 root 容器用户增加运维复杂度**：对于私有部署场景，收益不大但问题不少
