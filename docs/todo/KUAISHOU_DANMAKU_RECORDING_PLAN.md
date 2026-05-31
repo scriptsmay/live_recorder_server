@@ -33,7 +33,8 @@
 
 - 快手弹幕可行性验证脚本。
 - 录制会话内保存弹幕原始文件：`danmaku.jsonl`。
-- 生成 ASS 弹幕字幕：`danmaku.ass`。
+- 生成会话级 ASS 弹幕字幕：`danmaku.ass`。
+- 支持分段录制场景，为每个视频分段生成独立 ASS：`danmaku_segments/[recording_file_id].ass`。
 - 新增弹幕压制队列，默认并发 1，输出 `*_danmaku.mp4`。
 - 手动触发压制 API 和页面入口。
 - 可选自动压制：录制完成并完成必要转码后入队。
@@ -84,6 +85,7 @@
 - `ts_ms` 以当前录制会话开始时间为 0 点。
 - 连接断开重连后继续使用会话时间，避免弹幕整体偏移。
 - 录制恢复场景需要记录 `started_at` 和本地单调时间，防止系统时间跳变。
+- 不按视频分段拆分原始弹幕。原始弹幕只按会话保存一份，后续压制阶段再按视频分段裁剪，避免重连、续播、分段边界变化导致原始数据碎片化。
 
 ### 2. ASS 生成
 
@@ -120,7 +122,74 @@ ASS 生成规则：
 屏幕占用：上方 60%-70%
 ```
 
-### 3. 弹幕压制队列
+### 3. 分段录制适配
+
+当前系统几乎默认按 1 小时分段录制，弹幕方案必须把“会话弹幕时间轴”和“视频分段时间轴”拆开处理。
+
+核心原则：
+
+- `danmaku.jsonl` 是会话级文件，覆盖整个录制会话。
+- `danmaku.ass` 是会话级完整 ASS，主要用于预览、排查和重新裁剪。
+- 实际压制时不直接把完整 ASS 套到每个分段视频上，而是为每个 `recording_files` 记录生成一个分段 ASS。
+- 每个视频分段独立入队、独立压制、独立失败重试，队列全局并发仍然固定为 1。
+
+建议目录结构：
+
+```text
+VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/
+├── 20260531_200000.ts
+├── 20260531_210000.ts
+├── danmaku.jsonl
+├── danmaku.ass
+└── danmaku_segments/
+    ├── 101.ass                 # recording_files.id = 101
+    └── 102.ass
+```
+
+分段 ASS 生成流程：
+
+```text
+recording_files 按 segment_index / file_name 排序
+  ↓
+为每个视频分段计算 segment_start_ms / segment_end_ms
+  ↓
+从 danmaku.jsonl 筛选该时间窗口内的弹幕
+  ↓
+将弹幕时间减去 segment_start_ms，归一化到当前分段 0 点
+  ↓
+生成 danmaku_segments/[recording_file_id].ass
+  ↓
+按 recording_file_id 入 danmaku_burn_queue
+```
+
+分段时间计算优先级：
+
+1. 优先使用录制时记录的真实分段打开时间：`segment_start_ms` / `segment_end_ms`。
+2. 如果暂时没有真实时间，使用 `segment_index * segment_duration` 估算。1 小时分段时，第 0 段是 `0-3600000ms`，第 1 段是 `3600000-7200000ms`。
+3. 如果文件名由 FFmpeg `-strftime 1` 生成，且模板包含精确时间，可解析文件名时间并与会话 `started_at` 比较得到偏移。
+4. 最后兜底才按文件排序和 `ffprobe` 时长累加估算。
+
+注意：现有 `recording_files.started_at` / `ended_at` 不应直接作为分段真实起止时间。当前看门狗写入这些字段时，记录的是发现/入库时间，不一定等于 FFmpeg 开始写该分段的时间。
+
+建议为 `recording_files` 补充分段时间字段：
+
+```sql
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_start_ms INTEGER DEFAULT 0;
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0;
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT '';
+```
+
+分段压制输出规则：
+
+- 输入：每个原始分段或转码后的分段 MP4。
+- ASS：该分段对应的 `danmaku_segments/[recording_file_id].ass`。
+- 输出：同目录下 `原文件名_danmaku.mp4`。
+- 投稿：如果 `prefer_danmaku_burned_video=true`，投稿文件列表使用所有压制成功的 `*_danmaku.mp4`，并按 `segment_index` 排序；缺失压制产物时不自动混用原视频，除非用户明确允许。
+- HLS：弹幕压制成功后可为压制版单独生成 HLS；不要把 HLS 分片计入录制文件数。
+
+非分段录制是上述流程的特例：只有一个 `recording_files`，`segment_start_ms=0`，`segment_end_ms=视频时长`。
+
+### 4. 弹幕压制队列
 
 新增模块：
 
@@ -143,25 +212,25 @@ Redis Key：
 ```text
 录制结束
   ↓
-生成 danmaku.ass
+生成 danmaku.ass 和分段 ASS
   ↓
 如果 auto_transcode=true
-    等待普通转码完成，使用 MP4 作为压制输入
+    等待普通转码完成，逐个使用 MP4 分段作为压制输入
   否则
-    使用原始 TS/FLV 作为压制输入
+    逐个使用原始 TS/FLV 分段作为压制输入
   ↓
-入 danmaku_burn_queue
+每个 recording_file 入 danmaku_burn_queue
 ```
 
 失败处理：
 
 - 输入视频不存在：任务失败，记录错误。
-- `danmaku.ass` 不存在或为空：不入队，标记 skipped。
+- 分段 ASS 不存在或为空：不入队，标记 skipped。
 - FFmpeg 不支持 `subtitles/ass`：任务失败，并在日志中提示镜像缺少 libass。
 - 输出文件已存在：默认跳过；手动强制压制时允许覆盖。
 - 进程超时：按视频时长估算，建议 `max(30 分钟, 视频时长 * 4)`。
 
-### 4. FFmpeg 命令
+### 5. FFmpeg 命令
 
 CPU 编码兜底命令：
 
@@ -191,7 +260,7 @@ ffmpeg -i input.mp4 \
 - 即使使用硬件编码，字幕渲染本身仍可能走 CPU，性能需要实测。
 - Docker 镜像必须包含中文字体、fontconfig、libass；否则可能出现中文方块、字体错乱或滤镜不存在。
 
-### 5. 数据库设计
+### 6. 数据库设计
 
 新增表：`danmaku_capture_records`
 
@@ -218,6 +287,10 @@ CREATE TABLE IF NOT EXISTS danmaku_capture_records (
 CREATE TABLE IF NOT EXISTS danmaku_burn_records (
   id SERIAL PRIMARY KEY,
   session_id INTEGER,
+  recording_file_id INTEGER,
+  segment_index INTEGER DEFAULT 0,
+  segment_start_ms INTEGER DEFAULT 0,
+  segment_end_ms INTEGER DEFAULT 0,
   input_path VARCHAR(1024) NOT NULL,
   ass_path VARCHAR(1024) NOT NULL,
   output_path VARCHAR(1024) DEFAULT '',
@@ -236,6 +309,9 @@ CREATE TABLE IF NOT EXISTS danmaku_burn_records (
 ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burn_path VARCHAR(1024) DEFAULT '';
 ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS is_danmaku_burned BOOLEAN DEFAULT FALSE;
 ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP;
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT '';
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_start_ms INTEGER DEFAULT 0;
+ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0;
 ```
 
 新增 settings：
@@ -250,8 +326,9 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 | `danmaku_font_family`          | `Noto Sans CJK SC` | 弹幕字体                          |
 | `danmaku_font_size`            | `32`               | 1080p 默认字号                    |
 | `danmaku_opacity`              | `0.75`             | 弹幕不透明度                      |
+| `prefer_danmaku_burned_video`  | `false`            | 投稿/播放是否优先使用压制弹幕版本 |
 
-### 6. API 与页面
+### 7. API 与页面
 
 新增 API：
 
@@ -264,6 +341,7 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 页面改动：
 
 - `sessions` 页面增加“弹幕文件”“生成 ASS”“压制弹幕”操作。
+- 会话详情页按分段展示 `danmaku_ass_path`、`is_danmaku_burned` 和 `danmaku_burn_path`。
 - 新增或扩展 `transcode` 页面，展示弹幕压制队列和历史记录。
 - `settings` 页面增加弹幕录制与压制配置。
 
@@ -306,6 +384,7 @@ ls -l /dev/dri
 1. 10 分钟 720p。
 2. 10 分钟 1080p。
 3. 30 分钟 1080p。
+4. 2 小时 1080p，按 1 小时分段，验证两段弹幕裁剪和压制顺序。
 
 记录指标：
 
@@ -355,6 +434,7 @@ ls -l /dev/dri
 - 记录弹幕采集启动相对会话的偏移。
 - 支持手动设置 ASS 偏移量重新生成。
 - 在页面提供“弹幕时间偏移 ms”参数。
+- 分段录制时不要依赖看门狗入库时间作为分段起止时间；优先记录 FFmpeg 分段打开时间或从文件名/分段时长推导。
 
 ### 4. FFmpeg 和字体兼容
 
@@ -415,13 +495,14 @@ ls -l /dev/dri
 - 新增 ASS 生成器。
 - 支持手动重新生成 ASS。
 - 处理字符转义、密度限制、轨道分配、时间偏移。
+- 支持按 `recording_files` 分段裁剪生成独立 ASS。
 - 增加单元测试覆盖 ASS 转义和轨道分配。
 
 ### 阶段 3：弹幕压制队列（2-4 天）
 
 - 新增 `DanmakuBurnQueue` 和 `danmaku-burner`。
 - 新增 `danmaku_burn_records`。
-- 实现手动入队、状态更新、日志记录、失败清理。
+- 实现按分段手动入队、状态更新、日志记录、失败清理。
 - 在 NAS Docker 环境跑 720p/1080p 性能基准。
 
 ### 阶段 4：自动化与集成（1-3 天）
