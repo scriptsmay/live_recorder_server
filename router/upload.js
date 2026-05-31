@@ -127,7 +127,8 @@ router.post('/biliup/renew', async (req, res) => {
     }
 
     const tmpl = await DataService.getTemplates();
-    const row = tmpl.find((t) => t.id === template_id);
+    const templateId = parseInt(template_id, 10);
+    const row = tmpl.find((t) => t.id === templateId);
     if (!row) {
       return res.status(404).json({ status: 'Error', message: '模板不存在' });
     }
