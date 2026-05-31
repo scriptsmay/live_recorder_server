@@ -301,7 +301,8 @@ class RecorderService {
     let fileExists = false;
     let fileCount = 0;
     try {
-      const recordingFiles = await DataService.getRecordingFiles({ sessionId });
+      const recordingFiles = await DataService.getRecordingFiles({ session_id: sessionId });
+      console.log(`[finishSession] 会话 ${sessionId} 查询到 ${recordingFiles.length} 个录制文件记录`);
 
       for (const file of recordingFiles) {
         let stat;

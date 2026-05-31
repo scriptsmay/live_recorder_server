@@ -235,7 +235,8 @@ class DataService {
   }
 
   static async getRecordingFiles(options = {}) {
-    const { status, session_id } = options;
+    const { status } = options;
+    const sessionId = options.session_id ?? options.sessionId;
     const conditions = [];
     const params = [];
 
@@ -243,9 +244,9 @@ class DataService {
       conditions.push(`status = $${params.length + 1}`);
       params.push(status);
     }
-    if (session_id) {
+    if (sessionId) {
       conditions.push(`session_id = $${params.length + 1}`);
-      params.push(parseInt(session_id));
+      params.push(parseInt(sessionId, 10));
     }
 
     let sql = 'SELECT * FROM recording_files';
