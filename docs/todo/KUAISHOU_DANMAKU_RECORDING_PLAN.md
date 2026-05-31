@@ -26,6 +26,7 @@
 - Intel N100 支持 Intel Quick Sync Video，但 Docker 中是否可用取决于飞牛 NAS 主机驱动、容器 `/dev/dri` 透传、FFmpeg 编译参数和运行用户权限。参考：<https://www.intel.com/content/www/us/en/products/sku/231803/intel-processor-n100-6m-cache-up-to-3-40-ghz/specifications.html>
 - 当前系统已有 Redis 队列和 PostgreSQL 状态表，可复用 `TranscodeQueue` 的设计思路，但弹幕压制应独立成队列，避免重编码任务阻塞普通转码。
 - 当前录制输出目录结构为 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/`，弹幕产物应放入同一会话目录，便于备份、清理、投稿和排查。
+- 本地参考项目 `../completed_projects/biliup` 当前有快手直播录制插件 `biliup/plugins/kuaishou.py`，但未包含 `biliup/Danmaku/kuaishou.py` 或 Rust `crates/danmaku` 快手协议实现。其弹幕入口 `biliup/Danmaku/__init__.py` 只在注释中提到快手弹幕思路来源 `py-wuhao/ks_barrage`，可作为阶段 0 spike 的外部参考入口。
 
 ## 范围定义
 
@@ -472,6 +473,8 @@ ls -l /dev/dri
 ### 阶段 0：可行性验证（1-3 天）
 
 - 抓取快手直播页面网络请求，确认弹幕连接方式。
+- 参考 `../completed_projects/biliup/biliup/plugins/kuaishou.py` 复用其房间 ID 解析、首页低风控访问、`/live_api/liveroom/livedetail` 查询思路。
+- 参考 biliup `Danmaku/__init__.py` 注释中提到的 `py-wuhao/ks_barrage`，评估其快手弹幕协议是否仍可用。
 - 写独立脚本连接一个公开直播间，保存 10 分钟弹幕。
 - 验证匿名态、Cookie 态、重连、心跳和消息解析。
 - 输出 spike 结论：可稳定实现 / 需要登录态 / 不建议实现。
