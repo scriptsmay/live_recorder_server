@@ -26,10 +26,12 @@
 
 **滚动切割策略**：
 
-- 单个文件最大 50MB
-- 最多保留 5 个备份文件
-- 备份文件命名：`access.1.log`, `access.2.log`, ..., `access.5.log`
-- 超过备份数时自动删除最旧文件
+- 单个当前日志文件最大 10MB
+- 当前日志固定写入 `access.log` / `server.log`
+- 日期变更时归档为 `access.YYYY-MM-DD.log` / `server.YYYY-MM-DD.log`
+- 同一天超过大小限制时归档为 `access.YYYY-MM-DD.N.log` / `server.YYYY-MM-DD.N.log`
+- 每天最多保留 5 个大小备份，超过备份数时自动删除最旧文件
+- 轮转模块会清理超过 30 天的同类日期归档日志
 
 ### 2.2 代码位置
 
@@ -41,8 +43,8 @@
 
 **已有能力**：
 
-- `access.log`：生产环境和开发环境都会写入，带轮转（50MB × 5 个备份）
-- `server.log`：**仅在生产环境写入**（`NODE_ENV=production`），开发环境不生成
+- `access.log`：生产环境和开发环境都会写入，带日期+大小双维度轮转
+- `server.log`：**仅在生产环境写入**（`NODE_ENV=production`），带日期+大小双维度轮转
 - 进程日志（ffmpeg/biliup）：通过 `lib/utils/proc-log.js` 记录到 `logs/` 目录，格式 `{进程名}_{会话ID}.log`
 - `/logs` 页面可读取最后 2000 行，并支持 SSE 实时查看
 
@@ -271,7 +273,7 @@ class LogCleanupService {
 
 **暂缓理由**：
 
-- 现有 `access.log` 单文件 50MB 轮转，进程日志也有 10MB 左右的保护
+- 现有 `access.log` / `server.log` 单文件 10MB 轮转，进程日志也有 10MB 左右的保护
 - 后端只返回 tail 或按字节分页，前端不会真的需要渲染 100MB+
 - 自研虚拟滚动的维护成本不低，收益暂时不够
 - 不符合「保持轻量」的设计原则
