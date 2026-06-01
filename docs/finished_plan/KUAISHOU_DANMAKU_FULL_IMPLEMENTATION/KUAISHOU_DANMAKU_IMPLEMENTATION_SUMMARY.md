@@ -50,13 +50,13 @@
 
 ### chrome_live_listener 改动（5 个任务）
 
-| 任务    | 文件                | 说明                                              |
-| ------- | ------------------- | ------------------------------------------------- |
+| 任务    | 文件                | 说明                                                   |
+| ------- | ------------------- | ------------------------------------------------------ |
 | T1-CE-1 | `inject.js`         | monkey-patch WebSocket，拦截二进制 protobuf 消息并解码 |
-| T1-CE-2 | `danmaku-parser.js` | 解析 commentFeeds/giftFeeds 为标准事件格式        |
-| T1-CE-3 | `content.js`        | postMessage 转发链路（inject.js → background.js） |
-| T1-CE-4 | `background.js`     | 5 秒批量缓冲 + POST /api/danmaku/batch            |
-| T1-CE-5 | `config.js`         | 弹幕 API 路径配置                                 |
+| T1-CE-2 | `danmaku-parser.js` | 解析 commentFeeds/giftFeeds 为标准事件格式             |
+| T1-CE-3 | `content.js`        | postMessage 转发链路（inject.js → background.js）      |
+| T1-CE-4 | `background.js`     | 5 秒批量缓冲 + POST /api/danmaku/batch                 |
+| T1-CE-5 | `config.js`         | 弹幕 API 路径配置                                      |
 
 **payload 格式验证结果**：SC_FEED_PUSH 的 payload 为 Protobuf binary（非 JSON），inject.js 内置零依赖的 protobuf wire format 解码器（~150 行），支持 varint 编码、嵌套消息递归解析和 UTF-8 字符串检测。
 
@@ -294,14 +294,14 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 
 ### chrome_live_listener
 
-| 文件                | 类型 | 说明                                      |
-| ------------------- | ---- | ----------------------------------------- |
+| 文件                | 类型 | 说明                                           |
+| ------------------- | ---- | ---------------------------------------------- |
 | `inject.js`         | 新增 | WebSocket hook + protobuf 解码 + 弹幕/礼物提取 |
 | `danmaku-parser.js` | 新增 | 弹幕标准化与过滤工具模块                       |
-| `content.js`        | 修改 | postMessage 转发链路                      |
-| `background.js`     | 修改 | 5 秒批量缓冲 + POST /api/danmaku/batch    |
-| `config.js`         | 修改 | 弹幕 API 路径                             |
-| `manifest.json`     | 修改 | web_accessible_resources 声明             |
+| `content.js`        | 修改 | postMessage 转发链路                           |
+| `background.js`     | 修改 | 5 秒批量缓冲 + POST /api/danmaku/batch         |
+| `config.js`         | 修改 | 弹幕 API 路径                                  |
+| `manifest.json`     | 修改 | web_accessible_resources 声明                  |
 
 ### 测试文件
 

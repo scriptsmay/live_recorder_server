@@ -147,8 +147,8 @@ class DataService {
     await Promise.all(
       result.rows.map((row) => {
         if (row.danmaku_raw_path && require('fs').existsSync(row.danmaku_raw_path)) {
-          return require('fs').promises
-            .readFile(row.danmaku_raw_path, 'utf-8')
+          return require('fs')
+            .promises.readFile(row.danmaku_raw_path, 'utf-8')
             .then((content) => {
               row.danmaku_event_count = content.split('\n').filter(Boolean).length;
             })

@@ -291,7 +291,13 @@ describe('DanmakuBurner — burn() 前置检查', () => {
 
     // 强制缓存为无 libass
     const origCaps = DanmakuBurner._capabilities;
-    DanmakuBurner._capabilities = { subtitlesFilter: false, qsvEncoder: false, vaapiEncoder: false, libx264: true, fontconfig: false };
+    DanmakuBurner._capabilities = {
+      subtitlesFilter: false,
+      qsvEncoder: false,
+      vaapiEncoder: false,
+      libx264: true,
+      fontconfig: false,
+    };
 
     const result = await DanmakuBurner.burn({
       inputPath: input,
@@ -315,7 +321,13 @@ describe('DanmakuBurner — burn() 成功', () => {
   beforeAll(() => {
     ensureTmp();
     // 预设缓存能力值，避免 burn() 内部 probeCapabilities 触发额外 spawn
-    DanmakuBurner._capabilities = { subtitlesFilter: true, qsvEncoder: true, vaapiEncoder: false, libx264: true, fontconfig: true };
+    DanmakuBurner._capabilities = {
+      subtitlesFilter: true,
+      qsvEncoder: true,
+      vaapiEncoder: false,
+      libx264: true,
+      fontconfig: true,
+    };
   });
 
   beforeEach(() => {
@@ -464,7 +476,13 @@ describe('DanmakuBurner — burn() 成功', () => {
 describe('DanmakuBurner — burn() 失败', () => {
   beforeAll(() => {
     ensureTmp();
-    DanmakuBurner._capabilities = { subtitlesFilter: true, qsvEncoder: false, vaapiEncoder: false, libx264: true, fontconfig: false };
+    DanmakuBurner._capabilities = {
+      subtitlesFilter: true,
+      qsvEncoder: false,
+      vaapiEncoder: false,
+      libx264: true,
+      fontconfig: false,
+    };
   });
 
   beforeEach(() => {

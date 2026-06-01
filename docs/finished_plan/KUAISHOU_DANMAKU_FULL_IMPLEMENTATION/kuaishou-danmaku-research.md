@@ -288,10 +288,10 @@ https://captcha.zt.kuaishou.com/iframe/index.html?captchaSession=...
 
 ## 8. 与 Bilibili 弹幕方案对比
 
-| 维度         | Bilibili                     | 快手                                         |
-| ------------ | ---------------------------- | -------------------------------------------- |
+| 维度         | Bilibili                     | 快手                                                         |
+| ------------ | ---------------------------- | ------------------------------------------------------------ |
 | 协议         | WebSocket + Protobuf（全量） | WebSocket + Protobuf binary（全量，2026-06-01 实机验证确认） |
-| 认证         | 需要 token（游客可获取）     | 需要 token（有反爬保护）                     |
-| 反爬         | 较弱，可直接调用 API         | 较强，`__NS_hxfalcon` + 验证码               |
-| 弹幕获取难度 | 低                           | 中高                                         |
-| 推荐接入方式 | 直接 WebSocket 连接          | Chrome Extension 转发                        |
+| 认证         | 需要 token（游客可获取）     | 需要 token（有反爬保护）                                     |
+| 反爬         | 较弱，可直接调用 API         | 较强，`__NS_hxfalcon` + 验证码                               |
+| 弹幕获取难度 | 低                           | 中高                                                         |
+| 推荐接入方式 | 直接 WebSocket 连接          | Chrome Extension 转发                                        |
