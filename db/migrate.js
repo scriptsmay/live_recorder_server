@@ -91,6 +91,16 @@ async function runMigration() {
     `);
 
     await client.query(`
+      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS is_hls_ready BOOLEAN DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS hls_playlist_path VARCHAR(1024) DEFAULT ''
+    `);
+    await client.query(`
+      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS hls_generated_at TIMESTAMP
+    `);
+
+    await client.query(`
       ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS caption VARCHAR(1024) DEFAULT ''
     `);
 
@@ -222,6 +232,27 @@ async function runMigration() {
     `);
 
     await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS is_hls_ready BOOLEAN DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_playlist_path VARCHAR(1024) DEFAULT ''
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_generated_at TIMESTAMP
+    `);
+
+    // 添加 recordings 表缺少的字段到 recording_files 表
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_index INTEGER DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS duration_seconds INTEGER DEFAULT 0
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         id SERIAL PRIMARY KEY,
         key VARCHAR(255) UNIQUE NOT NULL,
@@ -267,7 +298,11 @@ async function runMigration() {
       ['max_resume_retries', '3'],
       ['auto_transcode', 'true'],
       ['transcode_delete_originals', 'true'],
-      ['transcode_concurrency', '1'],
+      ['transcode_concurrency', '3'],
+      ['auto_generate_hls', 'true'],
+      ['hls_enabled', 'true'],
+      ['hls_segment_duration', '10'],
+      ['hls_cleanup_days', '30'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

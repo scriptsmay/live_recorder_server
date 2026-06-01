@@ -1,45 +1,37 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const DataService = require('../services/DataService');
+const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 
-// 日志目录
-const logsDir = path.join(__dirname, '../logs');
-const { LOG_ERR_HTML } = require('../config/template');
-const md = require('../lib/utils/markdown');
+// const md = require('../lib/utils/markdown');
 
-// 当访问根路径时，重定向
 router.get('/', (req, res) => {
   res.redirect('/dashboard');
 });
 
-router.get('/dashboard', (req, res) => {
-  res.render('dashboard', { title: '仪表盘' });
-});
-
-router.get('/rooms', async (req, res) => {
+router.get('/dashboard', async (req, res) => {
   try {
-    const [{ rows: rooms }, templates, { map: settingsMap }] = await Promise.all([
-      DataService.getRooms(),
-      DataService.getTemplates(),
-      DataService.getSettings(),
+    const [rooms, sessions, uploadRecords] = await Promise.all([
+      DataService.getRoomList(),
+      DataService.getSessions({ limit: 10 }),
+      DataService.getUploadRecords({ limit: 20 }),
     ]);
-    const downloader = settingsMap.downloader || 'ffmpeg';
-    res.render('rooms', {
-      title: '直播间管理',
+
+    res.render('dashboard', {
+      title: '仪表盘',
       rooms,
-      templates,
-      downloader,
+      recentSessions: sessions.rows || sessions,
+      recentUploads: uploadRecords.rows || uploadRecords,
     });
   } catch (err) {
-    console.error('[html] 直播间页加载失败:', err);
-    res.status(500).render('rooms', {
-      title: '直播间管理',
+    console.error('[html] 仪表盘加载失败:', err);
+    res.status(500).render('dashboard', {
+      title: '仪表盘',
       rooms: [],
-      templates: [],
-      downloader: 'ffmpeg',
+      recentSessions: [],
+      recentUploads: [],
     });
   }
 });
@@ -47,26 +39,34 @@ router.get('/rooms', async (req, res) => {
 router.get('/sessions', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
-    const [sessions, uploadRecords, rooms, templates] = await Promise.all([
-      DataService.getSessions({ room_url: roomFilter }),
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const [sessionsResult, uploadResult, rooms, templates] = await Promise.all([
+      DataService.getSessions({ room_url: roomFilter, page, limit }),
       DataService.getUploadRecords({ limit: 200 }),
       DataService.getRoomList(),
       DataService.getTemplates(),
     ]);
 
     const uploadMap = {};
-    for (const u of uploadRecords) {
+    for (const u of uploadResult.rows) {
       if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
       uploadMap[u.session_id].push(u);
     }
 
+    const totalPages = Math.ceil(sessionsResult.total / limit);
+
+    const downloader = getActiveDownloader().name;
     res.render('sessions', {
       title: '录制会话',
-      sessions,
+      sessions: sessionsResult.rows,
+      downloader,
       uploadMap,
       rooms,
       templates,
       currentRoomUrl: roomFilter,
+      pagination: { page, limit, total: sessionsResult.total, totalPages },
     });
   } catch (err) {
     console.error('[html] 会话页加载失败:', err);
@@ -77,80 +77,107 @@ router.get('/sessions', async (req, res) => {
       rooms: [],
       templates: [],
       currentRoomUrl: '',
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
     });
   }
 });
 
-router.get('/templates', async (req, res) => {
+router.get('/rooms', async (req, res) => {
   try {
-    const templates = await DataService.getTemplates();
-    res.render('templates', { title: '投稿模板', templates });
-  } catch (err) {
-    console.error('[html] 模板页加载失败:', err);
-    res.status(500).render('templates', { title: '投稿模板', templates: [] });
-  }
-});
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
 
-router.get('/upload_records', async (req, res) => {
-  try {
-    const [records, templates] = await Promise.all([
-      DataService.getUploadRecords({ limit: 100 }),
+    const [{ rows: rooms, total }, templates, { map: settingsMap }] = await Promise.all([
+      DataService.getRooms({ page, limit }),
       DataService.getTemplates(),
+      DataService.getSettings(),
     ]);
-
-    res.render('upload_records', {
-      title: '投稿记录',
-      records,
+    const downloader = settingsMap.downloader || getActiveDownloader().name;
+    const totalPages = Math.ceil(total / limit);
+    res.render('rooms', {
+      title: '直播间管理',
+      rooms,
       templates,
+      downloader,
+      pagination: { page, limit, total, totalPages },
     });
   } catch (err) {
-    console.error('[html] 投稿记录页加载失败:', err);
-    res.status(500).render('upload_records', { title: '投稿记录', records: [], templates: [] });
+    console.error('[html] 直播间页加载失败:', err);
+    res.status(500).render('rooms', {
+      title: '直播间管理',
+      rooms: [],
+      templates: [],
+      downloader: 'FFmpegDownloader',
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 
 router.get('/transcode', async (req, res) => {
   try {
-    const records = await DataService.getTranscodeRecords({ limit: 100 });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
+
+    const result = await DataService.getTranscodeRecords({ page, limit });
+    const totalPages = Math.ceil(result.total / limit);
     res.render('transcode', {
       title: '转码记录',
-      records,
+      records: result.rows,
+      pagination: { page, limit, total: result.total, totalPages },
     });
   } catch (err) {
     console.error('[html] 转码记录页加载失败:', err);
-    res.status(500).render('transcode', { title: '转码记录', records: [] });
+    res.status(500).render('transcode', {
+      title: '转码记录',
+      records: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 
 router.get('/recordings', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
 
-    const [recordings, rooms] = await Promise.all([
+    const [result, rooms] = await Promise.all([
       DataService.getRecordings({
         room_url: roomFilter,
+        page,
+        limit,
       }),
       DataService.getRoomList(),
     ]);
+
+    const totalPages = Math.ceil(result.total / limit);
     res.render('recordings', {
       title: '录制历史',
-      recordings,
+      recordings: result.rows,
       rooms,
       roomFilter,
+      pagination: {
+        page,
+        limit,
+        total: result.total,
+        totalPages,
+      },
     });
   } catch (err) {
     console.error('[html] 录制历史页加载失败:', err);
-    res.status(500).render('recordings', { title: '录制历史', recordings: [], rooms: [], roomFilter: '' });
+    res.status(500).render('recordings', {
+      title: '录制历史',
+      recordings: [],
+      rooms: [],
+      roomFilter: '',
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 
 router.get('/_/rooms/table', async (req, res) => {
   const { rows: rooms } = await DataService.getRooms();
   res.render('partials/_rooms_table', { rooms, layout: false });
-});
-
-router.get('/files', (req, res) => {
-  res.render('files', { title: '文件管理' });
 });
 
 router.get('/settings', async (req, res) => {
@@ -165,81 +192,46 @@ router.get('/settings', async (req, res) => {
 
 router.get('/apiview', (req, res) => {
   const mdPath = path.join(__dirname, '..', 'docs', 'API.md');
-  let content = '';
-  try {
-    const raw = fs.readFileSync(mdPath, 'utf-8');
-    content = md.render(raw);
-  } catch (_) {
-    content = '<div class="alert alert-danger">无法加载 API.md 文档</div>';
-  }
-  res.render('apiview', {
-    title: 'API 文档',
-    apiContent: content,
-  });
+  let content = fs.readFileSync(mdPath, 'utf-8');
+  // try {
+  //   const raw = fs.readFileSync(mdPath, 'utf-8');
+  //   // content = md.render(raw);
+  //   content = raw;
+  // } catch (_) {
+  //   content = '<div class="alert alert-danger">无法加载 API.md 文档</div>';
+  // }
+  res.render('apiview', { title: 'API 文档', content });
 });
 
-// 路由：查看 logs 目录下的 .log 文件
-router.get('/logs', async (req, res) => {
+router.get('/templates', async (req, res) => {
   try {
-    // 如果没有 logsDir 这个目录，则创建它
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir);
-    }
-    // 获取目录中的文件列表
-    const files = fs.readdirSync(logsDir);
-    const logFiles = files.filter((file) => file.endsWith('.log'));
-
-    // 获取查询参数 ?file=xxx.log
-    const requestedFile = req.query.file;
-    let selectedFileContent = '';
-    let selectedFileName = '';
-
-    if (requestedFile && logFiles.includes(requestedFile)) {
-      const filePath = path.join(logsDir, requestedFile);
-      selectedFileContent = fs.readFileSync(filePath, 'utf-8');
-      selectedFileName = requestedFile;
-    }
-
-    // 返回 HTML 页面展示日志文件列表和内容
-    res.render('logs', {
-      logFiles,
-      selectedFileName,
-      selectedFileContent,
-    });
+    const templates = await DataService.getTemplates();
+    res.render('templates', { title: '投稿模板', templates });
   } catch (err) {
-    console.error(err);
-    res.status(500).send(LOG_ERR_HTML);
+    console.error('[html] 模板页加载失败:', err);
+    res.status(500).render('templates', { title: '投稿模板', templates: [] });
   }
 });
 
-// 路由：删除指定名称的日志文件
-router.get('/logs/delete', async (req, res) => {
+router.get('/upload_records', async (req, res) => {
   try {
-    // 获取目录中的文件列表
-    const files = fs.readdirSync(logsDir);
-    const logFiles = files.filter((file) => file.endsWith('.log'));
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = 50;
 
-    // 获取查询参数 ?file=xxx.log
-    const requestedFile = req.query.file;
-
-    if (!requestedFile || !logFiles.includes(requestedFile)) {
-      return res.status(400).send(LOG_ERR_HTML);
-    }
-
-    const filePath = path.join(logsDir, requestedFile);
-
-    // 删除日志文件
-    fs.unlink(filePath, (err) => {
-      if (err) {
-        console.error(`无法删除文件: ${err.message}`);
-        return res.status(500).send(LOG_ERR_HTML);
-      }
-      console.log(`文件 ${requestedFile} 已成功删除`);
-      res.redirect('/logs'); // 删除完成后重定向回日志页面
+    const result = await DataService.getUploadRecords({ page, limit });
+    const totalPages = Math.ceil(result.total / limit);
+    res.render('upload_records', {
+      title: '投稿记录',
+      records: result.rows,
+      pagination: { page, limit, total: result.total, totalPages },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).send(LOG_ERR_HTML);
+    console.error('[html] 投稿记录页加载失败:', err);
+    res.status(500).render('upload_records', {
+      title: '投稿记录',
+      records: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    });
   }
 });
 

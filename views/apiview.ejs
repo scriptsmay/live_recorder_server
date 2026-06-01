@@ -1,1 +1,125 @@
-<div class="markdown-content"><%- apiContent %></div>
+<!-- Markdown 解析器 -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Tocbot CSS & JS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tocbot/4.25.0/tocbot.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tocbot/4.25.0/tocbot.min.js"></script>
+
+<div class="container-fluid">
+  <div class="row">
+    <!-- 左侧：Markdown 内容区 -->
+    <div class="col-lg-8">
+      <div id="markdown-content" class="js-toc-content markdown-content">
+        <!-- marked.js 会将 HTML 渲染到这里 -->
+      </div>
+    </div>
+
+    <!-- 右侧：大纲目录区 -->
+    <div class="col-lg-4 d-none d-lg-block">
+      <div class="position-sticky" style="top: 2rem">
+        <h5 class="mb-3">📑 目录</h5>
+        <nav class="js-toc px-4"></nav>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- markdown 内容 -->
+<script type="text/markdown" id="raw-md">
+  <%- content %>
+</script>
+
+<script>
+  // 1. 从刚才的 script 标签中获取纯净的 Markdown 文本
+  const mdText = document.getElementById('raw-md').textContent;
+
+  // 2. 使用 marked 渲染 Markdown 到内容区
+  const contentEl = document.getElementById('markdown-content');
+  contentEl.innerHTML = marked.parse(mdText);
+
+  // ==========================================
+  // [新增] 3. 为生成的原生 HTML 自动添加 Bootstrap 类
+  // ==========================================
+
+  // 3.1 美化表格 (添加 table, table-bordered 等类，并包裹响应式 div)
+  contentEl.querySelectorAll('table').forEach((table) => {
+    table.classList.add('table', 'table-striped', 'table-hover');
+
+    // 给表格外面套一层 div 实现移动端横向滚动 (Bootstrap 的 .table-responsive)
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-responsive my-3';
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+
+  // 3.2 美化引用块 (Blockquote)
+  contentEl.querySelectorAll('blockquote').forEach((bq) => {
+    // 使用 Bootstrap 的边框和背景色工具类，做出左侧带竖线的提示框效果
+    bq.classList.add('blockquote', 'border-start', 'border-4', 'border-primary', 'ps-3', 'bg-light', 'py-2', 'fs-6');
+  });
+
+  // 3.3 美化图片
+  contentEl.querySelectorAll('img').forEach((img) => {
+    img.classList.add('img-fluid', 'rounded', 'shadow-sm', 'my-3');
+  });
+
+  // ==========================================
+  // [新增] 处理标题、段落、列表和水平线的边距
+  // ==========================================
+
+  // 1. 处理标题 (对应你的 h2, h3, h4 需求)
+  contentEl.querySelectorAll('h1').forEach((h1) => {
+    h1.classList.add('mb-3', 'border-bottom', 'pb-2'); // h1 往往加个下划线更好看
+  });
+  contentEl.querySelectorAll('h2').forEach((h2) => {
+    h2.classList.add('mt-4', 'mb-2');
+  });
+  contentEl.querySelectorAll('h3').forEach((h3) => {
+    h3.classList.add('mt-3', 'mb-2');
+  });
+
+  // 2. 处理水平线 (对应你的 ---)
+  contentEl.querySelectorAll('hr').forEach((hr) => {
+    hr.classList.add('my-4', 'text-muted');
+  });
+
+  // 3. 处理列表 (marked.js 会自动生成标准的 <ul> 和 <li>，比用 <p> 好得多)
+  contentEl.querySelectorAll('ul, ol').forEach((list) => {
+    list.classList.add('mb-3', 'ps-4'); // ps-4 保证列表缩进
+  });
+  contentEl.querySelectorAll('li').forEach((li) => {
+    li.classList.add('mb-1'); // 对应你代码里的 mb-1
+  });
+
+  // 4. 处理普通段落
+  contentEl.querySelectorAll('p').forEach((p) => {
+    // 避免给已经被处理过的 p 标签重复加样式
+    if (!p.className) {
+      p.classList.add('mb-3', 'text-break'); // text-break 防止长 URL 撑爆屏幕
+    }
+  });
+
+  // ==========================================
+
+  // 4. 为 h1, h2, h3 自动生成 id (给 Tocbot 用)
+  const headings = contentEl.querySelectorAll('h1, h2, h3');
+  headings.forEach((heading) => {
+    if (!heading.id) {
+      heading.id = heading.textContent.trim().replace(/\s+/g, '-');
+    }
+  });
+
+  // 5. 初始化 Tocbot
+  tocbot.init({
+    // 大纲渲染的目标容器 (对应右侧的 nav.js-toc)
+    tocSelector: '.js-toc',
+    // 需要扫描的内容容器 (对应左侧的 div.js-toc-content)
+    contentSelector: '.js-toc-content',
+    // 提取哪些标题作为大纲
+    headingSelector: 'h1, h2, h3',
+    // 对于没有 id 的标题，自动为其生成 id (锚点)
+    collapseDepth: 6, // 默认展开层级
+    scrollSmooth: true, // 开启平滑滚动
+    scrollSmoothDuration: 420,
+    headingsOffset: 80, // 偏移量，防止被顶部导航栏遮挡
+  });
+</script>

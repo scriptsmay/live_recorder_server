@@ -75,7 +75,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 ## 1. 会话生命周期
 
-**会话的文件列表以 `recording_files` 表为数据源**（而非 `recordings` 表）。`recording_files` 跟踪实际磁盘文件，`recordings` 仅为元数据表供流媒体播放等下游使用。
+**会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
 
 ```
                       ┌── 新录制请求 ──────────────────┐
@@ -86,10 +86,10 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
               │  (recording) │◄────────────────────────┘
               │              │
               │  看门狗实时   │── 每 30s ──→ scanActiveSegments()
-              │  追踪分片     │             写入 recording_files + recordings
+              │  追踪分片     │             写入 recording_files
               │              │
               │  GET /api    │── 会话详情直接查询 recording_files
-              │  /sessions   │   （不查 recordings 表）
+              │  /sessions   │
               └──────┬───────┘
                      │
         ┌────────────┼────────────┐
@@ -167,7 +167,6 @@ FFmpeg 写入分段文件(.flv)
         ▼
   [1] scanActiveSegments (看门狗 30s 周期)
       → 发现新 .flv，写入 recording_files (completed)
-      → 写入 recordings
       → 更新 session total_segments + 1
 
   [2] close handler (进程退出时)
@@ -180,7 +179,7 @@ FFmpeg 写入分段文件(.flv)
   [3] TranscodeQueue (异步转码)
       → 从 Redis 队列取出任务(并发3)
       → ffmpeg -i input.flv -c copy output.mp4
-      → 更新 recording_files 和 recordings 表路径
+      → 更新 recording_files 表路径
       → 删除原 FLV 文件(如果配置了 transcode_delete_originals=true)
 ```
 
@@ -207,8 +206,14 @@ FFmpeg 写入分段文件(.flv)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
 - 支持网络重连：`-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`
-- 用户代理伪装：避免被 CDN 403 拦截
+- 用户代理伪装：通过 `lib/core/config/userAgents.js` 配置化，避免被 CDN 403 拦截
 - 协议白名单：`-protocol_whitelist rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy`
+- **流类型自动检测**：支持 FLV 和 HLS/m3u8 两种流格式
+  - URL 特征检测（`.m3u8`、`.flv`、`/hls/`、`/flv/` 路径）
+  - HTTP 头检测（Content-Type + 响应体 `#EXTM3U` 标记）
+  - `detectStreamType(url)` 异步方法供外部预检
+  - `buildArgs()` 根据 `streamType` 选项选择参数策略
+- **HLS 专用参数**：更长超时（60s）、`-live_start_index -1`、`-avoid_negative_ts make_zero`、协议白名单含 `hls`
 
 ---
 
@@ -309,13 +314,13 @@ await transcodeQueue.getCurrentProcessingCount();
 | `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`） |
 | `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件        |
 
-### 不属于看门狗（但在 `app.js` 启动时运行）
+### 不属于看门狗（但在 `app.js` 启动时通过 `lifecycle.js` 运行）
 
-| 函数                       | 所在文件            | 触发       | 职责                                                       |
-| -------------------------- | ------------------- | ---------- | ---------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `app.js`            | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
-| `cleanupStaleRedis()`      | `app.js`            | 启动       | 清理 Redis 过期 `active_task:*`                            |
-| `scanRecordingFiles()`     | `lib/scan-files.js` | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
+| 函数                       | 所在文件                | 触发       | 职责                                                       |
+| -------------------------- | ----------------------- | ---------- | ---------------------------------------------------------- |
+| `cleanupStaleRecordings()` | `lib/core/lifecycle.js` | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
+| `cleanupStaleRedis()`      | `lib/core/lifecycle.js` | 启动       | 清理 Redis 过期 `active_task:*`                            |
+| `scanRecordingFiles()`     | `lib/scan-files.js`     | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
 
 ### 周期性执行链
 
@@ -333,13 +338,14 @@ watchdog.start()
 ### 启动时执行链（非周期）
 
 ```
-startup()
-  ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
-  ├─ cleanupStaleRedis()            ← 清理 Redis 过期 active_task
-  ├─ cleanupStaleRecordings()       ← 重命名 .part、恢复会话
-  ├─ transcodeQueue.init()          ← 初始化转码队列(加载并发配置)
-  ├─ pollingManager.start()         ← 启动轮询管理器(加载 polling_enabled 房间)
-  └─ watchdog.start()               ← 启动看门狗
+app.js
+  └─ bootstrap()
+       ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
+       ├─ cleanupStaleRedis()             ← 清理 Redis 过期 active_task
+       ├─ cleanupStaleRecordings()        ← 重命名 .part、恢复会话
+       ├─ transcodeQueue.init()           ← 初始化转码队列(加载并发配置)
+       ├─ watchdog.start()                ← 启动看门狗
+       └─ pollingManager.start()          ← 启动轮询管理器(加载 polling_enabled 房间)
 ```
 
 ### checkStaleRecordings()
@@ -358,7 +364,7 @@ startup()
 ### scanActiveSegments()
 
 - 同步 `fs.readdirSync` + `fs.statSync` 扫描所有活跃录制房间的输出目录
-- 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + recordings + 更新 session 合计
+- 发现未追踪的 `.flv`/`.mp4` → 写入 recording_files + 更新 session 合计
 - **mtime 稳定期**：文件最近 2 分钟内有修改则跳过（防止标记还在写入的当前分段）
 - 小于 `filtering_threshold` 的碎片跳过不追踪
 
@@ -367,7 +373,7 @@ startup()
 - 同步 `fs.readdirSync` + `fs.statSync` 扫描整个 `VIDEO_DOWNLOAD_DIR`
 - 找到小于 `filtering_threshold` 的 `.flv`/`.mp4` 文件
 - 跳过创建不足 2 分钟的新文件（防止误删刚完成的分片），跳过刚由 `.part` 重命名而来的文件
-- 删除磁盘文件 + 关联的 `recordings` + `recording_files` 记录
+- 删除磁盘文件 + 关联的 `recording_files` 记录
 - 更新 session 合计
 
 ### syncMissingFiles()
@@ -390,20 +396,40 @@ startup()
 ```
 PollingManager (单例)
 ├── CHECKERS 注册表
-│   ├── huya  → HuyaChecker  (mp.huya.com/cache.php)
-│   ├── douyu → (待实现)
-│   └── ...
+│   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
+│   ├── bilibili → BilibiliChecker (api.live.bilibili.com)
+│   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
+│   │                          signers/douyu.js (完整签名 + 单飞机制)
+│   │                          signers/douyu-vip.js (VIP房间 JS 签名)
+│   └── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
 ```
 
 ### PlatformChecker 基类
 
-| 方法                       | 说明                                               |
-| -------------------------- | -------------------------------------------------- |
-| `static getPlatformId()`   | 平台标识符，如 `'huya'`                            |
-| `static canHandleUrl(url)` | 判断 URL 是否属于本平台                            |
-| `async checkStatus()`      | 返回 `{ isLive, roomName, roomTitle, streamInfo }` |
+| 方法                              | 说明                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| `static getPlatformId()`          | 平台标识符，如 `'huya'`                                                          |
+| `static canHandleUrl(url)`        | 判断 URL 是否属于本平台                                                          |
+| `static fetchJson()`              | 统一 HTTP GET 请求（JSON，含超时、UA、错误处理）                                 |
+| `static fetchText()`              | 统一 HTTP GET 请求（Text，用于 HTML 解析）                                       |
+| `static normalizeResult()`        | 补齐默认字段，返回统一格式                                                       |
+| `static extractLastPathSegment()` | 提取 URL 路径最后一段（房间号）                                                  |
+| `async checkStatus()`             | 返回 `{ isLive, recordable, roomName, roomTitle, streamUrl, streamInfo, error }` |
+
+### 统一返回规范
+
+| 字段         | 必填 | 说明                                                       |
+| ------------ | ---- | ---------------------------------------------------------- |
+| `isLive`     | 是   | 是否开播（主播正在直播）                                   |
+| `recordable` | 否   | 是否可录制，默认 `true`；设为 `false` 表示开播但无法获取流 |
+| `roomName`   | 否   | 主播名或房间名                                             |
+| `roomTitle`  | 否   | 直播标题                                                   |
+| `roomCover`  | 否   | 封面地址                                                   |
+| `streamUrl`  | 否   | FFmpeg 可录制地址；不可录制时返回 `null`                   |
+| `streamInfo` | 否   | 平台、画质、CDN、原始接口字段摘要                          |
+| `error`      | 否   | 非致命错误说明（如签名失败、不可录制类型）                 |
 
 ### HuyaChecker 实现要点
 
@@ -412,13 +438,33 @@ PollingManager (单例)
 - 流地址构建：`{sFlvUrl}/{streamName}.{sFlvUrlSuffix}?{sFlvAntiCode}`
 - **去掉 `-imgplus`**：移动端 anticode 会导致 ffmpeg ~6 秒断连
 
+### BilibiliChecker 实现要点
+
+- 通过 B站 公开 API 查询，无需登录
+- API 调用顺序：`room_init` → `Master/info` → `getH5InfoByRoom` → `playUrl`
+- 自动处理短房间号映射（通过 `room_init` 返回真实 room_id）
+- 流地址优先选择 FLV，无 FLV 时使用 HLS
+- 回退到 `getRoomPlayInfo` V2 接口获取更完整的流信息
+
+### DouyuChecker 实现要点
+
+- 通过斗鱼 betard API 查询房间状态，hlsH5Preview API 获取流地址
+- **完整签名算法** (`signers/douyu.js`)：从 `getEncryption` 接口获取密钥，MD5 迭代生成签名
+- **单飞机制**：密钥缓存（5分钟 TTL）+ 并发请求合并，避免 Thundering Herd
+- **VIP 房间支持** (`signers/douyu-vip.js`)：通过 `vm` 模块执行 JS 签名代码（`ub98484234()`）
+- **CDN 自动选择**：检测到 scdn 时自动切换到可用 CDN
+- **互动游戏检测**：可选启用，通过 interactive API 排除非直播内容
+- **画质选择**：支持 `rate` 参数选择画质等级
+- **流格式检测**：自动判断 HLS (m3u8) 或 FLV 格式
+
 ### 轮询流程
 
 ```
-app.js init()
-  └─ pollingManager.start()
-       └─ loadPollingRooms()                       # DB: polling_enabled=true
-            └─ pollRoom(room) × N                   # 仅检查1次，无定时器
+app.js
+  └─ bootstrap()
+       └─ pollingManager.start()
+            └─ loadPollingRooms()                       # DB: polling_enabled=true
+                 └─ pollRoom(room) × N                   # 仅检查1次，无定时器
 
 router/rooms.js (新增/修改房间)
   └─ pollingManager.reloadRoom(roomId)
@@ -468,7 +514,7 @@ router/rooms.js (新增/修改房间)
 2. **追踪遗留文件**：将 untracked 的 `.flv`/`.mp4` 写入 `recording_files`
 3. **房间复位**：`status = 'idle'`, `ffmpeg_pid = NULL`, `output_path = ''`
 4. **尝试恢复会话**：对 `status='recording'` 的会话调用 `tryResumeSession`（最多 3 次）
-5. **标记录制中断**：`recordings` + `recording_files` 中 `status='recording'` 的标为 `interrupted`
+5. **标记录制中断**：`recording_files` 中 `status='recording'` 的标为 `interrupted`
 
 ---
 
@@ -497,8 +543,9 @@ router/rooms.js (新增/修改房间)
 
 ### 执行
 
+- API 接口立即返回，上传在后台异步执行（`UploadService._runUpload`）
 - 调用 `biliup upload` 子进程
-- 输出记录到 `upload_records` 表
+- 输出记录到 `upload_records` 表，状态流转：`uploading` → `success` / `failed`
 - 解析 BV 号（正则 `/BV[0-9A-Za-z]{10}/`），关联到投稿记录
 
 ---

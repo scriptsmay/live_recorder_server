@@ -272,6 +272,7 @@ async function scanActiveSegments() {
 | **双重保障机制**         | 主流程 + 兜底流程配合，确保无遗漏                    |
 | **错误隔离提升稳定性**   | 单个分片转码失败不影响其他分片，避免级联失败         |
 | **避免处理正在写入文件** | 通过状态跟踪，等新分段打开时再处理上一个完成的分段   |
+| **接口入参先归一化类型** | HTTP 入参常为字符串，和数据库数字 ID 比较前应先转换  |
 
 ## 录制中断处理的设计理念
 
@@ -417,3 +418,107 @@ async function runWatchdog() {
 | **简单可靠** | 单一触发点，易于理解和维护               |
 | **及时响应** | 看门狗30秒扫描，能及时发现可投稿的会话   |
 | **避免重复** | 统一检查机制，防止重复投稿               |
+
+## 斗鱼直播流录制
+
+> **✅ 状态：可用**（2026-05-28 修复）
+
+### 历史演进
+
+| 阶段   | 方案                                | 状态              |
+| ------ | ----------------------------------- | ----------------- |
+| v1     | `ub98484234.js` + VM 沙箱执行       | ❌ 前端 JS 已 404 |
+| v2     | `hlsH5Preview` API + 简化 MD5 签名  | ❌ API 已废弃     |
+| v3     | `getEncryption` + `hlsH5Preview`    | ❌ 鉴权失败       |
+| **v4** | **`getEncryption` + `getH5PlayV1`** | **✅ 当前方案**   |
+
+### 问题排查过程（2026-05-28）
+
+**现象**：直播间 `https://www.douyu.com/1863767` 无法录制，不走 VIP 签名 2 分钟切断，走 VIP 签名直接报错。
+
+**排查步骤**：
+
+1. **VIP 签名失效**：`https://www.douyu.com/ub98484234.js` 返回 404，斗鱼已全面迁移到 Next.js 架构，旧签名 JS 不复存在
+2. **旧 API 废弃**：`hlsH5Preview` 返回 `{"error":2005,"msg":"鉴权失败"}`
+3. **逆向新版加密 JS**：分析 `web-encrypt-*.js`（18KB minified），发现新 API 端点为 `getH5PlayV1`
+4. **UA 不匹配**：`getSignParams` 用 `getOptimalUserAgent()`（Mac Chrome）生成 `enc_data`，但 `_fetchStreamUrl` 硬编码 Windows UA。**斗鱼服务端现在校验 `enc_data` 中的 UA 与请求头 UA 是否一致**，不一致返回 403
+
+### 当前签名方案
+
+签名算法不变（`getEncryption` → MD5 迭代），但 API 端点和请求格式有变化：
+
+```js
+// 1. 获取加密密钥（不变）
+const { key, rand_str, enc_time, enc_data } = await fetch(
+  'https://www.douyu.com/wgapi/livenc/liveweb/websec/getEncryption?did=xxx'
+);
+
+// 2. MD5 签名（不变）
+let secret = rand_str;
+for (let i = 0; i < enc_time; i++) secret = md5(secret + key);
+const auth = md5(secret + key + rid + ts);
+
+// 3. 请求流地址（端点和格式变了！）
+//    旧: POST /lapi/live/hlsH5Preview/{rid}
+//    新: POST /lapi/live/getH5PlayV1/{rid}
+const body = [
+  `enc_data=${enc_data}`, // 签名参数在前
+  `tt=${ts}`,
+  `did=${did}`,
+  `auth=${auth}`,
+  'cdn=hw-h5', // 其他参数在后
+  'ver=Douyu_new',
+  'rate=0',
+  // ... 不再传 rid（在 URL 中）
+].join('&');
+
+// 4. UA 必须与 getEncryption 请求时一致！
+const streamUrl = `${rtmp_url}/${rtmp_live}`;
+```
+
+### 关键踩坑点
+
+1. **`enc_data` 绑定 UA**：`getEncryption` 返回的 `enc_data` 中包含请求时的 User-Agent，后续 `getH5PlayV1` 请求必须使用相同 UA，否则返回 403
+2. **请求体格式**：签名参数（`enc_data`/`tt`/`did`/`auth`）必须放在其他参数前面
+3. **`rid` 不在 body 中**：新版 API 只从 URL 路径读取 `rid`，body 中传 `rid` 会导致鉴权失败
+4. **VIP 签名已废弃**：`ub98484234.js` 返回 404，`douyu-vip.js` 不再被引用
+
+### 架构说明
+
+```
+signers/douyu.js          # 签名算法（getEncryption + MD5）
+signers/douyu-vip.js      # [已废弃] ub98484234 VM 沙箱签名
+DouyuChecker.js           # 平台检查器（调用签名 + 请求流地址）
+```
+
+### 经验总结
+
+1. **平台 API 变更要及时跟进**：斗鱼从传统 SPA 迁移到 Next.js，大量旧 API 和前端 JS 失效
+2. **逆向加密 JS 是最后手段**：通过分析 minified JS 中的关键词（API 端点、参数名）定位变更点，比完整逆向高效
+3. **UA 一致性是隐性鉴权**：`enc_data` 绑定了 UA，两端必须一致——这类问题在文档中不会说明，只能通过对比实际请求发现
+4. **保留旧签名代码**：`douyu-vip.js` 虽然废弃，但保留作为参考，万一斗鱼恢复类似机制
+
+## Docker 容器中 biliup 投稿失败排查【已解决】
+
+### 现象
+
+自动投稿一直失败，biliup 日志无输出或报权限错误。
+
+### 排查过程
+
+1. **biliup 命令找不到**：`uv tool install biliup` 将二进制安装到 `/root/.local/share/uv/tools/biliup/bin/`，但容器以非 root 用户运行时 PATH 中没有此路径。通过 `BILIUP_PATH` 环境变量或创建 `/usr/local/bin/biliup` 软链接解决。
+
+2. **上传锁权限错误**：biliup（Rust 二进制）通过 `dirs::data_local_dir()` 获取锁文件目录，在 Linux 下返回 `$HOME/.local/share/biliup/locks/`。当容器使用 `gosu` 降权时，`HOME` 环境变量仍指向 `/root`，非 root 用户无权写入。
+
+3. **根本原因**：Dockerfile 中 `gosu` 降权方案与 biliup 的 Rust 二进制存在权限冲突——降权改变了进程 uid 但未改变 `HOME` 环境变量。
+
+### 最终方案
+
+去掉 `nodeuser` 和 `gosu`，容器以 root 运行。对于私有部署的录制服务，这是最简单可靠的方案。
+
+### 经验总结
+
+1. **`gosu` 降权不改变环境变量**：`gosu user cmd` 只改变 uid/gid，`HOME` 等环境变量需要手动设置
+2. **Rust 的 `dirs` crate 依赖 `HOME`**：不是从 `/etc/passwd` 读取，而是直接读 `HOME` 环境变量
+3. **`uv tool install` 安装位置取决于执行用户**：root 执行时装到 `/root/.local/share/uv/`，需要显式链接到全局 PATH
+4. **非 root 容器用户增加运维复杂度**：对于私有部署场景，收益不大但问题不少

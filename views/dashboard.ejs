@@ -90,7 +90,7 @@
 </div>
 
 <!-- 转码队列进度条 -->
-<div class="card mb-4">
+<div class="card mb-3">
   <div class="card-header">转码队列状态</div>
   <div class="card-body">
     <div class="mb-2 d-flex justify-content-between">
@@ -110,27 +110,23 @@
   </div>
 </div>
 
+<div class="text-end">
+  <a href="/logs" class="text-muted small"><span>&#128203;</span> 查看完整日志</a>
+</div>
+
 <script>
   const REFRESH_INTERVAL = 5000;
   let autoRefresh = true;
   let refreshTimer = null;
 
-  function formatDuration(dateInput) {
-    if (!dateInput) return '-';
+  function formatDuration(ms) {
+    if (!ms) return '-';
+    const target = new Date(ms);
+    if (isNaN(target.getTime())) return '-';
 
-    // 1. 确保将输入转为 Date 对象，如果已经是时间戳数值则直接使用
-    const targetDate = new Date(dateInput);
-
-    // 2. 检查日期是否有效
-    if (isNaN(targetDate.getTime())) return '-';
-
-    // 3. 计算相差秒数
-    const sec = Math.floor((Date.now() - targetDate.getTime()) / 1000);
-
-    if (sec < 0) return '刚刚'; // 如果目标时间在未来，返回特殊提示
+    const sec = Math.floor((Date.now() - target.getTime()) / 1000);
     if (sec < 60) return sec + '秒';
     if (sec < 3600) return Math.floor(sec / 60) + '分' + (sec % 60) + '秒';
-
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     return h + '时' + m + '分';

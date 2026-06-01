@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const express = require('express');
 const router = express.Router();
@@ -9,6 +11,7 @@ const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
+const hlsGenerator = require('../lib/core/hls-generator');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../package.json');
@@ -297,24 +300,11 @@ router.put('/recording_files/:id/associate', async (req, res) => {
 
     const fileData = file.rows[0];
 
-    await pool.query("UPDATE recording_files SET session_id = $1, status = 'completed' WHERE id = $2", [
+    await pool.query("UPDATE recording_files SET session_id = $1, room_url = $2, status = 'completed' WHERE id = $3", [
       session_id,
+      fileData.room_url || session.rows[0].room_url,
       id,
     ]);
-
-    await pool.query(
-      `INSERT INTO recordings (session_id, room_url, file_path, file_size, started_at, ended_at, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'completed')
-       ON CONFLICT (file_path) DO UPDATE SET session_id = $1, status = 'completed'`,
-      [
-        session_id,
-        fileData.room_url || session.rows[0].room_url,
-        fileData.file_path,
-        fileData.file_size,
-        fileData.created_at,
-        fileData.completed_at || new Date(),
-      ]
-    );
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -336,31 +326,73 @@ router.delete('/recording_files/missing', async (req, res) => {
 router.delete('/recordings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM recordings WHERE id = $1', [id]);
-    if (result.rowCount === 0) {
+    const deleteFile = req.query.delete_file === 'true';
+
+    // 先查询记录，获取文件路径信息
+    const fileResult = await pool.query(
+      `SELECT id, file_path, is_hls_ready, hls_playlist_path FROM recording_files WHERE id = $1`,
+      [id]
+    );
+
+    if (fileResult.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '记录不存在' });
     }
-    res.json({ status: 'ok' });
+
+    const file = fileResult.rows[0];
+
+    // 删除本地文件
+    if (deleteFile) {
+      const deletedPaths = [];
+
+      // 删除主文件
+      if (file.file_path) {
+        try {
+          if (fs.existsSync(file.file_path)) {
+            fs.unlinkSync(file.file_path);
+            deletedPaths.push(file.file_path);
+          }
+        } catch (err) {
+          console.warn(`[api] 删除文件失败: ${file.file_path}`, err.message);
+        }
+
+        // 同时删除 recordings 表中的对应记录
+        try {
+          await pool.query('DELETE FROM recordings WHERE file_path = $1', [file.file_path]);
+        } catch (_) {}
+      }
+
+      // 删除 HLS 目录
+      if (file.is_hls_ready && file.hls_playlist_path) {
+        try {
+          const hlsDir = path.dirname(file.hls_playlist_path);
+          if (fs.existsSync(hlsDir)) {
+            fs.rmSync(hlsDir, { recursive: true, force: true });
+            deletedPaths.push(hlsDir);
+          }
+        } catch (err) {
+          console.warn(`[api] 删除 HLS 目录失败: ${file.hls_playlist_path}`, err.message);
+        }
+      }
+
+      console.log(`[api] 已删除本地文件: ${deletedPaths.join(', ') || '(无)'}`);
+    }
+
+    // 删除数据库记录
+    await pool.query('DELETE FROM recording_files WHERE id = $1', [id]);
+
+    res.json({ status: 'ok', deletedFile: deleteFile });
   } catch (err) {
     console.error('[api] 删除录制记录失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });
   }
 });
 
-const fs = require('fs');
-const path = require('path');
-
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
 
-    let fileResult = await pool.query('SELECT file_path FROM recordings WHERE id = $1', [id]);
-    let filePath = fileResult.rows[0]?.file_path;
-
-    if (!filePath) {
-      fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
-      filePath = fileResult.rows[0]?.file_path;
-    }
+    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+    const filePath = fileResult.rows[0]?.file_path;
 
     if (!filePath) {
       return res.status(404).json({ status: 'Error', message: '文件不存在' });
@@ -416,6 +448,142 @@ router.get('/recordings/:id/stream', async (req, res) => {
   } catch (err) {
     console.error('[api] 流播放失败:', err);
     res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
+router.get('/recordings/:id/hls', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recording_files WHERE id = $1',
+      [id]
+    );
+    const recording = result.rows[0];
+
+    if (!recording) {
+      return res.status(404).json({ status: 'Error', message: '录制不存在' });
+    }
+
+    if (recording.is_hls_ready && recording.hls_playlist_path) {
+      const exists = fs.existsSync(recording.hls_playlist_path);
+      if (exists) {
+        const videoDownloadDir = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '.');
+        const relativePath = path.relative(videoDownloadDir, recording.hls_playlist_path);
+        return res.json({
+          status: 'ok',
+          data: {
+            is_ready: true,
+            playlist_path: recording.hls_playlist_path,
+            relative_path: relativePath,
+            generated_at: recording.hls_generated_at,
+            type: 'recording_file',
+          },
+        });
+      }
+    }
+
+    res.json({
+      status: 'ok',
+      data: {
+        is_ready: false,
+        source_file: recording.file_path,
+        type: 'recording_file',
+      },
+    });
+  } catch (err) {
+    console.error('[api] HLS 状态查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+const SUPPORTED_TRANSCODE_EXT = /\.(ts|flv|m2ts)$/i;
+
+router.post('/recordings/:id/generate-hls', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const recordingResult = await pool.query('SELECT id, file_path FROM recording_files WHERE id = $1', [id]);
+
+    if (recordingResult.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制不存在' });
+    }
+
+    const recording = recordingResult.rows[0];
+
+    if (!recording.file_path || !fs.existsSync(recording.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '源文件不存在' });
+    }
+
+    console.log(`[api] 开始生成 HLS: recording_id=${id}`);
+    const genResult = await hlsGenerator.generateForRecording(id, 'recording_file');
+
+    if (genResult.success) {
+      res.json({
+        status: 'ok',
+        data: {
+          playlist_path: genResult.playlistPath,
+          already_exists: genResult.alreadyExists || false,
+        },
+      });
+    } else {
+      res.status(500).json({ status: 'Error', message: genResult.error || 'HLS 生成失败' });
+    }
+  } catch (err) {
+    console.error('[api] HLS 生成失败:', err);
+    res.status(500).json({ status: 'Error', message: 'HLS 生成失败' });
+  }
+});
+
+router.post('/recordings/:id/transcode', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT rf.id, rf.file_path, rf.session_id
+       FROM recording_files rf
+       WHERE rf.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
+    }
+
+    const file = result.rows[0];
+
+    if (!file.file_path || !fs.existsSync(file.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '源文件不存在于磁盘' });
+    }
+
+    if (!SUPPORTED_TRANSCODE_EXT.test(file.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '仅支持 .ts / .flv / .m2ts 文件转码' });
+    }
+
+    // 检查是否已存在转码记录（queued 或 processing 状态）
+    const existingRecord = await pool.query(
+      `SELECT id, status FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing')`,
+      [file.file_path]
+    );
+
+    if (existingRecord.rows.length > 0) {
+      return res.status(409).json({ status: 'Error', message: '该文件已在转码队列中' });
+    }
+
+    const mp4Path = file.file_path.replace(SUPPORTED_TRANSCODE_EXT, '.mp4');
+
+    await transcodeQueue.enqueue({
+      videoPathToTrans: file.file_path,
+      mp4Path,
+      sessionId: file.session_id,
+      force: true,
+    });
+
+    console.log(`[api] 手动转码入队: ${file.file_path}`);
+    res.json({ status: 'ok', message: '已加入转码队列' });
+  } catch (err) {
+    console.error('[api] 手动转码失败:', err);
+    res.status(500).json({ status: 'Error', message: '手动转码失败' });
   }
 });
 

@@ -23,17 +23,23 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-require('../config/env').initEnv({ mode: 'development' });
+const env = process.env.NODE_ENV || 'development';
+if (env !== 'development') {
+  console.error('⚠️  错误：请在开发环境运行此脚本');
+  process.exit(1);
+}
+require('../config/env').initEnv({ mode: env });
 
 const pool = require('../db/index');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
+const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
 const DEV_PORT = process.env.PORT || '3001';
 
 console.log('========================================');
 console.log('  开发环境清理脚本');
 console.log('========================================');
-console.log('⚠️  注意：本脚本只清理开发环境，不会影响 PM2 生产环境');
+console.log('⚠️  注意：本脚本只清理开发环境，不会影响 生产环境');
 console.log('----------------------------------------');
 console.log(`DOWNLOAD_DIR: ${DOWNLOAD_DIR} | PORT: ${DEV_PORT}`);
 
@@ -134,9 +140,15 @@ async function cleanup() {
     for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
       const fullPath = path.join(DOWNLOAD_DIR, f);
       const stat = fs.statSync(fullPath);
+      // 修改后的删除目录逻辑
       if (stat.isDirectory()) {
-        fs.rmSync(fullPath, { recursive: true, force: true });
-        dirCount++;
+        try {
+          // 增加 recursive 和 force 选项，并处理可能的锁定问题
+          fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          dirCount++;
+        } catch (err) {
+          console.error(`    ❌ 无法删除目录 ${fullPath}: ${err.message}`);
+        }
       } else {
         fs.unlinkSync(fullPath);
         fileCount++;
@@ -149,6 +161,26 @@ async function cleanup() {
     }
   } else {
     console.log('    ⚠️  下载目录不存在');
+  }
+
+  // 清空日志目录（开发环境）
+  if (fs.existsSync(LOG_DIR)) {
+    console.log(`  └─ 清空日志目录 ${LOG_DIR} ...`);
+    let logFileCount = 0;
+    for (const f of fs.readdirSync(LOG_DIR)) {
+      const fullPath = path.join(LOG_DIR, f);
+      if (fs.statSync(fullPath).isFile()) {
+        fs.unlinkSync(fullPath);
+        logFileCount++;
+      }
+    }
+    if (logFileCount > 0) {
+      console.log(`    ✅ 删除 ${logFileCount} 个日志文件`);
+    } else {
+      console.log('    ✅ 无待处理日志文件');
+    }
+  } else {
+    console.log('    ⚠️  日志目录不存在');
   }
 
   console.log('\n[4/5] 清理数据库...');

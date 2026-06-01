@@ -13,15 +13,15 @@
     <%- typeof styles !== 'undefined' ? styles : '' %>
   </head>
   <body>
-    <div class="page-wrap container-fluid">
+    <div class="page-wrap container-fluid p-0">
       <header>
         <!-- 导航栏等通用内容 -->
         <%- include('partials/_header') %>
       </header>
 
-      <main class="page-main"><%- body %></main>
+      <main class="page-main p-4"><%- body %></main>
 
-      <footer><%- include('partials/_footer') %></footer>
+      <%- include('partials/_footer') %>
     </div>
     <!-- 公共组件 -->
     <!-- 全局统一的空容器 -->
@@ -44,6 +44,7 @@
       </div>
     </div>
     <!-- 通用JS -->
+    <script src="/js/popper.min.js"></script>
     <script src="/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.20/dayjs.min.js"></script>

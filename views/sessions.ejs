@@ -55,14 +55,9 @@
           </div>
         <% } %>
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
+        <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent(downloader + '_' + s.id + '.log') %>" target="_blank">查看日志</a>
         <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted')) { %>
-          <select class="form-select form-select-sm d-inline-block w-auto mx-1 uploadTmplSelect" data-session-id="<%= s.id %>">
-            <option value="">选择模板投稿</option>
-            <% templates.forEach(t => { %>
-              <option value="<%= t.id %>"><%= t.name %><%= t.room_url ? ' [' + (t.room_name || t.room_url) + ']' : '' %></option>
-            <% }) %>
-          </select>
-          <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="<%= s.id %>" disabled>投稿</button>
+          <button class="btn btn-sm btn-outline-success uploadBtn mx-2" data-session-id="<%= s.id %>">投稿</button>
         <% } %>
         <button class="btn btn-sm btn-outline-danger float-end deleteSessionBtn" data-session-id="<%= s.id %>">删除</button>
         <div class="mt-2 d-none filesContainer" id="files_<%= s.id %>">
@@ -74,7 +69,74 @@
 <% } %>
 </div>
 
-<%- include('partials/_pagination', { prefix: 'sess', hideFirst: true }) %>
+<% if (pagination.totalPages > 1) { %>
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  <nav aria-label="录制会话分页">
+    <ul class="pagination pagination-sm mb-0">
+      <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page - 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">上一页</a>
+      </li>
+      <%
+        const maxPages = 7;
+        let startPage = Math.max(1, pagination.page - 3);
+        let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+        if (endPage - startPage < maxPages - 1) {
+          startPage = Math.max(1, endPage - maxPages + 1);
+        }
+        for (let i = startPage; i <= endPage; i++) {
+      %>
+        <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+          <a class="page-link" href="?page=<%= i %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>"><%= i %></a>
+        </li>
+      <% } %>
+      <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page + 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">下一页</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+<% } %>
+
+<!-- 将投稿部分做成modal投稿 -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg"> 
+    <div class="modal-content"> 
+      <div class="modal-header">
+        <h5 class="modal-title" id="uploadModalLabel">投稿录制会话<span class="text-muted ml-2" id="uploadSessionIdText"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="uploadForm">
+          <input type="hidden" id="uploadSessionId">
+          <div class="mb-3">
+            <label for="uploadTmplSelect" class="form-label">选择投稿模板</label>
+            <select id="uploadTmplSelect" class="form-select form-select-sm d-inline-block mx-1" required>
+              <option value="">选择模板投稿</option>
+              <% templates.forEach(t => { %>
+                <option value="<%= t.id %>"><%= t.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <button type="submit" id="uploadSubmitBtn" class="btn btn-primary" disabled>提交投稿</button>
+          </div>
+          <div class="mb-3" id="uploadResultText"></div>
+        </form>
+        
+        <div id="uploadStatusContainer" class="mt-3 d-none text-primary">
+          <div class="spinner-border spinner-border-sm" role="status">
+            <span class="visually-hidden">正在提交投稿...</span>
+          </div>
+          <span id="uploadStatus" class="ms-1">正在提交投稿...请稍候</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/recording-player.js"></script>
+<%- include('partials/_video_player') %>
 
 <script>
   document.getElementById('roomFilter')?.addEventListener('change', (e) => {
@@ -82,6 +144,7 @@
     window.location.href = '/sessions' + url;
   });
 
+  // 列表中的操作按钮事件代理
   document.addEventListener('click', async (e) => {
     const toggle = e.target.closest('.toggleFiles');
     if (toggle) {
@@ -89,22 +152,23 @@
       const container = document.getElementById('files_' + sid);
       container.classList.toggle('d-none');
       if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
-        const res = await fetch('/api/sessions/' + sid);
+        const res = await fetch('/api/recording_files?session_id=' + sid);
         const json = await res.json();
         container.innerHTML = '';
-        if (!json.data || !json.data.recordings || json.data.recordings.length === 0) {
+        if (!json.data || json.data.length === 0) {
           container.innerHTML = '<small class="text-muted">无分片文件</small>';
           return;
         }
         const table = document.createElement('table');
         table.className = 'table table-sm mb-0';
-        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          json.data.recordings.map(r => '<tr>' +
+        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+          json.data.map(r => '<tr>' +
             '<td>' + r.id + '</td>' +
             '<td><small>' + (r.file_path || '-') + '</small></td>' +
             '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
+            '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
             '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
-            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
+            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playRecBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
             '</tr>'
           ).join('') + '</tbody>';
         container.appendChild(table);
@@ -124,66 +188,114 @@
       return;
     }
 
-    const playBtn = e.target.closest('.playBtn');
-    if (playBtn) {
-      const src = '/api/recordings/' + playBtn.dataset.recordingId + '/stream';
-      const filename = playBtn.dataset.filename || '视频预览';
-      const ext = playBtn.dataset.ext;
-      
-      try {
-        // 发起请求，通过 Range 头部只请求 0-1 字节来检查接口是否正常
-        const res = await fetch(src, { headers: { 'Range': 'bytes=0-1' } });
-        if (res.ok || res.status === 206) {
-          openVideoPlayer(src, filename, ext);
-        } else {
-          // 尝试解析错误信息
-          let errorMsg = '视频加载失败，状态码：' + res.status;
-          if (res.headers.get('content-type')?.includes('application/json')) {
-            const json = await res.json();
-            errorMsg = json.message || errorMsg;
-          }
-          toast(errorMsg);
-        }
-      } catch (err) {
-        toast('视频加载失败：' + (err.message || '未知错误'));
-      }
-      return;
+  });
+
+
+</script>
+
+<script>
+  // 声明一个全局的 modal 实例变量
+  let uploadModalInstance = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. 初始化相关组件
+    if (typeof RecordingPlayer !== 'undefined') {
+      RecordingPlayer.init();
     }
 
-    const uploadBtn = e.target.closest('.uploadBtn');
-    if (uploadBtn && !uploadBtn.disabled) {
-      showConfirm('确认投稿？').then(async confirmed => {
-        if (!confirmed) return;
-        const sessionId = uploadBtn.dataset.sessionId;
-        const sel = uploadBtn.parentElement.querySelector('.uploadTmplSelect');
-        const templateId = sel.value;
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = '投稿中...';
+    const modalEl = document.getElementById('uploadModal');
+    if (modalEl) {
+      uploadModalInstance = new bootstrap.Modal(modalEl);
+    }
+
+    // 2. 监听模板选择，控制提交按钮状态
+    document.getElementById('uploadTmplSelect')?.addEventListener('change', (e) => {
+      document.getElementById('uploadSubmitBtn').disabled = !e.target.value;
+    });
+
+    // 3. 监听表单提交事件（而不是按钮点击）
+    document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault(); // 关键：阻止表单默认提交刷新页面
+
+      const confirmed = await showConfirm('确认投稿？'); // 假设 showConfirm 返回 Promise
+      if (!confirmed) return;
+
+      const sessionId = document.getElementById('uploadSessionId').value;
+      const templateId = document.getElementById('uploadTmplSelect').value;
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      const resultText = document.getElementById('uploadResultText');
+      const statusContainer = document.getElementById('uploadStatusContainer');
+
+      // 提交前的 UI 状态更新
+      resultText.textContent = '';
+      resultText.className = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = '投稿中...';
+      statusContainer.classList.remove('d-none'); // 显示加载动画
+
+      try {
         const res = await fetch('/api/sessions/' + sessionId + '/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ template_id: parseInt(templateId) }),
+          body: JSON.stringify({ template_id: parseInt(templateId, 10) }),
         });
+        
         const json = await res.json();
-        if (res.ok) {
-          uploadBtn.textContent = '已提交';
-          uploadBtn.className = 'btn btn-sm btn-success';
+        
+        if (!res.ok || json.status !== 'ok') {
+          resultText.textContent = json.message || '投稿失败';
+          resultText.className = 'text-danger';
         } else {
-          toast(json.message || '投稿失败');
-          uploadBtn.disabled = false;
-          uploadBtn.textContent = '投稿';
+          uploadModalInstance.hide();
+          toast(json.message || '投稿任务已提交');
+          // 延迟一点关闭并刷新页面以显示最新状态（比如 BV 号或 uploading 标签）
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
         }
-        return;
-      });
+
+        // 成功状态
+        submitBtn.textContent = '已提交';
+        submitBtn.classList.replace('btn-primary', 'btn-success');
+
+      } catch (error) {
+        // 异常处理
+        console.error('Upload error:', error);
+        toast(error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '重新投稿';
+      } finally {
+        // 无论成功失败，隐藏加载动画
+        statusContainer.classList.add('d-none');
+      }
+    });
+  });
+
+  // 全局事件代理 (保留你原有的 filter, toggleFiles, deleteBtn)
+  document.getElementById('roomFilter')?.addEventListener('change', (e) => {
+    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
+    window.location.href = '/sessions' + url;
+  });
+
+  document.addEventListener('click', async (e) => {
+    
+    // 打开投稿模态框
+    const uploadBtn = e.target.closest('.uploadBtn');
+    if (uploadBtn && !uploadBtn.disabled) {
+      // 在显示之前，重置表单的状态，防止上一次的输入或错误提示残留
+      document.getElementById('uploadSessionId').value = uploadBtn.dataset.sessionId;
+      document.getElementById('uploadTmplSelect').value = '';
+      document.getElementById('uploadResultText').textContent = '';
+      document.getElementById('uploadSessionIdText').textContent = '#' + uploadBtn.dataset.sessionId;
+      
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交投稿';
+      submitBtn.className = 'btn btn-primary'; // 恢复默认颜色
+      
+      document.getElementById('uploadStatusContainer').classList.add('d-none');
+
+      uploadModalInstance?.show();
     }
   });
-
-  document.addEventListener('change', (e) => {
-    const sel = e.target.closest('.uploadTmplSelect');
-    if (!sel) return;
-    const btn = sel.parentElement.querySelector('.uploadBtn');
-    btn.disabled = !sel.value;
-  });
 </script>
-
-<%- include('partials/_video_player') %>

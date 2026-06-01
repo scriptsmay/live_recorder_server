@@ -1,5 +1,21 @@
 console.log('App initialized');
 
+document.addEventListener('DOMContentLoaded', () => {
+  appInit();
+});
+
+/**
+ * 初始化应用程序
+ * @description
+ * 该函数在 DOMContentLoaded 事件触发时被调用，负责初始化应用程序的各种功能。
+ * 目前主要功能是启用 Bootstrap 的 Tooltip 插件，使页面上所有具有 data-bs-toggle="tooltip" 属性的元素都能显示工具提示。
+ * 你可以在这里添加更多的初始化逻辑，例如设置全局事件监听器、初始化其他第三方库等。
+ */
+function appInit() { 
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+}
+
 /**
  * 复制代码到剪贴板
  * @param {HTMLElement} element - 触发复制的元素，通常是一个包含代码的 <code> 标签

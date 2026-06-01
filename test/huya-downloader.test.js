@@ -209,7 +209,127 @@ describe('FFmpeg Downloader Module', () => {
           reconnect: true,
           reconnectDelayMax: 120,
           timeout: 30,
+          streamType: 'flv',
         });
+      });
+    });
+
+    describe('流类型检测', () => {
+      describe('_detectStreamTypeByUrl', () => {
+        it('should detect HLS from .m3u8 URL', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/live/stream.m3u8')).toBe('hls');
+        });
+
+        it('should detect HLS from /hls/ path', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/hls/live/stream')).toBe('hls');
+        });
+
+        it('should detect HLS from playlist URL', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/playlist.m3u8')).toBe('hls');
+        });
+
+        it('should detect FLV from .flv URL', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/live/stream.flv')).toBe('flv');
+        });
+
+        it('should detect FLV from /flv/ path', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/flv/live/stream')).toBe('flv');
+        });
+
+        it('should return unknown for unrecognized URLs', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/live/stream')).toBe('unknown');
+        });
+
+        it('should be case insensitive', () => {
+          expect(downloader._detectStreamTypeByUrl('http://example.com/live/stream.M3U8')).toBe('hls');
+          expect(downloader._detectStreamTypeByUrl('http://example.com/live/stream.FLV')).toBe('flv');
+        });
+      });
+
+      describe('detectStreamType', () => {
+        it('should return url type when URL matches', async () => {
+          const result = await downloader.detectStreamType('http://example.com/stream.m3u8');
+          expect(result).toEqual({ type: 'hls', metadata: { source: 'url' } });
+        });
+
+        it('should fall back to header detection for unknown URLs', async () => {
+          global.fetch = jest.fn().mockResolvedValue({
+            headers: { get: () => 'application/vnd.apple.mpegurl' },
+            arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+          });
+
+          const result = await downloader.detectStreamType('http://example.com/live/stream');
+          expect(result).toEqual({ type: 'hls', metadata: { source: 'header' } });
+
+          delete global.fetch;
+        });
+
+        it('should default to flv on detection failure', async () => {
+          global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+          const result = await downloader.detectStreamType('http://example.com/live/stream');
+          expect(result).toEqual({ type: 'flv', metadata: { source: 'header' } });
+
+          delete global.fetch;
+        });
+      });
+    });
+
+    describe('HLS 参数构建', () => {
+      it('should build HLS args with correct protocol whitelist', () => {
+        const url = 'http://example.com/stream.m3u8';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'hls' });
+
+        expect(args).toContain('-protocol_whitelist');
+        const whitelistIndex = args.indexOf('-protocol_whitelist');
+        expect(args[whitelistIndex + 1]).toContain('hls');
+      });
+
+      it('should build HLS args with live_start_index', () => {
+        const url = 'http://example.com/stream.m3u8';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'hls' });
+
+        expect(args).toContain('-live_start_index');
+        expect(args).toContain('-1');
+      });
+
+      it('should build HLS args with longer timeout', () => {
+        const url = 'http://example.com/stream.m3u8';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'hls' });
+
+        expect(args).toContain('-rw_timeout');
+        const timeoutIndex = args.indexOf('-rw_timeout');
+        expect(args[timeoutIndex + 1]).toBe('60000000');
+      });
+
+      it('should build HLS args with make_zero avoid_negative_ts', () => {
+        const url = 'http://example.com/stream.m3u8';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'hls' });
+
+        const tsIndex = args.indexOf('-avoid_negative_ts');
+        expect(args[tsIndex + 1]).toBe('make_zero');
+      });
+
+      it('should default to standard args when streamType is flv', () => {
+        const url = 'http://example.com/stream.flv';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'flv' });
+
+        const whitelistIndex = args.indexOf('-protocol_whitelist');
+        expect(args[whitelistIndex + 1]).not.toContain('hls');
+      });
+
+      it('should default to standard args when streamType not specified', () => {
+        const url = 'http://example.com/stream';
+        const outputPath = '/tmp/test.ts';
+        const args = downloader.buildArgs(url, outputPath);
+
+        const whitelistIndex = args.indexOf('-protocol_whitelist');
+        expect(args[whitelistIndex + 1]).not.toContain('hls');
       });
     });
 

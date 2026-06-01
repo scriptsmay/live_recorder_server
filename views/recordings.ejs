@@ -1,4 +1,4 @@
-<h2>录制历史</h2>
+<h2>录制文件</h2>
 
 <div class="row mb-3">
   <div class="col-md-4">
@@ -9,6 +9,9 @@
       <% }) %>
     </select>
   </div>
+  <div class="col-md-4 ms-auto">
+    <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  </div>
 </div>
 
 <div class="table-responsive">
@@ -17,8 +20,10 @@
       <tr>
         <th>ID</th>
         <th>直播间</th>
+        <th>会话ID</th>
         <th>文件路径</th>
         <th>大小</th>
+        <th>HLS</th>
         <th>状态</th>
         <th>开始时间</th>
         <th>结束时间</th>
@@ -27,45 +32,135 @@
     </thead>
     <tbody>
       <% if (recordings.length === 0) { %>
-        <tr><td colspan="8" class="text-center text-muted py-4">暂无录制记录</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">暂无录制记录</td></tr>
       <% } else { %>
         <% recordings.forEach(r => { %>
-          <% const badge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>' }[r.status] || r.status; %>
+          <% 
+            const statusMap = { 
+              recording: '<span class="badge bg-primary">录制中</span>', 
+              completed: '<span class="badge bg-success">已完成</span>', 
+              interrupted: '<span class="badge bg-danger">中断</span>' 
+            };
+            
+            // 使用模板字符串 `${r.status}` 动态显示原始状态值
+            const badge = statusMap[r.status] || `<span class="badge bg-secondary">${r.status}</span>`; 
+          %>
           <% const size = r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
-          <% const roomDisplay = r.room_name ? r.room_name + '<br><small class="text-muted">' + (r.room_url || '').slice(0, 30) + '…</small>' : (r.room_url || '-'); %>
+          <% const hlsBadge = r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>'; %>
+          <% const filename = r.file_path ? r.file_path.split('/').pop() : ''; %>
+          <% const ext = r.file_path ? (r.file_path.split('.').pop() || '') : ''; %>
           <tr>
             <td><%= r.id %></td>
-            <td><%- roomDisplay %></td>
+            <td><%- r.room_name %><br><small class="text-muted"><%= r.room_url %></small></td>
+            <td><%= r.session_id %></td>
             <td><small><%= r.file_path || '-' %></small></td>
             <td><%= size %></td>
+            <td><%- hlsBadge %></td>
             <td><%- badge %></td>
             <td><small><%= formatDate(r.session_started_at || r.started_at) %></small></td>
             <td><small><%= formatDate(r.session_ended_at || r.ended_at) %></small></td>
-            <td><button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>">删除</button></td>
+            <td>
+              <% if (r.status === 'completed' && r.file_path) { %>
+                <button class="btn btn-sm btn-outline-info playRecBtn me-1" data-recording-id="<%= r.id %>" data-filename="<%= filename %>" data-ext="<%= ext %>">▶</button>
+              <% } %>
+              <% if (r.status === 'completed' && r.file_path && /\.(ts|flv|m2ts)$/i.test(r.file_path)) { %>
+                <button class="btn btn-sm btn-outline-warning transcodeRecBtn me-1" data-id="<%= r.id %>" data-filename="<%= filename %>">转码</button>
+              <% } %>
+              <button class="btn btn-sm btn-outline-danger deleteRecBtn" data-id="<%= r.id %>" data-filename="<%= filename %>">删除</button>
+            </td>
           </tr>
         <% }) %>
       <% } %>
     </tbody>
   </table>
 </div>
-<%- include('partials/_pagination', { prefix: 'rec', hideFirst: true }) %>
+
+<% if (pagination.totalPages > 1) { %>
+<nav aria-label="录制文件分页">
+  <ul class="pagination pagination-sm justify-content-center">
+    <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+      <a class="page-link" href="?page=<%= pagination.page - 1 %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>">上一页</a>
+    </li>
+    <% 
+      const maxPages = 7;
+      let startPage = Math.max(1, pagination.page - 3);
+      let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+      if (endPage - startPage < maxPages - 1) {
+        startPage = Math.max(1, endPage - maxPages + 1);
+      }
+      for (let i = startPage; i <= endPage; i++) { 
+    %>
+      <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+        <a class="page-link" href="?page=<%= i %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>"><%= i %></a>
+      </li>
+    <% } %>
+    <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+      <a class="page-link" href="?page=<%= pagination.page + 1 %><%= roomFilter ? '&room_url=' + encodeURIComponent(roomFilter) : '' %>">下一页</a>
+    </li>
+  </ul>
+</nav>
+<% } %>
+
+<script src="/js/recording-player.js"></script>
+<%- include('partials/_video_player') %>
 
 <script>
   document.getElementById('roomFilter').addEventListener('change', e => {
-    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '/recordings';
+    const url = e.target.value 
+      ? '?room_url=' + encodeURIComponent(e.target.value)
+      : '/recordings';
     window.location.href = url;
   });
 
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.deleteRecBtn');
     if (!btn) return;
-    showConfirm('确定删除此录制记录？').then(async confirmed => {
-      if (!confirmed) return;
-      const id = btn.dataset.id;
-      const res = await fetch('/api/recordings/' + id, { method: 'DELETE' });
+    const filename = btn.dataset.filename || '';
+    const msg = '确定删除此录制记录？'
+      + (filename ? `<br><small class="text-muted">${filename}</small>` : '')
+      + '<div class="form-check mt-3">'
+      + '<input class="form-check-input" type="checkbox" id="deleteFileCheckbox">'
+      + '<label class="form-check-label" for="deleteFileCheckbox">同时删除本地文件</label>'
+      + '</div>';
+    const confirmed = await showConfirm(msg, `#${btn.dataset.id}`);
+    if (!confirmed) return;
+    const deleteFile = document.getElementById('deleteFileCheckbox')?.checked || false;
+    const id = btn.dataset.id;
+    const url = '/api/recordings/' + id + (deleteFile ? '?delete_file=true' : '');
+    const res = await fetch(url, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) return toast(json.message || '删除失败');
+    toast(deleteFile ? '已删除记录及本地文件' : '已删除记录');
+    window.location.reload();
+  });
+
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('.transcodeRecBtn');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const filename = btn.dataset.filename;
+    const confirmed = await showConfirm(`确定将文件加入转码队列？`, filename);
+    if (!confirmed) return;
+    btn.disabled = true;
+    btn.textContent = '处理中…';
+    try {
+      const res = await fetch('/api/recordings/' + id + '/transcode', { method: 'POST' });
       const json = await res.json();
-      if (!res.ok) return toast(json.message || '删除失败');
-      window.location.reload();
-    });
+      if (!res.ok) return toast(json.message || '转码失败');
+      toast(json.message || '已加入转码队列');
+      btn.textContent = '已入队';
+      btn.classList.remove('btn-outline-warning');
+      btn.classList.add('btn-outline-secondary');
+    } catch (err) {
+      toast('请求失败');
+      btn.disabled = false;
+      btn.textContent = '转码';
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof RecordingPlayer !== 'undefined') {
+      RecordingPlayer.init();
+    }
   });
 </script>

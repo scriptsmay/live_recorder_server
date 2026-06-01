@@ -301,10 +301,17 @@ class RecorderService {
     let fileExists = false;
     let fileCount = 0;
     try {
-      const recordingFiles = await DataService.getRecordingFiles({ sessionId });
+      const recordingFiles = await DataService.getRecordingFiles({ session_id: sessionId });
+      console.log(`[finishSession] 会话 ${sessionId} 查询到 ${recordingFiles.length} 个录制文件记录`);
 
       for (const file of recordingFiles) {
-        const stat = fs.statSync(file.file_path);
+        let stat;
+        try {
+          stat = fs.statSync(file.file_path);
+        } catch {
+          console.warn(`[finishSession] 文件不存在，跳过: ${file.file_path}`);
+          continue;
+        }
         if (stat.size < thresholdBytes) {
           try {
             fs.unlinkSync(file.file_path);
@@ -321,13 +328,8 @@ class RecorderService {
         fileExists = true;
 
         // 有文件，更新数据库记录
-        await pool.query("UPDATE recordings SET file_size = $1, ended_at = NOW(), status = 'completed' WHERE id = $2", [
-          stat.size,
-          file.id,
-        ]);
-        // 更新文件记录
         await pool.query(
-          `UPDATE recording_files SET file_size = $1, status = 'completed', completed_at = NOW()
+          `UPDATE recording_files SET file_size = $1, status = 'completed', ended_at = NOW(), completed_at = NOW()
            WHERE session_id = $2 AND file_path = $3`,
           [stat.size, sessionId, file.file_path]
         );
@@ -348,10 +350,10 @@ class RecorderService {
       await pool.query(
         `UPDATE recording_sessions
              SET ended_at = NOW(), status = $1,
-                 total_segments = 1,
-                 total_size = $2
-             WHERE id = $3 AND status = 'recording'`,
-        [sessionStatus, fileSize, sessionId]
+                 total_segments = $2,
+                 total_size = $3
+             WHERE id = $4 AND status = 'recording'`,
+        [sessionStatus, fileCount, fileSize, sessionId]
       );
     }
 
@@ -501,7 +503,7 @@ class RecorderService {
           caption,
           streamUrl: url,
         });
-        console.log(`[任务启动] 录制会话: ${sessionId}`);
+        // console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
 
       // 二、使用 roomId 和 sessionId 生成带层级的输出路径
@@ -523,14 +525,20 @@ class RecorderService {
         console.log(`[任务启动] 创建会话目录: ${sessionDir}`);
       }
 
-      console.log(`[任务启动] 文件名模板: ${template}`);
-      console.log(`[任务启动] 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}`);
-      console.log(`[任务启动] 视频将保存至: ${outputFilePattern}`);
-
       // 三、更新会话的输出路径
       await recordingManager.updateSessionOutputPath(sessionId, outputFilePattern);
 
-      // 四、然后启动下载器模块的录制进程
+      // 四、异步流类型检测
+      let streamType = 'flv';
+      try {
+        const detection = await downloader.detectStreamType(url);
+        streamType = detection.type;
+        console.log(`[流类型检测] ${url.slice(0, 60)} -> ${streamType} (via ${detection.metadata.source})`);
+      } catch (err) {
+        console.warn(`[流类型检测] 失败，使用默认类型 flv:`, err.message);
+      }
+
+      // 五、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
         downloader,
         streamUrl: url,
@@ -539,10 +547,17 @@ class RecorderService {
           segmentDuration,
           platform: room.polling_platform,
           isStreamUrl: true,
+          streamType,
         },
         sessionId,
       });
-      console.log(`[任务启动] 输出文件路径: ${outputFilePattern} | PID: ${dlProcess.pid}`);
+      console.log(
+        `[任务启动] 文件名模板: ${template}` +
+          `| 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}` +
+          `| 输出文件路径: ${outputFilePattern}` +
+          `| PID: ${dlProcess.pid}` +
+          `| 日志路径: ${logPath}`
+      );
 
       // 五、再去更新 session.pid
       await recordingManager.updateSessionPidToDatabase({
@@ -550,8 +565,6 @@ class RecorderService {
         sessionId,
         pid: dlProcess.pid,
       });
-
-      console.log(`[任务启动] 日志文件: ${logPath} `);
 
       // 更新 redis 缓存
       await this.setActiveTask(roomKey, {

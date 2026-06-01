@@ -337,3 +337,55 @@ ffmpeg -i "输入.ts" \
 4. **兼容性好**：几乎所有播放器都支持 TS 格式
 
 > **提示**：项目配置文件 `config.ini` 中推荐将 `video_save_type` 设置为 `TS` 格式。
+
+---
+
+### 七、HLS/m3u8 流录制参数
+
+FFmpegDownloader 支持自动检测 HLS 流并使用专用参数录制：
+
+```bash
+ffmpeg -y \
+    -rw_timeout 60000000 \          # HLS 需要更长超时（60s）
+    -reconnect 1 \
+    -reconnect_at_eof 1 \
+    -reconnect_streamed 1 \
+    -reconnect_delay_max 30 \       # HLS 重连间隔更短
+    -live_start_index -1 \          # 从直播点开始（HLS 专用）
+    -user_agent "Mozilla/5.0 ..." \
+    -protocol_whitelist "rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy,hls" \
+    -analyzeduration 20000000 \
+    -probesize 20000000 \
+    -thread_queue_size 1024 \
+    -i "http://example.com/live/stream.m3u8" \
+    -c copy -map 0 \
+    -fflags +genpts+igndts+discardcorrupt \
+    -correct_ts_overflow 1 \
+    -avoid_negative_ts make_zero \  # HLS 推荐 make_zero 模式
+    -max_muxing_queue_size 2048 \
+    -sn -dn -bufsize 15000k \
+    -f mpegts \
+    output.ts
+```
+
+#### HLS 与标准 FLV 参数差异
+
+| 参数                   | FLV 标准值     | HLS 专用值     | 说明                         |
+| ---------------------- | -------------- | -------------- | ---------------------------- |
+| `-rw_timeout`          | 30000000 (30s) | 60000000 (60s) | HLS 播放列表刷新需要更长时间 |
+| `-reconnect_delay_max` | 60             | 30             | HLS 重连更积极               |
+| `-live_start_index`    | (无)           | -1             | 从最新直播片段开始           |
+| `-protocol_whitelist`  | (不含 hls)     | (含 hls)       | 需要 hls 协议支持            |
+| `-avoid_negative_ts`   | 1              | make_zero      | HLS 推荐 make_zero 模式      |
+
+#### 流类型检测流程
+
+```
+RecorderService.startRecording()
+  → downloader.detectStreamType(url)     # 异步预检
+      ├─ URL 特征检测（.m3u8, .flv, /hls/, /flv/）
+      └─ HTTP 头检测（Content-Type + 响应体 #EXTM3U）
+  → downloader.buildArgs(url, path, { streamType })
+      ├─ streamType='hls' → _buildHLSArgs()
+      └─ streamType='flv' → _buildStandardArgs()
+```

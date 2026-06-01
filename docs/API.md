@@ -36,6 +36,59 @@ curl http://127.0.0.1:1123/api/health
 
 ---
 
+## 日志查看
+
+### GET /api/logs/content
+
+读取指定日志文件尾部内容，用于 `/logs` 页面按需查看最近日志。
+
+**参数（Query）：**
+
+| 参数 | 类型    | 必填 | 说明                                 |
+| ---- | ------- | ---- | ------------------------------------ |
+| file | string  | 是   | 日志文件名，仅允许 `logs/` 下 `.log` |
+| tail | integer | 否   | 返回最后 N 行，默认 2000，最大 5000  |
+
+**返回：**
+
+```json
+{
+  "file": "access.log",
+  "lines": ["GET /api/health 200 5ms"],
+  "truncated": true
+}
+```
+
+### GET /api/logs/stream
+
+建立 SSE 连接，实时推送指定日志文件新增内容。后端使用文件 offset 轮询新增字节，不依赖 `fs.watch`。
+
+**参数（Query）：**
+
+| 参数 | 类型    | 必填 | 说明                                 |
+| ---- | ------- | ---- | ------------------------------------ |
+| file | string  | 是   | 日志文件名，仅允许 `logs/` 下 `.log` |
+| tail | integer | 否   | 初始推送最后 N 行，默认 100          |
+
+**事件：**
+
+- `ready`：连接就绪
+- `log`：新增日志行，格式 `{ "line": "..." }`
+- `reset`：日志文件发生轮转或截断，客户端应清空旧内容后继续接收
+- `log-error`：读取日志时发生错误，格式 `{ "message": "..." }`
+
+### DELETE /api/logs
+
+删除指定日志文件。
+
+**请求体：**
+
+| 参数 | 类型   | 必填 | 说明                                 |
+| ---- | ------ | ---- | ------------------------------------ |
+| file | string | 是   | 日志文件名，仅允许 `logs/` 下 `.log` |
+
+---
+
 ## 直播间管理
 
 ### GET /api/rooms
@@ -63,18 +116,18 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 
 **请求体：**
 
-| 参数                 | 类型    | 必填 | 说明                                                            |
-| -------------------- | ------- | ---- | --------------------------------------------------------------- |
-| room_url             | string  | 是   | 直播间地址（唯一标识）                                          |
-| room_name            | string  | 否   | 直播间名称                                                      |
-| filename_template    | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                       |
-| segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件     |
-| notification_enabled | boolean | 否   | 是否启用通知，默认 true                                         |
-| monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载） |
-| upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）             |
-| polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false                            |
-| polling_platform     | string  | 否   | 轮询平台：`huya`（当前仅支持虎牙）                              |
-| polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                                |
+| 参数                 | 类型    | 必填 | 说明                                                                                |
+| -------------------- | ------- | ---- | ----------------------------------------------------------------------------------- |
+| room_url             | string  | 是   | 直播间地址（唯一标识）                                                              |
+| room_name            | string  | 否   | 直播间名称                                                                          |
+| filename_template    | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                                           |
+| segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件                         |
+| notification_enabled | boolean | 否   | 是否启用通知，默认 true                                                             |
+| monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载）                     |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）                                 |
+| polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false                                                |
+| polling_platform     | string  | 否   | 轮询平台：`huya`、`bilibili`、`douyin`（已实现），`douyu`（不可用-平台流2分钟超时） |
+| polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                                                    |
 
 **示例：**
 
@@ -309,14 +362,160 @@ curl http://127.0.0.1:1123/api/sessions/25
 | status     | string  | 否   | 按状态筛选：`pending` / `recording` / `completed` / `interrupted` / `missing` / `orphaned` |
 | session_id | integer | 否   | 按会话 ID 筛选                                                                             |
 
+### DELETE /api/recordings/:id
+
+删除录制文件记录。
+
+**参数（Query）：**
+
+| 参数        | 类型   | 必填 | 说明                                                                      |
+| ----------- | ------ | ---- | ------------------------------------------------------------------------- |
+| delete_file | string | 否   | 设为 `true` 时同时删除本地文件（主文件 + HLS 目录），默认仅删除数据库记录 |
+
+**删除本地文件时的行为：**
+
+1. 删除 `file_path` 对应的主文件（.ts/.flv/.mp4 等）
+2. 若 `is_hls_ready` 为 true，删除 `hls_playlist_path` 所在目录（含所有分片）
+3. 同步清理 `recordings` 表中的对应记录
+
+**示例：**
+
+```bash
+# 仅删除数据库记录
+curl -X DELETE http://127.0.0.1:1123/api/recordings/42
+
+# 同时删除本地文件
+curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
+```
+
+---
+
 ### GET /api/recordings/:id/stream
 
 流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。
-查询优先级：先查 `recordings` 表，未命中则查 `recording_files` 表。
+数据源：`recording_files` 表
 
 **返回：**
 
 视频流（`video/mp4` / `video/x-flv` / `video/mp2t` 等，根据文件扩展名自动判断 MIME 类型）。
+
+---
+
+### GET /api/recordings/:id/hls
+
+查询录制文件的 HLS 播放状态。
+数据源：`recording_files` 表
+
+**返回（HLS 已就绪）：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "is_ready": true,
+    "playlist_path": "/data/videos/room1/hls_filename/playlist.m3u8",
+    "relative_path": "room1/hls_filename/playlist.m3u8",
+    "generated_at": "2026-05-25T12:00:00.000Z",
+    "type": "recording"
+  }
+}
+```
+
+**返回（HLS 未就绪）：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "is_ready": false,
+    "source_file": "/data/videos/room1/file.mp4",
+    "type": "recording"
+  }
+}
+```
+
+---
+
+### POST /api/recordings/:id/generate-hls
+
+手动触发生成 HLS 播放文件。
+数据源：`recording_files` 表
+
+**返回（成功）：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "playlist_path": "/data/videos/room1/hls_filename/playlist.m3u8",
+    "already_exists": false
+  }
+}
+```
+
+**返回（失败）：**
+
+```json
+{
+  "status": "Error",
+  "message": "HLS 生成失败"
+}
+```
+
+---
+
+### POST /api/recordings/:id/transcode
+
+手动将录制文件加入转码队列。**无视 `auto_transcode` 全局设置**，强制入队。
+
+**前置条件：**
+
+- 文件状态为 `completed` 且文件存在于磁盘
+- 文件格式为 `.ts` / `.flv` / `.m2ts`
+- 文件未在转码队列中（无 `queued` / `processing` 状态的转码记录）
+
+**返回：**
+
+```json
+{ "status": "ok", "message": "已加入转码队列" }
+```
+
+**错误：**
+
+| 状态码 | 说明                   |
+| ------ | ---------------------- |
+| 400    | 文件格式不支持或不存在 |
+| 404    | 记录不存在             |
+| 409    | 文件已在转码队列中     |
+| 500    | 服务端异常             |
+
+**示例：**
+
+```bash
+curl -X POST http://127.0.0.1:1123/api/recordings/42/transcode
+```
+
+---
+
+### GET /api/hls/\*
+
+HLS 文件服务，提供 `.m3u8` 播放列表和 `.ts` 分片文件。
+
+**说明：**
+
+- 路径参数为相对于 `VIDEO_DOWNLOAD_DIR` 的路径
+- 支持 HTTP Range 请求，实现断点续传
+- MIME 类型自动识别：`.m3u8` 返回 `application/vnd.apple.mpegurl`，`.ts` 返回 `video/mp2t`
+
+**示例：**
+
+```bash
+# 播放列表
+curl http://127.0.0.1:1123/api/hls/room1/hls_filename/playlist.m3u8
+
+# TS 分片
+curl http://127.0.0.1:1123/api/hls/room1/hls_filename/segment_001.ts
+```
 
 ---
 
@@ -411,6 +610,11 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 | `threads`                    | string | `8`      | 上传线程数                                                   |
 | `pool2_size`                 | string | `1`      | 上传线程池大小                                               |
 | `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                                 |
+| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件                |
+| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                        |
+| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                           |
+| `hls_cleanup_days`           | number | `30`     | HLS 文件自动清理天数，超过此时长自动删除                     |
+| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                             |
 
 ---
 
@@ -512,14 +716,12 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **返回：**
 
+接口立即返回，上传在后台异步执行。可通过 `GET /api/upload_records` 查询上传状态。
+
 ```json
 {
   "status": "ok",
-  "data": {
-    "record_id": 10,
-    "bv_id": "BV1234567890",
-    "message": "投稿成功"
-  }
+  "message": "[投稿] 25 → 模板 1「默认模板」已开始"
 }
 ```
 

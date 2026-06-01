@@ -127,7 +127,8 @@ router.post('/biliup/renew', async (req, res) => {
     }
 
     const tmpl = await DataService.getTemplates();
-    const row = tmpl.find((t) => t.id === template_id);
+    const templateId = parseInt(template_id, 10);
+    const row = tmpl.find((t) => t.id === templateId);
     if (!row) {
       return res.status(404).json({ status: 'Error', message: '模板不存在' });
     }
@@ -179,6 +180,9 @@ router.post('/biliup/renew', async (req, res) => {
   }
 });
 
+/**
+ * 指定会话指定模板ID投稿
+ */
 router.post('/sessions/:id/upload', async (req, res) => {
   try {
     const { id } = req.params;
@@ -204,8 +208,11 @@ router.post('/sessions/:id/upload', async (req, res) => {
     }
 
     const sessionData = session.rows[0];
-    await UploadService.executeUpload(sessionData, tmpl.rows[0]);
-    res.json({ status: 'ok', message: '投稿任务已启动' });
+    const result = await UploadService.executeUpload(sessionData, tmpl.rows[0]);
+    if (result.error) {
+      return res.json({ status: 'Error', message: result.message });
+    }
+    res.json({ status: 'ok', message: result.message || '投稿任务已启动' });
   } catch (err) {
     console.error('[sessions] 上传失败:', err);
     res.status(500).json({ status: 'Error', message: '上传失败' });

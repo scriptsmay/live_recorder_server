@@ -1,7 +1,6 @@
 node_modules
 logs
 user_data
-package-lock.json
 cookies.json
 .qoder
 .env

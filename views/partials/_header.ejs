@@ -1,5 +1,5 @@
 <!-- Bootstrap 导航栏 -->
-<nav class="navbar navbar-expand-lg navbar-dark mb-3">
+<nav class="navbar navbar-expand-lg navbar-dark mb-1">
   <div class="container-fluid">
     <a class="navbar-brand" href="/">直播录制服务</a>
     <button
@@ -25,13 +25,10 @@
           <a class="nav-link <%= path === '/sessions' ? 'active' : '' %>" href="/sessions">录制会话</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= path === '/recordings' ? 'active' : '' %>" href="/recordings">录制历史</a>
+          <a class="nav-link <%= path === '/recordings' ? 'active' : '' %>" href="/recordings">录制文件</a>
         </li>
         <li class="nav-item">
           <a class="nav-link <%= path === '/transcode' ? 'active' : '' %>" href="/transcode">转码记录</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link <%= path === '/files' ? 'active' : '' %>" href="/files">录制文件</a>
         </li>
         <li class="nav-item">
           <a class="nav-link <%= path === '/templates' ? 'active' : '' %>" href="/templates">投稿管理</a>
@@ -40,13 +37,13 @@
           <a class="nav-link <%= path === '/upload_records' ? 'active' : '' %>" href="/upload_records">投稿记录</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= path === '/apiview' ? 'active' : '' %>" href="/apiview">API</a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link <%= path === '/settings' ? 'active' : '' %>" href="/settings">设置</a>
         </li>
-        <li class="nav-item hidden">
+        <li class="nav-item">
           <a class="nav-link <%= path === '/logs' ? 'active' : '' %>" href="/logs">日志</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link <%= path === '/apiview' ? 'active' : '' %>" href="/apiview">API文档</a>
         </li>
       </ul>
     </div>
