@@ -137,6 +137,20 @@ describe('DanmakuBurner — buildFilterChain', () => {
     expect(filter).toContain('subtitles=');
     expect(filter).toContain('/视频/弹幕字幕.ass');
   });
+
+  test('相对路径被解析为绝对路径', () => {
+    const filter = DanmakuBurner._buildFilterChain('relative/path/test.ass');
+    expect(filter).toContain('subtitles=');
+    // 绝对路径应以 / 开头（POSIX）
+    expect(filter).toMatch(/subtitles='\/.*relative\/path\/test\.ass'/);
+    expect(filter).not.toMatch(/^subtitles='relative/);
+  });
+
+  test('方括号被转义', () => {
+    const filter = DanmakuBurner._buildFilterChain('/path/[test].ass');
+    expect(filter).toContain('\\[');
+    expect(filter).toContain('\\]');
+  });
 });
 
 // ============================================================
