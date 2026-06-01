@@ -115,6 +115,9 @@
                   <% } else { %>
                     <span class="text-muted small">—</span>
                   <% } %>
+                  <% if (burnRec && burnRec.log_path) { %>
+                    <a href="/logs?file=<%= encodeURIComponent(burnRec.log_path.split('/').pop()) %>" class="btn btn-sm btn-outline-secondary ms-1" target="_blank" title="<%= burnRec.log_path %>">日志</a>
+                  <% } %>
                 </td>
               </tr>
             <% }) %>

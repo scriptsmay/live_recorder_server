@@ -143,6 +143,21 @@ class DataService {
 
     const result = await pool.query(sql, params);
 
+    // 从 JSONL 文件修正弹幕条数（DB 中的 event_count 可能在服务重启后失准）
+    await Promise.all(
+      result.rows.map((row) => {
+        if (row.danmaku_raw_path && require('fs').existsSync(row.danmaku_raw_path)) {
+          return require('fs').promises
+            .readFile(row.danmaku_raw_path, 'utf-8')
+            .then((content) => {
+              row.danmaku_event_count = content.split('\n').filter(Boolean).length;
+            })
+            .catch(() => {});
+        }
+        return Promise.resolve();
+      })
+    );
+
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM recording_sessions s${where}`,
       params.slice(0, params.length - (page ? 2 : 1))
@@ -190,10 +205,20 @@ class DataService {
       danmaku_burn_exists: f.danmaku_burn_path ? require('fs').existsSync(f.danmaku_burn_path) : false,
     }));
 
+    // 弹幕采集记录：优先从 JSONL 文件计算真实条数（内存计数在服务重启后会丢失）
+    const capture = captureRes.rows[0] || null;
+    if (capture && capture.raw_path && require('fs').existsSync(capture.raw_path)) {
+      try {
+        const content = require('fs').readFileSync(capture.raw_path, 'utf-8');
+        const lineCount = content.split('\n').filter(Boolean).length;
+        capture.event_count = lineCount;
+      } catch (_) {}
+    }
+
     return {
       session,
       room: roomRes.rows[0] || null,
-      capture: captureRes.rows[0] || null,
+      capture,
       burnRecords: burnRes.rows,
       files,
     };
