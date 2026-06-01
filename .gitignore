@@ -39,3 +39,7 @@ backups/
 __pycache__/
 download.log
 data/
+
+# IDEs
+.workbuddy/
+.claude/

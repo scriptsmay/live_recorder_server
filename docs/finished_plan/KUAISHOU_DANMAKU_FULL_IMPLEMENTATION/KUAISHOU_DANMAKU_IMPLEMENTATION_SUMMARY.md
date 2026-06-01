@@ -382,3 +382,30 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 3. **自动压制默认关闭**：`auto_burn_danmaku=false`，先使用手动入口验证
 4. **Docker 镜像要求**：FFmpeg 需包含 `libass`、`fontconfig`、`fonts-noto-cjk`
 5. **弹幕失败隔离**：弹幕录制/压制失败不会影响视频录制、转码、HLS 和投稿
+
+---
+
+## 后续优化：Chrome Extension 弹幕录制状态感知
+
+更新日期：2026-06-01
+
+### 背景
+
+初始实现中，Chrome Extension 的弹幕发送与后端录制状态完全解耦：只要用户打开快手直播间页面，`inject.js` 就会持续拦截 WebSocket 弹幕并通过 `POST /api/danmaku/batch` 发送到后端，无论后端是否在录制。这导致非录制期间产生大量无效网络请求。
+
+### 改动内容（仅 `chrome_live_listener/background.js`）
+
+引入 `isSending` 状态门控，弹幕发送严格跟随后端录制状态：
+
+1. 进入直播间后创建弹幕会话，进入缓冲模式（`isSending=false`，采集但不发送）
+2. 立即查询后端 `GET /api/notify/status` 录制状态，如已在录制则开启发送
+3. 定时器每 10 秒轮询后端录制状态，检测到录制开始/结束自动启停发送
+4. 录制结束时先刷新剩余缓冲再关闭发送
+5. 未录制期间弹幕保留在内存缓冲区（上限 5000 条，超出丢弃最早事件）
+
+### 关键设计
+
+- **竞态防护**：`stopDanmakuSession` 使用 `stopping` 标记阻止 drain 期间新事件进入缓冲区，同步 `splice(0)` 取出全部事件后再 `await flush`
+- **延迟容忍**：录制开始到首次弹幕发送最大延迟约 15 秒（10s 检查间隔 + 5s flush 间隔），对录制场景可接受
+- **内存保护**：缓冲区上限 5000 条事件，防止长时间不录制时内存无限增长
+- **会话过期检查**：`checkRecordingAndUpdateSession` 在网络 await 后重新检查会话是否存在，避免操作已被 `stopDanmakuSession` 删除的会话

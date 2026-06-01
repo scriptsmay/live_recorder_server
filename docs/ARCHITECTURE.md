@@ -73,6 +73,31 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
      │                               │                            │   异步转码 (并发3)      │   biliup upload    │
 ```
 
+### 弹幕数据流（Chrome 扩展 → 后端）
+
+Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕，经 `content.js` 转发给 `background.js`，批量推送到后端 `POST /api/danmaku/batch`。**扩展侧弹幕发送与后端录制状态联动**：仅在录制中时才推送弹幕数据，未录制时事件保留在内存缓冲区（上限 5000 条）。
+
+```
+[Chrome Extension]                                                    [Server]
+     │                                                                    │
+     │  inject.js hook WebSocket → 弹幕事件                               │
+     │  ──────────────────────────>│ content.js (5s 缓冲)                 │
+     │                              │                                     │
+     │  danmakuReady                │ background.js                       │
+     │  (会话创建, isSending=false) │                                     │
+     │                              │                                     │
+     │  GET /api/notify/status      │  检查录制状态 (立即 + 每10s)        │
+     │  ──────────────────────────────────────────────────────────────────>│
+     │                              │  ◄── recording ──                   │
+     │                              │  isSending=true                     │
+     │                              │                                     │
+     │  POST /api/danmaku/batch     │  每 5s flush（仅 isSending=true）   │
+     │  ──────────────────────────────────────────────────────────────────>│
+     │                              │                                     │  DanmakuRecorder
+     │                              │                                     │  → danmaku.jsonl
+     │  录制结束 → flush → 停止发送 │                                     │
+```
+
 ## 1. 会话生命周期
 
 **会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
