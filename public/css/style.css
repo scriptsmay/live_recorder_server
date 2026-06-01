@@ -547,6 +547,24 @@ hr {
   background: linear-gradient(135deg, var(--theme-bg-warm) 0%, #ffffff 100%);
 }
 
+.session-card .section-block {
+  background: var(--theme-bg-warm);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-card .section-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.session-card .section-block small {
+  font-size: 0.82rem;
+}
+
 #videoPlayerModal .modal-content {
   background: #1a1a1a;
 }

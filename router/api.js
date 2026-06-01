@@ -390,8 +390,13 @@ router.delete('/recordings/:id', async (req, res) => {
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
+    const type = req.query.type; // 'danmaku' 时返回弹幕压制版
 
-    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+    const sql =
+      type === 'danmaku'
+        ? 'SELECT danmaku_burn_path AS file_path FROM recording_files WHERE id = $1'
+        : 'SELECT file_path FROM recording_files WHERE id = $1';
+    const fileResult = await pool.query(sql, [id]);
     const filePath = fileResult.rows[0]?.file_path;
 
     if (!filePath) {

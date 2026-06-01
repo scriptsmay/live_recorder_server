@@ -161,6 +161,9 @@
                 <td><small><%= formatDate(b.started_at) %></small></td>
                 <td><small><%= formatDate(b.completed_at) %></small></td>
                 <td>
+                  <% if (b.status === 'completed' && b.recording_file_id) { %>
+                    <button class="btn btn-sm btn-outline-success playRecBtn mb-1" data-recording-id="<%= b.recording_file_id %>" data-filename="<%= outputName %>" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">▶ 播放</button>
+                  <% } %>
                   <button class="btn btn-sm btn-outline-danger deleteBurnBtn mb-1" data-id="<%= b.id %>">删除</button>
                   <% if (b.status === 'failed' && b.ass_path) { %>
                     <br><button class="btn btn-sm btn-outline-warning retryBurnBtn" data-recording-id="<%= b.recording_file_id %>" data-session-id="<%= b.session_id %>">重试</button>
@@ -175,7 +178,15 @@
   </div>
 </div>
 
+<script src="/js/recording-player.js"></script>
+<%- include('partials/_video_player') %>
+
 <script>
+  // 初始化播放器
+  if (typeof RecordingPlayer !== 'undefined') {
+    RecordingPlayer.init();
+  }
+
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.deleteTranscodeBtn');
     if (btn) {

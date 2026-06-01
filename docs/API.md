@@ -395,6 +395,12 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
 流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。
 数据源：`recording_files` 表
 
+**查询参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | 可选。传 `danmaku` 时返回弹幕压制版文件（`danmaku_burn_path`），默认返回原始录制文件（`file_path`） |
+
 **返回：**
 
 视频流（`video/mp4` / `video/x-flv` / `video/mp2t` 等，根据文件扩展名自动判断 MIME 类型）。
