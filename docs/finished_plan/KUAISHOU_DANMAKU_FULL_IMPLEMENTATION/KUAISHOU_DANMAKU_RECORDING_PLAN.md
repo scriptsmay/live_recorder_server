@@ -64,11 +64,13 @@
 
 **协议摘要**（详见 [kuaishou-danmaku-research.md](./kuaishou-danmaku-research.md)）：
 
-- 传输层：WebSocket，消息为 JSON envelope `{type, payload}`
-- `SC_FEED_PUSH`（PayloadType 310）是核心推送消息，payload 包含 `commentFeeds[]`、`giftFeeds[]`、`likeFeeds[]`
+- 传输层：WebSocket，消息为 Protobuf binary（外层结构: f1=payloadType varint, f2=seqId varint, f3=payload nested message）
+- `SC_FEED_PUSH`（PayloadType 310）是核心推送消息，protobuf 结构：field 5 = commentFeeds（repeated message）、field 8 = giftFeeds（repeated message）
 - `SC_COMMENT_ZONE_RICH_TEXT`（PayloadType 829）为富文本弹幕
-- 心跳：客户端每 20s 发送 `{type: "CS_HEARTBEAT", timestamp}`
-- 进入房间：发送 `{type: "CS_ENTER_ROOM", payload: {liveStreamId, token, pageId}}`
+- 心跳：客户端每 20s 发送 protobuf binary 消息（PayloadType 1）
+- 进入房间：发送 protobuf binary 消息（PayloadType 200），payload 包含 liveStreamId、token、pageId
+
+> **注意**：早期文档中将这些消息描述为 JSON 格式（如 `{type: "CS_HEARTBEAT", timestamp}`），这是逻辑结构描述而非线格式。实际线格式全部为 protobuf binary 编码。
 
 **拦截方式**：在 `chrome_live_listener` 中新增 inject.js，monkey-patch `WebSocket` 构造函数，监听所有 SC_FEED_PUSH 消息，通过 postMessage → content script → background.js 链路转发到后端。
 
@@ -448,7 +450,7 @@ ls -l /dev/dri
 - Extension 侧做宽松解析：只提取已知字段，未知字段保留 raw。
 - 保存原始 WebSocket 消息到本地日志，方便协议变化后重放分析。
 - UI 明确显示弹幕录制失败原因，不阻断视频录制。
-- `SC_FEED_PUSH` 的 payload 结构需实际注入验证：如果是 JSON 对象则直接解析，如果是 protobuf binary 则需引入 protobufjs。
+- `SC_FEED_PUSH` 的 payload 结构已实机验证为 protobuf binary，inject.js 内置零依赖 protobuf wire format 解码器。
 
 ### 2. 账号与风控
 
@@ -477,14 +479,14 @@ ls -l /dev/dri
 
 > **2026-06-01 新增**
 
-风险：inject.js 拦截到的 `SC_FEED_PUSH` 消息，其 `payload` 字段可能是 JSON 对象（前端代码直接访问 `payload.commentFeeds`），也可能是 protobuf binary（需要解码）。两种情况的解析方式完全不同。
+风险：~~inject.js 拦截到的 `SC_FEED_PUSH` 消息，其 `payload` 字段可能是 JSON 对象（前端代码直接访问 `payload.commentFeeds`），也可能是 protobuf binary（需要解码）。两种情况的解析方式完全不同。~~ → **已解决**（2026-06-01 更新）：确认为 protobuf binary。inject.js 内置零依赖 protobuf wire format 解码器，无需 protobufjs 或外部 proto 定义。
 
 应对：
 
-- Phase 1 先用 `inject.js` 拦截并 `console.log` 打印实际消息格式，确认后再实现解析。
-- 如果是 JSON：直接在 `danmaku-parser.js` 中解析，零依赖。
-- 如果是 protobuf binary：需要从 JS bundle 中提取 proto 定义，引入 `protobufjs` 库。
-- 两种方案的 parser 可以抽象为统一接口，上层代码不受影响。
+- ~~Phase 1 先用 `inject.js` 拦截并 `console.log` 打印实际消息格式，确认后再实现解析~~ → **已完成**
+- ~~如果是 JSON：直接在 `danmaku-parser.js` 中解析，零依赖~~
+- ~~如果是 protobuf binary：需要从 JS bundle 中提取 proto 定义，引入 `protobufjs` 库~~
+- ✅ 实际方案：inject.js 自实现 protobuf 解码器，JSON 仅作为字符串消息的 fallback 路径
 
 ### 4. FFmpeg 和字体兼容
 
@@ -523,7 +525,7 @@ ls -l /dev/dri
 
 调研结果详见 [kuaishou-danmaku-research.md](./kuaishou-danmaku-research.md)。
 
-- [x] 抓取快手直播页面网络请求，确认弹幕连接方式 → WebSocket + JSON envelope + Protobuf payload
+- [x] 抓取快手直播页面网络请求，确认弹幕连接方式 → WebSocket + Protobuf binary
 - [x] 识别核心消息类型 → SC_FEED_PUSH (310) 包含弹幕/礼物/点赞
 - [x] 分析反爬保护 → `websocketinfo` 接口有 `__NS_hxfalcon` + 验证码，headless 被拦截
 - [x] 确定数据源方案 → Chrome Extension inject.js 拦截页面 WebSocket

@@ -11,10 +11,10 @@
 
 阶段 0 已完成（2026-06-01），结论如下：
 
-- 快手弹幕使用 WebSocket + JSON envelope（SC_FEED_PUSH）协议。
+- 快手弹幕使用 WebSocket + Protobuf binary（SC_FEED_PUSH, PayloadType 310）协议。
 - `websocketinfo` 接口有反爬，后端直连不可行。
 - **采用 Chrome Extension inject.js 拦截页面 WebSocket**，被动监听，零风控风险。
-- payload 格式（JSON 还是 protobuf binary）**尚未实机验证**，是阶段 1 的第一步。
+- payload 格式已实机验证为 **protobuf binary**（所有 WebSocket 消息均为 ArrayBuffer），inject.js 内置零依赖 protobuf wire format 解码器。
 
 ---
 
@@ -63,7 +63,9 @@
 **完成标准**：
 
 - [x] 能在 console 看到 `SC_FEED_PUSH` 消息
-- [x] 确认 `payload.commentFeeds` 是 JSON 对象（✅ 无需 protobuf）
+- [x] 确认 payload 为 protobuf binary（✅ 已内置 protobuf 解码器）
+
+> **实机验证结果**（2026-06-01 更新）：所有 WebSocket 消息均为 ArrayBuffer（二进制 protobuf），inject.js 通过 `EventTarget.prototype.addEventListener` 和 `WebSocket.prototype.onmessage` 在页面 JS 之前拦截原始二进制数据，使用自实现的 protobuf wire format 解码器解析。JSON 仅作为字符串消息的 fallback 路径。
 
 ---
 
@@ -73,47 +75,28 @@
 
 **前提**：T1-CE-1 验证完成，确认 payload 格式。
 
-**情况 A — JSON payload（预期情况）**：
+**情况 A — protobuf binary（实际实现）**：
+
+> **2026-06-01 更新**：实机验证确认所有消息均为 protobuf binary。inject.js 内置零依赖 protobuf wire format 解码器（~150 行），核心逻辑如下：
+> - `readVarint()` / `decodeProto()` — 线格式解码，支持 varint、嵌套消息、UTF-8 字符串
+> - `processBinaryMessage()` — 外层 protobuf 结构: field 1 = payloadType (varint), field 2 = seqId, field 3 = payload (nested message)
+> - `extractPbEvents()` — PayloadType 分发: 310=FEED_PUSH 提取弹幕/礼物, 340=WATCHING_LIST 跳过
+> - `tryExtractComment()` / `tryExtractGift()` — 子消息提取: commentFeeds (field 5)、giftFeeds (field 8)
+> - `isRealText()` — 文本过滤器: 排除 base64 编码、URL、数字 ID 字符串、camelCase 标识符
 
 ```js
-// danmaku-parser.js
-function parseFeedPush(payload) {
-  const events = [];
-  const tsMs = Date.now();
-
-  for (const c of payload.commentFeeds || []) {
-    events.push({
-      type: 'comment',
-      ts_ms: tsMs,
-      user: c.user?.userName || c.authorName || '',
-      user_id: c.user?.principalId || '',
-      text: c.content || '',
-      raw: c,
-    });
-  }
-
-  for (const g of payload.giftFeeds || []) {
-    events.push({
-      type: 'gift',
-      ts_ms: tsMs,
-      user: g.user?.userName || g.senderName || '',
-      user_id: g.user?.principalId || '',
-      gift_name: g.giftName || '',
-      gift_count: g.comboCount || 1,
-      raw: g,
-    });
-  }
-
-  return events;
-}
-module.exports = { parseFeedPush };
+// danmaku-parser.js (ES module)
+export function normalizeDanmakuBatch(rawEvents, sessionId) { ... }
+export function filterDanmakuEvents(events) { ... }
 ```
 
-**情况 B — protobuf binary**：
+**~~情况 B — JSON payload~~（已废弃，实际未出现）**：
 
-- 从快手 JS bundle 提取 proto 定义文件
-- 引入 `protobufjs`（`npm install protobufjs`）
-- 离线 decode 后转为上述标准格式
+~~从快手 JS bundle 提取 proto 定义文件~~
+~~引入 `protobufjs`~~
+~~离线 decode 后转为上述标准格式~~
+
+> 实际不需要 protobufjs，也不需要提取 proto 定义文件。inject.js 的自实现解码器足以处理所有已知消息。
 
 **完成标准**：
 
@@ -420,7 +403,7 @@ router.use('/api', danmakuRouter);
 
 | 项目                    | 说明                                                                                                                             |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **payload 格式验证**    | 必须先完成 T1-CE-1，若是 protobuf binary，需额外 1-2 天处理 proto 定义                                                           |
+| **payload 格式验证**    | ~~若是 protobuf binary 需额外 1-2 天~~ → **已解决**：实机验证确认为 protobuf binary，inject.js 自实现解码器已实现 |
 | **session_id 传递**     | Extension 需要知道当前会话 ID；最简单方式是在 `/api/notify/live_download` 响应中带上，Extension 收到后存入 `activeLiveSessionId` |
 | **分段时间记录**        | 建议同步在 `FFmpegDownloader.js` 中记录每个分段打开时间，为阶段 2 ASS 裁剪提供精确数据                                           |
 | **Service Worker 保活** | Extension background.js 的 service worker 可能被浏览器 sleep，弹幕心跳（5s 刷新计时）本身足以保活                                |
@@ -437,7 +420,7 @@ router.use('/api', danmakuRouter);
 
 | 任务    | 说明                          |                         状态                          |
 | ------- | ----------------------------- | :---------------------------------------------------: |
-| T1-CE-1 | inject.js — WebSocket 拦截    |              ✅ payload 为 JSON，零依赖               |
+| T1-CE-1 | inject.js — WebSocket 拦截    |      ✅ payload 为 protobuf binary，内置解码器      |
 | T1-CE-2 | danmaku-parser.js — 弹幕解析  |               ✅ comment/gift 均可解析                |
 | T1-CE-3 | content.js — postMessage 转发 |                      ✅ 链路正常                      |
 | T1-CE-4 | background.js — 5s 批量推送   |                  ✅ 推送失败不抛异常                  |
@@ -451,7 +434,10 @@ router.use('/api', danmakuRouter);
 
 ### 核心决策
 
-- **payload 格式**：JSON 对象（非 protobuf binary），解析零依赖
+- **payload 格式**：Protobuf binary（非 JSON），inject.js 内置零依赖 protobuf wire format 解码器
+- **protobuf 字段映射**：SC_FEED_PUSH (pt=310) payload 中，field 5 = commentFeeds, field 8 = giftFeeds; comment 子消息: field 2.f1=userId, field 2.f2=userName, comment text 取最长有效文本
+- **文本过滤**：`isRealText()` 函数排除 base64 编码、URL、数字 ID 串、camelCase 标识符等非弹幕文本
+- **PayloadType 过滤**：pt=340 (LIVE_WATCHING_LIST) 包含用户名但无弹幕，已跳过避免误判
 - **时间戳规则**：写入 JSONL 时 `offset_ms = ts_ms - sessionStartedAt`
 - **弹幕隔离**：弹幕模块异常不影响视频录制（try/catch 隔离）
 

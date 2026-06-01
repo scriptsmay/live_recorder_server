@@ -34,6 +34,8 @@
 
 **建议**：Phase 1 第一步就是部署 inject.js 做 `console.log` 验证，这一步不超过半天。如果是 JSON，解析零依赖；如果是 protobuf binary，需要从页面 bundle 中提取 proto definition 文件。两种方案都不构成阻塞。
 
+> **2026-06-01 实机验证结果**：所有 WebSocket 消息均为 ArrayBuffer（纯 protobuf binary），不存在 JSON envelope。inject.js 通过 prototype-level hook（`EventTarget.prototype.addEventListener` + `WebSocket.prototype.onmessage`）在页面 JS 解码器之前拦截原始二进制数据。最终方案为 inject.js 内置零依赖 protobuf wire format 解码器（~150 行），无需 protobufjs，也无需提取 proto 定义文件。
+
 ### 潜在问题
 
 - **Manifest V3 Service Worker 休眠**：`background.js` 是 service worker，可能被浏览器休眠。但现有代码已有心跳保活机制（content.js 每 3 秒发消息），弹幕数据推送本身也会唤醒 service worker。5 秒批量推送的频率足以维持活跃。
@@ -156,7 +158,7 @@ CPU 编码命令（`libx264`）是确定可行的。QSV/VAAPI 需要 Docker 容�
 
 | 风险                            | 等级 | 评估                                                           |
 | ------------------------------- | ---- | -------------------------------------------------------------- |
-| SC_FEED_PUSH payload 格式待验证 | 中   | 半天内可确认，不构成阻塞                                       |
+| SC_FEED_PUSH payload 格式待验证 | ~~中~~ ✅ 已解决 | 确认 protobuf binary，inject.js 自实现解码器已解决 |
 | 快手协议变更                    | 中   | Extension 被动监听，协议变更影响与页面同步，用户反馈后即可感知 |
 | N100 性能不足                   | 中   | 并发固定 1 + 自动压制默认关闭 + 夜间窗口，可缓解               |
 | 存储膨胀                        | 低   | 已有应对策略（保留开关、清理策略）                             |
@@ -192,7 +194,7 @@ CPU 编码命令（`libx264`）是确定可行的。QSV/VAAPI 需要 Docker 容�
 
 1. **阶段 1 最先做的事情**：部署 inject.js 到 chrome_live_listener，打开一个快手直播间，验证是否能拦截到弹幕数据并打印到 console。这是整个项目的第一个关键验证点，应该在所有后端开发之前完成。
 
-2. **payload 格式确认后立刻做**：如果是 protobuf binary，优先从页面 JS bundle 中提取 proto definition，引入 `protobufjs`。这个工作量比预期的大，可能需要 1-2 天。
+2. **~~payload 格式确认后~~**（已解决）：~~如果是 protobuf binary，优先从页面 JS bundle 中提取 proto definition，引入 `protobufjs`~~ → 实际方案为 inject.js 内置零依赖 protobuf wire format 解码器，不依赖 protobufjs 或外部 proto 定义文件。
 
 3. **分段时间记录**：建议在阶段 1 同步修改录制流程，记录分段真实打开时间。这样后续 ASS 生成和压制都不需要兜底估算。
 

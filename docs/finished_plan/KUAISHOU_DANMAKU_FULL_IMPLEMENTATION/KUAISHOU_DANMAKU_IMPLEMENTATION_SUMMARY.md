@@ -31,8 +31,8 @@
 
 ### 核心发现
 
-- 快手弹幕使用 WebSocket + JSON envelope 协议
-- `SC_FEED_PUSH`（PayloadType 310）是核心推送消息，包含 `commentFeeds[]`、`giftFeeds[]`、`likeFeeds[]`
+- 快手弹幕使用 WebSocket + Protobuf binary 协议（所有消息均为二进制 ArrayBuffer，非 JSON）
+- `SC_FEED_PUSH`（PayloadType 310）是核心推送消息，protobuf 结构：field 5 = commentFeeds（repeated message）、field 8 = giftFeeds（repeated message）
 - `websocketinfo` 接口有 `__NS_hxfalcon` 反爬保护
 - **决策**：采用 Chrome Extension inject.js 拦截页面 WebSocket，绕过反爬
 
@@ -52,13 +52,13 @@
 
 | 任务    | 文件                | 说明                                              |
 | ------- | ------------------- | ------------------------------------------------- |
-| T1-CE-1 | `inject.js`         | monkey-patch WebSocket，拦截 SC_FEED_PUSH 消息    |
+| T1-CE-1 | `inject.js`         | monkey-patch WebSocket，拦截二进制 protobuf 消息并解码 |
 | T1-CE-2 | `danmaku-parser.js` | 解析 commentFeeds/giftFeeds 为标准事件格式        |
 | T1-CE-3 | `content.js`        | postMessage 转发链路（inject.js → background.js） |
 | T1-CE-4 | `background.js`     | 5 秒批量缓冲 + POST /api/danmaku/batch            |
 | T1-CE-5 | `config.js`         | 弹幕 API 路径配置                                 |
 
-**payload 格式验证结果**：SC_FEED_PUSH 的 payload 为 JSON 对象（非 protobuf），解析零依赖。
+**payload 格式验证结果**：SC_FEED_PUSH 的 payload 为 Protobuf binary（非 JSON），inject.js 内置零依赖的 protobuf wire format 解码器（~150 行），支持 varint 编码、嵌套消息递归解析和 UTF-8 字符串检测。
 
 ### live_recorder_server 改动（6 个任务）
 
@@ -296,8 +296,8 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 
 | 文件                | 类型 | 说明                                      |
 | ------------------- | ---- | ----------------------------------------- |
-| `inject.js`         | 新增 | WebSocket monkey-patch，拦截 SC_FEED_PUSH |
-| `danmaku-parser.js` | 新增 | 弹幕消息解析（comment/gift）              |
+| `inject.js`         | 新增 | WebSocket hook + protobuf 解码 + 弹幕/礼物提取 |
+| `danmaku-parser.js` | 新增 | 弹幕标准化与过滤工具模块                       |
 | `content.js`        | 修改 | postMessage 转发链路                      |
 | `background.js`     | 修改 | 5 秒批量缓冲 + POST /api/danmaku/batch    |
 | `config.js`         | 修改 | 弹幕 API 路径                             |
@@ -333,7 +333,8 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
 │                    Chrome Extension                              │
 │                                                                 │
 │  inject.js          content.js          background.js           │
-│  (WebSocket Hook) → (postMessage)    → (5s 批量缓冲)            │
+│  (WS Hook +         (postMessage)    → (5s 批量缓冲)            │
+│   Protobuf 解码)     │                                          │
 │                            │                  │                  │
 │                            ▼                  ▼                  │
 │                    danmaku-parser.js   POST /api/danmaku/batch   │

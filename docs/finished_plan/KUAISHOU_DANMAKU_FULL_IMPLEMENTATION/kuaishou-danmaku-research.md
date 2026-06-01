@@ -51,7 +51,7 @@ new WebSocket(url); // url 来自 websocketinfo 响应
 
 ### Step 3: 进入直播间
 
-客户端发送：
+客户端发送（逻辑结构，实际为 protobuf binary 编码）：
 
 ```json
 {
@@ -64,7 +64,7 @@ new WebSocket(url); // url 来自 websocketinfo 响应
 }
 ```
 
-### Step 4: 服务端确认
+### Step 4: 服务端确认（protobuf binary）
 
 ```json
 {
@@ -75,9 +75,9 @@ new WebSocket(url); // url 来自 websocketinfo 响应
 }
 ```
 
-### Step 5: 心跳保活
+### Step 5: 心跳保活（protobuf binary）
 
-每 20 秒发送一次：
+每 20 秒发送一次（PayloadType 1）：
 
 ```json
 {
@@ -175,6 +175,8 @@ new WebSocket(url); // url 来自 websocketinfo 响应
 ---
 
 ## 4. SC_FEED_PUSH 数据结构
+
+> **2026-06-01 实机验证更新**：以下 JSON 结构是逻辑描述（来自 JS Bundle 逆向分析），**实际线格式为 protobuf binary**。inject.js 拦截到的是原始 ArrayBuffer，需通过自实现 protobuf wire format 解码器解析。protobuf 字段映射：field 5 = commentFeeds (repeated message), field 8 = giftFeeds (repeated message)。
 
 `SC_FEED_PUSH` 是核心消息，payload 包含：
 
@@ -280,7 +282,7 @@ https://captcha.zt.kuaishou.com/iframe/index.html?captchaSession=...
 - WebSocket 使用 protobuf.js 库进行消息序列化/反序列化
 - 弹幕组件使用 CSS class `.danmaku`，有独立的弹幕速度控制和行管理逻辑
 - `_SEND_DANMAKU_` 是页面内发送弹幕的全局事件（`window._SEND_DANMAKU_`）
-- 消息格式为 JSON envelope 包裹 protobuf payload，`type` 字段为消息类型字符串
+- 消息格式为纯 Protobuf binary，外层结构: field 1 = payloadType (varint), field 2 = seqId (varint), field 3 = payload (nested message)
 
 ---
 
@@ -288,7 +290,7 @@ https://captcha.zt.kuaishou.com/iframe/index.html?captchaSession=...
 
 | 维度         | Bilibili                     | 快手                                         |
 | ------------ | ---------------------------- | -------------------------------------------- |
-| 协议         | WebSocket + Protobuf（全量） | WebSocket + JSON envelope + Protobuf payload |
+| 协议         | WebSocket + Protobuf（全量） | WebSocket + Protobuf binary（全量，2026-06-01 实机验证确认） |
 | 认证         | 需要 token（游客可获取）     | 需要 token（有反爬保护）                     |
 | 反爬         | 较弱，可直接调用 API         | 较强，`__NS_hxfalcon` + 验证码               |
 | 弹幕获取难度 | 低                           | 中高                                         |
