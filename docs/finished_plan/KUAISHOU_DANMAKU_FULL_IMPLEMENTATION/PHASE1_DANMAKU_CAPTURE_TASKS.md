@@ -78,6 +78,7 @@
 **情况 A — protobuf binary（实际实现）**：
 
 > **2026-06-01 更新**：实机验证确认所有消息均为 protobuf binary。inject.js 内置零依赖 protobuf wire format 解码器（~150 行），核心逻辑如下：
+>
 > - `readVarint()` / `decodeProto()` — 线格式解码，支持 varint、嵌套消息、UTF-8 字符串
 > - `processBinaryMessage()` — 外层 protobuf 结构: field 1 = payloadType (varint), field 2 = seqId, field 3 = payload (nested message)
 > - `extractPbEvents()` — PayloadType 分发: 310=FEED_PUSH 提取弹幕/礼物, 340=WATCHING_LIST 跳过
@@ -100,7 +101,7 @@ export function filterDanmakuEvents(events) { ... }
 
 **完成标准**：
 
-- [x] parser 输出标准事件格式：`{ type, ts_ms, user, user_id, text, raw }`
+- [x] parser 输出标准事件格式：`{ type, ts_ms, ts_abs_ms, user, userId, text, raw }`
 - [x] comment 和 gift 均可解析
 - [x] 未知字段保留到 `raw` 中
 
@@ -257,7 +258,7 @@ class DanmakuRecorder {
   async start({ sessionId, roomId, sessionDir, sessionStartedAt }) {}
 
   // 批量写入弹幕事件（来自 /api/danmaku/batch）
-  // events: [{ type, ts_ms(绝对时间), user, text, raw }]
+  // events: [{ type, ts_ms, ts_abs_ms, user, userId, text, raw }]
   async appendEvents(sessionId, events) {}
 
   // 结束录制，flush 文件，更新数据库
@@ -270,15 +271,25 @@ class DanmakuRecorder {
 
 **时间戳规则**：
 
-- 入参 `ts_ms` 为浏览器绝对时间戳
-- 写入 JSONL 时转为相对偏移：`offset_ms = ts_ms - sessionStartedAt`
-- `offset_ms` 是最终用于 ASS 生成的时间轴
+- Extension 端 `inject.js` 在捕获每条弹幕时打上 `ts_ms: Date.now()`（绝对时间戳）
+- `danmaku-parser.js` 标准化后输出 `ts_ms`（相对偏移）和 `ts_abs_ms`（绝对时间戳）
+- 服务端 `_normalizeEvent` 按以下优先级选取绝对时间戳：
+  1. `ts_abs_ms` — Extension 端提供的绝对时间戳（最优）
+  2. `ts_ms` — 仅在 `> 0` 时视为合法（`0` 是 falsy，会被跳过）
+  3. `_receivedAt` — `writeBatch` 为同批次无合法时间戳的事件分配的递增到达时间
+  4. `Date.now()` — 最终兜底
+- 写入 JSONL 时转为相对偏移：`ts_ms = tsAbs - sessionStartedAt`
+- `ts_ms` 是最终用于 ASS 生成的时间轴
+
+> **已知陷阱**：JavaScript 中 `0 || fallback` 会跳过 `0`（falsy）。旧代码用 `event.ts_ms || event.ts_abs_ms || Date.now()` 导致 `ts_ms = 0` 被忽略。已改用 `typeof x === 'number' && x > 0` 显式校验。
 
 **JSONL 格式**：
 
 ```json
-{ "offset_ms": 12345, "type": "comment", "user": "用户名", "user_id": "xxx", "text": "弹幕内容", "raw": {} }
+{ "ts_ms": 12345, "type": "comment", "username": "用户名", "user_id": "xxx", "text": "弹幕内容" }
 ```
+
+> 注：`raw` 字段仅在未知事件类型（`default` 分支）时保留。comment、gift、like 类型使用结构化字段。
 
 **完成标准**：
 
@@ -301,18 +312,18 @@ Content-Type: application/json
 
 请求体：
 {
-  "session_id": 123,
+  "room_url": "https://live.kuaishou.com/u/xxx",
   "events": [
-    { "type": "comment", "ts_ms": 1717200000000, "user": "xxx", "text": "弹幕" },
+    { "type": "comment", "ts_ms": 5000, "ts_abs_ms": 1717200005000, "user": "xxx", "userId": "uid_123", "text": "弹幕" },
     ...
   ]
 }
 
 成功响应 200：
-{ "ok": true, "received": 5 }
+{ "status": "ok", "written": 5, "error": null }
 
 失败响应 400/404：
-{ "ok": false, "error": "session not found" }
+{ "status": "Error", "message": "缺少 room_url 或 events" }
 ```
 
 **逻辑**：
@@ -403,7 +414,7 @@ router.use('/api', danmakuRouter);
 
 | 项目                    | 说明                                                                                                                             |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **payload 格式验证**    | ~~若是 protobuf binary 需额外 1-2 天~~ → **已解决**：实机验证确认为 protobuf binary，inject.js 自实现解码器已实现 |
+| **payload 格式验证**    | ~~若是 protobuf binary 需额外 1-2 天~~ → **已解决**：实机验证确认为 protobuf binary，inject.js 自实现解码器已实现                |
 | **session_id 传递**     | Extension 需要知道当前会话 ID；最简单方式是在 `/api/notify/live_download` 响应中带上，Extension 收到后存入 `activeLiveSessionId` |
 | **分段时间记录**        | 建议同步在 `FFmpegDownloader.js` 中记录每个分段打开时间，为阶段 2 ASS 裁剪提供精确数据                                           |
 | **Service Worker 保活** | Extension background.js 的 service worker 可能被浏览器 sleep，弹幕心跳（5s 刷新计时）本身足以保活                                |
@@ -420,7 +431,7 @@ router.use('/api', danmakuRouter);
 
 | 任务    | 说明                          |                         状态                          |
 | ------- | ----------------------------- | :---------------------------------------------------: |
-| T1-CE-1 | inject.js — WebSocket 拦截    |      ✅ payload 为 protobuf binary，内置解码器      |
+| T1-CE-1 | inject.js — WebSocket 拦截    |       ✅ payload 为 protobuf binary，内置解码器       |
 | T1-CE-2 | danmaku-parser.js — 弹幕解析  |               ✅ comment/gift 均可解析                |
 | T1-CE-3 | content.js — postMessage 转发 |                      ✅ 链路正常                      |
 | T1-CE-4 | background.js — 5s 批量推送   |                  ✅ 推送失败不抛异常                  |

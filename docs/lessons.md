@@ -536,8 +536,11 @@ brew install homebrew-ffmpeg/ffmpeg/ffmpeg
 const caps = await this._getCapabilities();
 if (!caps.subtitlesFilter) {
   return {
-    success: false, outputPath, duration: 0,
-    error: 'FFmpeg 未编译 libass，subtitles 滤镜不可用。请安装带 libass 的 FFmpeg（brew install homebrew-ffmpeg/ffmpeg/ffmpeg）',
+    success: false,
+    outputPath,
+    duration: 0,
+    error:
+      'FFmpeg 未编译 libass，subtitles 滤镜不可用。请安装带 libass 的 FFmpeg（brew install homebrew-ffmpeg/ffmpeg/ffmpeg）',
     logPath: null,
   };
 }
@@ -547,12 +550,12 @@ if (!caps.subtitlesFilter) {
 
 ### 经验总结
 
-| 教训 | 说明 |
-| --- | --- |
-| **FFmpeg 报错不等于语法错** | "Error parsing filter description" 可能是滤镜不存在，不是参数写错了 |
-| **先验证工具能力再排查代码** | `ffmpeg -filters | grep subtitle` 一行命令就能定位，却浪费了两轮在路径转义上 |
-| **Homebrew 和 Debian 的 FFmpeg 差异大** | Homebrew bottled 版砍掉了 libass 等非核心依赖，Debian 包反而更完整 |
-| **代码层做能力检查** | 不要假设 FFmpeg 一定有某个滤镜，启动时探测 + 友好报错能节省大量排查时间 |
+| 教训                                    | 说明                                                                    |
+| --------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
+| **FFmpeg 报错不等于语法错**             | "Error parsing filter description" 可能是滤镜不存在，不是参数写错了     |
+| **先验证工具能力再排查代码**            | `ffmpeg -filters                                                        | grep subtitle` 一行命令就能定位，却浪费了两轮在路径转义上 |
+| **Homebrew 和 Debian 的 FFmpeg 差异大** | Homebrew bottled 版砍掉了 libass 等非核心依赖，Debian 包反而更完整      |
+| **代码层做能力检查**                    | 不要假设 FFmpeg 一定有某个滤镜，启动时探测 + 友好报错能节省大量排查时间 |
 
 ## Docker 容器中 biliup 投稿失败排查【已解决】
 
@@ -578,3 +581,34 @@ if (!caps.subtitlesFilter) {
 2. **Rust 的 `dirs` crate 依赖 `HOME`**：不是从 `/etc/passwd` 读取，而是直接读 `HOME` 环境变量
 3. **`uv tool install` 安装位置取决于执行用户**：root 执行时装到 `/root/.local/share/uv/`，需要显式链接到全局 PATH
 4. **非 root 容器用户增加运维复杂度**：对于私有部署场景，收益不大但问题不少
+
+## JavaScript falsy 陷阱：`ts_ms = 0` 被 `||` 吞掉导致弹幕时间轴全部归零
+
+### 现象
+
+弹幕压制版视频中，243 条弹幕全部在开头 0 秒同时飞出，之后整段视频空空如也。检查 `danmaku.jsonl` 发现所有事件的 `ts_ms` 都是 `0`。
+
+### 根因
+
+`_normalizeEvent` 中用 `||` 做时间戳 fallback：
+
+```javascript
+const tsAbs = event.ts_ms || event.ts_abs_ms || Date.now();
+```
+
+Chrome Extension 发来的事件 `ts_ms` 是相对时间（可能为 `0`），而 `0` 在 JavaScript 中是 falsy，所以 `0 || ...` 会继续往后跳。更致命的是，Extension 的 `danmaku-parser.js` 输出的 `ts_ms` 是相对偏移（如 5000ms），即使它不为 0，服务端也会把它当绝对时间戳使用，`5000 - sessionStartMs` 得到一个巨大的负数，`Math.max(0, ...)` 后变成 `0`。
+
+同时，`_normalizeEvent` 存储字段名为 `user`，但搜索 API 和前端都用 `username`，导致弹幕按用户名搜索永远无法命中。
+
+### 修复
+
+1. **时间戳优先级链**：`ts_abs_ms`（Extension 绝对时间戳）→ `ts_ms`（仅在 `> 0` 时合法）→ `_receivedAt`（批次到达时间）→ `Date.now()`。用 `typeof x === 'number' && x > 0` 替代 `||`。
+2. **批次时间戳分配**：`writeBatch` 为同批次缺少合法时间戳的事件分配递增的 `_receivedAt = batchArrivalBase + i`，避免同批事件挤在同一毫秒。
+3. **字段名对齐**：`_normalizeEvent` 输出从 `user` 改为 `username`，新增 `user_id`。搜索 API 兼容新旧字段名。
+4. **Extension 端同步修复**：`danmaku-parser.js` 的 `normalizeDanmakuEvent` 同样把 `rawEvent.ts_ms || Date.now()` 改为显式校验。
+
+### 经验总结
+
+1. **`||` 不适用于数值 fallback**：`0`、`NaN` 都是 falsy，数值型字段必须用 `typeof x === 'number'` 显式判断
+2. **跨系统字段名要对齐**：Extension 输出 `user`、服务端存 `user`、前端读 `username`——三段各写各的，搜索功能形同虚设
+3. **时间戳语义要明确**：同一个字段名 `ts_ms` 在不同模块中含义不同（绝对 vs 相对），是导致误用的根源。改名区分（`ts_abs_ms` vs `ts_ms`）比依赖注释更可靠

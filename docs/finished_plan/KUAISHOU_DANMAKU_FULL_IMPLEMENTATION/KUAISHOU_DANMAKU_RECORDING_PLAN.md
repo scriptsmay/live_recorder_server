@@ -108,15 +108,18 @@ Chrome Extension 拦截弹幕
 - `background.js` — 弹幕缓冲（5s 批量）+ POST 到后端 `/api/danmaku/batch`
 - `config.js` — 新增弹幕相关的 API 路径配置
 
-`danmaku.jsonl` 建议每行一条标准化事件：
+`danmaku.jsonl` 每行一条标准化事件：
 
 ```json
-{ "ts_ms": 12345, "type": "comment", "user": "用户名", "text": "弹幕内容", "raw": {} }
+{ "ts_ms": 12345, "type": "comment", "username": "用户名", "user_id": "uid_xxx", "text": "弹幕内容" }
 ```
 
 时间戳规则：
 
-- `ts_ms` 以当前录制会话开始时间为 0 点。
+- `ts_ms` 以当前录制会话开始时间为 0 点（相对偏移，单位毫秒）。
+- Extension 端 `inject.js` 为每条弹幕独立打上 `Date.now()` 作为绝对时间戳，经 `danmaku-parser.js` 标准化后同时携带 `ts_ms`（相对）和 `ts_abs_ms`（绝对）。
+- 服务端 `_normalizeEvent` 按优先级选取绝对时间戳：`ts_abs_ms` > `ts_ms`(>0) > `_receivedAt` > `Date.now()`，然后减去 `sessionStartedAt` 得到相对偏移。
+- `writeBatch` 为同批次缺少合法时间戳的事件分配递增的 `_receivedAt = batchArrivalBase + i`，避免同批事件挤在同一毫秒。
 - 连接断开重连后继续使用会话时间，避免弹幕整体偏移。
 - 录制恢复场景需要记录 `started_at` 和本地单调时间，防止系统时间跳变。
 - 不按视频分段拆分原始弹幕。原始弹幕只按会话保存一份，后续压制阶段再按视频分段裁剪，避免重连、续播、分段边界变化导致原始数据碎片化。

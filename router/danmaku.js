@@ -326,7 +326,10 @@ router.get('/danmaku/search', async (req, res) => {
     const kwLower = (keyword || '').toLowerCase();
     if (kwLower) {
       allEvents = allEvents.filter(
-        (e) => e.text.toLowerCase().includes(kwLower) || (e.username && e.username.toLowerCase().includes(kwLower))
+        (e) => {
+          const username = e.username || e.user || '';
+          return e.text.toLowerCase().includes(kwLower) || username.toLowerCase().includes(kwLower);
+        }
       );
     }
 
@@ -350,8 +353,8 @@ router.get('/danmaku/search', async (req, res) => {
                 .padStart(2, '0')}`
             : '',
         text: e.text,
-        username: e.username || '',
-        user_id: e.user_id || '',
+        username: e.username || e.user || '',
+        user_id: e.user_id || e.userId || '',
       })),
       total,
       offset: offsetNum,
