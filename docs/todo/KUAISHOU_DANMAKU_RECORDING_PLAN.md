@@ -1,6 +1,7 @@
 # 快手直播弹幕录制与视频弹幕压制开发计划
 
 创建日期：2026-05-31
+更新日期：2026-06-01（阶段 0 调研完成，更新数据采集方案）
 
 ## 目标
 
@@ -10,7 +11,9 @@
 
 整体技术难度：中高。
 
-主要难点不在 FFmpeg 压制本身，而在快手弹幕数据源。快手公开开放资料未提供面向普通直播间观众侧弹幕抓取的稳定 API，因此第一阶段必须做可行性验证：确认弹幕 WebSocket/HTTP 接口、鉴权、签名、心跳、消息格式和封禁风险。若只能依赖 Web 端逆向接口，维护成本和失效概率较高。
+~~主要难点不在 FFmpeg 压制本身，而在快手弹幕数据源。快手公开开放资料未提供面向普通直播间观众侧弹幕抓取的稳定 API，因此第一阶段必须做可行性验证：确认弹幕 WebSocket/HTTP 接口、鉴权、签名、心跳、消息格式和封禁风险。若只能依赖 Web 端逆向接口，维护成本和失效概率较高。~~
+
+> **2026-06-01 更新**: 阶段 0 调研已完成。快手弹幕协议已逆向清楚（详见 [kuaishou-danmaku-research.md](./kuaishou-danmaku-research.md)），采用 **Chrome Extension 拦截页面 WebSocket** 方案作为数据源，可绕过 `websocketinfo` 接口的反爬保护。主要难点从"数据源未知"转变为"Extension 与后端的数据桥接"。
 
 弹幕压制是重编码任务，不能沿用当前 TS/FLV → MP4 的 `-c copy` 快速转封装模式。FFmpeg 的 `subtitles/ass` 滤镜会把字幕渲染进视频画面，视频流必须重新编码；在 N100 上应默认并发 1，并优先验证 Intel Quick Sync/VAAPI/QSV 是否可用。没有硬件编码时也可用 `libx264`，但会明显占用 CPU，可能影响同时录制。
 
@@ -53,27 +56,55 @@
 
 ### 1. 弹幕数据采集
 
+> **2026-06-01 更新**: 基于调研结果，采用 Chrome Extension 拦截方案替代直接连接 WebSocket。
+
+#### 数据源方案：Chrome Extension 拦截
+
+快手弹幕使用 WebSocket + Protobuf 协议，但 `websocketinfo` 接口有 `__NS_hxfalcon` 反爬保护，headless 浏览器访问会触发验证码。因此不采用后端直连方案，而是通过 `chrome_live_listener` 扩展在用户浏览器中拦截弹幕数据。
+
+**协议摘要**（详见 [kuaishou-danmaku-research.md](./kuaishou-danmaku-research.md)）：
+
+- 传输层：WebSocket，消息为 JSON envelope `{type, payload}`
+- `SC_FEED_PUSH`（PayloadType 310）是核心推送消息，payload 包含 `commentFeeds[]`、`giftFeeds[]`、`likeFeeds[]`
+- `SC_COMMENT_ZONE_RICH_TEXT`（PayloadType 829）为富文本弹幕
+- 心跳：客户端每 20s 发送 `{type: "CS_HEARTBEAT", timestamp}`
+- 进入房间：发送 `{type: "CS_ENTER_ROOM", payload: {liveStreamId, token, pageId}}`
+
+**拦截方式**：在 `chrome_live_listener` 中新增 inject.js，monkey-patch `WebSocket` 构造函数，监听所有 SC_FEED_PUSH 消息，通过 postMessage → content script → background.js 链路转发到后端。
+
+#### 后端采集流程
+
 新增模块：
 
-- `lib/core/danmaku/KuaishouDanmakuClient.js`
-- `lib/core/danmaku/DanmakuRecorder.js`
-- `lib/core/danmaku/DanmakuAssGenerator.js`
+- `lib/core/danmaku/KuaishouDanmakuClient.js`（~~直连 WebSocket~~ → 改为 HTTP 接收端点）
+- `lib/core/danmaku/DanmakuRecorder.js`（弹幕写入与会话管理）
+- `lib/core/danmaku/DanmakuAssGenerator.js`（ASS 字幕生成）
 
 采集流程：
 
 ```text
-录制会话开始
+Chrome Extension 拦截弹幕
   ↓
-判断 room.platform / room_url 是否为快手
+批量 POST /api/danmaku/batch（每 5 秒）
   ↓
-启动 DanmakuRecorder
-  ↓
-连接快手弹幕数据源
-  ↓
-按会话时间写入 danmaku.jsonl
+后端 DanmakuRecorder 写入 danmaku.jsonl + 数据库
   ↓
 录制结束时停止采集并生成 danmaku.ass
 ```
+
+#### Chrome Extension 改动清单（chrome_live_listener 项目）
+
+新增文件：
+
+- `inject.js` — 注入页面上下文，monkey-patch WebSocket，拦截 SC_FEED_PUSH
+- `danmaku-parser.js` — 解析弹幕消息，提取 commentFeeds/giftFeeds/likeFeeds
+
+修改文件：
+
+- `manifest.json` — 添加 `web_accessible_resources` 声明 inject.js
+- `content.js` — 监听 inject.js 的 postMessage，转发给 background.js
+- `background.js` — 弹幕缓冲（5s 批量）+ POST 到后端 `/api/danmaku/batch`
+- `config.js` — 新增弹幕相关的 API 路径配置
 
 `danmaku.jsonl` 建议每行一条标准化事件：
 
@@ -333,6 +364,7 @@ ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFA
 
 新增 API：
 
+- `POST /api/danmaku/batch`：接收 Chrome Extension 批量推送的弹幕数据（新增，Chrome Extension 调用）
 - `POST /api/sessions/:id/danmaku/ass`：重新生成 ASS。
 - `POST /api/sessions/:id/danmaku/burn`：手动加入压制队列。
 - `GET /api/danmaku_capture_records`：查询弹幕录制记录。
@@ -407,24 +439,28 @@ ls -l /dev/dri
 
 ### 1. 快手弹幕数据源不稳定
 
-风险：接口签名、Cookie、WebSocket 协议、protobuf schema、心跳参数可能变化。
+> **2026-06-01 更新**：协议已逆向清楚，Chrome Extension 方案不直接面对反爬，风险等级从"高"降为"中"。
+
+风险：WebSocket 协议、protobuf schema、消息类型枚举可能随版本更新变化。
 
 应对：
 
-- 第一阶段只做 spike，不直接改主链路。
-- 把快手采集器做成平台插件，不影响其他平台和录制功能。
-- 保存原始包或原始 JSON，方便接口变化后重放解析。
+- Extension 侧做宽松解析：只提取已知字段，未知字段保留 raw。
+- 保存原始 WebSocket 消息到本地日志，方便协议变化后重放分析。
 - UI 明确显示弹幕录制失败原因，不阻断视频录制。
+- `SC_FEED_PUSH` 的 payload 结构需实际注入验证：如果是 JSON 对象则直接解析，如果是 protobuf binary 则需引入 protobufjs。
 
 ### 2. 账号与风控
 
-风险：如果需要 Cookie 或登录态，长期采集可能触发风控或失效。
+> **2026-06-01 更新**：Chrome Extension 方案天然复用用户浏览器的登录态和 cookie，风控风险大幅降低。
+
+风险：用户未登录快手时，弹幕数据可能受限。
 
 应对：
 
-- 优先验证匿名游客态是否可读取弹幕。
-- 不在数据库保存明文 Cookie；如必须保存，使用 `.env` 或后续引入加密配置。
-- 增加连接频率限制和退避重连。
+- 弹幕采集依赖用户已在浏览器中打开直播间（天然有 cookie）。
+- 不需要额外保存或管理 cookie。
+- Extension 只做被动监听 WebSocket，不主动发起 API 请求，风控触发概率极低。
 
 ### 3. 时间同步偏移
 
@@ -434,8 +470,21 @@ ls -l /dev/dri
 
 - 记录弹幕采集启动相对会话的偏移。
 - 支持手动设置 ASS 偏移量重新生成。
-- 在页面提供“弹幕时间偏移 ms”参数。
+- 在页面提供”弹幕时间偏移 ms”参数。
 - 分段录制时不要依赖看门狗入库时间作为分段起止时间；优先记录 FFmpeg 分段打开时间或从文件名/分段时长推导。
+
+### 7. SC_FEED_PUSH payload 格式待验证（新增）
+
+> **2026-06-01 新增**
+
+风险：inject.js 拦截到的 `SC_FEED_PUSH` 消息，其 `payload` 字段可能是 JSON 对象（前端代码直接访问 `payload.commentFeeds`），也可能是 protobuf binary（需要解码）。两种情况的解析方式完全不同。
+
+应对：
+
+- Phase 1 先用 `inject.js` 拦截并 `console.log` 打印实际消息格式，确认后再实现解析。
+- 如果是 JSON：直接在 `danmaku-parser.js` 中解析，零依赖。
+- 如果是 protobuf binary：需要从 JS bundle 中提取 proto 定义，引入 `protobufjs` 库。
+- 两种方案的 parser 可以抽象为统一接口，上层代码不受影响。
 
 ### 4. FFmpeg 和字体兼容
 
@@ -470,25 +519,42 @@ ls -l /dev/dri
 
 ## 开发阶段拆分
 
-### 阶段 0：可行性验证（1-3 天）
+### 阶段 0：可行性验证 ✅ 已完成（2026-06-01）
 
-- 抓取快手直播页面网络请求，确认弹幕连接方式。
-- 参考 `../completed_projects/biliup/biliup/plugins/kuaishou.py` 复用其房间 ID 解析、首页低风控访问、`/live_api/liveroom/livedetail` 查询思路。
-- 参考 biliup `Danmaku/__init__.py` 注释中提到的 `py-wuhao/ks_barrage`，评估其快手弹幕协议是否仍可用。
-- 写独立脚本连接一个公开直播间，保存 10 分钟弹幕。
-- 验证匿名态、Cookie 态、重连、心跳和消息解析。
-- 输出 spike 结论：可稳定实现 / 需要登录态 / 不建议实现。
+调研结果详见 [kuaishou-danmaku-research.md](./kuaishou-danmaku-research.md)。
+
+- [x] 抓取快手直播页面网络请求，确认弹幕连接方式 → WebSocket + JSON envelope + Protobuf payload
+- [x] 识别核心消息类型 → SC_FEED_PUSH (310) 包含弹幕/礼物/点赞
+- [x] 分析反爬保护 → `websocketinfo` 接口有 `__NS_hxfalcon` + 验证码，headless 被拦截
+- [x] 确定数据源方案 → Chrome Extension inject.js 拦截页面 WebSocket
+- [x] 提取 liveStreamId → 从页面 SSR 数据 `__INITIAL_STATE__` 获取
+- [x] 梳理完整协议 → 42 种 SC_ 消息类型 + 10 种 CS_ 消息类型
+
+**结论**：可稳定实现，通过 Chrome Extension 方案绕过反爬。用户浏览器天然有登录态和 cookie，WebSocket 连接由页面自身建立，Extension 只做被动监听。
 
 交付物：
 
-- `scripts/probe-kuaishou-danmaku.js`
-- 一份样例 `danmaku.jsonl`
-- 快手弹幕协议说明文档
+- `docs/todo/kuaishou-danmaku-research.md` — 完整协议分析文档
+- `docs/kuaishou-danmaku-research.md` — ~~原位置（已迁移）~~
 
 ### 阶段 1：弹幕录制基础链路（2-4 天）
 
-- 新增弹幕采集模块。
-- 录制会话启动/结束时挂载和停止弹幕采集。
+> **2026-06-01 更新**：数据源从"后端直连 WebSocket"改为"Chrome Extension 拦截 + 后端接收"。
+
+**chrome_live_listener 侧（前置）**：
+
+- 新增 `inject.js`：monkey-patch WebSocket，拦截 SC_FEED_PUSH 消息。
+- 修改 `content.js`：接收 inject.js 的 postMessage，转发给 background.js。
+- 新增 `danmaku-parser.js`：解析弹幕消息（先验证 payload 格式，再实现解析）。
+- 修改 `background.js`：弹幕缓冲（5s 批量）+ POST 到后端。
+- 修改 `manifest.json`：声明 inject.js 为 web_accessible_resources。
+- **验证步骤**：先部署 inject.js，打开一个快手直播间，确认能拦截到弹幕数据并打印到 console。
+
+**live_recorder_server 侧**：
+
+- 新增 `POST /api/danmaku/batch` 接口，接收 Extension 批量推送的弹幕。
+- 新增弹幕采集模块（DanmakuRecorder）。
+- 录制会话启动/结束时管理弹幕写入。
 - 新增 `danmaku_capture_records`。
 - 保存 `danmaku.jsonl`。
 - 页面显示弹幕录制状态。
@@ -517,9 +583,25 @@ ls -l /dev/dri
 
 ## 需要修改的文件清单
 
+### chrome_live_listener（浏览器扩展）
+
 新增：
 
-- `lib/core/danmaku/KuaishouDanmakuClient.js`
+- `inject.js` — 注入页面上下文，monkey-patch WebSocket 拦截弹幕
+- `danmaku-parser.js` — 弹幕消息解析
+
+修改：
+
+- `manifest.json` — 添加 web_accessible_resources
+- `content.js` — 监听 inject.js postMessage 并转发
+- `background.js` — 弹幕缓冲与批量发送
+- `config.js` — 弹幕 API 路径
+
+### live_recorder_server（后端）
+
+新增：
+
+- `lib/core/danmaku/KuaishouDanmakuClient.js`（~~直连 WebSocket~~ → HTTP 接收端点）
 - `lib/core/danmaku/DanmakuRecorder.js`
 - `lib/core/danmaku/DanmakuAssGenerator.js`
 - `lib/core/DanmakuBurnQueue.js`
