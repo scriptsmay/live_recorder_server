@@ -498,6 +498,62 @@ DouyuChecker.js           # 平台检查器（调用签名 + 请求流地址）
 3. **UA 一致性是隐性鉴权**：`enc_data` 绑定了 UA，两端必须一致——这类问题在文档中不会说明，只能通过对比实际请求发现
 4. **保留旧签名代码**：`douyu-vip.js` 虽然废弃，但保留作为参考，万一斗鱼恢复类似机制
 
+## FFmpeg subtitles 滤镜依赖 libass（Homebrew 踩坑）
+
+### 现象
+
+弹幕压制 FFmpeg 命令执行失败，退出码 234：
+
+```
+[AVFilterGraph] No option name near '/path/to/file.ass'
+[AVFilterGraph] Error parsing filterchain 'subtitles='/path/to/file.ass'' around:
+Error opening output files: Invalid argument
+```
+
+报错完全看不出是依赖缺失，误导排查方向到路径转义问题上。
+
+### 根因
+
+Homebrew 官方 bottled FFmpeg **不编译 libass**，`subtitles` 和 `ass` 滤镜根本不存在。FFmpeg 把未知的滤镜名当作 filtergraph 语法来解析，产出 "No option name near" 这种极具误导性的错误。
+
+**Docker 环境不受影响**：Debian bookworm 的 `apt install ffmpeg` 自带 `libass9`，subtitles 滤镜开箱即用。
+
+### 解决方案
+
+macOS 开发环境使用 homebrew-ffmpeg tap（默认含 libass）：
+
+```bash
+brew uninstall ffmpeg
+brew tap homebrew-ffmpeg/ffmpeg
+brew install homebrew-ffmpeg/ffmpeg/ffmpeg
+```
+
+### 代码防御
+
+在 `danmaku-burner.js` 的 `burn()` 方法入口增加了 `probeCapabilities()` 缓存检查：
+
+```javascript
+const caps = await this._getCapabilities();
+if (!caps.subtitlesFilter) {
+  return {
+    success: false, outputPath, duration: 0,
+    error: 'FFmpeg 未编译 libass，subtitles 滤镜不可用。请安装带 libass 的 FFmpeg（brew install homebrew-ffmpeg/ffmpeg/ffmpeg）',
+    logPath: null,
+  };
+}
+```
+
+`_getCapabilities()` 首次调用后缓存结果，后续压制不再重复 fork FFmpeg。
+
+### 经验总结
+
+| 教训 | 说明 |
+| --- | --- |
+| **FFmpeg 报错不等于语法错** | "Error parsing filter description" 可能是滤镜不存在，不是参数写错了 |
+| **先验证工具能力再排查代码** | `ffmpeg -filters | grep subtitle` 一行命令就能定位，却浪费了两轮在路径转义上 |
+| **Homebrew 和 Debian 的 FFmpeg 差异大** | Homebrew bottled 版砍掉了 libass 等非核心依赖，Debian 包反而更完整 |
+| **代码层做能力检查** | 不要假设 FFmpeg 一定有某个滤镜，启动时探测 + 友好报错能节省大量排查时间 |
+
 ## Docker 容器中 biliup 投稿失败排查【已解决】
 
 ### 现象
