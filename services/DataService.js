@@ -129,7 +129,8 @@ class DataService {
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-    let sql = `SELECT s.*, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN danmaku_capture_records dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
+    // danmaku_capture_records 使用子查询取每个 session 最新的一条，避免一对多 JOIN 导致行扇出
+    let sql = `SELECT s.*, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
