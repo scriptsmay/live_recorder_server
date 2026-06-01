@@ -273,6 +273,38 @@ describe('DanmakuBurner — burn() 前置检查', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('已存在');
   });
+
+  test('FFmpeg 无 libass 时返回友好错误', async () => {
+    const input = tmpPath('no_libass.mp4');
+    const ass = tmpPath('no_libass.ass');
+    createDummyFile(input);
+    fs.writeFileSync(
+      ass,
+      [
+        '[Script Info]',
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+        'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,弹幕',
+      ].join('\n'),
+      'utf-8'
+    );
+
+    // 强制缓存为无 libass
+    const origCaps = DanmakuBurner._capabilities;
+    DanmakuBurner._capabilities = { subtitlesFilter: false, qsvEncoder: false, vaapiEncoder: false, libx264: true, fontconfig: false };
+
+    const result = await DanmakuBurner.burn({
+      inputPath: input,
+      assPath: ass,
+      outputPath: tmpPath('no_libass_out.mp4'),
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('libass');
+
+    // 恢复
+    DanmakuBurner._capabilities = origCaps;
+  });
 });
 
 // ============================================================
@@ -280,7 +312,11 @@ describe('DanmakuBurner — burn() 前置检查', () => {
 // ============================================================
 
 describe('DanmakuBurner — burn() 成功', () => {
-  beforeAll(() => ensureTmp());
+  beforeAll(() => {
+    ensureTmp();
+    // 预设缓存能力值，避免 burn() 内部 probeCapabilities 触发额外 spawn
+    DanmakuBurner._capabilities = { subtitlesFilter: true, qsvEncoder: true, vaapiEncoder: false, libx264: true, fontconfig: true };
+  });
 
   beforeEach(() => {
     spawn.mockClear();
@@ -426,7 +462,10 @@ describe('DanmakuBurner — burn() 成功', () => {
 // ============================================================
 
 describe('DanmakuBurner — burn() 失败', () => {
-  beforeAll(() => ensureTmp());
+  beforeAll(() => {
+    ensureTmp();
+    DanmakuBurner._capabilities = { subtitlesFilter: true, qsvEncoder: false, vaapiEncoder: false, libx264: true, fontconfig: false };
+  });
 
   beforeEach(() => {
     spawn.mockClear();
