@@ -528,7 +528,7 @@ ls -l /dev/dri
 - [x] 分析反爬保护 → `websocketinfo` 接口有 `__NS_hxfalcon` + 验证码，headless 被拦截
 - [x] 确定数据源方案 → Chrome Extension inject.js 拦截页面 WebSocket
 - [x] 提取 liveStreamId → 从页面 SSR 数据 `__INITIAL_STATE__` 获取
-- [x] 梳理完整协议 → 42 种 SC_ 消息类型 + 10 种 CS_ 消息类型
+- [x] 梳理完整协议 → 42 种 SC* 消息类型 + 10 种 CS* 消息类型
 
 **结论**：可稳定实现，通过 Chrome Extension 方案绕过反爬。用户浏览器天然有登录态和 cookie，WebSocket 连接由页面自身建立，Extension 只做被动监听。
 

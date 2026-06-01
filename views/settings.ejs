@@ -22,22 +22,6 @@
       ],
     },
     {
-      title: '转码设置',
-      items: [
-        { key: 'auto_transcode', label: '自动转码', desc: '录制完成后自动将 FLV/TS 转换为 MP4', type: 'select', options: ['true', 'false'] },
-        { key: 'transcode_delete_originals', label: '转码后删除原始文件', desc: '转码成功后自动删除 FLV/TS 原始文件', type: 'select', options: ['true', 'false'] },
-        { key: 'transcode_concurrency', label: '转码并发数', desc: '转码队列的最大并发数', type: 'number', attrs: 'min="1" max="10"' },
-      ],
-    },
-    {
-      title: 'HLS 设置',
-      items: [
-        { key: 'auto_generate_hls', label: '自动生成 HLS', desc: '转码完成后自动生成 HLS 索引（推荐开启，零重编码，速度极快）', type: 'select', options: ['true', 'false'] },
-        { key: 'hls_segment_duration', label: 'HLS 分段时长（秒）', desc: '每个 HLS 分段的时间长度，默认 10 秒', type: 'number', attrs: 'min="5" max="60"' },
-        { key: 'hls_cleanup_days', label: 'HLS 清理天数', desc: '超过此天数的 HLS 文件将被自动清理，设为 0 则不清理', type: 'number', attrs: 'min="0" max="365"' },
-      ],
-    },
-    {
       title: '上传设置',
       items: [
         { key: 'submit_api', label: '提交接口', desc: 'biliup --submit 选项，留空为自动选择', type: 'select', options: ['', 'app', 'web', 'b-cut-android'] },
@@ -47,35 +31,60 @@
         { key: 'max_upload_limit', label: '上传重试次数限制', desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3', type: 'number', attrs: 'min="1" max="999"' },
       ],
     },
+    {
+      title: '转码 & HLS',
+      items: [
+        { key: 'auto_transcode', label: '自动转码', desc: '录制完成后自动将 FLV/TS 转换为 MP4', type: 'select', options: ['true', 'false'] },
+        { key: 'transcode_delete_originals', label: '转码后删除原始文件', desc: '转码成功后自动删除 FLV/TS 原始文件', type: 'select', options: ['true', 'false'] },
+        { key: 'transcode_concurrency', label: '转码并发数', desc: '转码队列的最大并发数', type: 'number', attrs: 'min="1" max="10"' },
+        { key: 'auto_generate_hls', label: '自动生成 HLS', desc: '转码完成后自动生成 HLS 索引（推荐开启，零重编码，速度极快）', type: 'select', options: ['true', 'false'] },
+        { key: 'hls_segment_duration', label: 'HLS 分段时长（秒）', desc: '每个 HLS 分段的时间长度，默认 10 秒', type: 'number', attrs: 'min="5" max="60"' },
+        { key: 'hls_cleanup_days', label: 'HLS 清理天数', desc: '超过此天数的 HLS 文件将被自动清理，设为 0 则不清理', type: 'number', attrs: 'min="0" max="365"' },
+      ],
+    },
+    {
+      title: '弹幕设置',
+      items: [
+        { key: 'kuaishou_danmaku_enabled', label: '启用弹幕录制', desc: '是否在快手直播录制时同时采集弹幕数据', type: 'select', options: ['false', 'true'] },
+        { key: 'auto_burn_danmaku', label: '自动弹幕压制', desc: '录制/转码完成后自动将弹幕压制到视频上（N100 建议关闭，使用手动）', type: 'select', options: ['false', 'true'] },
+        { key: 'danmaku_burn_concurrency', label: '弹幕压制并发', desc: '弹幕压制队列最大并发数，N100 建议固定为 1', type: 'number', attrs: 'min="1" max="1"' },
+        { key: 'danmaku_preserve_clean_video', label: '保留无弹幕版本', desc: '压制成功后是否保留无弹幕版本', type: 'select', options: ['true', 'false'] },
+        { key: 'danmaku_density_per_second', label: '每秒弹幕上限', desc: 'ASS 生成时每秒最多渲染的弹幕数，超出部分丢弃', type: 'number', attrs: 'min="5" max="100"' },
+        { key: 'danmaku_font_family', label: '弹幕字体', desc: 'ASS 渲染使用的字体名称', type: 'text', attrs: '' },
+        { key: 'danmaku_font_size', label: '弹幕字号（1080p）', desc: '1080p 分辨率下的默认字号', type: 'number', attrs: 'min="16" max="64"' },
+        { key: 'danmaku_opacity', label: '弹幕不透明度', desc: '0-1 之间，0 完全透明，1 完全不透明', type: 'number', attrs: 'min="0" max="1" step="0.05"' },
+        { key: 'prefer_danmaku_burned_video', label: '优先使用弹幕版', desc: '投稿/播放时是否优先使用弹幕压制版本', type: 'select', options: ['false', 'true'] },
+      ],
+    },
   ];
 %>
 
-<div class="row">
+<div class="row g-4">
   <% groups.forEach(group => { %>
-    <div class="col-md-3 col-sm-6 mb-4">
-      <div class="card">
+    <div class="col-lg-6 col-12">
+      <div class="card h-100">
         <div class="card-header"><h5 class="mb-0"><%= group.title %></h5></div>
         <div class="card-body">
-          <% group.items.forEach(item => { %>
-            <% const val = settingsMap[item.key] || ''; %>
-            <% if (item.type === 'select') { %>
-              <div class="mb-3">
-                <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
-                <select class="form-select" id="set_<%= item.key %>">
-                  <% item.options.forEach(o => { %>
-                    <option value="<%= o %>" <%= val === o ? 'selected' : '' %>><%= o || '(自动)' %></option>
-                  <% }) %>
-                </select>
-                <div class="form-text"><%= item.desc %></div>
+          <div class="row">
+            <% group.items.forEach(item => { %>
+              <% const val = settingsMap[item.key] || ''; %>
+              <div class="col-md-6 mb-3">
+                <% if (item.type === 'select') { %>
+                  <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
+                  <select class="form-select" id="set_<%= item.key %>">
+                    <% item.options.forEach(o => { %>
+                      <option value="<%= o %>" <%= val === o ? 'selected' : '' %>><%= o || '(自动)' %></option>
+                    <% }) %>
+                  </select>
+                  <div class="form-text"><%= item.desc %></div>
+                <% } else { %>
+                  <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
+                  <input type="<%= item.type %>" class="form-control" id="set_<%= item.key %>" value="<%= val %>" <%= item.attrs || '' %> />
+                  <div class="form-text"><%= item.desc %></div>
+                <% } %>
               </div>
-            <% } else { %>
-              <div class="mb-3">
-                <label class="form-label" for="set_<%= item.key %>"><%= item.label %></label>
-                <input type="<%= item.type %>" class="form-control" id="set_<%= item.key %>" value="<%= val %>" <%= item.attrs || '' %> />
-                <div class="form-text"><%= item.desc %></div>
-              </div>
-            <% } %>
-          <% }) %>
+            <% }) %>
+          </div>
         </div>
       </div>
     </div>
@@ -107,6 +116,15 @@
       'threads',
       'pool2_size',
       'max_upload_limit',
+      'kuaishou_danmaku_enabled',
+      'auto_burn_danmaku',
+      'danmaku_burn_concurrency',
+      'danmaku_preserve_clean_video',
+      'danmaku_density_per_second',
+      'danmaku_font_family',
+      'danmaku_font_size',
+      'danmaku_opacity',
+      'prefer_danmaku_burned_video',
     ];
 
     const btn = document.getElementById('saveSettingsBtn');

@@ -32,6 +32,7 @@ dev_downloads/
 dev_biliup/
 
 test_downloads/
+test/tmp_*
 
 # database backups
 backups/

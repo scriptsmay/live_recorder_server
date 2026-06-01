@@ -1,114 +1,221 @@
 <h2>转码记录</h2>
 
-<div class="table-responsive">
-  <table class="table table-hover align-middle">
-    <thead class="table-light">
-      <tr>
-        <th>ID</th>
-        <th>会话ID</th>
-        <th>直播间</th>
-        <th>原文件</th>
-        <th>转码文件</th>
-        <th>状态</th>
-        <th>入队时间</th>
-        <th>开始时间</th>
-        <th>完成时间</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      <% if (records.length === 0) { %>
-        <tr><td colspan="10" class="text-center text-muted py-4">暂无转码记录</td></tr>
-      <% } else { %>
-        <% records.forEach(r => { %>
-          <% const badge = {
-            queued: '<span class="badge bg-secondary">排队中</span>',
-            processing: '<span class="badge bg-primary">转码中</span>',
-            completed: '<span class="badge bg-success">已完成</span>',
-            failed: '<span class="badge bg-danger">失败</span>',
-          }[r.status] || r.status; %>
-          <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
-          <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
-          <tr>
-            <td><%= r.id %></td>
-            <td><%= r.session_id || '-' %></td>
-            <td>
-              <% if (r.room_name) { %>
-                <span class="text-muted">#<%= r.room_id %></span>
-                <small><%= r.room_name %></small>
-              <% } else { %>
-                <span class="text-muted">-</span>
-              <% } %>
-            </td>
-            <td>
-              <small title="<%= r.original_path %>"><%= originalName %></small>
-            </td>
-            <td>
-              <% if (r.transcoded_path) { %>
-                <small title="<%= r.transcoded_path %>"><%= transcodedName %></small>
-              <% } else { %>
-                <span class="text-muted">-</span>
-              <% } %>
-            </td>
-            <td><%- badge %></td>
-            <td>
-              <small><%= formatDate(r.enqueued_at) %></small>
-            </td>
-            <td>
-              <small><%= formatDate(r.started_at) %></small>
-            </td>
-            <td>
-              <small><%= formatDate(r.completed_at) %></small>
-            </td>
-            <td>
-              <a class="btn btn-sm btn-outline-dark mb-1" href="/logs?file=<%= encodeURIComponent('transcode_' + r.session_id + '.log') %>" target="_blank">日志</a>
-              <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
-            </td>
-          </tr>
-        <% }) %>
+<!-- 标签切换 -->
+<ul class="nav nav-tabs mb-3" id="transcodeTab" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="transcode-tab" data-bs-toggle="tab" data-bs-target="#transcodePanel" type="button" role="tab">转码记录</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="burn-tab" data-bs-toggle="tab" data-bs-target="#burnPanel" type="button" role="tab">
+      弹幕压制
+      <% const burnActive = burnRecords.filter(b => b.status === 'processing' || b.status === 'queued').length; %>
+      <% if (burnActive > 0) { %>
+        <span class="badge bg-warning ms-1"><%= burnActive %></span>
       <% } %>
-    </tbody>
-  </table>
-</div>
+    </button>
+  </li>
+</ul>
 
-<% if (pagination.totalPages > 1) { %>
-<div class="d-flex justify-content-between align-items-center mt-3">
-  <small class="text-muted">共 <%= pagination.total %> 条记录</small>
-  <nav aria-label="转码记录分页">
-    <ul class="pagination pagination-sm mb-0">
-      <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
-        <a class="page-link" href="?page=<%= pagination.page - 1 %>">上一页</a>
-      </li>
-      <%
-        const maxPages = 7;
-        let startPage = Math.max(1, pagination.page - 3);
-        let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
-        if (endPage - startPage < maxPages - 1) {
-          startPage = Math.max(1, endPage - maxPages + 1);
-        }
-        for (let i = startPage; i <= endPage; i++) {
-      %>
-        <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
-          <a class="page-link" href="?page=<%= i %>"><%= i %></a>
-        </li>
-      <% } %>
-      <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
-        <a class="page-link" href="?page=<%= pagination.page + 1 %>">下一页</a>
-      </li>
-    </ul>
-  </nav>
+<div class="tab-content">
+  <!-- 转码记录 Tab -->
+  <div class="tab-pane fade show active" id="transcodePanel" role="tabpanel">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>会话ID</th>
+            <th>直播间</th>
+            <th>原文件</th>
+            <th>转码文件</th>
+            <th>状态</th>
+            <th>入队时间</th>
+            <th>开始时间</th>
+            <th>完成时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (records.length === 0) { %>
+            <tr><td colspan="10" class="text-center text-muted py-4">暂无转码记录</td></tr>
+          <% } else { %>
+            <% records.forEach(r => { %>
+              <% const badge = {
+                queued: '<span class="badge bg-secondary">排队中</span>',
+                processing: '<span class="badge bg-primary">转码中</span>',
+                completed: '<span class="badge bg-success">已完成</span>',
+                failed: '<span class="badge bg-danger">失败</span>',
+              }[r.status] || r.status; %>
+              <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
+              <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
+              <tr>
+                <td><%= r.id %></td>
+                <td><%= r.session_id || '-' %></td>
+                <td>
+                  <% if (r.room_name) { %>
+                    <span class="text-muted">#<%= r.room_id %></span>
+                    <small><%= r.room_name %></small>
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+                <td><small title="<%= r.original_path %>"><%= originalName %></small></td>
+                <td>
+                  <% if (r.transcoded_path) { %>
+                    <small title="<%= r.transcoded_path %>"><%= transcodedName %></small>
+                  <% } else { %>
+                    <span class="text-muted">-</span>
+                  <% } %>
+                </td>
+                <td><%- badge %></td>
+                <td><small><%= formatDate(r.enqueued_at) %></small></td>
+                <td><small><%= formatDate(r.started_at) %></small></td>
+                <td><small><%= formatDate(r.completed_at) %></small></td>
+                <td>
+                  <a class="btn btn-sm btn-outline-dark mb-1" href="/logs?file=<%= encodeURIComponent('transcode_' + r.session_id + '.log') %>" target="_blank">日志</a>
+                  <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
+                </td>
+              </tr>
+            <% }) %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (pagination.totalPages > 1) { %>
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+        <nav aria-label="转码记录分页">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+              <a class="page-link" href="?page=<%= pagination.page - 1 %>">上一页</a>
+            </li>
+            <%
+              const maxPages = 7;
+              let startPage = Math.max(1, pagination.page - 3);
+              let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+              if (endPage - startPage < maxPages - 1) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+              }
+              for (let i = startPage; i <= endPage; i++) {
+            %>
+              <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+                <a class="page-link" href="?page=<%= i %>"><%= i %></a>
+              </li>
+            <% } %>
+            <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+              <a class="page-link" href="?page=<%= pagination.page + 1 %>">下一页</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- 弹幕压制 Tab -->
+  <div class="tab-pane fade" id="burnPanel" role="tabpanel">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>会话ID</th>
+            <th>分段</th>
+            <th>ASS 文件</th>
+            <th>输出文件</th>
+            <th>状态</th>
+            <th>入队时间</th>
+            <th>开始时间</th>
+            <th>完成时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (burnRecords.length === 0) { %>
+            <tr><td colspan="10" class="text-center text-muted py-4">暂无弹幕压制记录</td></tr>
+          <% } else { %>
+            <% burnRecords.forEach(b => { %>
+              <% const burnBadge = {
+                queued: '<span class="badge bg-secondary">排队中</span>',
+                processing: '<span class="badge bg-primary">压制中</span>',
+                completed: '<span class="badge bg-success">已完成</span>',
+                failed: '<span class="badge bg-danger">失败</span>',
+                skipped: '<span class="badge bg-warning">跳过</span>',
+              }[b.status] || ('<span class="badge bg-secondary">' + b.status + '</span>'); %>
+              <% const assName = b.ass_path ? b.ass_path.split('/').pop() : '-'; %>
+              <% const outputName = b.output_path ? b.output_path.split('/').pop() : '-'; %>
+              <tr>
+                <td><%= b.id %></td>
+                <td>
+                  <a href="/sessions/<%= b.session_id %>/danmaku"><%= b.session_id %></a>
+                  <% if (b.room_url) { %><br><small class="text-muted"><%= b.room_url %></small><% } %>
+                </td>
+                <td><%= b.segment_index != null ? b.segment_index : '-' %></td>
+                <td><small title="<%= b.ass_path %>"><%= assName %></small></td>
+                <td><small title="<%= b.output_path %>"><%= outputName %></small></td>
+                <td>
+                  <%- burnBadge %>
+                  <% if (b.error) { %><br><small class="text-danger"><%= b.error.slice(0, 50) %></small><% } %>
+                </td>
+                <td><small><%= formatDate(b.enqueued_at) %></small></td>
+                <td><small><%= formatDate(b.started_at) %></small></td>
+                <td><small><%= formatDate(b.completed_at) %></small></td>
+                <td>
+                  <button class="btn btn-sm btn-outline-danger deleteBurnBtn mb-1" data-id="<%= b.id %>">删除</button>
+                  <% if (b.status === 'failed' && b.ass_path) { %>
+                    <br><button class="btn btn-sm btn-outline-warning retryBurnBtn" data-recording-id="<%= b.recording_file_id %>" data-session-id="<%= b.session_id %>">重试</button>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
-<% } %>
 
 <script>
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.deleteTranscodeBtn');
-    if (!btn) return;
+    if (btn) {
+      showConfirm('确定删除此转码记录吗？').then(async (confirmed) => {
+        if (!confirmed) return;
+        await fetch(`/api/transcode_records/${btn.dataset.id}`, { method: 'DELETE' });
+        window.location.reload();
+      });
+      return;
+    }
 
-    showConfirm('确定删除此转码记录吗？').then(async (confirmed) => {
-      if (!confirmed) return;
-      await fetch(`/api/transcode_records/${btn.dataset.id}`, { method: 'DELETE' });
-      window.location.reload();
-    });
+    const delBurnBtn = e.target.closest('.deleteBurnBtn');
+    if (delBurnBtn) {
+      showConfirm('确定删除此压制记录吗？').then(async (confirmed) => {
+        if (!confirmed) return;
+        await fetch(`/api/danmaku_burn_records/${delBurnBtn.dataset.id}`, { method: 'DELETE' });
+        window.location.reload();
+      });
+      return;
+    }
+
+    const retryBtn = e.target.closest('.retryBurnBtn');
+    if (retryBtn) {
+      retryBtn.disabled = true;
+      retryBtn.textContent = '入队中...';
+      try {
+        const res = await fetch(`/api/sessions/${retryBtn.dataset.sessionId}/danmaku/burn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: true }),
+        });
+        const json = await res.json();
+        toast(json.status === 'ok' ? json.message : ('失败: ' + json.message));
+        if (json.status === 'ok') setTimeout(() => location.reload(), 1500);
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      } finally {
+        retryBtn.disabled = false;
+        retryBtn.textContent = '重试';
+      }
+    }
   });
 </script>

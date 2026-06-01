@@ -9,6 +9,9 @@ const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 const DataService = require('./DataService');
 const RecordingManager = require('../lib/core/RecordingManager');
+const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
+const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
+const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -267,6 +270,9 @@ class RecorderService {
         code,
       });
 
+      // 停止弹幕采集并生成 ASS
+      await this._handleDanmakuFinish(sessionId, room.room_url);
+
       if (sessionId) {
         try {
           const sess = await pool.query(
@@ -364,6 +370,83 @@ class RecorderService {
     }
 
     return { fileSize, fileExists, fileCount };
+  }
+
+  /**
+   * 处理弹幕录制结束：停止采集、生成 ASS、触发自动压制
+   *
+   * @param {number|string} sessionId - 录制会话 ID
+   * @param {string} roomUrl - 房间 URL
+   */
+  static async _handleDanmakuFinish(sessionId, roomUrl) {
+    try {
+      // 停止弹幕采集
+      const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl);
+
+      if (!captureId || eventCount === 0) {
+        console.log(`[弹幕] 会话 ${sessionId} 无弹幕数据或采集未启动`);
+        return;
+      }
+
+      console.log(`[弹幕] 会话 ${sessionId} 采集停止: ${eventCount} 条事件, capture_id=${captureId}`);
+
+      // 获取会话目录
+      const session = await pool.query(`SELECT output_dir FROM recording_sessions WHERE id = $1`, [sessionId]);
+      if (session.rows.length === 0) return;
+
+      const sessionDir = session.rows[0].output_dir;
+      const jsonlPath = path.join(sessionDir, 'danmaku.jsonl');
+      const assPath = path.join(sessionDir, 'danmaku.ass');
+
+      if (!fs.existsSync(jsonlPath)) return;
+
+      // 生成会话级 ASS
+      const assResult = await danmakuAssGenerator.generateFromJsonl({
+        jsonlPath,
+        assPath,
+      });
+
+      if (assResult.success) {
+        console.log(`[弹幕] ASS 生成成功: ${assPath}, ${assResult.eventCount} 条`);
+
+        // 更新采集记录
+        await pool.query(`UPDATE danmaku_capture_records SET ass_path = $1 WHERE session_id = $2`, [
+          assPath,
+          sessionId,
+        ]);
+
+        // 为每个分段生成分段 ASS
+        const segments = await pool.query(
+          `SELECT id, segment_index, segment_start_ms, segment_end_ms FROM recording_files WHERE session_id = $1 ORDER BY segment_index`,
+          [sessionId]
+        );
+
+        if (segments.rows.length > 0) {
+          const segOutputDir = path.join(sessionDir, 'danmaku_segments');
+          const segResults = await danmakuAssGenerator.generateSegmentAss({
+            jsonlPath,
+            outputDir: segOutputDir,
+            segments: segments.rows,
+          });
+
+          for (const seg of segResults) {
+            await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
+          }
+          console.log(`[弹幕] 分段 ASS 生成完成: ${segResults.length} 个分段`);
+        }
+
+        // 检查是否自动压制
+        const autoBurn = await DataService.getSetting('auto_burn_danmaku', 'false');
+        if (autoBurn === 'true') {
+          const enqueued = await danmakuBurnQueue.enqueueSession({ sessionId: parseInt(sessionId, 10) });
+          console.log(`[弹幕] 自动压制入队: ${enqueued} 个分段`);
+        }
+      } else {
+        console.warn(`[弹幕] ASS 生成失败: ${assResult.error}`);
+      }
+    } catch (err) {
+      console.error('[弹幕] 处理弹幕结束失败:', err.message);
+    }
   }
 
   /**
@@ -575,6 +658,19 @@ class RecorderService {
         startTime: sessionStart,
         downloader: downloader.name,
       });
+
+      // 启动弹幕采集（如果启用）
+      danmakuRecorder
+        .startCapture({
+          sessionId,
+          roomId: room.id,
+          roomUrl: room.room_url,
+          platform: room.polling_platform || 'kuaishou',
+          outputDir: sessionDir,
+        })
+        .catch((err) => {
+          console.warn('[弹幕] 启动采集失败:', err.message);
+        });
 
       const finishSessionWrapper = async (code, signal) => {
         if (code !== 0) {

@@ -118,11 +118,18 @@ router.get('/transcode', async (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = 50;
 
-    const result = await DataService.getTranscodeRecords({ page, limit });
+    const [result, burnResult] = await Promise.all([
+      DataService.getTranscodeRecords({ page, limit }),
+      DataService.query(
+        `SELECT dbr.*, rf.file_path as video_path, rs.room_url FROM danmaku_burn_records dbr LEFT JOIN recording_files rf ON dbr.recording_file_id = rf.id LEFT JOIN recording_sessions rs ON dbr.session_id = rs.id ORDER BY dbr.enqueued_at DESC LIMIT 100`
+      ),
+    ]);
+
     const totalPages = Math.ceil(result.total / limit);
     res.render('transcode', {
       title: '转码记录',
       records: result.rows,
+      burnRecords: burnResult.rows || [],
       pagination: { page, limit, total: result.total, totalPages },
     });
   } catch (err) {
@@ -130,6 +137,7 @@ router.get('/transcode', async (req, res) => {
     res.status(500).render('transcode', {
       title: '转码记录',
       records: [],
+      burnRecords: [],
       pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
     });
   }
@@ -187,6 +195,25 @@ router.get('/settings', async (req, res) => {
   } catch (err) {
     console.error('[html] 设置页加载失败:', err);
     res.status(500).render('settings', { title: '全局设置', settings: [] });
+  }
+});
+
+router.get('/sessions/:id/danmaku', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const detail = await DataService.getSessionDetail(id);
+
+    if (!detail) {
+      return res.status(404).send('会话不存在');
+    }
+
+    res.render('session-danmaku', {
+      title: `会话 #${id} 弹幕详情`,
+      ...detail,
+    });
+  } catch (err) {
+    console.error('[html] 弹幕详情页加载失败:', err);
+    res.status(500).send('加载失败');
   }
 });
 

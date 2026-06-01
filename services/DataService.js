@@ -2,6 +2,12 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 
 class DataService {
+  /** 执行自定义 SQL 查询 */
+  static async query(sql, params = []) {
+    const result = await pool.query(sql, params);
+    return result;
+  }
+
   static async getTemplates() {
     const result = await pool.query('SELECT * FROM upload_templates ORDER BY id');
     return result.rows;
@@ -123,7 +129,7 @@ class DataService {
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-    let sql = `SELECT s.*, rm.room_name FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url${where} ORDER BY s.id DESC`;
+    let sql = `SELECT s.*, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN danmaku_capture_records dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
@@ -150,6 +156,46 @@ class DataService {
   static async getSession(sessionId) {
     const result = await pool.query('SELECT * FROM recording_sessions WHERE id = $1', [parseInt(sessionId)]);
     return result.rows[0] || null;
+  }
+
+  /**
+   * 获取会话详情（含弹幕录制、压制记录、分段文件）
+   */
+  static async getSessionDetail(sessionId) {
+    const sid = parseInt(sessionId, 10);
+
+    const [sessionRes, captureRes, burnRes, filesRes, roomRes] = await Promise.all([
+      pool.query('SELECT * FROM recording_sessions WHERE id = $1', [sid]),
+      pool.query('SELECT * FROM danmaku_capture_records WHERE session_id = $1', [sid]),
+      pool.query(
+        'SELECT dbr.*, rf.file_path as video_path FROM danmaku_burn_records dbr LEFT JOIN recording_files rf ON dbr.recording_file_id = rf.id WHERE dbr.session_id = $1 ORDER BY dbr.segment_index',
+        [sid]
+      ),
+      pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY segment_index', [sid]),
+      pool.query(
+        'SELECT rm.* FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url WHERE s.id = $1',
+        [sid]
+      ),
+    ]);
+
+    const session = sessionRes.rows[0] || null;
+    if (!session) return null;
+
+    // 检查文件是否存在
+    const files = filesRes.rows.map((f) => ({
+      ...f,
+      file_exists: f.file_path ? require('fs').existsSync(f.file_path) : false,
+      danmaku_ass_exists: f.danmaku_ass_path ? require('fs').existsSync(f.danmaku_ass_path) : false,
+      danmaku_burn_exists: f.danmaku_burn_path ? require('fs').existsSync(f.danmaku_burn_path) : false,
+    }));
+
+    return {
+      session,
+      room: roomRes.rows[0] || null,
+      capture: captureRes.rows[0] || null,
+      burnRecords: burnRes.rows,
+      files,
+    };
   }
 
   static async getUploadRecords(options = {}) {

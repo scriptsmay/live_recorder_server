@@ -8,6 +8,7 @@ const roomsRouter = require('./rooms');
 const uploadRouter = require('./upload');
 const settingsRouter = require('./settings');
 const transcodeRouter = require('./transcode');
+const danmakuRouter = require('./danmaku');
 
 function createRoutes() {
   const router = express.Router();
@@ -20,6 +21,7 @@ function createRoutes() {
   router.use('/api', uploadRouter);
   router.use('/api', settingsRouter);
   router.use('/api', transcodeRouter);
+  router.use('/api', danmakuRouter);
 
   return router;
 }

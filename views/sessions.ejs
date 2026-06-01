@@ -19,6 +19,9 @@
     <% const uploads = uploadMap[s.id] || []; %>
     <% const hasSuccessUpload = uploads.some(u => u.status === 'success'); %>
     <% const statusBadge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>', pending: '<span class="badge bg-secondary">录制准备</span>' }[s.status] || s.status; %>
+    <% const danmakuBadge = s.danmaku_status === 'recording' ? '<span class="badge bg-success">弹幕录制中 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'completed' ? '<span class="badge bg-info">弹幕已完成 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'failed' ? '<span class="badge bg-danger" title="' + (s.danmaku_error || '') + '">弹幕失败</span>' : '<span class="badge bg-secondary">弹幕 —</span>'; %>
+    <% const burnTotal = s.danmaku_burn_total || 0; const burnCompleted = s.danmaku_burn_completed || 0; const burnFailed = s.danmaku_burn_failed || 0; %>
+    <% const burnBadge = burnTotal > 0 ? (burnFailed > 0 ? '<span class="badge bg-warning">压制 ' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + '失败)</span>' : (burnCompleted === burnTotal ? '<span class="badge bg-success">压制完成 ' + burnCompleted + '/' + burnTotal + '</span>' : '<span class="badge bg-info">压制中 ' + burnCompleted + '/' + burnTotal + '</span>')) : '<span class="badge bg-secondary">压制 —</span>'; %>
     <% const totalSize = s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -36,6 +39,12 @@
           <div class="col-md-3"><small>结束: <%= formatDate(s.ended_at) %></small></div>
           <div class="col-md-3"><small>分片: <%= s.total_segments || 0 %> 段</small></div>
           <div class="col-md-3"><small>大小: <%= totalSize %></small></div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-md-12"><small>弹幕: <%- danmakuBadge %></small></div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-md-12"><small>压制: <%- burnBadge %></small></div>
         </div>
         
         <div class="mb-2">
@@ -55,9 +64,14 @@
           </div>
         <% } %>
         <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
+        <a class="btn btn-sm btn-outline-dark" href="/sessions/<%= s.id %>/danmaku">弹幕详情</a>
         <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent(downloader + '_' + s.id + '.log') %>" target="_blank">查看日志</a>
         <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted')) { %>
           <button class="btn btn-sm btn-outline-success uploadBtn mx-2" data-session-id="<%= s.id %>">投稿</button>
+        <% } %>
+        <% if (s.status === 'completed' || s.status === 'interrupted') { %>
+          <button class="btn btn-sm btn-outline-info genAssBtn mx-1" data-session-id="<%= s.id %>" title="重新生成 ASS 字幕">生成 ASS</button>
+          <button class="btn btn-sm btn-outline-warning burnDanmakuBtn mx-1" data-session-id="<%= s.id %>" title="将弹幕压制到视频上">压制弹幕</button>
         <% } %>
         <button class="btn btn-sm btn-outline-danger float-end deleteSessionBtn" data-session-id="<%= s.id %>">删除</button>
         <div class="mt-2 d-none filesContainer" id="files_<%= s.id %>">
@@ -161,16 +175,21 @@
         }
         const table = document.createElement('table');
         table.className = 'table table-sm mb-0';
-        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          json.data.map(r => '<tr>' +
+        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>弹幕</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+          json.data.map(r => {
+            const danmakuBadge = r.is_danmaku_burned
+              ? '<span class="badge bg-success">已压制</span>'
+              : (r.danmaku_ass_path ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');
+            return '<tr>' +
             '<td>' + r.id + '</td>' +
             '<td><small>' + (r.file_path || '-') + '</small></td>' +
             '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
             '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
+            '<td>' + danmakuBadge + '</td>' +
             '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
             '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playRecBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') + '</td>' +
-            '</tr>'
-          ).join('') + '</tbody>';
+            '</tr>';
+          }).join('') + '</tbody>';
         container.appendChild(table);
       }
       return;
@@ -185,6 +204,58 @@
         if (!res.ok) { toast(json.message); return; }
         location.reload();
       });
+      return;
+    }
+
+    // 生成 ASS 按钮
+    const genAssBtn = e.target.closest('.genAssBtn');
+    if (genAssBtn) {
+      const sid = genAssBtn.dataset.sessionId;
+      genAssBtn.disabled = true;
+      genAssBtn.textContent = '生成中...';
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/ass', { method: 'POST' });
+        const json = await res.json();
+        if (res.ok && json.status === 'ok') {
+          toast('ASS 生成成功: ' + json.data.event_count + ' 条弹幕');
+        } else {
+          toast('生成失败: ' + (json.message || '未知错误'));
+        }
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      } finally {
+        genAssBtn.disabled = false;
+        genAssBtn.textContent = '生成 ASS';
+      }
+      return;
+    }
+
+    // 压制弹幕按钮
+    const burnBtn = e.target.closest('.burnDanmakuBtn');
+    if (burnBtn) {
+      const sid = burnBtn.dataset.sessionId;
+      const confirmed = await showConfirm('确认将此会话加入弹幕压制队列？');
+      if (!confirmed) return;
+      burnBtn.disabled = true;
+      burnBtn.textContent = '入队中...';
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: false }),
+        });
+        const json = await res.json();
+        if (res.ok && json.status === 'ok') {
+          toast(json.message);
+        } else {
+          toast('入队失败: ' + (json.message || '未知错误'));
+        }
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      } finally {
+        burnBtn.disabled = false;
+        burnBtn.textContent = '压制弹幕';
+      }
       return;
     }
 

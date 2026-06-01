@@ -284,6 +284,65 @@ async function runMigration() {
       END $$;
     `);
 
+    // ========== 弹幕相关表 ==========
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS danmaku_capture_records (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER,
+        room_id INTEGER,
+        platform VARCHAR(50) DEFAULT 'kuaishou',
+        status VARCHAR(20) DEFAULT 'recording',
+        raw_path VARCHAR(1024) DEFAULT '',
+        ass_path VARCHAR(1024) DEFAULT '',
+        event_count INTEGER DEFAULT 0,
+        started_at TIMESTAMP DEFAULT NOW(),
+        ended_at TIMESTAMP,
+        error TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS danmaku_burn_records (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER,
+        recording_file_id INTEGER UNIQUE,
+        segment_index INTEGER DEFAULT 0,
+        segment_start_ms INTEGER DEFAULT 0,
+        segment_end_ms INTEGER DEFAULT 0,
+        input_path VARCHAR(1024) NOT NULL,
+        ass_path VARCHAR(1024) NOT NULL,
+        output_path VARCHAR(1024) DEFAULT '',
+        status VARCHAR(20) DEFAULT 'queued',
+        error TEXT DEFAULT '',
+        enqueued_at TIMESTAMP DEFAULT NOW(),
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // recording_files 弹幕相关字段
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_start_ms INTEGER DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT ''
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burn_path VARCHAR(1024) DEFAULT ''
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS is_danmaku_burned BOOLEAN DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
+    `);
+
     const defaultSettings = [
       ['pool_size', '3'],
       ['watchdog_interval', '30'],
@@ -303,6 +362,15 @@ async function runMigration() {
       ['hls_enabled', 'true'],
       ['hls_segment_duration', '10'],
       ['hls_cleanup_days', '30'],
+      ['kuaishou_danmaku_enabled', 'false'],
+      ['auto_burn_danmaku', 'false'],
+      ['danmaku_burn_concurrency', '1'],
+      ['danmaku_preserve_clean_video', 'true'],
+      ['danmaku_density_per_second', '20'],
+      ['danmaku_font_family', 'Noto Sans CJK SC'],
+      ['danmaku_font_size', '32'],
+      ['danmaku_opacity', '0.75'],
+      ['prefer_danmaku_burned_video', 'false'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(
