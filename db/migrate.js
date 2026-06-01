@@ -316,6 +316,7 @@ async function runMigration() {
         output_path VARCHAR(1024) DEFAULT '',
         status VARCHAR(20) DEFAULT 'queued',
         error TEXT DEFAULT '',
+        log_path VARCHAR(1024) DEFAULT '',
         enqueued_at TIMESTAMP DEFAULT NOW(),
         started_at TIMESTAMP,
         completed_at TIMESTAMP,
@@ -341,6 +342,9 @@ async function runMigration() {
     `);
     await client.query(`
       ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''
     `);
 
     const defaultSettings = [

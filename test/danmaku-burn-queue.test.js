@@ -357,6 +357,7 @@ describe('DanmakuBurnQueue — processTask()', () => {
       outputPath: output,
       duration: 15000,
       outputSize: 1048576,
+      logPath: '/tmp/logs/danmaku_burn_s500_proc_ok.log',
     });
     burner.estimateTimeout.mockResolvedValue(1800000);
     pool.query.mockResolvedValue({ rows: [] });
@@ -407,6 +408,7 @@ describe('DanmakuBurnQueue — processTask() 失败', () => {
       outputPath: output,
       duration: 5000,
       error: 'FFmpeg crashed',
+      logPath: '/tmp/logs/danmaku_burn_s600_fail_input.log',
     });
     burner.estimateTimeout.mockResolvedValue(1800000);
     pool.query.mockResolvedValue({ rows: [] });
