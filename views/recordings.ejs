@@ -7,7 +7,7 @@
 <div class="filter-bar mb-3">
   <div class="filter-group">
     <span class="filter-label">直播间：</span>
-    <button class="filter-tag filter-tag-room-recording active" data-room="">全部</button>
+    <button class="filter-tag filter-tag-room-recording <%= roomFilter ? '' : 'active' %>" data-room="">全部</button>
     <% rooms.forEach(r => { %>
       <button class="filter-tag filter-tag-room-recording <%= r.room_url === roomFilter ? 'active' : '' %>"
               data-room="<%= r.room_url %>">

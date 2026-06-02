@@ -13,7 +13,7 @@
 <div class="row g-3 mb-4">
   <div class="col-md-6">
     <div class="card h-100">
-      <div class="card-header"><strong>会话信息</strong></div>
+      <div class="card-header"><span>会话信息</span></div>
       <div class="card-body">
         <table class="table table-sm mb-0">
           <tr><td class="text-muted" style="width: 100px;">房间</td><td><%= room ? room.room_name || room.room_url : session.room_url %></td></tr>
@@ -32,7 +32,7 @@
   <div class="col-md-6">
     <div class="card h-100">
       <div class="card-header">
-        <strong>弹幕录制</strong>
+        <span>弹幕录制</span>
         <span class="float-end">
           <% if (capture) { %>
             <% const dcrBadge = { recording: '<span class="badge bg-success">录制中</span>', completed: '<span class="badge bg-info">已完成</span>', failed: '<span class="badge bg-danger">失败</span>' }[capture.status] || capture.status; %>
@@ -64,7 +64,7 @@
 
 <!-- 分段文件压制状态 -->
 <div class="card mb-4">
-  <div class="card-header"><strong>分段文件 & 压制状态</strong></div>
+  <div class="card-header"><span>分段文件 & 压制状态</span></div>
   <div class="card-body p-0">
     <% if (files.length === 0) { %>
       <p class="text-muted p-3 mb-0">无分段文件</p>
@@ -131,7 +131,7 @@
 <!-- 弹幕搜索面板 -->
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <strong>弹幕搜索</strong>
+    <span>弹幕搜索</span>
     <div class="input-group input-group-sm" style="width: 320px;">
       <input type="text" class="form-control" id="danmakuSearchInput" placeholder="搜索弹幕内容或用户名..." />
       <button class="btn btn-outline-secondary" id="danmakuSearchBtn">搜索</button>
@@ -230,10 +230,10 @@
     const keyword = document.getElementById('danmakuSearchInput').value.trim();
     const resultDiv = document.getElementById('danmakuSearchResult');
 
-    if (!keyword) {
-      resultDiv.innerHTML = '<p class="text-muted text-center">输入关键词搜索弹幕</p>';
-      return;
-    }
+    // if (!keyword) {
+    //   resultDiv.innerHTML = '<p class="text-muted text-center">输入关键词搜索弹幕</p>';
+    //   return;
+    // }
 
     resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> 搜索中...</div>';
 

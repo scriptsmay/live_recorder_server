@@ -4,6 +4,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const DataService = require('./DataService');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
+const { isDanmakuBurnFile } = require('../config/config');
 
 class RoomService {
   static async getRoomByUrl(roomUrl) {
@@ -138,6 +139,7 @@ class RoomService {
       candidates = files
         .filter((f) => {
           if (!/\.(flv|mp4|ts)$/i.test(f)) return false;
+          if (isDanmakuBurnFile(f)) return false;
           const prefix = nameWithoutExt.replace(/%[YmdHMS]/g, '.*');
           const regex = new RegExp('^' + prefix.replace(/\*/g, '.*') + '.*' + ext.replace(/\./g, '\\.') + '$');
           return regex.test(f);
