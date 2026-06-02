@@ -13,6 +13,8 @@
  *   - dev_downloads/*.part → 重命名为 .flv
  *   - 删除孤文件（orphaned）和缺失文件（missing）的 DB 记录
  *   - 中断所有遗留的 recording 会话
+ *   - 清空弹幕采集记录（danmaku_capture_records）
+ *   - 清空弹幕压制记录（danmaku_burn_records）
  *
  * 保护机制：
  *   - 不会停止/删除任何 PM2 进程（生产环境由 PM2 管理）
@@ -219,6 +221,22 @@ async function cleanup() {
       console.log(`  └─ 清空 transcode_records: ${transcodeRecords.rowCount} 条`);
     } else {
       console.log('  └─ transcode_records 已为空');
+    }
+
+    // 清空 danmaku_capture_records 表（弹幕采集记录）
+    const danmakuCaptureRecords = await d.query('DELETE FROM danmaku_capture_records RETURNING id');
+    if (danmakuCaptureRecords.rowCount > 0) {
+      console.log(`  └─ 清空 danmaku_capture_records: ${danmakuCaptureRecords.rowCount} 条`);
+    } else {
+      console.log('  └─ danmaku_capture_records 已为空');
+    }
+
+    // 清空 danmaku_burn_records 表（弹幕压制记录）
+    const danmakuBurnRecords = await d.query('DELETE FROM danmaku_burn_records RETURNING id');
+    if (danmakuBurnRecords.rowCount > 0) {
+      console.log(`  └─ 清空 danmaku_burn_records: ${danmakuBurnRecords.rowCount} 条`);
+    } else {
+      console.log('  └─ danmaku_burn_records 已为空');
     }
 
     // 房间复位
