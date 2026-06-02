@@ -38,7 +38,8 @@ Phase 4 可并行:
 <!-- views/partials/_header.ejs 修改 -->
 <nav>
   <a href="/sessions">录制文件</a>
-  <a href="/toolbox/danmaku">弹幕工具箱</a>  <!-- 新增 -->
+  <a href="/toolbox/danmaku">弹幕工具箱</a>
+  <!-- 新增 -->
   <a href="/transcode">转码记录</a>
   <a href="/upload">投稿管理</a>
 </nav>
@@ -79,14 +80,14 @@ Phase 4 可并行:
 
 ### 2.3 关键交互
 
-| 交互 | 说明 |
-|------|------|
+| 交互       | 说明                                                                     |
+| ---------- | ------------------------------------------------------------------------ |
 | 分段复选框 | 仅 `ass_generated=true` 且 `burn_status` 为 `pending` 或 `failed` 时可选 |
-| 全部压制 | 对该会话下所有可压制的分段发起压制，使用默认参数 |
-| 搜索弹幕 | 跳转到弹幕搜索页面（Phase 4 新增或已有页面） |
-| 播放产物 | 打开视频播放器，显示叠加了弹幕的视频 |
-| 下载产物 | 下载压制好的 MP4 文件 |
-| 批量操作栏 | 勾选 ≥1 个分段后从底部滑出，支持一键全部入队 |
+| 全部压制   | 对该会话下所有可压制的分段发起压制，使用默认参数                         |
+| 搜索弹幕   | 跳转到弹幕搜索页面（Phase 4 新增或已有页面）                             |
+| 播放产物   | 打开视频播放器，显示叠加了弹幕的视频                                     |
+| 下载产物   | 下载压制好的 MP4 文件                                                    |
+| 批量操作栏 | 勾选 ≥1 个分段后从底部滑出，支持一键全部入队                             |
 
 ---
 
@@ -112,13 +113,13 @@ Phase 4 可并行:
 
 错误码规范：
 
-| HTTP 状态码 | 错误码示例 | 说明 |
-|-------------|-----------|------|
-| 400 | `ERR_DANMAKU_INVALID_PARAMS` | 参数校验失败 |
-| 404 | `ERR_DANMAKU_SESSION_NOT_FOUND` | 会话不存在 |
-| 404 | `ERR_DANMAKU_SEGMENT_NOT_FOUND` | 分段不存在 |
-| 409 | `ERR_DANMAKU_ALREADY_QUEUED` | 分段已在队列中 |
-| 500 | `ERR_DANMAKU_INTERNAL` | 服务器内部错误 |
+| HTTP 状态码 | 错误码示例                      | 说明           |
+| ----------- | ------------------------------- | -------------- |
+| 400         | `ERR_DANMAKU_INVALID_PARAMS`    | 参数校验失败   |
+| 404         | `ERR_DANMAKU_SESSION_NOT_FOUND` | 会话不存在     |
+| 404         | `ERR_DANMAKU_SEGMENT_NOT_FOUND` | 分段不存在     |
+| 409         | `ERR_DANMAKU_ALREADY_QUEUED`    | 分段已在队列中 |
+| 500         | `ERR_DANMAKU_INTERNAL`          | 服务器内部错误 |
 
 > **权限说明**：当前为单用户场景，暂未做权限校验。未来多用户场景下，所有写操作（`POST batch-burn`、`DELETE product`）需校验登录态，读操作可匿名访问。
 
@@ -130,12 +131,12 @@ Phase 4 可并行:
 
 **请求参数**：
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| page | number | 否 | 1 | 页码 |
-| limit | number | 否 | 20 | 每页条数，最大 100 |
-| roomId | string | 否 | - | 按直播间筛选 |
-| status | string | 否 | - | 按状态筛选（`ass_ready` / `queued` / `burning` / `done` / `failed`） |
+| 参数   | 类型   | 必填 | 默认值 | 说明                                                                 |
+| ------ | ------ | ---- | ------ | -------------------------------------------------------------------- |
+| page   | number | 否   | 1      | 页码                                                                 |
+| limit  | number | 否   | 20     | 每页条数，最大 100                                                   |
+| roomId | string | 否   | -      | 按直播间筛选                                                         |
+| status | string | 否   | -      | 按状态筛选（`ass_ready` / `queued` / `burning` / `done` / `failed`） |
 
 **响应**：
 
@@ -248,11 +249,11 @@ Phase 4 可并行:
 
 **请求参数**：
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| page | number | 否 | 1 | 页码 |
-| limit | number | 否 | 20 | 每页条数，最大 100 |
-| roomId | string | 否 | - | 按直播间筛选 |
+| 参数   | 类型   | 必填 | 默认值 | 说明               |
+| ------ | ------ | ---- | ------ | ------------------ |
+| page   | number | 否   | 1      | 页码               |
+| limit  | number | 否   | 20     | 每页条数，最大 100 |
+| roomId | string | 否   | -      | 按直播间筛选       |
 
 **响应**：
 
@@ -348,9 +349,9 @@ async getToolboxSessions({ page = 1, limit = 20, roomId, status }) {
 // public/js/toolbox-danmaku.js
 class PollingManager {
   constructor() {
-    this.baseInterval = 5000;   // 基础间隔 5s
-    this.maxInterval = 30000;    // 最大间隔 30s
-    this.minInterval = 2000;     // 最小间隔 2s（活跃任务多时）
+    this.baseInterval = 5000; // 基础间隔 5s
+    this.maxInterval = 30000; // 最大间隔 30s
+    this.minInterval = 2000; // 最小间隔 2s（活跃任务多时）
     this.timer = null;
   }
 
@@ -370,7 +371,7 @@ class PollingManager {
     } else if (activeCount > 0) {
       interval = this.baseInterval;
     } else {
-      interval = this.maxInterval;  // 无活跃任务，30s 轮询一次
+      interval = this.maxInterval; // 无活跃任务，30s 轮询一次
     }
 
     this.timer = setTimeout(() => this.poll(), interval);
@@ -401,17 +402,20 @@ data: { queued: 2, burning: 1, done: 45 }
 
 ### 6.1 `views/sessions.ejs`
 
- Remove：
+Remove：
+
 - 文件列表中的「生成 ASS」按钮
 - 文件列表中的「压制弹幕」按钮
 
 Add：
+
 - 文件列表中保留「▶ 弹幕」播放按钮（只读，播放已压制产物）
 - 新增「弹幕工具箱 →」链接，跳转到 `/toolbox/danmaku`
 
 ### 6.2 `views/session-danmaku.ejs`
 
 改为只读展示页：
+
 - 显示弹幕采集状态、ASS 文件预览链接
 - Remove 所有操作按钮（生成 ASS、加入压制队列等）
 - 新增「返回工具箱」链接

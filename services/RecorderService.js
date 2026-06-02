@@ -236,6 +236,18 @@ class RecorderService {
     const sessionStart = session.started_at;
     const engine = getActiveDownloader(room.polling_platform);
 
+    // 将分段时间写入数据库
+    try {
+      await recordingManager.finalizeSession(sessionId, pool);
+    } catch (err) {
+      console.error(`[RecorderService] Failed to finalize segment times for session ${sessionId}:`, err);
+      // 异常退出时尝试通过 ffprobe 补充分段时间
+      const watchdog = require('../lib/core/watchdog');
+      watchdog.backfillSegmentTimes(sessionId, pool).catch((e) => {
+        console.error(`[RecorderService] backfillSegmentTimes failed:`, e.message);
+      });
+    }
+
     // 从会话中获取输出路径，避免生成新路径导致变量缺失问题
     const outputFilePattern = session.output_path || '[路径未知]';
 
@@ -617,6 +629,10 @@ class RecorderService {
         console.warn(`[流类型检测] 失败，使用默认类型 flv:`, err.message);
       }
 
+      // 注册分段追踪
+      const sessionStartMs = Date.now();
+      recordingManager.registerSession(sessionId, sessionStartMs);
+
       // 五、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({
         downloader,
@@ -630,6 +646,16 @@ class RecorderService {
         },
         sessionId,
       });
+
+      // 监听分段事件
+      dlProcess.on('segment', (filePath, elapsedMs) => {
+        recordingManager.recordSegment(sessionId, filePath, elapsedMs);
+      });
+
+      // 定期更新心跳（防止超时清理）
+      const heartbeatInterval = setInterval(() => {
+        recordingManager.heartbeat(sessionId);
+      }, 30 * 1000);
       console.log(
         `[任务启动] 文件名模板: ${template}` +
           `| 分段录制: ${useSegment ? segmentDuration + 's' : '关闭'}` +
@@ -674,6 +700,8 @@ class RecorderService {
         } else {
           console.log('FFmpeg 下载完成');
         }
+        // 录制结束时清除心跳定时器
+        clearInterval(heartbeatInterval);
         await this.finishSession({
           code,
           sessionId,

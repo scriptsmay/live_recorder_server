@@ -24,6 +24,7 @@ Phase 5 可并行:
 ## 1. 目标
 
 在弹幕功能完全迁移到工具箱后，清理所有遗留代码：
+
 - 移除录制文件列表中的弹幕操作入口
 - 删除数据库中的废弃字段（推迟到发布后 1 个月）
 - 清理废弃的环境变量和配置项（代码层面）
@@ -38,29 +39,29 @@ Phase 5 可并行:
 
 ### 2.1 保留项（安全网）
 
-| 文件 | 保留内容 | 原因 |
-|------|---------|------|
-| `watchdog.js` | `scanDanmakuFiles()` | 历史产物兼容 + 防御性检查 |
-| `scan-files.js` | `scanDanmakuFiles()` | 同上 |
-| `RoomService.js` | `checkDanmakuFiles()` | 同上 |
-| `DataService.js` | `getDanmakuPlayUrl()` | 兼容旧数据库记录 |
-| `configs.json` | `danmaku_output_dir` | 历史产物路径参考 |
-| 日志目录 | `DANMAKU_OUTPUT_DIR/logs/` | 保留最近 30 天日志 |
+| 文件             | 保留内容                   | 原因                      |
+| ---------------- | -------------------------- | ------------------------- |
+| `watchdog.js`    | `scanDanmakuFiles()`       | 历史产物兼容 + 防御性检查 |
+| `scan-files.js`  | `scanDanmakuFiles()`       | 同上                      |
+| `RoomService.js` | `checkDanmakuFiles()`      | 同上                      |
+| `DataService.js` | `getDanmakuPlayUrl()`      | 兼容旧数据库记录          |
+| `configs.json`   | `danmaku_output_dir`       | 历史产物路径参考          |
+| 日志目录         | `DANMAKU_OUTPUT_DIR/logs/` | 保留最近 30 天日志        |
 
 ### 2.2 删除项
 
-| 类别 | 待删除内容 | 位置 |
-|------|-----------|------|
-| 环境变量 | `AUTO_BURN_DANMAKU` | `configs.json` + `process.env` 读取代码 |
-| 环境变量 | `DANMAKU_BURN_FONT_SIZE` | 同上 |
-| 环境变量 | `DANMAKU_BURN_OPACITY` | 同上 |
-| 数据库字段 | `recording_files.danmaku_ass_path` | 推迟到发布后 1 个月 DROP |
-| 数据库字段 | `recording_files.danmaku_burn_status` | 同上 |
-| 数据库字段 | `recording_files.danmaku_burn_queue_at` | 同上 |
-| 数据库字段 | `recording_files.danmaku_burn_done_at` | 同上 |
-| 前端入口 | `sessions.ejs` 中的弹幕操作按钮 | 改为跳转链接 |
-| 前端入口 | `session-danmaku.ejs` 中的操作按钮 | 改为只读展示 |
-| 设置项 | `settings` 表中废弃的弹幕配置行 | `migrate.js` 中清理 |
+| 类别       | 待删除内容                              | 位置                                    |
+| ---------- | --------------------------------------- | --------------------------------------- |
+| 环境变量   | `AUTO_BURN_DANMAKU`                     | `configs.json` + `process.env` 读取代码 |
+| 环境变量   | `DANMAKU_BURN_FONT_SIZE`                | 同上                                    |
+| 环境变量   | `DANMAKU_BURN_OPACITY`                  | 同上                                    |
+| 数据库字段 | `recording_files.danmaku_ass_path`      | 推迟到发布后 1 个月 DROP                |
+| 数据库字段 | `recording_files.danmaku_burn_status`   | 同上                                    |
+| 数据库字段 | `recording_files.danmaku_burn_queue_at` | 同上                                    |
+| 数据库字段 | `recording_files.danmaku_burn_done_at`  | 同上                                    |
+| 前端入口   | `sessions.ejs` 中的弹幕操作按钮         | 改为跳转链接                            |
+| 前端入口   | `session-danmaku.ejs` 中的操作按钮      | 改为只读展示                            |
+| 设置项     | `settings` 表中废弃的弹幕配置行         | `migrate.js` 中清理                     |
 
 ---
 
@@ -145,9 +146,7 @@ async function down(db) {
 <button onclick="burnDanmaku('<%= file.id %>')">压制弹幕</button>
 
 <!-- ADD: 跳转链接 -->
-<a href="/toolbox/danmaku?roomId=<%= room.roomId %>" class="btn btn-sm">
-  弹幕工具箱 →
-</a>
+<a href="/toolbox/danmaku?roomId=<%= room.roomId %>" class="btn btn-sm"> 弹幕工具箱 → </a>
 ```
 
 **文件**: `views/session-danmaku.ejs`
@@ -230,6 +229,7 @@ async function down(db) {
 ```
 
 **✅ 检查点**：
+
 1. 执行 DROP 前，全量备份数据库
 2. 执行后，`DESCRIBE recording_files` 无弹幕字段
 3. 回滚脚本独立存放，通知运维团队
@@ -267,13 +267,13 @@ async function cleanupDanmakuLogs(retentionDays = 30) {
 
 ### Step 8: 更新文档
 
-| 文档 | 更新内容 | 具体章节 |
-|------|---------|---------|
-| `docs/DB.md` | 移除 `recording_files` 弹幕字段说明 | 「表结构 → recording_files」章节 |
-| `docs/API.md` | 移除废弃的弹幕 API 端点 | 「API 目录」和「弹幕相关」章节 |
-| `docs/SETUP.md` | 移除 `AUTO_BURN_DANMAKU` 等环境变量说明 | 「环境变量配置」章节 |
-| `README.md` | 更新功能描述（弹幕功能指向工具箱） | 「功能特性」章节 |
-| `docs/todo/DANMAKU_BURN_DECOUPLE_PLAN.md` | 标记 Phase 5 完成 | 顶部状态标记 |
+| 文档                                      | 更新内容                                | 具体章节                         |
+| ----------------------------------------- | --------------------------------------- | -------------------------------- |
+| `docs/DB.md`                              | 移除 `recording_files` 弹幕字段说明     | 「表结构 → recording_files」章节 |
+| `docs/API.md`                             | 移除废弃的弹幕 API 端点                 | 「API 目录」和「弹幕相关」章节   |
+| `docs/SETUP.md`                           | 移除 `AUTO_BURN_DANMAKU` 等环境变量说明 | 「环境变量配置」章节             |
+| `README.md`                               | 更新功能描述（弹幕功能指向工具箱）      | 「功能特性」章节                 |
+| `docs/todo/DANMAKU_BURN_DECOUPLE_PLAN.md` | 标记 Phase 5 完成                       | 顶部状态标记                     |
 
 **✅ 检查点**：文档更新后，新开发者按 `docs/SETUP.md` 配置环境无报错。
 
@@ -283,12 +283,12 @@ async function cleanupDanmakuLogs(retentionDays = 30) {
 
 ### 4.1 功能测试
 
-| 测试场景 | 预期结果 |
-|---------|---------|
-| 访问 `/sessions`，点击弹幕相关链接 | 正确跳转到工具箱页面 |
-| 访问 `/toolbox/danmaku` | 所有功能正常（Phase 4 已测试） |
-| 历史录制文件的弹幕播放 | 仍能播放（安全网保留） |
-| 新增录制文件的弹幕采集 | 正常工作（Phase 2/3 已测试） |
+| 测试场景                           | 预期结果                       |
+| ---------------------------------- | ------------------------------ |
+| 访问 `/sessions`，点击弹幕相关链接 | 正确跳转到工具箱页面           |
+| 访问 `/toolbox/danmaku`            | 所有功能正常（Phase 4 已测试） |
+| 历史录制文件的弹幕播放             | 仍能播放（安全网保留）         |
+| 新增录制文件的弹幕采集             | 正常工作（Phase 2/3 已测试）   |
 
 ### 4.2 回归测试
 
@@ -320,13 +320,13 @@ npm run migrate:down
 
 ## 5. 风险评估
 
-| 风险 | 等级 | 缓解措施 |
-|------|------|---------|
-| 遗留代码引用导致运行时错误 | 🟡 中 | Step 1 全局搜索 + Step 8 回归测试 |
-| 历史数据无法访问 | 🟢 低 | 安全网保留（`watchdog.js` 等不删除） |
-| 用户找不到弹幕功能入口 | 🟡 中 | `sessions.ejs` 保留明显的跳转链接 |
-| 数据库 DROP 后无法回滚 | 🔴 高 | 推迟 1 个月执行 + 提前准备回滚脚本 + 全量备份 |
-| 日志目录占用磁盘空间 | 🟢 低 | Step 7 加入定期清理任务 |
+| 风险                       | 等级  | 缓解措施                                      |
+| -------------------------- | ----- | --------------------------------------------- |
+| 遗留代码引用导致运行时错误 | 🟡 中 | Step 1 全局搜索 + Step 8 回归测试             |
+| 历史数据无法访问           | 🟢 低 | 安全网保留（`watchdog.js` 等不删除）          |
+| 用户找不到弹幕功能入口     | 🟡 中 | `sessions.ejs` 保留明显的跳转链接             |
+| 数据库 DROP 后无法回滚     | 🔴 高 | 推迟 1 个月执行 + 提前准备回滚脚本 + 全量备份 |
+| 日志目录占用磁盘空间       | 🟢 低 | Step 7 加入定期清理任务                       |
 
 ---
 
