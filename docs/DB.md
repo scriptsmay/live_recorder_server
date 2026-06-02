@@ -132,9 +132,6 @@
 | segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）      |
 | segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）      |
 | danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 分段级 ASS 字幕路径       |
-| danmaku_burn_path | VARCHAR(1024) | DEFAULT ''                                     | 弹幕压制输出视频路径      |
-| is_danmaku_burned | BOOLEAN       | DEFAULT FALSE                                  | 是否已完成弹幕压制        |
-| danmaku_burned_at | TIMESTAMP     |                                                | 弹幕压制完成时间          |
 | created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                  |
 
 **状态流转：**

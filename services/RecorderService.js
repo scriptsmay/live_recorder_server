@@ -11,7 +11,6 @@ const DataService = require('./DataService');
 const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
-const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -395,8 +394,12 @@ class RecorderService {
       if (session.rows.length === 0) return;
 
       const sessionDir = session.rows[0].output_dir;
-      const jsonlPath = path.join(sessionDir, 'danmaku.jsonl');
-      const assPath = path.join(sessionDir, 'danmaku.ass');
+      const danmakuDir = path.join(sessionDir, 'danmaku');
+      // 优先使用新路径，兼容旧路径
+      const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
+      const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
+      const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
+      const assPath = path.join(danmakuDir, 'danmaku.ass');
 
       if (!fs.existsSync(jsonlPath)) return;
 
@@ -422,7 +425,7 @@ class RecorderService {
         );
 
         if (segments.rows.length > 0) {
-          const segOutputDir = path.join(sessionDir, 'danmaku_segments');
+          const segOutputDir = path.join(danmakuDir, 'segments');
           const segResults = await danmakuAssGenerator.generateSegmentAss({
             jsonlPath,
             outputDir: segOutputDir,
@@ -433,13 +436,6 @@ class RecorderService {
             await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
           }
           console.log(`[弹幕] 分段 ASS 生成完成: ${segResults.length} 个分段`);
-        }
-
-        // 检查是否自动压制
-        const autoBurn = await DataService.getSetting('auto_burn_danmaku', 'false');
-        if (autoBurn === 'true') {
-          const enqueued = await danmakuBurnQueue.enqueueSession({ sessionId: parseInt(sessionId, 10) });
-          console.log(`[弹幕] 自动压制入队: ${enqueued} 个分段`);
         }
       } else {
         console.warn(`[弹幕] ASS 生成失败: ${assResult.error}`);
@@ -666,7 +662,7 @@ class RecorderService {
           roomId: room.id,
           roomUrl: room.room_url,
           platform: room.polling_platform || 'kuaishou',
-          outputDir: sessionDir,
+          outputDir: path.join(sessionDir, 'danmaku'),
         })
         .catch((err) => {
           console.warn('[弹幕] 启动采集失败:', err.message);

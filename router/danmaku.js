@@ -50,14 +50,18 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
     }
 
     const sessionDir = session.rows[0].output_dir;
-    const jsonlPath = path.join(sessionDir, 'danmaku.jsonl');
+    const danmakuDir = path.join(sessionDir, 'danmaku');
+    // 优先使用新路径，兼容旧路径
+    const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
+    const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
+    const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
 
     if (!fs.existsSync(jsonlPath)) {
       return res.status(404).json({ status: 'Error', message: '弹幕数据文件不存在' });
     }
 
     // 生成会话级 ASS
-    const assPath = path.join(sessionDir, 'danmaku.ass');
+    const assPath = path.join(danmakuDir, 'danmaku.ass');
     const assResult = await danmakuAssGenerator.generateFromJsonl({
       jsonlPath,
       assPath,
@@ -81,7 +85,7 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
 
     let segmentResults = [];
     if (segments.rows.length > 0) {
-      const segOutputDir = path.join(sessionDir, 'danmaku_segments');
+      const segOutputDir = path.join(danmakuDir, 'segments');
       segmentResults = await danmakuAssGenerator.generateSegmentAss({
         jsonlPath,
         outputDir: segOutputDir,
@@ -301,7 +305,11 @@ router.get('/danmaku/search', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
 
-    const jsonlPath = path.join(session.rows[0].output_dir, 'danmaku.jsonl');
+    const sessionDir = session.rows[0].output_dir;
+    const danmakuDir = path.join(sessionDir, 'danmaku');
+    const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
+    const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
+    const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
     if (!fs.existsSync(jsonlPath)) {
       return res.json({ status: 'ok', data: [], total: 0 });
     }

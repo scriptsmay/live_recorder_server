@@ -1,4 +1,5 @@
 require('./env').initEnv();
+const path = require('path');
 
 const envs = process.env;
 const SITE_URL = envs.SITE_URL || `http://localhost:${envs.PORT || 1123}/`;
@@ -13,6 +14,11 @@ function isDanmakuBurnFile(filename) {
   return filename.toLowerCase().endsWith(DANMAKU_BURN_SUFFIX);
 }
 
+// 弹幕压制产物独立输出目录
+function getDanmakuOutputDir() {
+  return envs.DANMAKU_OUTPUT_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'danmaku_output');
+}
+
 module.exports = {
   envs,
   SITE_URL,
@@ -25,4 +31,5 @@ module.exports = {
   SUPPORTED_TRANSCODE_EXT,
   DANMAKU_BURN_SUFFIX,
   isDanmakuBurnFile,
+  getDanmakuOutputDir,
 };

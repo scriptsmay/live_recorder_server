@@ -46,14 +46,11 @@
       title: '弹幕设置',
       items: [
         { key: 'kuaishou_danmaku_enabled', label: '启用弹幕录制', desc: '是否在快手直播录制时同时采集弹幕数据', type: 'select', options: ['false', 'true'] },
-        { key: 'auto_burn_danmaku', label: '自动弹幕压制', desc: '录制/转码完成后自动将弹幕压制到视频上（N100 建议关闭，使用手动）', type: 'select', options: ['false', 'true'] },
         { key: 'danmaku_burn_concurrency', label: '弹幕压制并发', desc: '弹幕压制队列最大并发数，N100 建议固定为 1', type: 'number', attrs: 'min="1" max="1"' },
-        { key: 'danmaku_preserve_clean_video', label: '保留无弹幕版本', desc: '压制成功后是否保留无弹幕版本', type: 'select', options: ['true', 'false'] },
         { key: 'danmaku_density_per_second', label: '每秒弹幕上限', desc: 'ASS 生成时每秒最多渲染的弹幕数，超出部分丢弃', type: 'number', attrs: 'min="5" max="100"' },
         { key: 'danmaku_font_family', label: '弹幕字体', desc: 'ASS 渲染使用的字体名称', type: 'text', attrs: '' },
         { key: 'danmaku_font_size', label: '弹幕字号（1080p）', desc: '1080p 分辨率下的默认字号', type: 'number', attrs: 'min="16" max="64"' },
         { key: 'danmaku_opacity', label: '弹幕不透明度', desc: '0-1 之间，0 完全透明，1 完全不透明', type: 'number', attrs: 'min="0" max="1" step="0.05"' },
-        { key: 'prefer_danmaku_burned_video', label: '优先使用弹幕版', desc: '投稿/播放时是否优先使用弹幕压制版本', type: 'select', options: ['false', 'true'] },
       ],
     },
   ];
@@ -117,14 +114,11 @@
       'pool2_size',
       'max_upload_limit',
       'kuaishou_danmaku_enabled',
-      'auto_burn_danmaku',
       'danmaku_burn_concurrency',
-      'danmaku_preserve_clean_video',
       'danmaku_density_per_second',
       'danmaku_font_family',
       'danmaku_font_size',
       'danmaku_opacity',
-      'prefer_danmaku_burned_video',
     ];
 
     const btn = document.getElementById('saveSettingsBtn');

@@ -394,7 +394,7 @@ router.get('/recordings/:id/stream', async (req, res) => {
 
     const sql =
       type === 'danmaku'
-        ? 'SELECT danmaku_burn_path AS file_path FROM recording_files WHERE id = $1'
+        ? "SELECT dbr.output_path AS file_path FROM danmaku_burn_records dbr WHERE dbr.recording_file_id = $1 AND dbr.status = 'completed'"
         : 'SELECT file_path FROM recording_files WHERE id = $1';
     const fileResult = await pool.query(sql, [id]);
     const filePath = fileResult.rows[0]?.file_path;

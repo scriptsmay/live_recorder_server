@@ -377,17 +377,13 @@ describe('DanmakuBurnQueue — processTask()', () => {
       [50]
     );
 
-    // Verify completed update
-    const completedCalls = pool.query.mock.calls.filter((call) => call[0].includes("'completed'"));
+    // Verify danmaku_burn_records updated with completed status (not recording_files anymore)
+    const completedCalls = pool.query.mock.calls.filter(
+      (call) => call[0].includes('UPDATE danmaku_burn_records') && call[0].includes("'completed'")
+    );
     expect(completedCalls.length).toBeGreaterThanOrEqual(1);
-
-    // Verify recording_files updated
-    const rfUpdateCalls = pool.query.mock.calls.filter((call) => call[0].includes('UPDATE recording_files'));
-    expect(rfUpdateCalls.length).toBeGreaterThanOrEqual(1);
-    const rfSql = rfUpdateCalls[0][0];
-    expect(rfSql).toContain('is_danmaku_burned = TRUE');
-    expect(rfUpdateCalls[0][1]).toContain(output);
-    expect(rfUpdateCalls[0][1]).toContain(50);
+    expect(completedCalls[0][1]).toContain(output);
+    expect(completedCalls[0][1]).toContain(50);
   });
 });
 

@@ -22,46 +22,46 @@
 
 ### 录制流程中的触发点（需移除）
 
-| 文件 | 行号 | 当前行为 | 处理方式 |
-|---|---|---|---|
-| `services/RecorderService.js` | L274 | `finishSession` 调用 `_handleDanmakuFinish` | 保留弹幕采集和 ASS 生成，移除自动压制入队 |
-| `services/RecorderService.js` | L439-443 | `_handleDanmakuFinish` 中 `auto_burn_danmaku` 检查 + `enqueueSession` | 移除 |
-| `lib/core/TranscodeQueue.js` | L207 | 转码完成后调用 `triggerDanmakuBurn` | 移除 |
-| `lib/core/TranscodeQueue.js` | L343-376 | `triggerDanmakuBurn` 方法本体 | 移除 |
+| 文件                          | 行号     | 当前行为                                                              | 处理方式                                  |
+| ----------------------------- | -------- | --------------------------------------------------------------------- | ----------------------------------------- |
+| `services/RecorderService.js` | L274     | `finishSession` 调用 `_handleDanmakuFinish`                           | 保留弹幕采集和 ASS 生成，移除自动压制入队 |
+| `services/RecorderService.js` | L439-443 | `_handleDanmakuFinish` 中 `auto_burn_danmaku` 检查 + `enqueueSession` | 移除                                      |
+| `lib/core/TranscodeQueue.js`  | L207     | 转码完成后调用 `triggerDanmakuBurn`                                   | 移除                                      |
+| `lib/core/TranscodeQueue.js`  | L343-376 | `triggerDanmakuBurn` 方法本体                                         | 移除                                      |
 
 ### 文件扫描过滤点（目录分离后不再需要）
 
-| 文件 | 行号 | 当前行为 |
-|---|---|---|
-| `lib/core/watchdog.js` | L211 | `scanActiveSegments` 排除 `_danmaku.mp4` |
-| `lib/core/watchdog.js` | L86 | `checkStaleRecordings` 排除 `_danmaku.mp4` |
-| `lib/core/watchdog.js` | L323 | `cleanupFragmentFiles` 排除 `_danmaku.mp4` |
-| `lib/core/scan-files.js` | L69 | `walkDir` 排除 `_danmaku.mp4` |
-| `services/RoomService.js` | L141 | `cleanupOutputFiles` 排除 `_danmaku.mp4` |
-| `config/config.js` | L11-14 | `DANMAKU_BURN_SUFFIX` + `isDanmakuBurnFile` |
+| 文件                      | 行号   | 当前行为                                    |
+| ------------------------- | ------ | ------------------------------------------- |
+| `lib/core/watchdog.js`    | L211   | `scanActiveSegments` 排除 `_danmaku.mp4`    |
+| `lib/core/watchdog.js`    | L86    | `checkStaleRecordings` 排除 `_danmaku.mp4`  |
+| `lib/core/watchdog.js`    | L323   | `cleanupFragmentFiles` 排除 `_danmaku.mp4`  |
+| `lib/core/scan-files.js`  | L69    | `walkDir` 排除 `_danmaku.mp4`               |
+| `services/RoomService.js` | L141   | `cleanupOutputFiles` 排除 `_danmaku.mp4`    |
+| `config/config.js`        | L11-14 | `DANMAKU_BURN_SUFFIX` + `isDanmakuBurnFile` |
 
 ### 数据库字段（需迁移）
 
-| 表 | 字段 | 处理方式 |
-|---|---|---|
-| `recording_files.danmaku_ass_path` | 分段 ASS 路径 | 迁移到 `danmaku_burn_records.ass_path` |
-| `recording_files.danmaku_burn_path` | 压制输出路径 | 迁移到 `danmaku_burn_records.output_path` |
-| `recording_files.is_danmaku_burned` | 是否已压制 | 从 `danmaku_burn_records.status` 派生 |
-| `recording_files.danmaku_burned_at` | 压制时间 | 从 `danmaku_burn_records.completed_at` 派生 |
+| 表                                  | 字段          | 处理方式                                    |
+| ----------------------------------- | ------------- | ------------------------------------------- |
+| `recording_files.danmaku_ass_path`  | 分段 ASS 路径 | 迁移到 `danmaku_burn_records.ass_path`      |
+| `recording_files.danmaku_burn_path` | 压制输出路径  | 迁移到 `danmaku_burn_records.output_path`   |
+| `recording_files.is_danmaku_burned` | 是否已压制    | 从 `danmaku_burn_records.status` 派生       |
+| `recording_files.danmaku_burned_at` | 压制时间      | 从 `danmaku_burn_records.completed_at` 派生 |
 
 ### 设置项（需清理）
 
-| Key | 当前默认值 | 处理方式 |
-|---|---|---|
-| `auto_burn_danmaku` | `false` | **移除**（不再自动触发） |
-| `prefer_danmaku_burned_video` | `false` | **移除**（从未被代码读取） |
-| `danmaku_preserve_clean_video` | `true` | **移除**（从未被代码读取） |
-| `kuaishou_danmaku_enabled` | `false` | 保留（控制弹幕采集） |
-| `danmaku_burn_concurrency` | `1` | 保留 |
-| `danmaku_density_per_second` | `20` | 保留 |
-| `danmaku_font_family` | `Noto Sans CJK SC` | 保留 |
-| `danmaku_font_size` | `32` | 保留 |
-| `danmaku_opacity` | `0.75` | 保留 |
+| Key                            | 当前默认值         | 处理方式                   |
+| ------------------------------ | ------------------ | -------------------------- |
+| `auto_burn_danmaku`            | `false`            | **移除**（不再自动触发）   |
+| `prefer_danmaku_burned_video`  | `false`            | **移除**（从未被代码读取） |
+| `danmaku_preserve_clean_video` | `true`             | **移除**（从未被代码读取） |
+| `kuaishou_danmaku_enabled`     | `false`            | 保留（控制弹幕采集）       |
+| `danmaku_burn_concurrency`     | `1`                | 保留                       |
+| `danmaku_density_per_second`   | `20`               | 保留                       |
+| `danmaku_font_family`          | `Noto Sans CJK SC` | 保留                       |
+| `danmaku_font_size`            | `32`               | 保留                       |
+| `danmaku_opacity`              | `0.75`             | 保留                       |
 
 ---
 
@@ -123,10 +123,10 @@ DANMAKU_OUTPUT_DIR/                               ← 独立压制输出目录
 
 新增环境变量和设置项：
 
-| 变量/Key | 说明 | 默认值 |
-|---|---|---|
-| `DANMAKU_OUTPUT_DIR` | 压制产物输出根目录 | `${VIDEO_DOWNLOAD_DIR}/../danmaku_output` |
-| `danmaku_output_dir` (settings) | 同上（数据库配置优先） | 同上 |
+| 变量/Key                        | 说明                   | 默认值                                    |
+| ------------------------------- | ---------------------- | ----------------------------------------- |
+| `DANMAKU_OUTPUT_DIR`            | 压制产物输出根目录     | `${VIDEO_DOWNLOAD_DIR}/../danmaku_output` |
+| `danmaku_output_dir` (settings) | 同上（数据库配置优先） | 同上                                      |
 
 ---
 
@@ -180,6 +180,7 @@ static async _handleDanmakuFinish(sessionId, roomUrl) {
 #### 1.3 `views/settings.ejs` — 移除废弃设置项
 
 从设置表单和提交列表中移除以下三项：
+
 - `auto_burn_danmaku`
 - `prefer_danmaku_burned_video`
 - `danmaku_preserve_clean_video`
@@ -391,12 +392,12 @@ Phase 5（清理遗留）
 
 ## 风险评估
 
-| 风险 | 影响 | 缓解措施 |
-|---|---|---|
-| 旧压制产物路径失效 | 历史数据无法播放 | Phase 2 中做路径兼容，查询时 fallback 到旧路径 |
-| 数据迁移丢失关联 | 压制记录与录制文件脱钩 | Phase 3 先迁移数据再删列，保留回滚能力 |
-| 前端功能回归 | 用户操作入口变化 | Phase 4 提供完整工具箱替代，保留会话页只读展示 |
-| ASS 生成路径变更 | 旧会话无法重新生成 ASS | `DanmakuAssGenerator` 兼容旧路径 |
+| 风险               | 影响                   | 缓解措施                                       |
+| ------------------ | ---------------------- | ---------------------------------------------- |
+| 旧压制产物路径失效 | 历史数据无法播放       | Phase 2 中做路径兼容，查询时 fallback 到旧路径 |
+| 数据迁移丢失关联   | 压制记录与录制文件脱钩 | Phase 3 先迁移数据再删列，保留回滚能力         |
+| 前端功能回归       | 用户操作入口变化       | Phase 4 提供完整工具箱替代，保留会话页只读展示 |
+| ASS 生成路径变更   | 旧会话无法重新生成 ASS | `DanmakuAssGenerator` 兼容旧路径               |
 
 ## 测试策略
 

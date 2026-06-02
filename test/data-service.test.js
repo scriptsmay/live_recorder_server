@@ -23,7 +23,7 @@ describe('DataService.getRecordingFiles', () => {
 
     const rows = await DataService.getRecordingFiles({ session_id: 18 });
 
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('WHERE session_id = $1'), [18]);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('rf.session_id = $1'), [18]);
     expect(rows).toHaveLength(1);
     expect(rows[0].file_exists).toBe(true);
   });
@@ -35,6 +35,6 @@ describe('DataService.getRecordingFiles', () => {
 
     await DataService.getRecordingFiles({ sessionId: '18' });
 
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('WHERE session_id = $1'), [18]);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('rf.session_id = $1'), [18]);
   });
 });

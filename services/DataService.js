@@ -206,7 +206,6 @@ class DataService {
       ...f,
       file_exists: f.file_path ? require('fs').existsSync(f.file_path) : false,
       danmaku_ass_exists: f.danmaku_ass_path ? require('fs').existsSync(f.danmaku_ass_path) : false,
-      danmaku_burn_exists: f.danmaku_burn_path ? require('fs').existsSync(f.danmaku_burn_path) : false,
     }));
 
     // 弹幕采集记录：优先从 JSONL 文件计算真实条数（内存计数在服务重启后会丢失）
@@ -317,22 +316,28 @@ class DataService {
     const params = [];
 
     if (status) {
-      conditions.push(`status = $${params.length + 1}`);
+      conditions.push(`rf.status = $${params.length + 1}`);
       params.push(status);
     }
     if (sessionId) {
-      conditions.push(`session_id = $${params.length + 1}`);
+      conditions.push(`rf.session_id = $${params.length + 1}`);
       params.push(parseInt(sessionId, 10));
     }
 
-    let sql = 'SELECT * FROM recording_files';
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += ' ORDER BY id DESC';
+    let sql = `SELECT rf.*, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
+      FROM recording_files rf
+      LEFT JOIN danmaku_burn_records dbr ON dbr.recording_file_id = rf.id`;
+    if (conditions.length) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+    sql += ' ORDER BY rf.id DESC';
 
     const result = await pool.query(sql, params);
     return result.rows.map((rec) => ({
       ...rec,
       file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
+      is_danmaku_burned: rec.burn_status === 'completed',
+      danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
     }));
   }
 

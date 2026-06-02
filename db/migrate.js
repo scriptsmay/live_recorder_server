@@ -335,15 +335,6 @@ async function runMigration() {
       ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT ''
     `);
     await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burn_path VARCHAR(1024) DEFAULT ''
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS is_danmaku_burned BOOLEAN DEFAULT FALSE
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_burned_at TIMESTAMP
-    `);
-    await client.query(`
       ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''
     `);
 
@@ -367,14 +358,11 @@ async function runMigration() {
       ['hls_segment_duration', '10'],
       ['hls_cleanup_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
-      ['auto_burn_danmaku', 'false'],
       ['danmaku_burn_concurrency', '1'],
-      ['danmaku_preserve_clean_video', 'true'],
       ['danmaku_density_per_second', '20'],
       ['danmaku_font_family', 'Noto Sans CJK SC'],
       ['danmaku_font_size', '32'],
       ['danmaku_opacity', '0.75'],
-      ['prefer_danmaku_burned_video', 'false'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(
