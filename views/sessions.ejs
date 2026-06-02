@@ -1,135 +1,212 @@
-<h2>录制会话</h2>
+<% const sessionStatusCounts = {
+  total: sessions.length,
+  recording: sessions.filter(s => s.status === 'recording').length,
+  completed: sessions.filter(s => s.status === 'completed').length,
+  interrupted: sessions.filter(s => s.status === 'interrupted').length,
+}; %>
 
-<div class="row mb-3">
-  <div class="col-md-4">
-    <select class="form-select" id="roomFilter">
-      <option value="">全部直播间</option>
-      <% rooms.forEach(r => { %>
-        <option value="<%= r.room_url %>" <%= currentRoomUrl === r.room_url ? 'selected' : '' %>><%= r.room_name || r.room_url %></option>
-      <% }) %>
-    </select>
+<!-- 页面标题 -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">录制会话</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;">所有直播间的录制记录与弹幕处理</p>
   </div>
 </div>
 
+<!-- 筛选条：状态 + 直播间 -->
+<div class="filter-bar mb-4">
+  <!-- 状态筛选标签 -->
+  <div class="filter-group">
+    <span class="filter-label">状态：</span>
+    <% ['all','recording','completed','interrupted'].forEach(st => { %>
+      <button class="filter-tag filter-tag-session-status <%= st === 'all' ? 'active' : '' %>" data-status="<%= st %>">
+        <span class="status-dot-inline status-dot-inline-<%= st === 'all' ? 'all' : st %>"></span>
+        <%= {all:'全部',recording:'录制中',completed:'已完成',interrupted:'中断'}[st] %>
+        <% if (st !== 'all') { %><span class="filter-count"><%= {recording:sessionStatusCounts.recording,completed:sessionStatusCounts.completed,interrupted:sessionStatusCounts.interrupted}[st]||0 %></span><% } %>
+      </button>
+    <% }) %>
+  </div>
+</div>
+
+<div class="filter-bar mb-4">
+  <!-- 直播间快速切换 -->
+  <div class="filter-group flex-wrap">
+    <span class="filter-label">直播间：</span>
+    <button class="filter-tag active" data-room-id="" onclick="location.href='/sessions'">全部</button>
+    <% rooms.forEach(r => { %>
+      <button class="filter-tag" data-room-id="<%= r.id %>" onclick="location.href='/sessions?room_id=<%= r.id %>'" <%= currentRoomId == r.id ? 'class="filter-tag active"' : '' %>>
+        <%= r.room_name || '未命名' %>
+      </button>
+    <% }) %>
+  </div>
+</div>
+
+<!-- 会话列表 -->
 <div id="sessionList">
 <% if (sessions.length === 0) { %>
-  <p class="text-muted text-center">暂无录制会话</p>
+  <div class="empty-state">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="text-secondary mb-2" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2zm11.5 5.175 3.5 1.556V4.269l-3.5 1.556zM2 4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"/></svg><p class="text-muted mb-0">暂无录制会话</p>
+  </div>
 <% } else { %>
   <% sessions.forEach(s => { %>
     <% const uploads = uploadMap[s.id] || []; %>
     <% const hasSuccessUpload = uploads.some(u => u.status === 'success'); %>
-    <% const statusBadge = { recording: '<span class="badge bg-primary">录制中</span>', completed: '<span class="badge bg-success">已完成</span>', interrupted: '<span class="badge bg-danger">中断</span>', pending: '<span class="badge bg-secondary">录制准备</span>' }[s.status] || s.status; %>
-    <% const danmakuBadge = s.danmaku_status === 'recording' ? '<span class="badge bg-success">录制中 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'completed' ? '<span class="badge bg-info">已完成 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'failed' ? '<span class="badge bg-danger" title="' + (s.danmaku_error || '') + '">失败</span>' : '<span class="badge bg-secondary">—</span>'; %>
+    <% const statusClass = { recording: 'status-recording', completed: 'status-completed', interrupted: 'status-interrupted', pending: 'status-pending' }[s.status] || ''; %>
+    <% const statusLabel = { recording: '录制中', completed: '已完成', interrupted: '中断', pending: '准备中' }[s.status] || s.status; %>
+    <% const danmakuBadge = s.danmaku_status === 'recording' ? '<span class="badge badge-recording">录制中 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'completed' ? '<span class="badge badge-completed">已完成 (' + (s.danmaku_event_count || 0) + '条)</span>' : s.danmaku_status === 'failed' ? '<span class="badge badge-failed" title="' + (s.danmaku_error || '') + '">失败</span>' : '<span class="badge bg-secondary">—</span>'; %>
     <% const burnTotal = s.danmaku_burn_total || 0; const burnCompleted = s.danmaku_burn_completed || 0; const burnFailed = s.danmaku_burn_failed || 0; %>
-    <% const burnBadge = burnTotal > 0 ? (burnFailed > 0 ? '<span class="badge bg-warning">' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + '失败)</span>' : (burnCompleted === burnTotal ? '<span class="badge bg-success">完成 ' + burnCompleted + '/' + burnTotal + '</span>' : '<span class="badge bg-info">进行中 ' + burnCompleted + '/' + burnTotal + '</span>')) : '<span class="badge bg-secondary">—</span>'; %>
+    <% let burnBadge = ''; %>
+    <% if (burnTotal > 0) { if (burnFailed > 0) { burnBadge = '<span class="badge badge-failed">' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + '失败)</span>'; } else if (burnCompleted === burnTotal) { burnBadge = '<span class="badge badge-completed">完成 ' + burnCompleted + '/' + burnTotal + '</span>'; } else { burnBadge = '<span class="badge badge-processing">进行中 ' + burnCompleted + '/' + burnTotal + '</span>'; } } else { burnBadge = '<span class="badge bg-secondary">—</span>'; } %>
     <% const totalSize = s.total_size ? (s.total_size / 1024 / 1024).toFixed(1) + ' MB' : '-'; %>
-    <div class="card mb-3 session-card">
-      <div class="card-header d-flex justify-content-between align-items-center py-2">
-        <div>
-          <span class="badge bg-info me-2">#<%= s.id %></span>
-          <strong><%= s.room_name || s.room_url %></strong>
-          <small class="text-muted ms-2"><%= s.room_url || '' %></small>
+
+    <div class="session-card-new" data-status="<%= s.status %>">
+      <!-- 卡片头部：Session ID + 状态 + 操作 -->
+      <div class="session-card-header">
+        <div class="session-header-left">
+          <span class="session-id-badge">#<%= s.id %></span>
+          <strong class="session-room-name"><%= s.room_name || s.room_url %></strong>
+          <small class="session-room-url text-muted"><%= s.room_url || '' %></small>
         </div>
-        <div>
-          <%- statusBadge %>
-          <button class="btn btn-sm btn-outline-danger ms-2 deleteSessionBtn" data-session-id="<%= s.id %>" title="删除会话">删除</button>
+        <div class="session-header-right">
+          <span class="session-status-badge <%= statusClass %>">
+            <span class="status-dot-mini status-dot-mini-<%= s.status === 'pending' ? 'idle' : s.status %>"></span>
+            <%= statusLabel %>
+          </span>
+          <button class="btn btn-sm ms-2 btn-outline-danger deleteSessionBtn" data-session-id="<%= s.id %>" title="删除会话">删除</button>
         </div>
       </div>
-      
-      <div class="card-body pt-2">
-        <div class="row g-3">
-          <!-- 左列：直播录制 + 投稿 -->
-          <div class="col-md-6">
-            <div class="section-block h-100">
-              <h6 class="section-title text-primary mb-2 pb-1 border-bottom border-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-camera-video me-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2zm11.5 5.175 3.5 1.556V4.269l-3.5 1.556zM2 4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"/></svg>
-                <% if (s.caption) { %><%= s.caption %><% } %>
-              </h6>
-              <div class="row g-2 mb-2">
-                <div class="col-6"><small class="text-muted d-block">开始时间</small><small><%= formatDate(s.started_at) %></small></div>
-                <div class="col-6"><small class="text-muted d-block">结束时间</small><small><%= formatDate(s.ended_at) %></small></div>
-                <div class="col-6"><small class="text-muted d-block">分片数</small><small><%= s.total_segments || 0 %> 段</small></div>
-                <div class="col-6"><small class="text-muted d-block">文件大小</small><small><%= totalSize %></small></div>
-              </div>
-              <div class="mb-2">
-                <small class="text-muted d-block">输出路径</small>
-                <small class="text-break"><%= s.output_path %></small>
-              </div>
-              <div class="mb-2">
-                <small class="text-muted d-block">直播流</small>
-                <code class="small" style="cursor: pointer; word-break: break-all;" onclick="copyCode(this, '<%= s.stream_url %>')"><%= (s.stream_url || '').slice(0, 80) + '…' %></code>
-              </div>
-              <% if (uploads.length) { %>
-                <div class="mb-2">
-                  <small class="text-muted d-block mb-1">投稿记录</small>
-                  <div>
-                    <% uploads.forEach(u => { %>
-                      <% const cls = { uploading: 'badge bg-primary', success: 'badge bg-success', failed: 'badge bg-danger' }[u.status] || 'badge bg-secondary'; %>
-                      <span class="<%= cls %> me-1" title="<%= u.status %>"><%= u.bv_id ? 'BV ' + u.bv_id : u.status %></span>
-                    <% }) %>
-                  </div>
-                </div>
-              <% } %>
-              <div class="mt-auto pt-2 d-flex flex-wrap gap-1">
-                <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">查看文件</button>
-                <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent(downloader + '_' + s.id + '.log') %>" target="_blank">查看日志</a>
-                <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted')) { %>
-                  <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="<%= s.id %>">投稿</button>
-                <% } %>
-              </div>
+
+      <!-- 卡片主体：双栏布局 -->
+      <div class="session-card-body-new">
+        <!-- 左栏：直播录制信息 -->
+        <div class="session-section session-section-video">
+          <div class="session-section-head">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2zm11.5 5.175 3.5 1.556V4.269l-3.5 1.556zM2 4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"/></svg>
+            <span>直播录制</span>
+            <% if (s.caption) { %><span class="session-caption"><%= s.caption %></span><% } %>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">开始时间</span>
+              <span class="info-value"><%= formatDate(s.started_at) %></span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">结束时间</span>
+              <span class="info-value"><%= formatDate(s.ended_at) %></span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">分片数</span>
+              <span class="info-value"><%= s.total_segments || 0 %> 段</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">文件大小</span>
+              <span class="info-value"><%= totalSize %></span>
+            </div>
+            <div class="info-item info-item-full">
+              <span class="info-label">输出路径</span>
+              <span class="info-value info-value-path text-break"><%= s.output_path %></span>
+            </div>
+            <div class="info-item info-item-full">
+              <span class="info-label">直播流</span>
+              <code class="stream-code" style="cursor:pointer;" onclick="copyCode(this, '<%= s.stream_url %>')" title="<%= s.stream_url || '' %>">
+                <%= (s.stream_url || '').slice(0, 60) + (s.stream_url && s.stream_url.length > 60 ? '…' : '') %>
+              </code>
             </div>
           </div>
-          <!-- 右列：弹幕生成 + 压制 -->
-          <div class="col-md-6">
-            <div class="section-block h-100">
-              <h6 class="section-title text-success mb-2 pb-1 border-bottom border-success">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-chat-dots me-1" viewBox="0 0 16 16"><path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2"/><path d="m2.165 15.803.02-.004c1.83-.363 2.948-.842 3.468-1.105A9 9 0 0 0 8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6a10.4 10.4 0 0 1-.524 2.318l-.003.011a11 11 0 0 1-.244.637c-.079.186.074.394.272.362a22 22 0 0 0 .693-.125Z"/></svg>
-                弹幕信息
-              </h6>
-              <div class="row g-2 mb-2">
-                <div class="col-6">
-                  <small class="text-muted d-block">弹幕状态</small>
-                  <%- danmakuBadge %>
-                </div>
-                <div class="col-6">
-                  <small class="text-muted d-block">压制状态</small>
-                  <%- burnBadge %>
-                </div>
-              </div>
-              <% if (burnTotal > 0 && burnCompleted < burnTotal && burnFailed === 0) { %>
-                <div class="mb-2">
-                  <div class="progress" style="height: 6px;">
-                    <div class="progress-bar bg-info" role="progressbar" style="width: <%= Math.round(burnCompleted / burnTotal * 100) %>%" aria-valuenow="<%= burnCompleted %>" aria-valuemin="0" aria-valuemax="<%= burnTotal %>"></div>
-                  </div>
-                  <small class="text-muted"><%= Math.round(burnCompleted / burnTotal * 100) %>% 完成</small>
-                </div>
-              <% } %>
-              <div class="mt-auto pt-2 d-flex flex-wrap gap-1">
-                <a class="btn btn-sm btn-outline-primary" href="/sessions/<%= s.id %>/danmaku">弹幕详情</a>
-                <% if (s.status === 'completed' || s.status === 'interrupted') { %>
-                  <button class="btn btn-sm btn-outline-info genAssBtn" data-session-id="<%= s.id %>" title="重新生成 ASS 字幕">生成 ASS</button>
-                  <button class="btn btn-sm btn-outline-warning burnDanmakuBtn" data-session-id="<%= s.id %>" title="将弹幕压制到视频上">压制弹幕</button>
-                <% } %>
-              </div>
+
+          <!-- 投稿记录 -->
+          <% if (uploads.length) { %>
+          <div class="upload-badges mt-2">
+            <span class="info-label-sm mb-1 d-block">投稿记录</span>
+            <div>
+              <% uploads.forEach(u => { %>
+                <% const cls = { uploading: 'badge badge-uploading', success: 'badge badge-completed', failed: 'badge badge-failed' }[u.status] || 'badge bg-secondary'; %>
+                <span class="<%= cls %> me-1" title="<%= u.status %>"><%= u.bv_id ? 'BV ' + u.bv_id : u.status %></span>
+              <% }) %>
             </div>
           </div>
+          <% } %>
+
+          <!-- 左栏操作按钮 -->
+          <div class="session-actions mt-3 pt-2 border-top border-light">
+            <button class="btn btn-sm btn-outline-secondary toggleFiles" data-session-id="<%= s.id %>">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8z"/><path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm10.293 5.707-3 3-1.293-1.293L9.5 8l1.5-1.5 3 3z"/></svg><span class="ms-1">文件</span>
+            </button>
+            <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent(downloader + '_' + s.id + '.log') %>" target="_blank">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/></svg><span class="ms-1">日志</span>
+            </a>
+            <% if (!hasSuccessUpload && (s.status === 'completed' || s.status === 'interrupted')) { %>
+              <button class="btn btn-sm btn-outline-success uploadBtn" data-session-id="<%= s.id %>" title="投稿此会话">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L4.854 4.854a.5.5 0 1 1-.708-.708l3-3z"/></svg><span class="ms-1">投稿</span>
+              </button>
+            <% } %>
+          </div>
         </div>
-        <div class="mt-2 d-none filesContainer" id="files_<%= s.id %>">
-          <div class="spinner-border spinner-border-sm"><span class="visually-hidden">加载中...</span></div>
+
+        <!-- 右栏：弹幕信息 -->
+        <div class="session-section session-section-danmaku">
+          <div class="session-section-head session-section-head-green">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2"/><path d="m2.165 15.803.02-.004c1.83-.363 2.948-.842 3.468-1.105A9 9 0 0 0 8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6a10.4 10.4 0 0 1-.524 2.318l-.003.011a11 11 0 0 1-.244.637c-.079.186.074.394.272.362a22 22 0 0 0 .693-.125Z"/></svg>
+            <span class="ms-1">弹幕信息</span>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">弹幕状态</span>
+              <%- danmakuBadge %>
+            </div>
+            <div class="info-item">
+              <span class="info-label">压制状态</span>
+              <%- burnBadge %>
+            </div>
+          </div>
+
+          <!-- 压制进度条 -->
+          <% if (burnTotal > 0 && burnCompleted < burnTotal && burnFailed === 0) { %>
+          <div class="burn-progress-wrap">
+            <div class="progress burn-progress" style="height: 8px;border-radius:4px;">
+              <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar"
+                   style="width: <%= Math.round(burnCompleted / burnTotal * 100) %>%"
+                   aria-valuenow="<%= burnCompleted %>"
+                   aria-valuemin="0"
+                   aria-valuemax="<%= burnTotal %>"></div>
+            </div>
+            <small class="text-muted mt-1 d-block"><%= Math.round(burnCompleted / burnTotal * 100) %>% 完成</small>
+          </div>
+          <% } %>
+
+          <!-- 右栏操作按钮 -->
+          <div class="session-actions mt-3 pt-2 border-top border-light">
+            <a class="btn btn-sm btn-outline-primary" href="/sessions/<%= s.id %>/danmaku">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2"/><path d="m2.165 15.803.02-.004c1.83-.363 2.948-.842 3.468-1.105A9 9 0 0 0 8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6a10.4 10.4 0 0 1-.524 2.318l-.003.011a11 11 0 0 1-.244.637c-.079.186.074.394.272.362a22 22 0 0 0 .693-.125Z"/></svg><span class="ms-1">详情</span>
+            </a>
+            <% if (s.status === 'completed' || s.status === 'interrupted') { %>
+              <button class="btn btn-sm btn-outline-info genAssBtn" data-session-id="<%= s.id %>" title="重新生成 ASS 字幕">生成ASS</button>
+              <button class="btn btn-sm btn-outline-warning burnDanmakuBtn" data-session-id="<%= s.id %>" title="将弹幕压制到视频上">压制弹幕</button>
+            <% } %>
+          </div>
         </div>
+      </div>
+
+      <!-- 文件列表（折叠） -->
+      <div class="files-collapse d-none" id="files_<%= s.id %>">
+        <div class="spinner-border spinner-border-sm"><span class="visually-hidden">加载中...</span></div>
       </div>
     </div>
   <% }) %>
 <% } %>
 </div>
 
-<% if (pagination.totalPages > 1) { %>
-<div class="d-flex justify-content-between align-items-center mt-3">
+<!-- 分页 -->
+
+<div class="d-flex justify-content-between align-items-center mt-4">
   <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  <% if (pagination.totalPages > 1) { %>
   <nav aria-label="录制会话分页">
     <ul class="pagination pagination-sm mb-0">
       <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
-        <a class="page-link" href="?page=<%= pagination.page - 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">上一页</a>
+        <a class="page-link" href="?page=<%= pagination.page - 1 %><%= currentRoomId ? '&room_url=' + encodeURIComponent(currentRoomId) : '' %>">上一页</a>
       </li>
       <%
         const maxPages = 7;
@@ -141,23 +218,24 @@
         for (let i = startPage; i <= endPage; i++) {
       %>
         <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
-          <a class="page-link" href="?page=<%= i %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>"><%= i %></a>
+          <a class="page-link" href="?page=<%= i %><%= currentRoomId ? '&room_url=' + encodeURIComponent(currentRoomId) : '' %>"><%= i %></a>
         </li>
       <% } %>
       <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
-        <a class="page-link" href="?page=<%= pagination.page + 1 %><%= currentRoomUrl ? '&room_url=' + encodeURIComponent(currentRoomUrl) : '' %>">下一页</a>
+        <a class="page-link" href="?page=<%= pagination.page + 1 %><%= currentRoomId ? '&room_url=' + encodeURIComponent(currentRoomId) : '' %>">下一页</a>
       </li>
     </ul>
   </nav>
+  <% } %>
 </div>
-<% } %>
 
-<!-- 将投稿部分做成modal投稿 -->
+
+<!-- 投稿 Modal -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg"> 
-    <div class="modal-content"> 
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="uploadModalLabel">投稿录制会话<span class="text-muted ml-2" id="uploadSessionIdText"></span></h5>
+        <h5 class="modal-title" id="uploadModalLabel">投稿录制会话<span class="text-muted ms-2" id="uploadSessionIdText"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -168,7 +246,7 @@
             <select id="uploadTmplSelect" class="form-select form-select-sm d-inline-block mx-1" required>
               <option value="">选择模板投稿</option>
               <% templates.forEach(t => { %>
-                <option value="<%= t.id %>"><%= t.name %></option>
+              <option value="<%= t.id %>"><%= t.name %></option>
               <% }) %>
             </select>
           </div>
@@ -177,7 +255,6 @@
           </div>
           <div class="mb-3" id="uploadResultText"></div>
         </form>
-        
         <div id="uploadStatusContainer" class="mt-3 d-none text-primary">
           <div class="spinner-border spinner-border-sm" role="status">
             <span class="visually-hidden">正在提交投稿...</span>
@@ -193,143 +270,45 @@
 <%- include('partials/_video_player') %>
 
 <script>
-  document.getElementById('roomFilter')?.addEventListener('change', (e) => {
-    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
-    window.location.href = '/sessions' + url;
-  });
-
-  // 列表中的操作按钮事件代理
-  document.addEventListener('click', async (e) => {
-    const toggle = e.target.closest('.toggleFiles');
-    if (toggle) {
-      const sid = toggle.dataset.sessionId;
-      const container = document.getElementById('files_' + sid);
-      container.classList.toggle('d-none');
-      if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
-        const res = await fetch('/api/recording_files?session_id=' + sid);
-        const json = await res.json();
-        container.innerHTML = '';
-        if (!json.data || json.data.length === 0) {
-          container.innerHTML = '<small class="text-muted">无分片文件</small>';
-          return;
-        }
-        const table = document.createElement('table');
-        table.className = 'table table-sm mb-0';
-        table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>弹幕</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-          json.data.map(r => {
-            const danmakuBadge = r.is_danmaku_burned
-              ? '<span class="badge bg-success">已压制</span>'
-              : (r.danmaku_ass_path ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');
-            return '<tr>' +
-            '<td>' + r.id + '</td>' +
-            '<td><small>' + (r.file_path || '-') + '</small></td>' +
-            '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
-            '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
-            '<td>' + danmakuBadge + '</td>' +
-            '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
-            '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playRecBtn me-1" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') +
-            (r.is_danmaku_burned && r.file_exists ? '<button class="btn btn-sm btn-outline-success playRecBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">▶弹幕</button>' : '') + '</td>' +
-            '</tr>';
-          }).join('') + '</tbody>';
-        container.appendChild(table);
-      }
-      return;
-    }
-
-    const delBtn = e.target.closest('.deleteSessionBtn');
-    if (delBtn) {
-      showConfirm('确定删除此会话？此操作不会删除实际文件。').then(async confirmed => {
-        if (!confirmed) return;
-        const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId, { method: 'DELETE' });
-        const json = await res.json();
-        if (!res.ok) { toast(json.message); return; }
-        location.reload();
-      });
-      return;
-    }
-
-    // 生成 ASS 按钮
-    const genAssBtn = e.target.closest('.genAssBtn');
-    if (genAssBtn) {
-      const sid = genAssBtn.dataset.sessionId;
-      genAssBtn.disabled = true;
-      genAssBtn.textContent = '生成中...';
-      try {
-        const res = await fetch('/api/sessions/' + sid + '/danmaku/ass', { method: 'POST' });
-        const json = await res.json();
-        if (res.ok && json.status === 'ok') {
-          toast('ASS 生成成功: ' + json.data.event_count + ' 条弹幕');
-        } else {
-          toast('生成失败: ' + (json.message || '未知错误'));
-        }
-      } catch (err) {
-        toast('请求失败: ' + err.message);
-      } finally {
-        genAssBtn.disabled = false;
-        genAssBtn.textContent = '生成 ASS';
-      }
-      return;
-    }
-
-    // 压制弹幕按钮
-    const burnBtn = e.target.closest('.burnDanmakuBtn');
-    if (burnBtn) {
-      const sid = burnBtn.dataset.sessionId;
-      const confirmed = await showConfirm('确认将此会话加入弹幕压制队列？');
-      if (!confirmed) return;
-      burnBtn.disabled = true;
-      burnBtn.textContent = '入队中...';
-      try {
-        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force: false }),
-        });
-        const json = await res.json();
-        if (res.ok && json.status === 'ok') {
-          toast(json.message);
-        } else {
-          toast('入队失败: ' + (json.message || '未知错误'));
-        }
-      } catch (err) {
-        toast('请求失败: ' + err.message);
-      } finally {
-        burnBtn.disabled = false;
-        burnBtn.textContent = '压制弹幕';
-      }
-      return;
-    }
-
-  });
-
-
-</script>
-
-<script>
-  // 声明一个全局的 modal 实例变量
-  let uploadModalInstance = null;
-
+  // ====== DOM 就绪后统一初始化 ======
   document.addEventListener('DOMContentLoaded', () => {
-    // 1. 初始化相关组件
-    if (typeof RecordingPlayer !== 'undefined') {
-      RecordingPlayer.init();
-    }
+    if (typeof RecordingPlayer !== 'undefined') RecordingPlayer.init();
 
+    // 投稿 Modal 实例
+    let uploadModalInstance = null;
     const modalEl = document.getElementById('uploadModal');
     if (modalEl) {
       uploadModalInstance = new bootstrap.Modal(modalEl);
     }
 
-    // 2. 监听模板选择，控制提交按钮状态
+    // 状态标签筛选（直接绑定）
+    document.querySelectorAll('.filter-tag-session-status').forEach(tag => {
+      tag.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tag-session-status').forEach(t => t.classList.remove('active'));
+        tag.classList.add('active');
+        const status = tag.dataset.status;
+        const cards = document.querySelectorAll('.session-card-new[data-status]');
+        cards.forEach(card => {
+          card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
+        });
+      });
+    });
+
+    // 直播间下拉筛选（兼容旧元素）
+    document.getElementById('roomFilter')?.addEventListener('change', (e) => {
+      const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
+      window.location.href = '/sessions' + url;
+    });
+
+    // 投稿模板选择
     document.getElementById('uploadTmplSelect')?.addEventListener('change', (e) => {
       document.getElementById('uploadSubmitBtn').disabled = !e.target.value;
     });
 
-    // 3. 监听表单提交事件（而不是按钮点击）
+    // 投稿表单提交
     document.getElementById('uploadForm')?.addEventListener('submit', async (e) => {
-      e.preventDefault(); // 关键：阻止表单默认提交刷新页面
-
-      const confirmed = await showConfirm('确认投稿？'); // 假设 showConfirm 返回 Promise
+      e.preventDefault();
+      const confirmed = await showConfirm('确认投稿？');
       if (!confirmed) return;
 
       const sessionId = document.getElementById('uploadSessionId').value;
@@ -338,12 +317,11 @@
       const resultText = document.getElementById('uploadResultText');
       const statusContainer = document.getElementById('uploadStatusContainer');
 
-      // 提交前的 UI 状态更新
       resultText.textContent = '';
       resultText.className = '';
       submitBtn.disabled = true;
       submitBtn.textContent = '投稿中...';
-      statusContainer.classList.remove('d-none'); // 显示加载动画
+      statusContainer.classList.remove('d-none');
 
       try {
         const res = await fetch('/api/sessions/' + sessionId + '/upload', {
@@ -351,63 +329,146 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ template_id: parseInt(templateId, 10) }),
         });
-        
         const json = await res.json();
-        
+
         if (!res.ok || json.status !== 'ok') {
           resultText.textContent = json.message || '投稿失败';
           resultText.className = 'text-danger';
         } else {
           uploadModalInstance.hide();
           toast(json.message || '投稿任务已提交');
-          // 延迟一点关闭并刷新页面以显示最新状态（比如 BV 号或 uploading 标签）
-          setTimeout(() => {
-            location.reload();
-          }, 2000);
+          setTimeout(() => { location.reload(); }, 2000);
         }
-
-        // 成功状态
         submitBtn.textContent = '已提交';
-        submitBtn.classList.replace('btn-primary', 'btn-success');
-
+        submitBtn.className.replace ? null : submitBtn.classList.replace('btn-primary', 'btn-success');
       } catch (error) {
-        // 异常处理
         console.error('Upload error:', error);
         toast(error.message);
         submitBtn.disabled = false;
         submitBtn.textContent = '重新投稿';
       } finally {
-        // 无论成功失败，隐藏加载动画
         statusContainer.classList.add('d-none');
       }
     });
-  });
 
-  // 全局事件代理 (保留你原有的 filter, toggleFiles, deleteBtn)
-  document.getElementById('roomFilter')?.addEventListener('change', (e) => {
-    const url = e.target.value ? '?room_url=' + encodeURIComponent(e.target.value) : '';
-    window.location.href = '/sessions' + url;
-  });
+    // 全局事件代理：文件展开 / 删除会话 / 生成ASS / 压制弹幕 / 打开投稿
+    document.addEventListener('click', async (e) => {
+      // 展开文件列表
+      const toggle = e.target.closest('.toggleFiles');
+      if (toggle) {
+        const sid = toggle.dataset.sessionId;
+        const container = document.getElementById('files_' + sid);
+        container.classList.toggle('d-none');
+        if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
+          const res = await fetch('/api/recording_files?session_id=' + sid);
+          const json = await res.json();
+          container.innerHTML = '';
+          if (!json.data || json.data.length === 0) {
+            container.innerHTML = '<small class="text-muted p-2 d-block">无分片文件</small>';
+            return;
+          }
+          const table = document.createElement('table');
+          table.className = 'table table-sm mb-0';
+          table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>弹幕</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+            json.data.map(r => {
+              const danmakuBadge = r.is_danmaku_burned
+                ? '<span class="badge bg-success">已压制</span>'
+                : (r.danmaku_ass_path ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');
+              return '<tr>' +
+              '<td>' + r.id + '</td>' +
+              '<td><small>' + (r.file_path || '-') + '</small></td>' +
+              '<td>' + (r.file_size ? (r.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-') + '</td>' +
+              '<td>' + (r.is_hls_ready ? '<span class="badge bg-success">就绪</span>' : '<span class="badge bg-secondary">未生成</span>') + '</td>' +
+              '<td>' + danmakuBadge + '</td>' +
+              '<td>' + (r.status === 'completed' ? '<span class="badge bg-success">完成</span>' : r.status === 'recording' ? '<span class="badge bg-primary">录制中</span>' : '<span class="badge bg-danger">中断</span>') + '</td>' +
+              '<td>' + (r.file_exists ? '<button class="btn btn-sm btn-outline-info playRecBtn me-1" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="' + ((r.file_path || '').split('.').pop() || '') + '">▶</button>' : '<span class="text-muted small">已删除</span>') +
+              (r.is_danmaku_burned && r.file_exists ? '<button class="btn btn-sm btn-outline-success playRecBtn" data-recording-id="' + r.id + '" data-filename="' + (r.file_path.split('/').pop() || '') + '" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">▶弹幕</button>' : '') + '</td>' +
+              '</tr>';
+            }).join('') + '</tbody>';
+          container.appendChild(table);
+        }
+        return;
+      }
 
-  document.addEventListener('click', async (e) => {
-    
-    // 打开投稿模态框
-    const uploadBtn = e.target.closest('.uploadBtn');
-    if (uploadBtn && !uploadBtn.disabled) {
-      // 在显示之前，重置表单的状态，防止上一次的输入或错误提示残留
-      document.getElementById('uploadSessionId').value = uploadBtn.dataset.sessionId;
-      document.getElementById('uploadTmplSelect').value = '';
-      document.getElementById('uploadResultText').textContent = '';
-      document.getElementById('uploadSessionIdText').textContent = '#' + uploadBtn.dataset.sessionId;
-      
-      const submitBtn = document.getElementById('uploadSubmitBtn');
-      submitBtn.disabled = true;
-      submitBtn.textContent = '提交投稿';
-      submitBtn.className = 'btn btn-primary'; // 恢复默认颜色
-      
-      document.getElementById('uploadStatusContainer').classList.add('d-none');
+      // 删除会话
+      const delBtn = e.target.closest('.deleteSessionBtn');
+      if (delBtn) {
+        showConfirm('确定删除此会话？此操作不会删除实际文件。').then(async confirmed => {
+          if (!confirmed) return;
+          const res = await fetch('/api/sessions/' + delBtn.dataset.sessionId, { method: 'DELETE' });
+          const json = await res.json();
+          if (!res.ok) { toast(json.message); return; }
+          location.reload();
+        });
+        return;
+      }
 
-      uploadModalInstance?.show();
-    }
+      // 生成 ASS
+      const genAssBtn = e.target.closest('.genAssBtn');
+      if (genAssBtn) {
+        const sid = genAssBtn.dataset.sessionId;
+        genAssBtn.disabled = true;
+        genAssBtn.textContent = '生成中...';
+        try {
+          const res = await fetch('/api/sessions/' + sid + '/danmaku/ass', { method: 'POST' });
+          const json = await res.json();
+          if (res.ok && json.status === 'ok') {
+            toast('ASS 生成成功: ' + json.data.event_count + ' 条弹幕');
+          } else {
+            toast('生成失败: ' + (json.message || '未知错误'));
+          }
+        } catch (err) {
+          toast('请求失败: ' + err.message);
+        } finally {
+          genAssBtn.disabled = false;
+          genAssBtn.textContent = '生成 ASS';
+        }
+        return;
+      }
+
+      // 压制弹幕
+      const burnBtn = e.target.closest('.burnDanmakuBtn');
+      if (burnBtn) {
+        const sid = burnBtn.dataset.sessionId;
+        const confirmed = await showConfirm('确认将此会话加入弹幕压制队列？');
+        if (!confirmed) return;
+        burnBtn.disabled = true;
+        burnBtn.textContent = '入队中...';
+        try {
+          const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: false }),
+          });
+          const json = await res.json();
+          if (res.ok && json.status === 'ok') {
+            toast(json.message);
+          } else {
+            toast('入队失败: ' + (json.message || '未知错误'));
+          }
+        } catch (err) {
+          toast('请求失败: ' + err.message);
+        } finally {
+          burnBtn.disabled = false;
+          burnBtn.textContent = '压制弹幕';
+        }
+        return;
+      }
+
+      // 打开投稿弹窗
+      const uploadBtn = e.target.closest('.uploadBtn');
+      if (uploadBtn && !uploadBtn.disabled) {
+        document.getElementById('uploadSessionId').value = uploadBtn.dataset.sessionId;
+        document.getElementById('uploadTmplSelect').value = '';
+        document.getElementById('uploadResultText').textContent = '';
+        document.getElementById('uploadSessionIdText').textContent = '#' + uploadBtn.dataset.sessionId;
+        const submitBtn = document.getElementById('uploadSubmitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '提交投稿';
+        submitBtn.className = 'btn btn-primary';
+        document.getElementById('uploadStatusContainer').classList.add('d-none');
+        uploadModalInstance?.show();
+      }
+    });
   });
 </script>

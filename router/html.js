@@ -39,11 +39,12 @@ router.get('/dashboard', async (req, res) => {
 router.get('/sessions', async (req, res) => {
   try {
     const roomFilter = req.query.room_url || '';
+    const roomIdFilter = req.query.room_id || '';
     const page = parseInt(req.query.page, 10) || 1;
     const limit = 50;
 
     const [sessionsResult, uploadResult, rooms, templates] = await Promise.all([
-      DataService.getSessions({ room_url: roomFilter, page, limit }),
+      DataService.getSessions({ room_url: roomFilter, room_id: roomIdFilter, page, limit }),
       DataService.getUploadRecords({ limit: 200 }),
       DataService.getRoomList(),
       DataService.getTemplates(),
@@ -58,6 +59,7 @@ router.get('/sessions', async (req, res) => {
     const totalPages = Math.ceil(sessionsResult.total / limit);
 
     const downloader = getActiveDownloader().name;
+    // console.log(sessionsResult.rows);
     res.render('sessions', {
       title: '录制会话',
       sessions: sessionsResult.rows,
@@ -66,6 +68,7 @@ router.get('/sessions', async (req, res) => {
       rooms,
       templates,
       currentRoomUrl: roomFilter,
+      currentRoomId: roomIdFilter,
       pagination: { page, limit, total: sessionsResult.total, totalPages },
     });
   } catch (err) {
@@ -116,6 +119,7 @@ router.get('/rooms', async (req, res) => {
 router.get('/transcode', async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
+    const typeFilter = req.query.type || 'all';
     const limit = 50;
 
     const [result, burnResult] = await Promise.all([
@@ -125,11 +129,23 @@ router.get('/transcode', async (req, res) => {
       ),
     ]);
 
+    // 根据 typeFilter 过滤历史记录（活跃任务不过滤，始终显示）
+    let filteredRecords = result.rows || [];
+    let filteredBurnRecords = burnResult.rows || [];
+    if (typeFilter === 'transcode') {
+      filteredBurnRecords = [];
+    } else if (typeFilter === 'burn') {
+      filteredRecords = [];
+    }
+
     const totalPages = Math.ceil(result.total / limit);
     res.render('transcode', {
       title: '转码记录',
-      records: result.rows,
-      burnRecords: burnResult.rows || [],
+      records: result.rows, // 原始数据（总览/活跃区用）
+      burnRecords: burnResult.rows || [], // 原始数据（总览/活跃区用）
+      filteredRecords, // 历史表过滤后
+      filteredBurnRecords, // 历史表过滤后
+      typeFilter,
       pagination: { page, limit, total: result.total, totalPages },
     });
   } catch (err) {
@@ -138,6 +154,9 @@ router.get('/transcode', async (req, res) => {
       title: '转码记录',
       records: [],
       burnRecords: [],
+      filteredRecords: [],
+      filteredBurnRecords: [],
+      typeFilter: 'all',
       pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
     });
   }

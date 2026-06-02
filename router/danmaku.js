@@ -325,12 +325,10 @@ router.get('/danmaku/search', async (req, res) => {
     // 关键词筛选
     const kwLower = (keyword || '').toLowerCase();
     if (kwLower) {
-      allEvents = allEvents.filter(
-        (e) => {
-          const username = e.username || e.user || '';
-          return e.text.toLowerCase().includes(kwLower) || username.toLowerCase().includes(kwLower);
-        }
-      );
+      allEvents = allEvents.filter((e) => {
+        const username = e.username || e.user || '';
+        return e.text.toLowerCase().includes(kwLower) || username.toLowerCase().includes(kwLower);
+      });
     }
 
     const total = allEvents.length;

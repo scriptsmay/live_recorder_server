@@ -1,232 +1,348 @@
-<h2>转码记录</h2>
+<% const transcodeActive = records.filter(r => r.status === 'processing' || r.status === 'queued').length;
+   const burnActive = burnRecords.filter(b => b.status === 'processing' || b.status === 'queued').length;
+   const totalCompletedToday = records.filter(r => r.status === 'completed').length + burnRecords.filter(b => b.status === 'completed').length;
+   const totalFailed = records.filter(r => r.status === 'failed').length + burnRecords.filter(b => b.status === 'failed').length; %>
 
-<!-- 标签切换 -->
-<ul class="nav nav-tabs mb-3" id="transcodeTab" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="transcode-tab" data-bs-toggle="tab" data-bs-target="#transcodePanel" type="button" role="tab">转码记录</button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="burn-tab" data-bs-toggle="tab" data-bs-target="#burnPanel" type="button" role="tab">
-      弹幕压制
-      <% const burnActive = burnRecords.filter(b => b.status === 'processing' || b.status === 'queued').length; %>
-      <% if (burnActive > 0) { %>
-        <span class="badge bg-warning ms-1"><%= burnActive %></span>
-      <% } %>
-    </button>
-  </li>
-</ul>
-
-<div class="tab-content">
-  <!-- 转码记录 Tab -->
-  <div class="tab-pane fade show active" id="transcodePanel" role="tabpanel">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>ID</th>
-            <th>会话ID</th>
-            <th>直播间</th>
-            <th>原文件</th>
-            <th>转码文件</th>
-            <th>状态</th>
-            <th>入队时间</th>
-            <th>开始时间</th>
-            <th>完成时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (records.length === 0) { %>
-            <tr><td colspan="10" class="text-center text-muted py-4">暂无转码记录</td></tr>
-          <% } else { %>
-            <% records.forEach(r => { %>
-              <% const badge = {
-                queued: '<span class="badge bg-secondary">排队中</span>',
-                processing: '<span class="badge bg-primary">转码中</span>',
-                completed: '<span class="badge bg-success">已完成</span>',
-                failed: '<span class="badge bg-danger">失败</span>',
-              }[r.status] || r.status; %>
-              <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
-              <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
-              <tr>
-                <td><%= r.id %></td>
-                <td><%= r.session_id || '-' %></td>
-                <td>
-                  <% if (r.room_name) { %>
-                    <span class="text-muted">#<%= r.room_id %></span>
-                    <small><%= r.room_name %></small>
-                  <% } else { %>
-                    <span class="text-muted">-</span>
-                  <% } %>
-                </td>
-                <td><small title="<%= r.original_path %>"><%= originalName %></small></td>
-                <td>
-                  <% if (r.transcoded_path) { %>
-                    <small title="<%= r.transcoded_path %>"><%= transcodedName %></small>
-                  <% } else { %>
-                    <span class="text-muted">-</span>
-                  <% } %>
-                </td>
-                <td><%- badge %></td>
-                <td><small><%= formatDate(r.enqueued_at) %></small></td>
-                <td><small><%= formatDate(r.started_at) %></small></td>
-                <td><small><%= formatDate(r.completed_at) %></small></td>
-                <td>
-                  <a class="btn btn-sm btn-outline-dark mb-1" href="/logs?file=<%= encodeURIComponent('transcode_' + r.session_id + '.log') %>" target="_blank">日志</a>
-                  <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
-                </td>
-              </tr>
-            <% }) %>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-
-    <% if (pagination.totalPages > 1) { %>
-      <div class="d-flex justify-content-between align-items-center mt-3">
-        <small class="text-muted">共 <%= pagination.total %> 条记录</small>
-        <nav aria-label="转码记录分页">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
-              <a class="page-link" href="?page=<%= pagination.page - 1 %>">上一页</a>
-            </li>
-            <%
-              const maxPages = 7;
-              let startPage = Math.max(1, pagination.page - 3);
-              let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
-              if (endPage - startPage < maxPages - 1) {
-                startPage = Math.max(1, endPage - maxPages + 1);
-              }
-              for (let i = startPage; i <= endPage; i++) {
-            %>
-              <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
-                <a class="page-link" href="?page=<%= i %>"><%= i %></a>
-              </li>
-            <% } %>
-            <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
-              <a class="page-link" href="?page=<%= pagination.page + 1 %>">下一页</a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    <% } %>
-  </div>
-
-  <!-- 弹幕压制 Tab -->
-  <div class="tab-pane fade" id="burnPanel" role="tabpanel">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>ID</th>
-            <th>会话ID</th>
-            <th>分段</th>
-            <th>ASS 文件</th>
-            <th>输出文件</th>
-            <th>状态</th>
-            <th>入队时间</th>
-            <th>开始时间</th>
-            <th>完成时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (burnRecords.length === 0) { %>
-            <tr><td colspan="10" class="text-center text-muted py-4">暂无弹幕压制记录</td></tr>
-          <% } else { %>
-            <% burnRecords.forEach(b => { %>
-              <% const burnBadge = {
-                queued: '<span class="badge bg-secondary">排队中</span>',
-                processing: '<span class="badge bg-primary">压制中</span>',
-                completed: '<span class="badge bg-success">已完成</span>',
-                failed: '<span class="badge bg-danger">失败</span>',
-                skipped: '<span class="badge bg-warning">跳过</span>',
-              }[b.status] || ('<span class="badge bg-secondary">' + b.status + '</span>'); %>
-              <% const assName = b.ass_path ? b.ass_path.split('/').pop() : '-'; %>
-              <% const outputName = b.output_path ? b.output_path.split('/').pop() : '-'; %>
-              <tr>
-                <td><%= b.id %></td>
-                <td>
-                  <a href="/sessions/<%= b.session_id %>/danmaku"><%= b.session_id %></a>
-                  <% if (b.room_url) { %><br><small class="text-muted"><%= b.room_url %></small><% } %>
-                </td>
-                <td><%= b.segment_index != null ? b.segment_index : '-' %></td>
-                <td><small title="<%= b.ass_path %>"><%= assName %></small></td>
-                <td><small title="<%= b.output_path %>"><%= outputName %></small></td>
-                <td>
-                  <%- burnBadge %>
-                  <% if (b.error) { %><br><small class="text-danger"><%= b.error.slice(0, 50) %></small><% } %>
-                </td>
-                <td><small><%= formatDate(b.enqueued_at) %></small></td>
-                <td><small><%= formatDate(b.started_at) %></small></td>
-                <td><small><%= formatDate(b.completed_at) %></small></td>
-                <td>
-                  <% if (b.status === 'completed' && b.recording_file_id) { %>
-                    <button class="btn btn-sm btn-outline-success playRecBtn mb-1" data-recording-id="<%= b.recording_file_id %>" data-filename="<%= outputName %>" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">▶ 播放</button>
-                  <% } %>
-                  <button class="btn btn-sm btn-outline-danger deleteBurnBtn mb-1" data-id="<%= b.id %>">删除</button>
-                  <% if (b.status === 'failed' && b.ass_path) { %>
-                    <br><button class="btn btn-sm btn-outline-warning retryBurnBtn" data-recording-id="<%= b.recording_file_id %>" data-session-id="<%= b.session_id %>">重试</button>
-                  <% } %>
-                </td>
-              </tr>
-            <% }) %>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
+<!-- 页面标题 -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">转码 & 压制</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;">视频转码与弹幕压制任务队列</p>
   </div>
 </div>
+
+<!-- ====== 总览状态条 ====== -->
+<div class="overview-bar">
+  <div class="overview-cell overview-active" data-count="<%= transcodeActive %>">
+    <div class="overview-value"><%= transcodeActive %></div>
+    <div class="overview-label">转码中</div>
+  </div>
+  <div class="overview-cell overview-burn" data-count="<%= burnActive %>">
+    <div class="overview-value"><%= burnActive %></div>
+    <div class="overview-label">压制中</div>
+  </div>
+  <div class="overview-cell overview-queued" data-count="<%= records.filter(r=>r.status==='queued').length + burnRecords.filter(b=>b.status==='queued').length %>">
+    <div class="overview-value"><%= records.filter(r=>r.status==='queued').length + burnRecords.filter(b=>b.status==='queued').length %></div>
+    <div class="overview-label">排队</div>
+  </div>
+  <div class="overview-cell overview-done">
+    <div class="overview-value"><%= totalCompletedToday %></div>
+    <div class="overview-label">已完成</div>
+  </div>
+  <div class="overview-cell overview-fail" data-count="<%= totalFailed %>">
+    <div class="overview-value text-danger"><%= totalFailed %></div>
+    <div class="overview-label">失败</div>
+  </div>
+</div>
+
+<!-- ====== 活跃任务区（置顶）====== -->
+<% const activeTranscodes = records.filter(r => r.status === 'processing' || r.status === 'queued');
+   const activeBurns = burnRecords.filter(b => b.status === 'processing' || b.status === 'queued');
+%>
+
+<% if (activeTranscodes.length > 0 || activeBurns.length > 0) { %>
+<div class="active-tasks-section">
+  <h6 class="section-heading">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M10.804 8 5.494 2.69A1 1 0 0 0 4.08 3.478l5.31 5.31-5.31 5.309a1 1 0 0 0 1.414 1.485L10.804 9l5.31 5.309a1 1 0 0 0 1.414-1.485z"/></svg>活跃任务
+  </h6>
+
+  <!-- 转码活跃任务卡 -->
+  <% activeTranscodes.forEach(r => { %>
+    <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
+    <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
+    <div class="task-card task-card-transcode">
+      <div class="task-card-bar task-card-bar-orange"></div>
+      <div class="task-card-body p-3 d-flex justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="type-badge type-badge-transcode">转码</span>
+            <span class="task-status-badge <%= r.status === 'processing' ? 'status-running' : 'status-queued' %>">
+              <%= r.status === 'processing' ? '转码中' : '排队中' %>
+            </span>
+            <span class="text-muted font-monospace" style="font-size:0.78rem;">#<%= r.id %></span>
+          </div>
+          <div class="mt-2">
+            <strong><%= r.room_name || '未知直播间' %></strong>
+            <small class="text-muted ms-2">会话 #<%= r.session_id || '-' %></small>
+          </div>
+          <div class="mt-1">
+            <code class="task-file-code" title="<%= r.original_path %>"><%= originalName %></code>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#ccc" viewBox="0 0 16 16" class="mx-1"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg>
+            <code class="task-file-code" title="<%= r.transcoded_path %>"><%= transcodedName %></code>
+          </div>
+          <% if (r.error) { %>
+          <p class="text-danger mt-1 mb-0" style="font-size:0.82rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg> <%= r.error.slice(0, 100) %>
+          </p>
+          <% } %>
+        </div>
+        <div class="task-card-actions d-flex flex-column gap-1">
+          <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent('transcode_' + r.session_id + '.log') %>" target="_blank">日志</a>
+          <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+
+  <!-- 弹幕压制活跃任务卡 -->
+  <% activeBurns.forEach(b => { %>
+    <% const assName = b.ass_path ? b.ass_path.split('/').pop() : '-'; %>
+    <% const outputName = b.output_path ? b.output_path.split('/').pop() : '-'; %>
+    <div class="task-card task-card-burn">
+      <div class="task-card-bar task-card-bar-blue"></div>
+      <div class="task-card-body p-3 d-flex justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="type-badge type-badge-burn">压制</span>
+            <span class="task-status-badge <%= b.status === 'processing' ? 'status-burn-running' : 'status-queued' %>">
+              <%= b.status === 'processing' ? '压制中' : '排队中' %>
+            </span>
+            <span class="text-muted font-monospace" style="font-size:0.78rem;">#<%= b.id %></span>
+          </div>
+          <div class="mt-2">
+            会话 #<a href="/sessions/<%= b.session_id %>/danmaku"><%= b.session_id %></a>
+            <small class="text-muted ms-2">分段 <%= b.segment_index != null ? b.segment_index : '-' %></small>
+          </div>
+          <div class="mt-1">
+            <code class="task-file-code" title="<%= b.ass_path %>"><%= assName %></code>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#ccc" viewBox="0 0 16 16" class="mx-1"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg>
+            <code class="task-file-code" title="<%= b.output_path %>"><%= outputName %></code>
+          </div>
+          <% if (b.error) { %>
+          <p class="text-danger mt-1 mb-0" style="font-size:0.82rem;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg> <%= b.error.slice(0, 100) %></p>
+          <% } %>
+        </div>
+        <div class="task-card-actions d-flex flex-column gap-1">
+          <% if (b.status === 'completed' && b.recording_file_id) { %>
+            <button class="btn btn-sm btn-outline-success playRecBtn mb-1" data-recording-id="<%= b.recording_file_id %>" data-filename="<%= outputName %>" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">播放</button>
+          <% } %>
+          <button class="btn btn-sm btn-outline-danger deleteBurnBtn" data-id="<%= b.id %>">删除</button>
+          <% if (b.status === 'failed' && b.ass_path) { %>
+            <button class="btn btn-sm btn-outline-warning retryBurnBtn" data-recording-id="<%= b.recording_file_id %>" data-session-id="<%= b.session_id %>">重试</button>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+<% } else { %>
+<div class="empty-state" style="margin-bottom:20px;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="text-secondary mb-2" viewBox="0 0 16 16"><path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM2 4.5v7l3.5-2 3.5 2v-7h-7z"/></svg><p class="text-muted mb-0" style="font-size:0.85rem;">暂无进行中的任务</p>
+</div>
+<% } %>
+
+<!-- ====== 历史记录表（统一）====== -->
+<h6 class="section-heading mt-4">
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm15 2h-4v3h4V4zm0 4h-4v3h4V8zm0 4h-4v3h4v-3zM1 2v12h4V2H1zm5 4h4V4H6v4zm4 4H6v3h4V8z"/></svg>历史记录
+</h6>
+
+<!-- 类型筛选标签（URL 跳转） -->
+<div class="filter-bar mb-3">
+  <div class="filter-group">
+    <span class="filter-label">类型：</span>
+    <button class="filter-tag filter-tag-type <%= typeFilter === 'all' ? 'active' : '' %>" data-type="all">全部</button>
+    <button class="filter-tag filter-tag-type <%= typeFilter === 'transcode' ? 'active' : '' %>" data-type="transcode">转码记录</button>
+    <button class="filter-tag filter-tag-type <%= typeFilter === 'burn' ? 'active' : '' %>" data-type="burn">弹幕压制</button>
+  </div>
+</div>
+
+<div class="table-responsive history-table-wrap">
+  <table class="table table-hover align-middle" id="historyTable">
+    <thead class="table-light">
+      <tr>
+        <th style="width:70px">类型</th>
+        <th>ID</th>
+        <th>会话 / 直播间</th>
+        <th>原文件</th>
+        <th>输出文件</th>
+        <th style="width:90px">状态</th>
+        <th style="width:130px">入队时间</th>
+        <th style="width:130px">完成时间</th>
+        <th style="width:160px;text-align:right">操作</th>
+      </tr>
+    </thead>
+    <tbody id="historyBody">
+      <% if (filteredRecords.length === 0 && filteredBurnRecords.length === 0) { %>
+        <tr><td colspan="9" class="text-center text-muted py-4">暂无历史记录</td></tr>
+      <% } else { %>
+        <!-- 转码行 -->
+        <% filteredRecords.filter(r => r.status !== 'queued' && r.status !== 'processing').forEach(r => { %>
+          <% const originalName = r.original_path ? r.original_path.split('/').pop() : '-'; %>
+          <% const transcodedName = r.transcoded_path ? r.transcoded_path.split('/').pop() : '-'; %>
+          <tr data-type="transcode">
+            <td><span class="type-badge type-badge-transcode-sm">转码</span></td>
+            <td><span class="text-muted font-monospace">#<%= r.id %></span></td>
+            <td>
+              <% if (r.room_name) { %>
+                <div class="room-mini">
+                  <span class="text-muted">#<%= r.room_id %></span>
+                  <small><%= r.room_name %></small>
+                </div>
+              <% } else { %><span class="text-muted">-</span><% } %>
+              <small class="text-muted d-block">会话 <%= r.session_id || '-' %></small>
+            </td>
+            <td><small title="<%= r.original_path %>"><%= originalName %></small></td>
+            <td>
+              <% if (r.transcoded_path) { %>
+                <small title="<%= r.transcoded_path %>"><%= transcodedName %></small>
+              <% } else { %><span class="text-muted">-</span><% } %>
+            </td>
+            <td>
+              <span class="history-status <%= {
+                completed:'history-done',
+                failed:'history-fail',
+                skipped:'history-skip'
+              }[r.status] || '' %>">
+                <%= {completed:'完成',failed:'失败',skipped:'跳过'}[r.status] || r.status %>
+              </span>
+              <% if (r.error) { %><br><small class="text-danger" style="font-size:0.72rem;"><%= r.error.slice(0, 40) %></small><% } %>
+            </td>
+            <td><small><%= formatDate(r.enqueued_at) %></small></td>
+            <td><small><%= formatDate(r.completed_at) %></small></td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-dark" href="/logs?file=<%= encodeURIComponent('transcode_' + r.session_id + '.log') %>" target="_blank">日志</a>
+              <button class="btn btn-sm btn-outline-danger deleteTranscodeBtn" data-id="<%= r.id %>">删除</button>
+            </td>
+          </tr>
+        <% }) %>
+        <!-- 压制行 -->
+        <% filteredBurnRecords.filter(b => b.status !== 'queued' && b.status !== 'processing').forEach(b => { %>
+          <% const assName = b.ass_path ? b.ass_path.split('/').pop() : '-'; %>
+          <% const outputName = b.output_path ? b.output_path.split('/').pop() : '-'; %>
+          <tr data-type="burn">
+            <td><span class="type-badge type-badge-burn-sm">压制</span></td>
+            <td><span class="text-muted font-monospace">#<%= b.id %></span></td>
+            <td>
+              <div class="room-mini">
+                <a href="/sessions/<%= b.session_id %>/danmaku"><%= b.session_id %></a>
+                <% if (b.segment_index != null) { %><span class="text-muted ms-1">#<%= b.segment_index %></span><% } %>
+              </div>
+              <% if (b.room_url) { %><small class="text-muted d-block"><%= b.room_url %></small><% } %>
+            </td>
+            <td><small title="<%= b.ass_path %>"><%= assName %></small></td>
+            <td><small title="<%= b.output_path %>"><%= outputName %></small></td>
+            <td>
+              <span class="history-status <%= {completed:'history-done',failed:'history-fail',skipped:'history-skip'}[b.status] || '' %>">
+                <%= {completed:'完成',failed:'失败',skipped:'跳过'}[b.status] || b.status %>
+              </span>
+
+              <% if (b.error) { %>
+                <div class="mt-1 text-muted text-link fs-75" data-bs-toggle="tooltip" data-bs-placement="top"
+                  data-bs-custom-class="tooltip-long-info"
+                  data-bs-title="<%= b.error %>">查看信息</div>
+              <% } %>
+            </td>
+            <td><small><%= formatDate(b.enqueued_at) %></small></td>
+            <td><small><%= formatDate(b.completed_at) %></small></td>
+            <td class="text-end">
+              <% if (b.status === 'completed' && b.recording_file_id) { %>
+                <button class="btn btn-sm btn-outline-success playRecBtn me-1" data-recording-id="<%= b.recording_file_id %>" data-filename="<%= outputName %>" data-ext="mp4" data-danmaku="true" title="播放弹幕压制版">▶</button>
+              <% } %>
+              <button class="btn btn-sm btn-outline-danger deleteBurnBtn" data-id="<%= b.id %>">删除</button>
+              <% if (b.status === 'failed' && b.ass_path) { %>
+                <br><button class="btn btn-sm btn-outline-warning retryBurnBtn mt-1" data-recording-id="<%= b.recording_file_id %>" data-session-id="<%= b.session_id %>">重试</button>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<!-- 分页（使用转码分页） -->
+
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <small class="text-muted">共 <%= pagination.total %> 条记录</small>
+  <% if (pagination.totalPages > 1) { %>
+  <nav aria-label="转码记录分页">
+    <ul class="pagination pagination-sm mb-0">
+      <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page - 1 %><%= typeFilter && typeFilter !== 'all' ? '&type=' + encodeURIComponent(typeFilter) : '' %>">上一页</a>
+      </li>
+      <%
+        const maxPages = 7;
+        let startPage = Math.max(1, pagination.page - 3);
+        let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+        if (endPage - startPage < maxPages - 1) {
+          startPage = Math.max(1, endPage - maxPages + 1);
+        }
+        for (let i = startPage; i <= endPage; i++) {
+      %>
+      <li class="page-item <%= i === pagination.page ? 'active' : '' %>">
+        <a class="page-link" href="?page=<%= i %><%= typeFilter && typeFilter !== 'all' ? '&type=' + encodeURIComponent(typeFilter) : '' %>"><%= i %></a>
+      </li>
+      <% } %>
+      <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+        <a class="page-link" href="?page=<%= pagination.page + 1 %><%= typeFilter && typeFilter !== 'all' ? '&type=' + encodeURIComponent(typeFilter) : '' %>">下一页</a>
+      </li>
+    </ul>
+  </nav>
+  <% } %>
+</div>
+
 
 <script src="/js/recording-player.js"></script>
 <%- include('partials/_video_player') %>
 
 <script>
-  // 初始化播放器
-  if (typeof RecordingPlayer !== 'undefined') {
-    RecordingPlayer.init();
-  }
+  // ====== DOM 就绪后统一初始化 ======
+  document.addEventListener('DOMContentLoaded', () => {
+    // 初始化播放器
+    if (typeof RecordingPlayer !== 'undefined') RecordingPlayer.init();
 
-  document.addEventListener('click', async e => {
-    const btn = e.target.closest('.deleteTranscodeBtn');
-    if (btn) {
-      showConfirm('确定删除此转码记录吗？').then(async (confirmed) => {
-        if (!confirmed) return;
-        await fetch(`/api/transcode_records/${btn.dataset.id}`, { method: 'DELETE' });
-        window.location.reload();
-      });
-      return;
-    }
+    // 类型筛选（URL 跳转）
+    document.addEventListener('click', e => {
+      const tag = e.target.closest('.filter-tag-type');
+      if (!tag) return;
+      const type = tag.dataset.type;
+      window.location.href = type === 'all'
+        ? '/transcode'
+        : '/transcode?type=' + encodeURIComponent(type);
+    });
 
-    const delBurnBtn = e.target.closest('.deleteBurnBtn');
-    if (delBurnBtn) {
-      showConfirm('确定删除此压制记录吗？').then(async (confirmed) => {
-        if (!confirmed) return;
-        await fetch(`/api/danmaku_burn_records/${delBurnBtn.dataset.id}`, { method: 'DELETE' });
-        window.location.reload();
-      });
-      return;
-    }
-
-    const retryBtn = e.target.closest('.retryBurnBtn');
-    if (retryBtn) {
-      retryBtn.disabled = true;
-      retryBtn.textContent = '入队中...';
-      try {
-        const res = await fetch(`/api/sessions/${retryBtn.dataset.sessionId}/danmaku/burn`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force: true }),
+    // 删除 / 重试按钮
+    document.addEventListener('click', async e => {
+      const btn = e.target.closest('.deleteTranscodeBtn');
+      if (btn) {
+        showConfirm('确定删除此转码记录吗？').then(async (confirmed) => {
+          if (!confirmed) return;
+          await fetch(`/api/transcode_records/${btn.dataset.id}`, { method: 'DELETE' });
+          window.location.reload();
         });
-        const json = await res.json();
-        toast(json.status === 'ok' ? json.message : ('失败: ' + json.message));
-        if (json.status === 'ok') setTimeout(() => location.reload(), 1500);
-      } catch (err) {
-        toast('请求失败: ' + err.message);
-      } finally {
-        retryBtn.disabled = false;
-        retryBtn.textContent = '重试';
+        return;
       }
-    }
+
+      const delBurnBtn = e.target.closest('.deleteBurnBtn');
+      if (delBurnBtn) {
+        showConfirm('确定删除此压制记录吗？').then(async (confirmed) => {
+          if (!confirmed) return;
+          await fetch(`/api/danmaku_burn_records/${delBurnBtn.dataset.id}`, { method: 'DELETE' });
+          window.location.reload();
+        });
+        return;
+      }
+
+      const retryBtn = e.target.closest('.retryBurnBtn');
+      if (retryBtn) {
+        retryBtn.disabled = true;
+        retryBtn.textContent = '入队中...';
+        try {
+          const res = await fetch(`/api/sessions/${retryBtn.dataset.sessionId}/danmaku/burn`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: true }),
+          });
+          const json = await res.json();
+          toast(json.status === 'ok' ? json.message : ('失败: ' + json.message));
+          if (json.status === 'ok') setTimeout(() => location.reload(), 1500);
+        } catch (err) {
+          toast('请求失败: ' + err.message);
+        } finally {
+          retryBtn.disabled = false;
+          retryBtn.textContent = '重试';
+        }
+      }
+    });
   });
 </script>

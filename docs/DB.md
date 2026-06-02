@@ -262,28 +262,28 @@ KV 结构的全局配置表。
 
 **记录每个会话的弹幕采集生命周期。** 一个 `session_id` 可能对应多条采集记录（如中断后重连）。
 
-| 字段        | 类型          | 约束              | 说明                                          |
-| ----------- | ------------- | ----------------- | --------------------------------------------- |
-| id          | SERIAL        | PRIMARY KEY       | 自增主键                                      |
-| session_id  | INTEGER       |                   | 所属录制会话                                  |
-| room_id     | INTEGER       |                   | 关联房间                                      |
-| platform    | VARCHAR(50)   | DEFAULT 'kuaishou' | 平台标识                                      |
-| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed`          |
-| raw_path    | VARCHAR(1024) | DEFAULT ''        | `danmaku.jsonl` 文件绝对路径                  |
-| ass_path    | VARCHAR(1024) | DEFAULT ''        | 生成的 `danmaku.ass` 文件路径                 |
-| event_count | INTEGER       | DEFAULT 0         | 采集到的弹幕事件总数                          |
-| started_at  | TIMESTAMP     | DEFAULT NOW()     | 采集开始时间                                  |
-| ended_at    | TIMESTAMP     |                   | 采集结束时间                                  |
-| error       | TEXT          | DEFAULT ''        | 失败时的错误信息                              |
-| created_at  | TIMESTAMP     | DEFAULT NOW()     | 记录创建时间                                  |
+| 字段        | 类型          | 约束                | 说明                                 |
+| ----------- | ------------- | ------------------- | ------------------------------------ |
+| id          | SERIAL        | PRIMARY KEY         | 自增主键                             |
+| session_id  | INTEGER       |                     | 所属录制会话                         |
+| room_id     | INTEGER       |                     | 关联房间                             |
+| platform    | VARCHAR(50)   | DEFAULT 'kuaishou'  | 平台标识                             |
+| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed` |
+| raw_path    | VARCHAR(1024) | DEFAULT ''          | `danmaku.jsonl` 文件绝对路径         |
+| ass_path    | VARCHAR(1024) | DEFAULT ''          | 生成的 `danmaku.ass` 文件路径        |
+| event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数                 |
+| started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间                         |
+| ended_at    | TIMESTAMP     |                     | 采集结束时间                         |
+| error       | TEXT          | DEFAULT ''          | 失败时的错误信息                     |
+| created_at  | TIMESTAMP     | DEFAULT NOW()       | 记录创建时间                         |
 
 **写入时机：**
 
-| 场景               | 操作                           |
-| ------------------ | ------------------------------ |
-| 录制会话启动弹幕采集 | INSERT，status = `recording`   |
-| 录制正常结束       | UPDATE status = `completed`，写入 event_count |
-| 采集异常           | UPDATE status = `failed`，写入 error          |
+| 场景                 | 操作                                          |
+| -------------------- | --------------------------------------------- |
+| 录制会话启动弹幕采集 | INSERT，status = `recording`                  |
+| 录制正常结束         | UPDATE status = `completed`，写入 event_count |
+| 采集异常             | UPDATE status = `failed`，写入 error          |
 
 ---
 
@@ -291,24 +291,24 @@ KV 结构的全局配置表。
 
 **记录每个分段的弹幕压制（FFmpeg 渲染）任务。** 每个 `recording_file_id` 最多一条记录（UNIQUE 约束）。
 
-| 字段              | 类型          | 约束              | 说明                                          |
-| ----------------- | ------------- | ----------------- | --------------------------------------------- |
-| id                | SERIAL        | PRIMARY KEY       | 自增主键                                      |
-| session_id        | INTEGER       |                   | 所属录制会话                                  |
-| recording_file_id | INTEGER       | UNIQUE            | 关联的 `recording_files.id`                   |
-| segment_index     | INTEGER       | DEFAULT 0         | 分段序号                                      |
-| segment_start_ms  | INTEGER       | DEFAULT 0         | 分段起始时间（毫秒）                          |
-| segment_end_ms    | INTEGER       | DEFAULT 0         | 分段结束时间（毫秒）                          |
-| input_path        | VARCHAR(1024) | NOT NULL          | 输入视频路径                                  |
-| ass_path          | VARCHAR(1024) | NOT NULL          | ASS 字幕文件路径                              |
-| output_path       | VARCHAR(1024) | DEFAULT ''        | 压制输出视频路径（`*_danmaku.mp4`）           |
-| status            | VARCHAR(20)   | DEFAULT 'queued'  | 状态流转见下                                  |
-| error             | TEXT          | DEFAULT ''        | 失败时的错误信息                              |
-| log_path          | VARCHAR(1024) | DEFAULT ''        | FFmpeg 压制日志路径                           |
-| enqueued_at       | TIMESTAMP     | DEFAULT NOW()     | 入队时间                                      |
-| started_at        | TIMESTAMP     |                   | 压制开始时间                                  |
-| completed_at      | TIMESTAMP     |                   | 压制完成/失败时间                             |
-| created_at        | TIMESTAMP     | DEFAULT NOW()     | 记录创建时间                                  |
+| 字段              | 类型          | 约束             | 说明                                |
+| ----------------- | ------------- | ---------------- | ----------------------------------- |
+| id                | SERIAL        | PRIMARY KEY      | 自增主键                            |
+| session_id        | INTEGER       |                  | 所属录制会话                        |
+| recording_file_id | INTEGER       | UNIQUE           | 关联的 `recording_files.id`         |
+| segment_index     | INTEGER       | DEFAULT 0        | 分段序号                            |
+| segment_start_ms  | INTEGER       | DEFAULT 0        | 分段起始时间（毫秒）                |
+| segment_end_ms    | INTEGER       | DEFAULT 0        | 分段结束时间（毫秒）                |
+| input_path        | VARCHAR(1024) | NOT NULL         | 输入视频路径                        |
+| ass_path          | VARCHAR(1024) | NOT NULL         | ASS 字幕文件路径                    |
+| output_path       | VARCHAR(1024) | DEFAULT ''       | 压制输出视频路径（`*_danmaku.mp4`） |
+| status            | VARCHAR(20)   | DEFAULT 'queued' | 状态流转见下                        |
+| error             | TEXT          | DEFAULT ''       | 失败时的错误信息                    |
+| log_path          | VARCHAR(1024) | DEFAULT ''       | FFmpeg 压制日志路径                 |
+| enqueued_at       | TIMESTAMP     | DEFAULT NOW()    | 入队时间                            |
+| started_at        | TIMESTAMP     |                  | 压制开始时间                        |
+| completed_at      | TIMESTAMP     |                  | 压制完成/失败时间                   |
+| created_at        | TIMESTAMP     | DEFAULT NOW()    | 记录创建时间                        |
 
 **状态流转：**
 
@@ -320,13 +320,13 @@ queued ──→ processing ──→ completed
 
 **写入时机：**
 
-| 场景                         | 操作                                  |
-| ---------------------------- | ------------------------------------- |
-| 手动/自动加入压制队列       | INSERT，status = `queued`             |
-| 压制队列开始处理            | UPDATE status = `processing`          |
-| FFmpeg 压制成功             | UPDATE status = `completed`           |
-| FFmpeg 压制失败             | UPDATE status = `failed`，写入 error  |
-| 输入/ASS 文件不存在         | UPDATE status = `skipped`             |
+| 场景                  | 操作                                 |
+| --------------------- | ------------------------------------ |
+| 手动/自动加入压制队列 | INSERT，status = `queued`            |
+| 压制队列开始处理      | UPDATE status = `processing`         |
+| FFmpeg 压制成功       | UPDATE status = `completed`          |
+| FFmpeg 压制失败       | UPDATE status = `failed`，写入 error |
+| 输入/ASS 文件不存在   | UPDATE status = `skipped`            |
 
 ---
 

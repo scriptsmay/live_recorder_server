@@ -10,6 +10,7 @@
       <th>名称</th>
       <th>标题模板</th>
       <th>分区</th>
+      <th>仅自己可见</th>
       <th>操作</th>
     </tr>
   </thead>
@@ -23,6 +24,7 @@
           <td><%= t.name %></td>
           <td><code><%= t.title_template || '-' %></code></td>
           <td><%= t.tid || '-' %></td>
+          <td><%= t.is_only_self ? '是' : '否' %></td>
           <td class="text-nowrap">
             <button class="btn btn-sm btn-outline-primary editTmplBtn"
               data='<%= JSON.stringify(t).replace(/'/g, "&#39;") %>'>编辑</button>
@@ -53,27 +55,34 @@
             <label class="form-label">模板名称 <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="inputTmplName" placeholder="默认模板" />
           </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">标题模板</label>
+            <input type="text" class="form-control" id="inputTmplTitle" value="{room_name} 直播录像 {date}" />
+            <div class="form-text">支持模板变量同下</div>
+          </div>
         </div>
+        
         <div class="mb-3">
-          <label class="form-label">标题模板</label>
-          <input type="text" class="form-control" id="inputTmplTitle" value="{room_name} 直播录像 {date}" />
-          <div class="form-text">支持 <code>{room_name}</code> <code>{date}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code><code>{HH}</code><code>{mm}</code><code>{ss}</code></div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">简介模板</label>
-          <textarea class="form-control" id="inputTmplDesc" rows="2"></textarea>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">账户文件 (cookies.json) <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" id="inputCookiesPath" placeholder="/path/to/cookies.json" />
-          <div class="form-text">biliup 登录后生成的 cookies 文件，必填绝对路径</div>
+          <label class="form-label">简介模板（<span class="form-text">支持模板变量：<code>{room_name}</code> <code>{caption}</code> <code>{date}</code> <code>{datetime}</code> <code>{YYYY}</code> <code>{MM}</code> <code>{DD}</code><code>{HH}</code><code>{mm}</code><code>{ss}</code></span>）</label>
+          <textarea class="form-control" id="inputTmplDesc" rows="3"></textarea>
         </div>
         <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">账户文件 (cookies.json) <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="inputCookiesPath" placeholder="/path/to/cookies.json" />
+            <div class="form-text">biliup 登录后生成的 cookies 文件，必填绝对路径</div>
+          </div>
           <div class="col-md-3 mb-3">
             <label class="form-label">投稿分区 TID</label>
             <input type="number" class="form-control" id="inputTmplTid" value="171" />
             <div class="form-text">参考游戏区: 17-单机游戏, 65-网络游戏,172-手机游戏,171-电子竞技</div>
           </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">封面路径</label>
+            <input type="text" class="form-control" id="inputTmplCover" placeholder="可选" />
+          </div>
+        </div>
+        <div class="row">
           <div class="col-md-3 mb-3">
             <label class="form-label">版权</label>
             <select class="form-select" id="inputTmplCopyright">
@@ -93,20 +102,16 @@
               <option value="1">开启</option>
             </select>
           </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">延迟发布 (dtime)</label>
+            <input type="number" class="form-control" id="inputDtime" value="0" placeholder="10位时间戳" />
+            <div class="form-text">10 位 Unix 时间戳，需大于当前时间 4 小时</div>
+          </div>
         </div>
         <div class="row">
           <div class="col-md-6 mb-3">
             <label class="form-label">标签（逗号分隔）</label>
             <input type="text" class="form-control" id="inputTmplTags" placeholder="直播,游戏" />
-          </div>
-          <div class="col-md-3 mb-3">
-            <label class="form-label">封面路径</label>
-            <input type="text" class="form-control" id="inputTmplCover" placeholder="可选" />
-          </div>
-          <div class="col-md-3 mb-3">
-            <label class="form-label">延迟发布 (dtime)</label>
-            <input type="number" class="form-control" id="inputDtime" value="0" placeholder="10位时间戳" />
-            <div class="form-text">10 位 Unix 时间戳，需大于当前时间 4 小时</div>
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label">投稿后处理</label>

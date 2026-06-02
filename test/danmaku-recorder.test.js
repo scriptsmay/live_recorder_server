@@ -287,9 +287,7 @@ describe('DanmakuRecorder.writeBatch — 批次时间戳分配', () => {
   });
 
   test('有合法 ts_abs_ms 的事件不会被分配 _receivedAt', () => {
-    const events = [
-      { ts_abs_ms: 1700000010000, type: 'comment', user: 'A', text: 'has-abs-ts' },
-    ];
+    const events = [{ ts_abs_ms: 1700000010000, type: 'comment', user: 'A', text: 'has-abs-ts' }];
 
     const normalizeSpy = jest.spyOn(DanmakuRecorder, '_normalizeEvent');
 

@@ -93,7 +93,7 @@ class DataService {
   }
 
   static async getRoomList() {
-    const result = await pool.query('SELECT room_url, room_name FROM rooms ORDER BY id DESC');
+    const result = await pool.query('SELECT id, room_url, room_name FROM rooms ORDER BY id DESC');
     return result.rows;
   }
 
@@ -115,13 +115,17 @@ class DataService {
   }
 
   static async getSessions(options = {}) {
-    const { room_url, status, limit = 50, page } = options;
+    const { room_url, room_id, status, limit = 50, page } = options;
     const conditions = ['s.deleted_at IS NULL'];
     const params = [];
 
     if (room_url) {
       conditions.push(`s.room_url = $${params.length + 1}`);
       params.push(room_url);
+    }
+    if (room_id) {
+      conditions.push(`rm.id = $${params.length + 1}`);
+      params.push(room_id);
     }
     if (status) {
       conditions.push(`s.status = $${params.length + 1}`);
@@ -130,7 +134,7 @@ class DataService {
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     // danmaku_capture_records 使用子查询取每个 session 最新的一条，避免一对多 JOIN 导致行扇出
-    let sql = `SELECT s.*, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
+    let sql = `SELECT s.*, rm.id as room_id, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
@@ -159,7 +163,7 @@ class DataService {
     );
 
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM recording_sessions s${where}`,
+      `SELECT COUNT(*) FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url ${where}`,
       params.slice(0, params.length - (page ? 2 : 1))
     );
 
