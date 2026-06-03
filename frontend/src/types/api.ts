@@ -1,0 +1,206 @@
+/**
+ * 通用 API 响应类型
+ */
+
+export interface PaginatedResponse<T> {
+  rows: T[]
+  total: number
+}
+
+export interface PaginationMeta {
+  page: number
+  total: number
+  totalPages: number
+}
+
+// ====== 直播间 ======
+
+export interface Room {
+  id: number
+  room_url: string
+  room_name: string
+  platform: string
+  status: 'idle' | 'recording' | 'paused'
+  notification_enabled: boolean
+  monitoring_enabled: boolean
+  polling_enabled: boolean
+  polling_interval: number
+  polling_platform: string | null
+  last_live_status: boolean
+  segment_duration: number
+  filename_template: string
+  upload_template_id: number | null
+  upload_template_name: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RoomFormData {
+  room_url?: string
+  room_name: string
+  filename_template: string
+  segment_duration: number
+  notification_enabled: boolean
+  monitoring_enabled: boolean
+  upload_template_id: number | null
+  polling_enabled: boolean
+  polling_interval: number
+}
+
+// ====== 录制会话 ======
+
+export interface RecordingSession {
+  id: number
+  room_id: number
+  room_url: string
+  room_name: string
+  status: 'pending' | 'recording' | 'completed' | 'interrupted'
+  started_at: string
+  ended_at: string | null
+  caption: string
+  output_path: string
+  stream_url: string
+  total_segments: number
+  total_size: number
+  danmaku_status: string
+  danmaku_event_count: number
+  danmaku_error: string | null
+  danmaku_burn_total: number
+  danmaku_burn_completed: number
+  danmaku_burn_failed: number
+  created_at: string
+}
+
+export interface SessionUpload {
+  id: number
+  session_id: number
+  status: string
+  bv_id: string | null
+}
+
+// ====== 录制文件 ======
+
+export interface RecordingFile {
+  id: number
+  session_id: number
+  file_path: string
+  file_size: number
+  duration: number | null
+  status: string
+  file_exists: boolean
+  is_hls_ready: boolean
+  is_danmaku_burned: boolean
+  danmaku_ass_exists: boolean
+  created_at: string
+}
+
+// ====== 投稿模板 ======
+
+export interface UploadTemplate {
+  id: number
+  name: string
+  cookies_path: string
+  title_template: string
+  desc_template: string
+  tags: string
+  source: string
+  tid: number | null
+  copyright: number | null
+  is_only_self: number
+  cover: string | null
+  dtime: number | null
+  after_upload: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UploadTemplateFormData {
+  name: string
+  cookies_path: string
+  title_template: string
+  desc_template: string
+  tags: string
+  source: string
+  tid: number | null
+  copyright: number | null
+  is_only_self: number
+  cover: string
+  dtime: number | null
+  after_upload: string
+}
+
+// ====== 投稿记录 ======
+
+export interface UploadRecord {
+  id: number
+  session_id: number
+  template_id: number | null
+  template_name: string
+  bv_id: string | null
+  status: string
+  message: string | null
+  output: string | null
+  created_at: string
+}
+
+// ====== 转码记录 ======
+
+export interface TranscodeRecord {
+  id: number
+  recording_file_id: number
+  original_path: string
+  output_path: string
+  status: string
+  error: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export interface BurnRecord {
+  id: number
+  recording_file_id: number
+  session_id: number
+  status: string
+  output_path: string
+  video_path: string
+  room_url: string
+  enqueued_at: string
+  completed_at: string | null
+}
+
+// ====== 仪表盘 ======
+
+export interface DashboardStatus {
+  active_recordings: ActiveRecording[]
+  active_count: number
+  pool_size: number
+  transcode: {
+    queue_length: number
+    processing: number
+    concurrency: number
+  }
+}
+
+export interface ActiveRecording {
+  room_url: string
+  room_name: string
+  pid: number
+  session_id: number
+  started_at: string
+  downloader: string
+}
+
+// ====== 全局设置 ======
+
+export interface SettingItem {
+  key: string
+  value: string
+  updated_at: string
+}
+
+// ====== 日志 ======
+
+export interface LogFile {
+  name: string
+}

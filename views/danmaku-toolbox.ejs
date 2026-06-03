@@ -581,7 +581,7 @@
       const filesJson = await filesRes.json();
       const burnJson = await burnRes.json();
 
-      const files = filesJson.data || [];
+      const files = (filesJson.data && filesJson.data.rows) || [];
       const burnRecords = burnJson.data || [];
       const burnMap = {};
       for (const br of burnRecords) {

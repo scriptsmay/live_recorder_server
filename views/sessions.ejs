@@ -361,15 +361,16 @@
         if (!container.classList.contains('d-none') && container.children.length === 1 && container.children[0].classList.contains('spinner-border')) {
           const res = await fetch('/api/recording_files?session_id=' + sid);
           const json = await res.json();
+          const rows = (json.data && json.data.rows) || [];
           container.innerHTML = '';
-          if (!json.data || json.data.length === 0) {
+          if (rows.length === 0) {
             container.innerHTML = '<small class="text-muted p-2 d-block">无分片文件</small>';
             return;
           }
           const table = document.createElement('table');
           table.className = 'table table-sm mb-0';
           table.innerHTML = '<thead><tr><th>#</th><th>文件路径</th><th>大小</th><th>HLS</th><th>弹幕</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
-            json.data.map(r => {
+            rows.map(r => {
               const danmakuBadge = r.is_danmaku_burned
                 ? '<span class="badge bg-success">已压制</span>'
                 : (r.danmaku_ass_exists ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');

@@ -15,6 +15,7 @@ const hlsGenerator = require('../lib/core/hls-generator');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../package.json');
+const { dockerImageVersion, startTime } = require('../config/app-info');
 
 router.get('/', (req, res) => {
   res.status(200).json({
@@ -60,6 +61,8 @@ router.get('/health', async (req, res) => {
     db: false,
     redis: false,
     version,
+    docker_image_version: dockerImageVersion,
+    server_start_time: startTime.toISOString(),
   };
 
   try {
@@ -276,8 +279,15 @@ router.get('/dashboard/status', async (req, res) => {
 
 router.get('/recording_files', async (req, res) => {
   try {
-    const { status, session_id } = req.query;
-    const data = await DataService.getRecordingFiles({ status, session_id });
+    const { status, session_id, room_url, limit, page, order } = req.query;
+    const data = await DataService.getRecordingFiles({
+      status,
+      session_id,
+      room_url,
+      limit,
+      page,
+      order,
+    });
     res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[api] recording_files 查询失败:', err);

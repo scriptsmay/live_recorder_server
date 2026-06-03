@@ -7,6 +7,32 @@ const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
 const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 const watchdog = require('../lib/core/watchdog');
+const DataService = require('../services/DataService');
+
+/**
+ * GET /api/sessions/:id/danmaku-page
+ * 弹幕详情页 JSON 数据（Vue 前端用）
+ */
+router.get('/sessions/:id/danmaku-page', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const detail = await DataService.getSessionDetail(id);
+
+    if (!detail) {
+      return res.status(404).json({ status: 'Error', message: '会话不存在' });
+    }
+
+    // 不暴露 output_dir 给前端
+    if (detail.session) {
+      delete detail.session.output_dir;
+    }
+
+    res.json({ status: 'ok', data: detail });
+  } catch (err) {
+    console.error('[api] 弹幕详情页数据加载失败:', err.message);
+    res.status(500).json({ status: 'Error', message: err.message });
+  }
+});
 
 /**
  * POST /api/danmaku/batch

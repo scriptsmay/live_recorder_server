@@ -225,39 +225,9 @@ async function migrateData() {
 migrateData().catch(console.error);
 ```
 
-### 步骤 3：更新 DataService.getRecordings
+### 步骤 3：更新 DataService.getRecordings (已删除此方法)
 
-修改 `services/DataService.js` 中的 `getRecordings` 方法：
-
-```javascript
-static async getRecordings(options = {}) {
-  const { room_url, thresholdBytes = 0, limit = 200 } = options;
-  const conditions = [];
-  const params = [];
-
-  if (thresholdBytes > 0) {
-    conditions.push(`rf.file_size >= $${params.length + 1}`);
-    params.push(thresholdBytes);
-  }
-  if (room_url) {
-    conditions.push(`rf.room_url = $${params.length + 1}`);
-    params.push(room_url);
-  }
-
-  const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-  const result = await pool.query(
-    `SELECT rf.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
-     FROM recording_files rf
-     LEFT JOIN rooms rm ON rf.room_url = rm.room_url
-     LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
-     ${where}
-     ORDER BY rf.id DESC
-     LIMIT $${params.length + 1}`,
-    [...params, parseInt(limit, 10)]
-  );
-  return result.rows;
-}
-```
+修改 `services/DataService.js` 中的 `getRecordings` 方法
 
 ### 步骤 4：更新 API 路由
 

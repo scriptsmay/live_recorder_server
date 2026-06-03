@@ -319,7 +319,7 @@ class RecorderService {
     let fileExists = false;
     let fileCount = 0;
     try {
-      const recordingFiles = await DataService.getRecordingFiles({ session_id: sessionId });
+      const { rows: recordingFiles } = await DataService.getRecordingFiles({ session_id: sessionId });
       console.log(`[finishSession] 会话 ${sessionId} 查询到 ${recordingFiles.length} 个录制文件记录`);
 
       for (const file of recordingFiles) {
@@ -783,10 +783,9 @@ class RecorderService {
         const { reuseSession, resumeCount } = await this.checkReuseSession(row);
         if (reuseSession) {
           // 将旧会话状态标记为 'interrupted'
-          await pool.query(
-            `UPDATE recording_sessions SET status = 'interrupted', ended_at = NOW() WHERE id = $1`,
-            [resumeCount]
-          );
+          await pool.query(`UPDATE recording_sessions SET status = 'interrupted', ended_at = NOW() WHERE id = $1`, [
+            resumeCount,
+          ]);
         }
 
         if (row.ffmpeg_pid) {

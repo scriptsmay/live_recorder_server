@@ -11,7 +11,7 @@
 
 Docker 架构：
 
-```
+```text
                 ┌────────────────────────────┐
                 │        Docker Compose       │
                 │                            │
@@ -45,7 +45,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 ## 整体流程
 
-```
+```text
 [Chrome 扩展 / 轮询检测]               [Server API]                 [FFmpeg]                [Transcode Queue]      [Upload]
      │                                       │                            │                         │                    │
      │  POST /notify/live_download           │     spawn pipe stderr      │                         │                    │
@@ -77,7 +77,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕，经 `content.js` 转发给 `background.js`，批量推送到后端 `POST /api/danmaku/batch`。**扩展侧弹幕发送与后端录制状态联动**：仅在录制中时才推送弹幕数据，未录制时事件保留在内存缓冲区（上限 5000 条）。
 
-```
+```text
 [Chrome Extension]                                                    [Server]
      │                                                                    │
      │  inject.js hook WebSocket → 弹幕事件                               │
@@ -102,7 +102,7 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
 
 弹幕录制结束后，服务端自动执行 ASS 字幕生成。弹幕压制为独立的工具箱功能，**不再自动触发**，由用户通过「弹幕工具箱」页面手动操作。
 
-```
+```text
 录制会话结束
     │
     ▼
@@ -135,7 +135,7 @@ _handleDanmakuFinish()
 
 **目录结构**：
 
-```
+```text
 VIDEO_DOWNLOAD_DIR/
   └── [roomId]/[sessionId]/
       ├── *.mp4 / *.ts                    ← 录制分段（纯净）
@@ -162,7 +162,7 @@ DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
 
 **会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
 
-```
+```text
                       ┌── 新录制请求 ──────────────────┐
                       │                                │
                       ▼                                │
@@ -207,7 +207,7 @@ DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
 
 录制文件采用层级目录结构存储：
 
-```
+```text
 VIDEO_DOWNLOAD_DIR/
 ├── [roomId]/                    # 房间ID目录
 │   ├── [sessionId]/             # 会话ID目录
@@ -223,7 +223,7 @@ VIDEO_DOWNLOAD_DIR/
 
 **压制产物独立目录**：
 
-```
+```text
 DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
 ├── [sessionId]/                 # 按会话分组
 │   ├── {filename}_danmaku.mp4   # 压制产物
@@ -243,7 +243,7 @@ DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
 
 ### recording_files 表状态流转
 
-```
+```text
                  ┌──────────────┐
      未跟踪      │  (无记录)    │
      磁盘扫描    └──────┬───────┘
@@ -258,7 +258,7 @@ DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
 
 ### 分片追踪时序
 
-```
+```text
 FFmpeg 写入分段文件(.flv)
         │
         │  分段边界(segment)
@@ -325,7 +325,7 @@ FFmpeg 写入分段文件(.flv)
 
 **工作流程**:
 
-```
+```text
 [FFmpeg 录制中]                          [转码流程]
      │                                      │
      │  新分段打开 (stderr 日志)             │
@@ -424,7 +424,7 @@ await transcodeQueue.getCurrentProcessingCount();
 
 ### 周期性执行链
 
-```
+```text
 watchdog.start()
   └─ setTimeout(runWatchdog, 100)
        ├─ checkStaleRecordings()    ← mtime 僵死检查
@@ -437,7 +437,7 @@ watchdog.start()
 
 ### 启动时执行链（非周期）
 
-```
+```text
 app.js
   └─ bootstrap()
        ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
@@ -493,7 +493,7 @@ app.js
 
 ### 架构
 
-```
+```text
 PollingManager (单例)
 ├── CHECKERS 注册表
 │   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
@@ -559,7 +559,7 @@ PollingManager (单例)
 
 ### 轮询流程
 
-```
+```text
 app.js
   └─ bootstrap()
        └─ pollingManager.start()

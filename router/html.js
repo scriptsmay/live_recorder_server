@@ -162,46 +162,6 @@ router.get('/transcode', async (req, res) => {
   }
 });
 
-router.get('/recordings', async (req, res) => {
-  try {
-    const roomFilter = req.query.room_url || '';
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = 50;
-
-    const [result, rooms] = await Promise.all([
-      DataService.getRecordings({
-        room_url: roomFilter,
-        page,
-        limit,
-      }),
-      DataService.getRoomList(),
-    ]);
-
-    const totalPages = Math.ceil(result.total / limit);
-    res.render('recordings', {
-      title: '录制历史',
-      recordings: result.rows,
-      rooms,
-      roomFilter,
-      pagination: {
-        page,
-        limit,
-        total: result.total,
-        totalPages,
-      },
-    });
-  } catch (err) {
-    console.error('[html] 录制历史页加载失败:', err);
-    res.status(500).render('recordings', {
-      title: '录制历史',
-      recordings: [],
-      rooms: [],
-      roomFilter: '',
-      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
-    });
-  }
-});
-
 router.get('/_/rooms/table', async (req, res) => {
   const { rows: rooms } = await DataService.getRooms();
   res.render('partials/_rooms_table', { rooms, layout: false });

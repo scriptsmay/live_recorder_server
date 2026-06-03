@@ -2,7 +2,7 @@
 
 ## 技术栈
 
-- Express 5（CommonJS）、EJS 模板、morgan、cors
+- Express 5（CommonJS）、Vue 3 SPA（Vite + Tailwind CSS v4 + TypeScript）、morgan、cors
 - PostgreSQL（`pg` 模块）—— 连接池在 `db/index.js`
 - Redis（`redis` 模块）—— 客户端在 `db/redis.js`
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
@@ -63,8 +63,9 @@
 │   ├── index.js
 │   ├── migrate.js
 │   └── redis.js
-├── views/              # EJS 模板
-├── public/             # 静态资源
+├── views/              # EJS 模板（已停用，htmlRouter 已注释）
+├── frontend/           # Vue 3 SPA 前端（Vite + Tailwind + TypeScript）
+├── public/             # 静态资源 + Vue 构建产物（public/frontend/）
 ├── scripts/            # 工具脚本
 ├── logs/               # 日志
 ├── docs/               # 文档
@@ -77,12 +78,12 @@
 - `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码、日志、生命周期）
 - `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染、文件路径生成）
 - `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
-- `services/DataService.js` — 集中封装读库查询，供 API 路由与 `router/html.js` 页面渲染共用，避免重复 `pool.query`
+- `services/DataService.js` — 集中封装读库查询，供 API 路由使用，避免重复 `pool.query`
 - `router/` — 路由层，负责接收请求、调用 Service、返回响应
 - `middleware/` — Express 中间件（如模板上下文、access log）
 - `config/` — 配置层（环境变量、应用信息）
 
-**页面渲染**：`templates`、`rooms`、`settings`、`sessions`、`upload_records`、`recordings` 由 `router/html.js` 后端 EJS 渲染；`dashboard` 保留前端 fetch（轮询/交互需求）。
+**页面渲染**：所有页面已迁移到 Vue SPA（`frontend/src/views/`），由 Vue Router 管理。生产环境下 `router/spa.js` 负责静态资源服务和 history 模式回退。EJS 的 `router/html.js` 已完全注释禁用。
 
 ## 代码规范
 
@@ -142,6 +143,7 @@ npm run lint && npm run format && npm run test
 - `DELETE /api/danmaku_burn_records/:id` —— 删除压制记录（可选删除文件）
 - `GET /api/danmaku/status` —— 获取弹幕采集和压制队列状态
 - `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
+- `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件、压制记录）
 - `GET /api/danmaku-toolbox/sessions` —— 获取有弹幕数据的会话列表（工具箱专用）
 - `GET /api/danmaku/burn_output/:id/stream` —— 流式播放压制产物文件
 
@@ -157,16 +159,19 @@ npm run lint && npm run format && npm run test
 - `GET /api/transcode_records` —— 查询转码记录列表（支持 `?status=` 筛选）
 - `DELETE /api/transcode_records/:id` —— 删除转码记录
 
-### 页面
+### 页面（Vue SPA 路由）
 
-- `GET /apiview` —— 从 `/` 重定向
-- `GET /logs` —— 查看/删除服务器日志
-- `GET /templates` —— 投稿模板管理
-- `GET /upload_records` —— 投稿记录
-- `GET /transcode` —— 转码记录
-- `GET /danmaku-toolbox` —— 弹幕工具箱（会话筛选、批量压制、状态监控、产物管理）
-- `GET /sessions` —— 录制会话（含投稿按钮）
-- `GET /settings` —— 全局设置（录制/上传参数配置）
+- `/dashboard` —— 仪表盘
+- `/rooms` —— 直播间管理
+- `/sessions` —— 录制会话（含投稿、文件查看）
+- `/sessions/:id/danmaku` —— 弹幕详情（会话信息、分段压制状态、弹幕搜索）
+- `/recordings` —— 录制文件
+- `/transcode` —— 转码记录
+- `/danmaku-toolbox` —— 弹幕工具箱（会话筛选、批量压制、状态监控、产物管理）
+- `/templates` —— 投稿模板管理
+- `/upload-records` —— 投稿记录（注：EJS 旧路径为 `/upload_records`）
+- `/settings` —— 全局设置
+- `/logs` —— 日志查看（注：存在 EJS 路由冲突，详见 `docs/todo/TODO.md`）
 
 ## 关键环境变量
 

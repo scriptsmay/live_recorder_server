@@ -280,10 +280,83 @@ class DataService {
     };
   }
 
-  static async getRecordings(options = {}) {
-    const { room_url, thresholdBytes = 0, limit = 50, page } = options;
+  // static async getRecordings(options = {}) {
+  //   const { room_url, thresholdBytes = 0, limit = 10, page } = options;
+  //   const conditions = [];
+  //   const params = [];
+
+  //   if (thresholdBytes > 0) {
+  //     conditions.push(`rf.file_size >= $${params.length + 1}`);
+  //     params.push(thresholdBytes);
+  //   }
+  //   if (room_url) {
+  //     conditions.push(`rf.room_url = $${params.length + 1}`);
+  //     params.push(room_url);
+  //   }
+
+  //   let sql = `SELECT rf.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
+  //      FROM recording_files rf
+  //      LEFT JOIN rooms rm ON rf.room_url = rm.room_url
+  //      LEFT JOIN recording_sessions rs ON rf.session_id = rs.id`;
+
+  //   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+
+  //   if (page) {
+  //     const pageSize = parseInt(limit, 10);
+  //     sql += `${where} ORDER BY rf.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+  //     params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+  //   } else {
+  //     sql += `${where} ORDER BY rf.id DESC LIMIT $${params.length + 1}`;
+  //     params.push(parseInt(limit, 10));
+  //   }
+
+  //   const result = await pool.query(sql, params);
+
+  //   const countResult = await pool.query(
+  //     `SELECT COUNT(*) FROM recording_files rf${where}`,
+  //     params.slice(0, params.length - (page ? 2 : 1))
+  //   );
+
+  //   return {
+  //     rows: result.rows,
+  //     total: parseInt(countResult.rows[0].count, 10),
+  //   };
+  // }
+
+  /**
+   * 获取录制文件列表及其相关元数据
+   *
+   * @param {Object} options - 查询选项对象
+   * @param {string} [options.status] - 录制文件状态过滤条件
+   * @param {string} [options.room_url] - 房间URL过滤条件
+   * @param {number} [options.thresholdBytes=0] - 文件大小阈值（字节），仅返回大于等于该值的文件
+   * @param {number|string} [options.limit] - 每页限制条数，若未提供则返回所有记录
+   * @param {number|string} [options.page] - 页码，配合limit使用进行分页
+   * @param {string} [options.order='desc'] - 排序方式，'asc' 或 'desc'，默认降序
+   * @param {number|string} [options.session_id] - 会话ID，兼容 session_id 和 sessionId 两种写法
+   * @returns {Promise<Object>} 包含录制文件列表和总数的对象
+   * @returns {Array} return.rows - 录制文件记录数组，每条记录额外包含文件存在性检查字段
+   * @returns {boolean} return.rows[].file_exists - 主录制文件是否存在
+   * @returns {boolean} return.rows[].is_danmaku_burned - 弹幕是否已完成烧录
+   * @returns {boolean} return.rows[].danmaku_burn_exists - 烧录后的弹幕文件是否存在
+   * @returns {boolean} return.rows[].danmaku_ass_exists - 原始ASS弹幕文件是否存在
+   * @returns {number} return.total - 符合条件的总记录数
+   */
+  static async getRecordingFiles(options = {}) {
+    const { status, room_url, thresholdBytes = 0, limit, page, order = 'desc' } = options;
+    const sessionId = options.session_id ?? options.sessionId;
     const conditions = [];
     const params = [];
+
+    // 构建动态查询条件
+    if (status) {
+      conditions.push(`rf.status = $${params.length + 1}`);
+      params.push(status);
+    }
+    if (sessionId) {
+      conditions.push(`rf.session_id = $${params.length + 1}`);
+      params.push(parseInt(sessionId, 10));
+    }
 
     if (thresholdBytes > 0) {
       conditions.push(`rf.file_size >= $${params.length + 1}`);
@@ -294,76 +367,64 @@ class DataService {
       params.push(room_url);
     }
 
-    let sql = `SELECT rf.*, rm.room_name, rs.started_at as session_started_at, rs.ended_at as session_ended_at
-       FROM recording_files rf
-       LEFT JOIN rooms rm ON rf.room_url = rm.room_url
-       LEFT JOIN recording_sessions rs ON rf.session_id = rs.id`;
+    // 基础查询SQL，关联房间、会话和弹幕烧录记录表
+    let sql = `SELECT rf.*, rm.room_name,  rs.output_dir as session_output_dir, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
+        FROM recording_files rf
+        LEFT JOIN rooms rm ON rf.room_url = rm.room_url
+        LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
+        LEFT JOIN danmaku_burn_records dbr ON dbr.recording_file_id = rf.id`;
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
 
-    if (page) {
-      const pageSize = parseInt(limit, 10);
-      sql += `${where} ORDER BY rf.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-      params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+    // 记录 WHERE 条件参数数量，后续计数查询需要用到
+    const whereParamCount = params.length;
+
+    // 根据是否提供limit参数决定构建分页查询还是全量查询
+    if (limit) {
+      if (page) {
+        const pageSize = parseInt(limit, 10);
+        sql += `${where} ORDER BY rf.id ${order.toLowerCase() === 'asc' ? 'ASC' : 'DESC'} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+      } else {
+        sql += `${where} ORDER BY rf.id ${order.toLowerCase() === 'asc' ? 'ASC' : 'DESC'} LIMIT $${params.length + 1}`;
+        params.push(parseInt(limit, 10));
+      }
     } else {
-      sql += `${where} ORDER BY rf.id DESC LIMIT $${params.length + 1}`;
-      params.push(parseInt(limit, 10));
+      // 默认ID升序
+      sql += `${where} ORDER BY rf.id ${order.toLowerCase() === 'asc' ? 'ASC' : 'DESC'}`;
     }
 
     const result = await pool.query(sql, params);
 
+    // 计数查询仅使用 WHERE 条件参数，排除分页追加的 LIMIT/OFFSET 参数
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM recording_files rf${where}`,
-      params.slice(0, params.length - (page ? 2 : 1))
+      `SELECT COUNT(*) FROM recording_files rf ${where}`,
+      params.slice(0, whereParamCount)
     );
 
     return {
-      rows: result.rows,
+      rows: result.rows.map((rec) => {
+        // 从确定性路径检查 ASS 文件是否存在，替代旧的 recording_files.danmaku_ass_path
+        let danmaku_ass_exists = false;
+        if (rec.session_output_dir && rec.segment_index != null) {
+          const assPath = require('path').join(
+            rec.session_output_dir,
+            'danmaku',
+            'segments',
+            `${rec.segment_index}.ass`
+          );
+          danmaku_ass_exists = require('fs').existsSync(assPath);
+        }
+        return {
+          ...rec,
+          file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
+          is_danmaku_burned: rec.burn_status === 'completed',
+          danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
+          danmaku_ass_exists,
+        };
+      }),
       total: parseInt(countResult.rows[0].count, 10),
     };
-  }
-
-  static async getRecordingFiles(options = {}) {
-    const { status } = options;
-    const sessionId = options.session_id ?? options.sessionId;
-    const conditions = [];
-    const params = [];
-
-    if (status) {
-      conditions.push(`rf.status = $${params.length + 1}`);
-      params.push(status);
-    }
-    if (sessionId) {
-      conditions.push(`rf.session_id = $${params.length + 1}`);
-      params.push(parseInt(sessionId, 10));
-    }
-
-    let sql = `SELECT rf.*, rs.output_dir as session_output_dir, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
-      FROM recording_files rf
-      LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
-      LEFT JOIN danmaku_burn_records dbr ON dbr.recording_file_id = rf.id`;
-    if (conditions.length) {
-      sql += ' WHERE ' + conditions.join(' AND ');
-    }
-    // 默认ID升序
-    sql += ' ORDER BY rf.id ASC';
-
-    const result = await pool.query(sql, params);
-    return result.rows.map((rec) => {
-      // 从确定性路径检查 ASS 文件是否存在，替代旧的 recording_files.danmaku_ass_path
-      let danmaku_ass_exists = false;
-      if (rec.session_output_dir && rec.segment_index != null) {
-        const assPath = require('path').join(rec.session_output_dir, 'danmaku', 'segments', `${rec.segment_index}.ass`);
-        danmaku_ass_exists = require('fs').existsSync(assPath);
-      }
-      return {
-        ...rec,
-        file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
-        is_danmaku_burned: rec.burn_status === 'completed',
-        danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
-        danmaku_ass_exists,
-      };
-    });
   }
 
   static async getTranscodeRecords(options = {}) {

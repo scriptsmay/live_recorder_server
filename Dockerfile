@@ -1,4 +1,15 @@
-# 阶段 1: 构建依赖
+# 阶段 1: 构建前端
+FROM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# 阶段 2: 构建后端依赖
 FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
@@ -10,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 阶段 2: 运行环境
+# 阶段 3: 运行环境
 FROM node:22-bookworm-slim
 
 ENV LANG=C.UTF-8 \
@@ -30,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 从构建阶段复制依赖和源码
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
+
+# 复制前端构建产物到 public/frontend/
+COPY --from=frontend-builder /app/frontend/../public/frontend ./public/frontend
 
 RUN mkdir -p /data/video_downloads /data/biliup /app/logs \
     && chmod +x scripts/docker-entrypoint.sh

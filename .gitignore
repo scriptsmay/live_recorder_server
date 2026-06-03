@@ -27,6 +27,8 @@ pnpm-lock.yaml
 .pnp.cjs
 .DS_Store
 
+public/frontend/
+
 # development directories
 dev_downloads/
 dev_biliup/

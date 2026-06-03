@@ -41,6 +41,15 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+router.get('/api/logs/files', async (req, res) => {
+  try {
+    const files = await logFiles.listFiles();
+    res.json({ status: 'ok', data: files });
+  } catch (err) {
+    res.status(500).json({ status: 'Error', message: '获取文件列表失败' });
+  }
+});
+
 router.get('/api/logs/content', async (req, res) => {
   try {
     const result = await logFiles.tailLines(req.query.file, req.query.tail);
