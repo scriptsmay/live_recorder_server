@@ -7,6 +7,11 @@ on:
   # 允许在 GitHub Actions 页面手动点击运行
   workflow_dispatch:
 
+# 赋予内置 Token 权限（双重保险）
+permissions:
+  contents: read
+  packages: write
+
 env:
   # 默认推送到 GitHub 自带的容器镜像库 (GHCR)
   REGISTRY: ghcr.io
@@ -16,18 +21,12 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # 赋予内置 Token 权限（双重保险）
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: 1. Checkout repository 检出代码
-        # 保持和你老版本一致或用 v4 均可
         uses: actions/checkout@v4
 
       - name: 2. Set up Docker Buildx 配置高阶构建环境
-        # Buildx 是使用高级缓存 (type=gha) 的前提
         uses: docker/setup-buildx-action@v3
 
       - name: 3. Log in to the Container registry 登录镜像库
