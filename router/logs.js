@@ -24,10 +24,13 @@ router.get('/api/logs/content', async (req, res) => {
   try {
     const result = await logFiles.tailLines(req.query.file, req.query.tail);
     res.json({
-      file: result.file,
-      lines: result.lines,
-      truncated: result.truncated,
-      offset: result.offset,
+      status: 'ok',
+      data: {
+        file: result.file,
+        lines: result.lines,
+        truncated: result.truncated,
+        offset: result.offset,
+      },
     });
   } catch (err) {
     sendLogError(res, err);

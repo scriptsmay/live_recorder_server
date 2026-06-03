@@ -53,10 +53,13 @@ curl http://127.0.0.1:1123/api/health
 
 ```json
 {
-  "file": "access.log",
-  "lines": ["GET /api/health 200 5ms"],
-  "truncated": true,
-  "offset": 2048
+  "status": "ok",
+  "data": {
+    "file": "access.log",
+    "lines": ["GET /api/health 200 5ms"],
+    "truncated": true,
+    "offset": 2048
+  }
 }
 ```
 

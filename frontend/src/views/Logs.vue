@@ -116,20 +116,24 @@ async function selectFile(file: string, options: { updateQuery?: boolean } = {})
   }
 
   try {
-    const res = await apiGet<{
+    type LogContent = {
       file: string
       lines: string[]
       truncated: boolean
       offset?: number
-    }>(`/api/logs/content?file=${encodeURIComponent(file)}&tail=${MAX_LINES}`)
+    }
+    const res = await apiGet<LogContent>(
+      `/api/logs/content?file=${encodeURIComponent(file)}&tail=${MAX_LINES}`,
+    )
+    const data = res.data ?? (res as unknown as LogContent)
 
-    logLines.value = res.data.lines || []
+    logLines.value = data.lines || []
 
-    if (res.data.offset) {
-      fileSizeText.value = formatBytes(res.data.offset)
+    if (data.offset) {
+      fileSizeText.value = formatBytes(data.offset)
     }
 
-    statusText.value = res.data.truncated
+    statusText.value = data.truncated
       ? '仅显示文件尾部内容（完整内容请下载查看）'
       : '已加载完整内容'
   } catch (err) {

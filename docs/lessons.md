@@ -697,13 +697,17 @@ Vue 日志页能加载日志文件列表，但选择文件后右侧内容为空�
 
 同时，Vue 迁移后只读取了初始 `route.query.file`，没有在 `selectFile()` 时写回 router query，也没有监听 query 变化。
 
+第二次复查发现 `/api/logs/content` 仍返回裸对象 `{ file, lines, truncated, offset }`，而前端 `apiGet` 统一按 `{ status, data }` 读取。结果 `res.data` 为 `undefined`，访问 `res.data.lines` 直接抛异常，页面就一直 toast `加载日志内容失败`。
+
 ### 修复
 
 1. 普通内容查看改为请求 `tail=5000`，返回最近日志内容。
 2. `/api/logs/content` 和 SSE `ready` 事件返回 `offset`，前端可显示当前文件大小。
 3. `selectFile()` 使用 `router.replace()` 同步 `?file=`，并监听 query 变化以支持刷新、复制链接和浏览器前进后退。
+4. `/api/logs/content` 改为返回 `{ status: 'ok', data: ... }`，并让前端兼容旧的裸对象响应。
 
 ### 经验总结
 
 1. **同一个参数在不同场景下语义要明确**：`tail=0` 对实时流是“从末尾开始”，对查看页却是“空内容”。调用方要按场景选择参数。
 2. **SPA 迁移不能只读 URL**：列表选择、删除、刷新和浏览器导航都要维护 query 状态，否则页面可分享性和回退行为会退化。
+3. **API 统一封装要求统一响应契约**：使用 `apiGet` 的接口必须返回 `{ status, data }`；裸对象会在前端被当成 `ApiResponse`，造成运行时异常。
