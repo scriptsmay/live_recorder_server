@@ -63,11 +63,12 @@ watch(
   },
 )
 
-function formatBytes(bytes: number) {
-  if (!bytes) return '-'
+function formatBytes(bytes: number | string | null | undefined) {
+  const n = Number(bytes)
+  if (!n || !isFinite(n)) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
   let i = 0
-  let val = bytes
+  let val = n
   while (val >= 1024 && i < units.length - 1) {
     val /= 1024
     i++

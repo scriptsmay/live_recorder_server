@@ -362,8 +362,8 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-[100px]">状态</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-[150px]">开关</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-[110px]">轮询</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-[220px]">配置</th>
-              <th class="px-4 py-3 text-right font-medium text-gray-500 w-[180px]">操作</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500">配置</th>
+              <th class="px-4 py-3 text-right font-medium text-gray-500 w-[220px]">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">

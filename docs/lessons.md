@@ -612,3 +612,42 @@ Chrome Extension 发来的事件 `ts_ms` 是相对时间（可能为 `0`），�
 1. **`||` 不适用于数值 fallback**：`0`、`NaN` 都是 falsy，数值型字段必须用 `typeof x === 'number'` 显式判断
 2. **跨系统字段名要对齐**：Extension 输出 `user`、服务端存 `user`、前端读 `username`——三段各写各的，搜索功能形同虚设
 3. **时间戳语义要明确**：同一个字段名 `ts_ms` 在不同模块中含义不同（绝对 vs 相对），是导致误用的根源。改名区分（`ts_abs_ms` vs `ts_ms`）比依赖注释更可靠
+
+## recording_files 追踪盲区：不分段录制、duration_seconds 死字段、segment_index 跳号
+
+### 现象
+
+1. `/api/sessions/52/danmaku-page` 查不到任何文件，但磁盘上 `.ts` 文件完好存在（56MB）
+2. `session.total_segments` 与实际文件数不一致（session 51 有 2 个文件但 total_segments = 1）
+3. `recording_files.duration_seconds` 始终为 0
+
+### 根因分析
+
+三个独立的问题，根因都在 `recording_files` 记录的插入路径不完整：
+
+**问题一：不分段录制文件丢失**
+
+不分段录制时 ffmpeg 不以 `-f segment` 模式运行，不会触发 `emitSegment()` 事件，`RecordingManager.recordSegment()` 从未被调用。录制结束后 `_handleSessionFinish()` 从 `recording_files` 查出 0 条记录，直接把 `total_segments` 覆写为 0。看门狗的 `scanActiveSegments()` 理论上能补上，但存在时序竞争——`_handleSessionFinish` 先把 session 标记为 completed 且 `total_segments = 0`，看门狗可能已过 5 分钟窗口。
+
+**问题二：scanRecordingFiles 漏更新 total_segments**
+
+`scanRecordingFiles()` 关联孤文件到 session 时只 INSERT 了 `recording_files` 记录，没有同步 `UPDATE recording_sessions SET total_segments = total_segments + 1`。如果文件先被这条路径录入，session 的 `total_segments` 就会少算。
+
+**问题三：segment_index 双递增**
+
+`scanActiveSegments()` 循环体内有两个 `segIndex++`（分别在第 279 行和第 290 行），每个新文件的序号跳 2（0, 2, 4...）。同时 `duration_seconds` 字段在 INSERT 时从未填充，只有迁移脚本写过一次。
+
+### 修复
+
+| 文件 | 改动 |
+|---|---|
+| `services/RecorderService.js` | `_handleSessionFinish` 在 `recordingFiles.length === 0` 时主动扫描 `output_dir`，将符合条件的视频文件补插入 `recording_files`，并累加 `fileCount` / `fileSize`，确保后续 UPDATE session 时计数正确 |
+| `lib/core/watchdog.js` | `scanActiveSegments` 中 INSERT 新文件前调用 `probeSegmentDuration()` 写入 `duration_seconds`；删除多余的 `segIndex++`，每个文件只递增一次 |
+| `lib/core/scan-files.js` | `scanRecordingFiles` 关联文件到 session 后，检查 `insertRes.rowCount > 0` 才 `UPDATE total_segments + 1`，避免 `ON CONFLICT DO NOTHING` 命中时重复计数 |
+
+### 经验总结
+
+1. **事件驱动的盲区要有兜底**：分段录制靠 `segment` 事件触发文件记录，但不分段模式不触发该事件——不能假设所有录制模式都走同一条路径，`_handleSessionFinish` 作为最终出口必须做兜底扫描
+2. **多入口 INSERT 要保持计数一致**：`recording_files` 有三个 INSERT 入口（`scanActiveSegments`、`scanRecordingFiles`、`_handleSessionFinish`），每个入口都必须同步更新 `recording_sessions.total_segments`，漏一个就会出偏差
+3. **循环体内的重复递增要看 diff**：`segIndex++` 写了两遍，肉眼扫代码很容易忽略，review 时关注循环变量变更的重复出现
+4. **迁移脚本引入的字段要确认有写入方**：`duration_seconds` 从旧表迁过来后没有任何业务代码写入，属于典型的"迁而不管"，迁移后应逐一确认每个新字段在生产路径中有写入逻辑

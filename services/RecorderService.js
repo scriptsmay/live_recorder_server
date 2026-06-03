@@ -11,6 +11,7 @@ const DataService = require('./DataService');
 const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
+const { SUPPORTED_EXT_REGEX, isDanmakuBurnFile } = require('../config/config');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -354,6 +355,48 @@ class RecorderService {
 
         // 加入自动转码队列
         RecordingManager.addTranscodeQueue(sessionId, file.file_path);
+      }
+
+      // 不分段录制：recording_files 可能为空（无 segment 事件），主动扫描 output_dir 补录
+      if (recordingFiles.length === 0) {
+        const sessRes = await pool.query(
+          `SELECT output_dir, room_url, started_at FROM recording_sessions WHERE id = $1`,
+          [sessionId]
+        );
+        const sessRow = sessRes.rows[0];
+
+        if (sessRow && sessRow.output_dir && fs.existsSync(sessRow.output_dir)) {
+          const entries = fs.readdirSync(sessRow.output_dir);
+          let segIdx = 0;
+          for (const name of entries) {
+            const fp = path.join(sessRow.output_dir, name);
+            if (!SUPPORTED_EXT_REGEX.test(name)) continue;
+            if (isDanmakuBurnFile(name)) continue;
+
+            let stat;
+            try {
+              stat = fs.statSync(fp);
+            } catch {
+              continue;
+            }
+            if (stat.size < thresholdBytes) continue;
+
+            await pool.query(
+              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, checked_at)
+               VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), $7, NOW())
+               ON CONFLICT (file_path) DO NOTHING`,
+              [sessionId, sessRow.room_url, fp, name, stat.size, sessRow.started_at, segIdx]
+            );
+
+            fileCount++;
+            fileSize += stat.size;
+            fileExists = true;
+            segIdx++;
+
+            RecordingManager.addTranscodeQueue(sessionId, fp);
+            console.log(`[finishSession] 补录文件: ${name} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
+          }
+        }
       }
     } catch (statErr) {
       console.warn(`[RecorderService] [会话${sessionId}] 无法获取文件大小`, statErr.message);

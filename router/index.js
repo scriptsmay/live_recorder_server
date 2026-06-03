@@ -24,6 +24,11 @@ function createRoutes() {
   // Vue SPA 路由（静态资源 + history 模式回退）
   router.use(spaRouter);
 
+  // 给个默认跳转到前端界面，方便访问
+  router.get('/', (req, res) => {
+    res.redirect('/api');
+  });
+
   return router;
 }
 
