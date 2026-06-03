@@ -2,6 +2,10 @@
 
 基于 Node.js + Express 的直播录制服务器，支持自动监控、弹幕采集、视频转码和自动投稿。
 
+---
+
+[![Build and Push Docker Image](https://github.com/scriptsmay/live_recorder_server/actions/workflows/docker-image.yml/badge.svg)](https://github.com/scriptsmay/live_recorder_server/actions/workflows/docker-image.yml)
+
 ## 功能特性
 
 - **直播录制**：使用 FFmpeg 作为下载引擎，支持分段录制（可配置时长）
@@ -60,16 +64,16 @@ npm run stop
 
 ### 关键环境变量
 
-| 配置项               | 说明                                      | 默认值                            |
-| -------------------- | ----------------------------------------- | --------------------------------- |
-| VIDEO_DOWNLOAD_DIR   | 录制文件输出根目录（**必需**）            | -                                 |
-| DANMAKU_OUTPUT_DIR   | 弹幕压制产物独立输出目录                  | `${VIDEO_DOWNLOAD_DIR}/../danmaku_output` |
-| PORT                 | 服务端口                                  | 1123（生产）/ 3001（开发）       |
-| BILIUP_PATH          | biliup 可执行文件路径                     | `biliup`                          |
-| BILIUP_WORK_DIR      | biliup 工作目录                           | `$HOME`                           |
-| MESSAGE_FEISHU_WEBHOOK | 飞书通知 Webhook URL                    | -                                 |
-| MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址                       | -                                 |
-| MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token                       | -                                 |
+| 配置项                 | 说明                           | 默认值                                    |
+| ---------------------- | ------------------------------ | ----------------------------------------- |
+| VIDEO_DOWNLOAD_DIR     | 录制文件输出根目录（**必需**） | -                                         |
+| DANMAKU_OUTPUT_DIR     | 弹幕压制产物独立输出目录       | `${VIDEO_DOWNLOAD_DIR}/../danmaku_output` |
+| PORT                   | 服务端口                       | 1123（生产）/ 3001（开发）                |
+| BILIUP_PATH            | biliup 可执行文件路径          | `biliup`                                  |
+| BILIUP_WORK_DIR        | biliup 工作目录                | `$HOME`                                   |
+| MESSAGE_FEISHU_WEBHOOK | 飞书通知 Webhook URL           | -                                         |
+| MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址              | -                                         |
+| MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token              | -                                         |
 
 ## 项目结构
 
