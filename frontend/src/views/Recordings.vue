@@ -3,7 +3,7 @@
  * 录制文件 - 查看/播放/转码/删除录制文件
  * 从 recordings.ejs 迁移
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
 import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
@@ -214,6 +214,10 @@ function statusLabel(status: string) {
 }
 
 onMounted(loadData)
+
+watch(() => route.query.room_url, () => {
+  loadData()
+})
 </script>
 
 <template>
@@ -278,11 +282,11 @@ onMounted(loadData)
               <th class="px-4 py-3 text-left font-medium text-gray-500">直播间</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">会话</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">文件路径</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">大小</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 w-30">大小</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">HLS</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-24">状态</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-32">开始时间</th>
-              <th class="px-4 py-3 text-right font-medium text-gray-500 w-40">操作</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 w-40">开始时间</th>
+              <th class="px-4 py-3 text-right font-medium text-gray-500 w-50">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -294,7 +298,7 @@ onMounted(loadData)
                   v-if="rec.room_url"
                   :href="rec.room_url"
                   target="_blank"
-                  class="text-xs text-gray-400 hover:text-brand-500 truncate block max-w-[200px]"
+                  class="text-xs text-gray-400 hover:text-brand-500 block"
                 >
                   {{ rec.room_url }}
                 </a>
