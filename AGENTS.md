@@ -221,7 +221,17 @@ VIDEO_DOWNLOAD_DIR/
 ├── [roomId]/
 │   ├── [sessionId]/
 │   │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   │   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   │   └── danmaku/                       # 弹幕数据（与录制文件隔离）
+│   │       ├── danmaku.jsonl              # 弹幕原始数据
+│   │       ├── danmaku.ass                # 会话级 ASS
+│   │       └── segments/                  # 分段 ASS
+│   │           └── {segment_index}.ass
+
+DANMAKU_OUTPUT_DIR/                        # 弹幕压制产物（独立目录）
+└── [sessionId]/
+    ├── {filename}_danmaku.mp4             # 压制产物
+    └── logs/                              # FFmpeg 压制日志
 ```
 
 ## 日志

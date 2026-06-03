@@ -205,13 +205,15 @@ class DataService {
     const fsModule = require('fs');
     const pathModule = require('path');
     const files = filesRes.rows.map((f) => {
-      // danmaku_ass_exists: 优先从 DB 记录检查，其次从确定性路径检查
+      // danmaku_ass_exists: 从确定性路径检查（sessionDir/danmaku/segments/{segment_index}.ass）
       let danmakuAssExists = false;
-      if (f.danmaku_ass_path && fsModule.existsSync(f.danmaku_ass_path)) {
-        danmakuAssExists = true;
-      } else if (session.output_dir) {
-        const deterministicPath = pathModule.join(session.output_dir, 'danmaku', 'segments', `${f.id}.ass`);
+      if (session.output_dir && f.segment_index != null) {
+        const deterministicPath = pathModule.join(session.output_dir, 'danmaku', 'segments', `${f.segment_index}.ass`);
         danmakuAssExists = fsModule.existsSync(deterministicPath);
+      }
+      // 兼容旧数据：如果 DB 中仍有 danmaku_ass_path 且文件存在
+      if (!danmakuAssExists && f.danmaku_ass_path && fsModule.existsSync(f.danmaku_ass_path)) {
+        danmakuAssExists = true;
       }
       return {
         ...f,
@@ -336,8 +338,9 @@ class DataService {
       params.push(parseInt(sessionId, 10));
     }
 
-    let sql = `SELECT rf.*, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
+    let sql = `SELECT rf.*, rs.output_dir as session_output_dir, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
       FROM recording_files rf
+      LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
       LEFT JOIN danmaku_burn_records dbr ON dbr.recording_file_id = rf.id`;
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ');
@@ -346,12 +349,21 @@ class DataService {
     sql += ' ORDER BY rf.id ASC';
 
     const result = await pool.query(sql, params);
-    return result.rows.map((rec) => ({
-      ...rec,
-      file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
-      is_danmaku_burned: rec.burn_status === 'completed',
-      danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
-    }));
+    return result.rows.map((rec) => {
+      // 从确定性路径检查 ASS 文件是否存在，替代旧的 recording_files.danmaku_ass_path
+      let danmaku_ass_exists = false;
+      if (rec.session_output_dir && rec.segment_index != null) {
+        const assPath = require('path').join(rec.session_output_dir, 'danmaku', 'segments', `${rec.segment_index}.ass`);
+        danmaku_ass_exists = require('fs').existsSync(assPath);
+      }
+      return {
+        ...rec,
+        file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
+        is_danmaku_burned: rec.burn_status === 'completed',
+        danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
+        danmaku_ass_exists,
+      };
+    });
   }
 
   static async getTranscodeRecords(options = {}) {

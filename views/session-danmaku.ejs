@@ -4,8 +4,7 @@
     <a href="/sessions" class="btn btn-sm btn-outline-secondary ms-2">返回列表</a>
   </h2>
   <div>
-    <button class="btn btn-outline-info" id="genAssBtn">重新生成 ASS</button>
-    <button class="btn btn-outline-warning ms-1" id="burnAllBtn">全部加入压制队列</button>
+    <a href="/danmaku-toolbox" class="btn btn-outline-success btn-sm" title="在弹幕工具箱中管理压制">弹幕工具箱 →</a>
   </div>
 </div>
 
@@ -79,7 +78,7 @@
               <th>分段时间</th>
               <th>弹幕 ASS</th>
               <th>压制状态</th>
-              <th>操作</th>
+              <th>状态</th>
             </tr>
           </thead>
           <tbody>
@@ -109,9 +108,11 @@
                 </td>
                 <td>
                   <% if (burnRec && burnRec.status === 'completed') { %>
-                    <span class="text-success small">✔</span>
-                  <% } else if (f.danmaku_ass_exists) { %>
-                    <button class="btn btn-sm btn-outline-warning burnFileBtn" data-recording-id="<%= f.id %>" data-session-id="<%= session.id %>">压制此段</button>
+                    <span class="text-success small">✔ 已压制</span>
+                  <% } else if (burnRec && burnRec.status === 'failed') { %>
+                    <span class="text-danger small" title="<%= burnRec.error || '' %>">✖ 失败</span>
+                  <% } else if (burnRec) { %>
+                    <span class="text-muted small"><%= burnRec.status %></span>
                   <% } else { %>
                     <span class="text-muted small">—</span>
                   <% } %>
@@ -146,83 +147,6 @@
 
 <script>
   const SESSION_ID = '<%= session.id %>';
-
-  // ASS 生成按钮
-  document.getElementById('genAssBtn')?.addEventListener('click', async function() {
-    this.disabled = true;
-    this.textContent = '生成中...';
-    try {
-      const res = await fetch('/api/sessions/' + SESSION_ID + '/danmaku/ass', { method: 'POST' });
-      const json = await res.json();
-      if (res.ok && json.status === 'ok') {
-        toast('ASS 生成成功: ' + json.data.event_count + ' 条弹幕');
-        setTimeout(() => location.reload(), 1500);
-      } else {
-        toast('生成失败: ' + (json.message || '未知错误'));
-      }
-    } catch (err) {
-      toast('请求失败: ' + err.message);
-    } finally {
-      this.disabled = false;
-      this.textContent = '重新生成 ASS';
-    }
-  });
-
-  // 全部压制按钮
-  document.getElementById('burnAllBtn')?.addEventListener('click', async function() {
-    const confirmed = await showConfirm('确认将全部可压制分段加入弹幕压制队列？');
-    if (!confirmed) return;
-    this.disabled = true;
-    this.textContent = '入队中...';
-    try {
-      const res = await fetch('/api/sessions/' + SESSION_ID + '/danmaku/burn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: false }),
-      });
-      const json = await res.json();
-      if (res.ok && json.status === 'ok') {
-        toast(json.message);
-        setTimeout(() => location.reload(), 1500);
-      } else {
-        toast('入队失败: ' + (json.message || '未知错误'));
-      }
-    } catch (err) {
-      toast('请求失败: ' + err.message);
-    } finally {
-      this.disabled = false;
-      this.textContent = '全部加入压制队列';
-    }
-  });
-
-  // 单段压制按钮
-  document.addEventListener('click', async (e) => {
-    const burnFileBtn = e.target.closest('.burnFileBtn');
-    if (burnFileBtn) {
-      const sid = burnFileBtn.dataset.sessionId;
-      burnFileBtn.disabled = true;
-      burnFileBtn.textContent = '入队中...';
-      try {
-        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force: false }),
-        });
-        const json = await res.json();
-        if (res.ok && json.status === 'ok') {
-          toast(json.message);
-          setTimeout(() => location.reload(), 1500);
-        } else {
-          toast('入队失败: ' + (json.message || '未知错误'));
-        }
-      } catch (err) {
-        toast('请求失败: ' + err.message);
-      } finally {
-        burnFileBtn.disabled = false;
-        burnFileBtn.textContent = '压制此段';
-      }
-    }
-  });
 
   // 弹幕搜索
   let searchOffset = 0;

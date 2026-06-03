@@ -372,7 +372,7 @@
             json.data.map(r => {
               const danmakuBadge = r.is_danmaku_burned
                 ? '<span class="badge bg-success">已压制</span>'
-                : (r.danmaku_ass_path ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');
+                : (r.danmaku_ass_exists ? '<span class="badge bg-info">ASS</span>' : '<span class="badge bg-secondary">无</span>');
               return '<tr>' +
               '<td>' + r.id + '</td>' +
               '<td><small>' + (r.file_path || '-') + '</small></td>' +
