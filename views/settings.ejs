@@ -51,6 +51,8 @@
         { key: 'danmaku_font_family', label: '弹幕字体', desc: 'ASS 渲染使用的字体名称', type: 'text', attrs: '' },
         { key: 'danmaku_font_size', label: '弹幕字号（1080p）', desc: '1080p 分辨率下的默认字号', type: 'number', attrs: 'min="16" max="64"' },
         { key: 'danmaku_opacity', label: '弹幕不透明度', desc: '0-1 之间，0 完全透明，1 完全不透明', type: 'number', attrs: 'min="0" max="1" step="0.05"' },
+        { key: 'danmaku_outline_colour', label: '描边颜色', desc: '6 位 RGB 十六进制，如 000000（黑）、FFFFFF（白）', type: 'text', attrs: 'maxlength="6" pattern="[0-9A-Fa-f]{6}"' },
+        { key: 'danmaku_outline_width', label: '描边宽度', desc: '描边像素宽度，0 为无描边', type: 'number', attrs: 'min="0" max="5"' },
       ],
     },
   ];
@@ -119,6 +121,8 @@
       'danmaku_font_family',
       'danmaku_font_size',
       'danmaku_opacity',
+      'danmaku_outline_colour',
+      'danmaku_outline_width',
     ];
 
     const btn = document.getElementById('saveSettingsBtn');

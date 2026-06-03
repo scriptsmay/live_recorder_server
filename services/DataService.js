@@ -342,7 +342,8 @@ class DataService {
     if (conditions.length) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
-    sql += ' ORDER BY rf.id DESC';
+    // 默认ID升序
+    sql += ' ORDER BY rf.id ASC';
 
     const result = await pool.query(sql, params);
     return result.rows.map((rec) => ({

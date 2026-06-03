@@ -2,10 +2,13 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <div>
     <h2 class="mb-1">弹幕工具箱</h2>
-    <p class="text-muted mb-0" style="font-size:0.85rem;">弹幕压制管理：会话筛选、批量压制、状态监控、产物管理</p>
+    <p class="text-muted mb-0" style="font-size: 0.85rem">弹幕压制管理：会话筛选、批量压制、状态监控、产物管理</p>
   </div>
   <button class="btn btn-sm btn-outline-secondary" id="refreshAllBtn" title="刷新所有状态">
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+      <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+      <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+    </svg>
     刷新
   </button>
 </div>
@@ -15,7 +18,10 @@
   <div class="col-6 col-md-3">
     <div class="stat-card stat-card-capture">
       <div class="stat-card-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M6 3a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM1 9h14v1H1z"/><circle cx="12" cy="13" r="3"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M6 3a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM1 9h14v1H1z" />
+          <circle cx="12" cy="13" r="3" />
+        </svg>
       </div>
       <div class="stat-card-body">
         <span class="stat-card-value" id="statActiveCaptures">—</span>
@@ -26,7 +32,14 @@
   <div class="col-6 col-md-3">
     <div class="stat-card stat-card-queue">
       <div class="stat-card-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/><path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+          <path
+            d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"
+          />
+          <path
+            d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"
+          />
+        </svg>
       </div>
       <div class="stat-card-body">
         <span class="stat-card-value" id="statQueueLength">—</span>
@@ -37,7 +50,11 @@
   <div class="col-6 col-md-3">
     <div class="stat-card stat-card-processing">
       <div class="stat-card-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+          <path
+            d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"
+          />
+        </svg>
       </div>
       <div class="stat-card-body">
         <span class="stat-card-value" id="statProcessing">—</span>
@@ -48,7 +65,11 @@
   <div class="col-6 col-md-3">
     <div class="stat-card stat-card-total">
       <div class="stat-card-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+          <path
+            d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"
+          />
+        </svg>
       </div>
       <div class="stat-card-body">
         <span class="stat-card-value" id="statSessionCount">—</span>
@@ -72,10 +93,14 @@
         <button class="filter-tag" data-dm-filter="unburned">未压制</button>
       </div>
       <!-- 搜索框 -->
-      <div class="input-group input-group-sm ms-auto" style="width: 260px; flex-shrink: 0;">
+      <div class="input-group input-group-sm ms-auto" style="width: 260px; flex-shrink: 0">
         <input type="text" class="form-control" id="searchInput" placeholder="搜索房间名或 Session ID..." />
         <button class="btn btn-outline-secondary" id="searchBtn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+            <path
+              d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"
+            />
+          </svg>
         </button>
       </div>
     </div>
@@ -85,11 +110,22 @@
 <!-- 批量操作栏 -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <button class="btn btn-sm btn-warning" id="batchBurnBtn" disabled>
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+      <path
+        d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"
+      />
+    </svg>
     批量压制
   </button>
   <button class="btn btn-sm btn-outline-info" id="batchAssBtn" disabled>
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/><path d="M3 8.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zm0-5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-1z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+      <path
+        d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"
+      />
+      <path
+        d="M3 8.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zm0-5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-1z"
+      />
+    </svg>
     批量生成 ASS
   </button>
   <span class="text-muted small" id="selectedCount">已选 0 个会话</span>
@@ -109,7 +145,18 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-2 text-primary" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            fill="currentColor"
+            class="me-2 text-primary"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"
+            />
+          </svg>
           弹幕搜索 <span class="text-muted fw-normal fs-6 ms-1" id="searchModalSession"></span>
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -130,144 +177,156 @@
 <%- include('partials/_video_player') %>
 
 <style>
-/* ---- 弹幕工具箱 stat-card 图标配色 ---- */
-.stat-card-capture .stat-card-icon  { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
-.stat-card-queue   .stat-card-icon  { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
-.stat-card-processing .stat-card-icon { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); }
-.stat-card-total   .stat-card-icon  { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  /* ---- 弹幕工具箱 stat-card 图标配色 ---- */
+  .stat-card-capture .stat-card-icon {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  }
+  .stat-card-queue .stat-card-icon {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  }
+  .stat-card-processing .stat-card-icon {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  }
+  .stat-card-total .stat-card-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
 
-/* ---- 弹幕会话卡片（工具箱专用升级版）---- */
-.dm-session-card {
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-  overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-  margin-bottom: 0.75rem;
-}
-.dm-session-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.07);
-}
-.dm-session-card.is-selected {
-  border-color: var(--theme-primary);
-  box-shadow: 0 0 0 2px rgba(255,140,0,0.15), 0 4px 12px rgba(0,0,0,0.06);
-}
+  /* ---- 弹幕会话卡片（工具箱专用升级版）---- */
+  .dm-session-card {
+    background: var(--theme-bg-card);
+    border: 1px solid var(--theme-border);
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    transition:
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+    margin-bottom: 0.75rem;
+  }
+  .dm-session-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+  }
+  .dm-session-card.is-selected {
+    border-color: var(--theme-primary);
+    box-shadow:
+      0 0 0 2px rgba(255, 140, 0, 0.15),
+      0 4px 12px rgba(0, 0, 0, 0.06);
+  }
 
-/* 卡片头部 */
-.dm-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, var(--theme-primary-light) 0%, #ffffff 60%);
-  border-bottom: 1px solid var(--theme-border);
-  flex-wrap: wrap;
-}
-.dm-card-header .form-check {
-  margin: 0;
-}
-.dm-card-header .form-check-input {
-  cursor: pointer;
-  width: 1rem;
-  height: 1rem;
-  margin-top: 0;
-}
-.dm-session-id {
-  display: inline-flex;
-  align-items: center;
-  background: var(--theme-primary);
-  color: #fff;
-  font-size: 0.73rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.2px;
-  flex-shrink: 0;
-}
-.dm-room-name {
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--theme-text);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dm-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
+  /* 卡片头部 */
+  .dm-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, var(--theme-primary-light) 0%, #ffffff 60%);
+    border-bottom: 1px solid var(--theme-border);
+    flex-wrap: wrap;
+  }
+  .dm-card-header .form-check {
+    margin: 0;
+  }
+  .dm-card-header .form-check-input {
+    cursor: pointer;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0;
+  }
+  .dm-session-id {
+    display: inline-flex;
+    align-items: center;
+    background: var(--theme-primary);
+    color: #fff;
+    font-size: 0.73rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.2px;
+    flex-shrink: 0;
+  }
+  .dm-room-name {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--theme-text);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dm-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
 
-/* 卡片主体 */
-.dm-card-body {
-  padding: 0.85rem 1rem;
-}
-.dm-meta-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  margin-bottom: 0.65rem;
-}
-.dm-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.82rem;
-  color: var(--theme-text-muted);
-}
-.dm-meta-item strong {
-  color: var(--theme-text);
-  font-weight: 600;
-}
+  /* 卡片主体 */
+  .dm-card-body {
+    padding: 0.85rem 1rem;
+  }
+  .dm-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 0.65rem;
+  }
+  .dm-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: var(--theme-text-muted);
+  }
+  .dm-meta-item strong {
+    color: var(--theme-text);
+    font-weight: 600;
+  }
 
-/* 操作按钮行 */
-.dm-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-}
+  /* 操作按钮行 */
+  .dm-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
 
-/* 分段折叠区 */
-.dm-segments-panel {
-  border-top: 1px dashed var(--theme-border);
-  background: #fafaf9;
-  padding: 0.75rem 1rem;
-}
-.dm-segments-panel .table {
-  margin-bottom: 0;
-  font-size: 0.82rem;
-}
-.dm-segments-panel .table > thead > tr > th {
-  font-size: 0.75rem;
-  padding: 0.55rem 0.6rem;
-}
-.dm-segments-panel .table > tbody > tr > td {
-  padding: 0.55rem 0.6rem;
-  vertical-align: middle;
-}
+  /* 分段折叠区 */
+  .dm-segments-panel {
+    border-top: 1px dashed var(--theme-border);
+    background: #fafaf9;
+    padding: 0.75rem 1rem;
+  }
+  .dm-segments-panel .table {
+    margin-bottom: 0;
+    font-size: 0.82rem;
+  }
+  .dm-segments-panel .table > thead > tr > th {
+    font-size: 0.75rem;
+    padding: 0.55rem 0.6rem;
+  }
+  .dm-segments-panel .table > tbody > tr > td {
+    padding: 0.55rem 0.6rem;
+    vertical-align: middle;
+  }
 
-/* 压制进度条 */
-.dm-burn-progress {
-  height: 4px;
-  border-radius: 2px;
-  background: #e5e7eb;
-  overflow: hidden;
-  margin-top: 6px;
-}
-.dm-burn-progress-bar {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
-  transition: width 0.4s ease;
-}
+  /* 压制进度条 */
+  .dm-burn-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #e5e7eb;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .dm-burn-progress-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    transition: width 0.4s ease;
+  }
 </style>
 
 <script>
@@ -287,7 +346,9 @@
     loadSessions();
     loadQueueStatus();
     // 每 15 秒自动刷新队列状态
-    pollTimer = setInterval(() => { loadQueueStatus(); }, 15000);
+    pollTimer = setInterval(() => {
+      loadQueueStatus();
+    }, 15000);
   });
 
   // ====== 数据加载 ======
@@ -327,22 +388,25 @@
 
     // 弹幕状态筛选
     if (currentFilter === 'has_data') {
-      filtered = filtered.filter(s => s.danmaku_event_count > 0);
+      filtered = filtered.filter((s) => s.danmaku_event_count > 0);
     } else if (currentFilter === 'ass_ready') {
-      filtered = filtered.filter(s => s.has_ass_ready);
+      filtered = filtered.filter((s) => s.has_ass_ready);
     } else if (currentFilter === 'burned') {
-      filtered = filtered.filter(s => s.danmaku_burn_completed > 0);
+      filtered = filtered.filter((s) => s.danmaku_burn_completed > 0);
     } else if (currentFilter === 'unburned') {
-      filtered = filtered.filter(s => s.has_ass_ready && (s.danmaku_burn_completed || 0) < (s.ass_segment_count || 0));
+      filtered = filtered.filter(
+        (s) => s.has_ass_ready && (s.danmaku_burn_completed || 0) < (s.ass_segment_count || 0)
+      );
     }
 
     // 关键词搜索
     if (searchKeyword) {
       const kw = searchKeyword.toLowerCase();
-      filtered = filtered.filter(s =>
-        String(s.id).includes(kw) ||
-        (s.room_name || '').toLowerCase().includes(kw) ||
-        (s.room_url || '').toLowerCase().includes(kw)
+      filtered = filtered.filter(
+        (s) =>
+          String(s.id).includes(kw) ||
+          (s.room_name || '').toLowerCase().includes(kw) ||
+          (s.room_url || '').toLowerCase().includes(kw)
       );
     }
 
@@ -364,7 +428,10 @@
       // 弹幕状态 badge
       let dmBadge = '';
       if (s.danmaku_status === 'recording') {
-        dmBadge = '<span class="badge badge-recording"><span class="status-dot-mini status-dot-mini-recording me-1"></span>采集中 (' + eventCount + ')</span>';
+        dmBadge =
+          '<span class="badge badge-recording"><span class="status-dot-mini status-dot-mini-recording me-1"></span>采集中 (' +
+          eventCount +
+          ')</span>';
       } else if (s.danmaku_status === 'completed') {
         dmBadge = '<span class="badge badge-completed">已完成 · ' + eventCount + ' 条</span>';
       } else if (s.danmaku_status === 'failed') {
@@ -377,7 +444,8 @@
       let burnBadge = '';
       if (burnTotal > 0) {
         if (burnFailed > 0) {
-          burnBadge = '<span class="badge badge-failed">' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + ' 失败)</span>';
+          burnBadge =
+            '<span class="badge badge-failed">' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + ' 失败)</span>';
         } else if (burnCompleted === burnTotal) {
           burnBadge = '<span class="badge badge-completed">压制完成 ' + burnCompleted + '/' + burnTotal + '</span>';
         } else {
@@ -388,7 +456,8 @@
       // 会话状态 badge
       let sessionBadge = '';
       if (s.status === 'recording') {
-        sessionBadge = '<span class="badge status-recording"><span class="status-dot-mini status-dot-mini-recording me-1"></span>录制中</span>';
+        sessionBadge =
+          '<span class="badge status-recording"><span class="status-dot-mini status-dot-mini-recording me-1"></span>录制中</span>';
       } else if (s.status === 'completed') {
         sessionBadge = '<span class="badge status-completed">已完成</span>';
       } else if (s.status === 'interrupted') {
@@ -398,17 +467,30 @@
       // 压制进度条
       let progressBar = '';
       if (burnTotal > 0 && burnCompleted < burnTotal && burnFailed === 0) {
-        const pct = Math.round(burnCompleted / burnTotal * 100);
-        progressBar = '<div class="dm-burn-progress"><div class="dm-burn-progress-bar progress-bar-striped progress-bar-animated" style="width:' + pct + '%"></div></div>';
+        const pct = Math.round((burnCompleted / burnTotal) * 100);
+        progressBar =
+          '<div class="dm-burn-progress"><div class="dm-burn-progress-bar progress-bar-striped progress-bar-animated" style="width:' +
+          pct +
+          '%"></div></div>';
       }
 
       html += '<div class="dm-session-card ' + isSelected + '" data-session-id="' + s.id + '">';
 
       // ---- 卡片头部 ----
       html += '<div class="dm-card-header">';
-      html += '<div class="form-check"><input class="form-check-input session-check" type="checkbox" data-sid="' + s.id + '" ' + checked + '></div>';
+      html +=
+        '<div class="form-check"><input class="form-check-input session-check" type="checkbox" data-sid="' +
+        s.id +
+        '" ' +
+        checked +
+        '></div>';
       html += '<span class="dm-session-id">#' + s.id + '</span>';
-      html += '<span class="dm-room-name" title="' + (s.room_url || '') + '">' + (s.room_name || s.room_url || '未命名') + '</span>';
+      html +=
+        '<span class="dm-room-name" title="' +
+        (s.room_url || '') +
+        '">' +
+        (s.room_name || s.room_url || '未命名') +
+        '</span>';
       html += '<div class="dm-badges">' + dmBadge + ' ' + burnBadge + ' ' + sessionBadge + '</div>';
       html += '</div>';
 
@@ -417,12 +499,23 @@
 
       // 元信息行
       html += '<div class="dm-meta-row">';
-      html += '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4.414A2 2 0 0 0 3 11.586l-2 2V2a1 1 0 0 1 1-1h12zm-12-1a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/></svg> 弹幕 <strong>' + eventCount + '</strong> 条</span>';
+      html +=
+        '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4.414A2 2 0 0 0 3 11.586l-2 2V2a1 1 0 0 1 1-1h12zm-12-1a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/></svg> 弹幕 <strong>' +
+        eventCount +
+        '</strong> 条</span>';
       if (s.ass_segment_count) {
-        html += '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/></svg> ASS <strong>' + s.ass_segment_count + '</strong> 段</span>';
+        html +=
+          '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/></svg> ASS <strong>' +
+          s.ass_segment_count +
+          '</strong> 段</span>';
       }
       if (burnTotal > 0) {
-        html += '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg> 压制 <strong>' + burnCompleted + '</strong>/' + burnTotal + '</span>';
+        html +=
+          '<span class="dm-meta-item"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg> 压制 <strong>' +
+          burnCompleted +
+          '</strong>/' +
+          burnTotal +
+          '</span>';
       }
       html += '</div>';
 
@@ -432,14 +525,24 @@
       // 操作按钮
       html += '<div class="dm-actions mt-2">';
       html += '<button class="btn btn-sm btn-outline-secondary expandSegmentsBtn" data-sid="' + s.id + '">';
-      html += '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M1.5 1.5A.5.5 0 0 1 2 1h5a.5.5 0 0 1 0 1H3.707L6.854 5.146a.5.5 0 1 1-.708.708L3 2.707V5.5a.5.5 0 0 1-1 0v-4zM14.5 14.5a.5.5 0 0 1-.5.5H9a.5.5 0 0 1 0-1h3.293l-3.147-3.146a.5.5 0 0 1 .708-.708L13 13.293V10.5a.5.5 0 0 1 1 0v4z"/></svg>展开分段</button>';
+      html +=
+        '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M1.5 1.5A.5.5 0 0 1 2 1h5a.5.5 0 0 1 0 1H3.707L6.854 5.146a.5.5 0 1 1-.708.708L3 2.707V5.5a.5.5 0 0 1-1 0v-4zM14.5 14.5a.5.5 0 0 1-.5.5H9a.5.5 0 0 1 0-1h3.293l-3.147-3.146a.5.5 0 0 1 .708-.708L13 13.293V10.5a.5.5 0 0 1 1 0v4z"/></svg>展开分段</button>';
       if (isDone) {
         html += '<button class="btn btn-sm btn-outline-info genAssBtn" data-sid="' + s.id + '">生成 ASS</button>';
         html += '<button class="btn btn-sm btn-warning burnSessionBtn" data-sid="' + s.id + '">';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>全部压制</button>';
+        html +=
+          '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>全部压制</button>';
+        html +=
+          '<button class="btn btn-sm btn-outline-danger reBurnBtn ms-2" data-sid="' + s.id + '">强制重压</button>';
       }
-      html += '<button class="btn btn-sm btn-outline-secondary searchDanmakuBtn" data-sid="' + s.id + '" data-room="' + (s.room_name || '') + '">';
-      html += '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>搜索弹幕</button>';
+      html +=
+        '<button class="btn btn-sm btn-outline-secondary searchDanmakuBtn" data-sid="' +
+        s.id +
+        '" data-room="' +
+        (s.room_name || '') +
+        '">';
+      html +=
+        '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>搜索弹幕</button>';
       html += '<a class="btn btn-sm btn-outline-primary" href="/sessions/' + s.id + '/danmaku">详情页</a>';
       html += '</div>';
 
@@ -467,7 +570,8 @@
     }
 
     container.classList.remove('d-none');
-    container.innerHTML = '<div class="dm-segments-panel text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> <span class="text-muted ms-2 small">加载分段...</span></div>';
+    container.innerHTML =
+      '<div class="dm-segments-panel text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> <span class="text-muted ms-2 small">加载分段...</span></div>';
 
     try {
       const [filesRes, burnRes] = await Promise.all([
@@ -499,7 +603,7 @@
       html += '<th style="width:90px;">ASS</th>';
       html += '<th style="width:100px;">压制状态</th>';
       html += '<th>产物文件</th>';
-      html += '<th style="width:160px; text-align:right;">操作</th>';
+      html += '<th style="width:240px; text-align:right;">操作</th>';
       html += '</tr></thead><tbody>';
 
       for (const f of files) {
@@ -520,10 +624,14 @@
             queued: '<span class="badge bg-secondary" style="font-size:0.7rem;">排队中</span>',
             processing: '<span class="badge badge-processing" style="font-size:0.7rem;">压制中</span>',
             completed: '<span class="badge badge-completed" style="font-size:0.7rem;">已完成</span>',
-            failed: '<span class="badge badge-failed" style="font-size:0.7rem;" title="' + (br.error || '').replace(/"/g, '&quot;') + '">失败</span>',
+            failed:
+              '<span class="badge badge-failed" style="font-size:0.7rem;" title="' +
+              (br.error || '').replace(/"/g, '&quot;') +
+              '">失败</span>',
             skipped: '<span class="badge badge-uploading" style="font-size:0.7rem;">已跳过</span>',
           };
-          burnBadge = bMap[br.status] || '<span class="badge bg-secondary" style="font-size:0.7rem;">' + br.status + '</span>';
+          burnBadge =
+            bMap[br.status] || '<span class="badge bg-secondary" style="font-size:0.7rem;">' + br.status + '</span>';
         }
 
         // 产物
@@ -536,23 +644,41 @@
         // 操作
         let actions = '<div class="action-group" style="justify-content:flex-end;">';
         if (br && br.status === 'completed') {
-          actions += '<button class="btn btn-sm btn-outline-success playBurnBtn" data-burn-id="' + br.id + '" data-name="' + (br.output_path || '').split('/').pop() + '">▶</button>';
+          actions +=
+            '<button class="btn btn-sm btn-outline-success playBurnBtn" data-burn-id="' +
+            br.id +
+            '" data-name="' +
+            (br.output_path || '').split('/').pop() +
+            '">▶</button>';
           if (br.log_path) {
-            actions += '<a href="/logs?file=' + encodeURIComponent(br.log_path.split('/').pop()) + '" class="btn btn-sm btn-outline-secondary" target="_blank">日志</a>';
+            actions +=
+              '<a href="/logs?file=' +
+              encodeURIComponent(br.log_path.split('/').pop()) +
+              '" class="btn btn-sm btn-outline-secondary" target="_blank">日志</a>';
           }
-          actions += '<button class="btn btn-sm btn-outline-warning reBurnBtn" data-sid="' + sessionId + '">重压</button>';
-          actions += '<button class="btn btn-sm btn-outline-danger deleteBurnBtn" data-burn-id="' + br.id + '" data-sid="' + sessionId + '">删除</button>';
-        } else if (f.danmaku_ass_path) {
-          actions += '<button class="btn btn-sm btn-warning burnFileBtn" data-sid="' + sessionId + '">压制</button>';
+          actions +=
+            '<button class="btn btn-sm btn-outline-danger deleteBurnBtn" data-burn-id="' +
+            br.id +
+            '" data-sid="' +
+            sessionId +
+            '">删除</button>';
         }
         if (br && br.status === 'failed' && br.log_path) {
-          actions += '<a href="/logs?file=' + encodeURIComponent(br.log_path.split('/').pop()) + '" class="btn btn-sm btn-outline-secondary" target="_blank">日志</a>';
+          actions +=
+            '<a href="/logs?file=' +
+            encodeURIComponent(br.log_path.split('/').pop()) +
+            '" class="btn btn-sm btn-outline-secondary" target="_blank">日志</a>';
         }
         actions += '</div>';
 
         html += '<tr>';
         html += '<td class="text-center text-muted">' + f.segment_index + '</td>';
-        html += '<td><code class="stream-code" title="' + fileName + '" style="max-width:200px;">' + fileName + '</code></td>';
+        html +=
+          '<td><code class="stream-code" title="' +
+          fileName +
+          '" style="max-width:200px;">' +
+          fileName +
+          '</code></td>';
         html += '<td class="text-muted">' + fileSize + '</td>';
         html += '<td>' + assBadge + '</td>';
         html += '<td>' + burnBadge + '</td>';
@@ -565,7 +691,8 @@
       container.innerHTML = html;
       container.dataset.loaded = 'true';
     } catch (err) {
-      container.innerHTML = '<div class="dm-segments-panel"><span class="text-danger small">加载失败: ' + err.message + '</span></div>';
+      container.innerHTML =
+        '<div class="dm-segments-panel"><span class="text-danger small">加载失败: ' + err.message + '</span></div>';
     }
   }
 
@@ -576,7 +703,7 @@
     document.getElementById('batchBurnBtn').disabled = count === 0;
     document.getElementById('batchAssBtn').disabled = count === 0;
     // 更新卡片选中状态
-    document.querySelectorAll('.dm-session-card').forEach(card => {
+    document.querySelectorAll('.dm-session-card').forEach((card) => {
       const sid = parseInt(card.dataset.sessionId, 10);
       if (selectedSessions.has(sid)) {
         card.classList.add('is-selected');
@@ -636,7 +763,10 @@
         const json = await res.json();
         if (res.ok && json.status === 'ok') {
           toast(json.message);
-          setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+          setTimeout(() => {
+            loadSessions();
+            loadQueueStatus();
+          }, 1000);
         } else {
           toast('入队失败: ' + (json.message || ''));
         }
@@ -644,7 +774,8 @@
         toast('请求失败: ' + err.message);
       } finally {
         burnSessionBtn.disabled = false;
-        burnSessionBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>全部压制';
+        burnSessionBtn.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>全部压制';
       }
       return;
     }
@@ -653,9 +784,11 @@
     const searchBtn = e.target.closest('.searchDanmakuBtn');
     if (searchBtn) {
       currentSearchSessionId = searchBtn.dataset.sid;
-      document.getElementById('searchModalSession').textContent = '#' + currentSearchSessionId + ' ' + (searchBtn.dataset.room || '');
+      document.getElementById('searchModalSession').textContent =
+        '#' + currentSearchSessionId + ' ' + (searchBtn.dataset.room || '');
       document.getElementById('modalSearchInput').value = '';
-      document.getElementById('modalSearchResult').innerHTML = '<p class="text-muted text-center py-3">输入关键词搜索弹幕</p>';
+      document.getElementById('modalSearchResult').innerHTML =
+        '<p class="text-muted text-center py-3">输入关键词搜索弹幕</p>';
       searchOffset = 0;
       searchModalInstance.show();
       setTimeout(() => document.getElementById('modalSearchInput').focus(), 300);
@@ -682,12 +815,17 @@
       const confirmed = await showConfirm('确认删除此压制记录及产物文件？');
       if (!confirmed) return;
       try {
-        const res = await fetch('/api/danmaku_burn_records/' + delBtn.dataset.burnId + '?delete_file=true', { method: 'DELETE' });
+        const res = await fetch('/api/danmaku_burn_records/' + delBtn.dataset.burnId + '?delete_file=true', {
+          method: 'DELETE',
+        });
         const json = await res.json();
         if (res.ok) {
           toast('已删除');
           const segContainer = document.getElementById('segments_' + delBtn.dataset.sid);
-          if (segContainer) { segContainer.dataset.loaded = 'false'; segContainer.classList.add('d-none'); }
+          if (segContainer) {
+            segContainer.dataset.loaded = 'false';
+            segContainer.classList.add('d-none');
+          }
           expandSegments(delBtn.dataset.sid);
           loadSessions();
         } else {
@@ -714,7 +852,10 @@
         const json = await res.json();
         if (res.ok && json.status === 'ok') {
           toast(json.message);
-          setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+          setTimeout(() => {
+            loadSessions();
+            loadQueueStatus();
+          }, 1000);
         } else {
           toast('入队失败: ' + (json.message || ''));
         }
@@ -739,9 +880,9 @@
   });
 
   // ====== 筛选标签 ======
-  document.querySelectorAll('[data-dm-filter]').forEach(tag => {
+  document.querySelectorAll('[data-dm-filter]').forEach((tag) => {
     tag.addEventListener('click', () => {
-      document.querySelectorAll('[data-dm-filter]').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('[data-dm-filter]').forEach((t) => t.classList.remove('active'));
       tag.classList.add('active');
       currentFilter = tag.dataset.dmFilter;
       renderSessions();
@@ -782,9 +923,13 @@
     }
     toast('批量入队完成: ' + totalEnqueued + ' 个分段');
     btn.disabled = false;
-    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>批量压制';
+    btn.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>批量压制';
     selectedSessions.clear();
-    setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+    setTimeout(() => {
+      loadSessions();
+      loadQueueStatus();
+    }, 1000);
   });
 
   // ====== 批量 ASS ======
@@ -813,7 +958,7 @@
   document.getElementById('refreshAllBtn')?.addEventListener('click', () => {
     loadSessions();
     loadQueueStatus();
-    document.querySelectorAll('.segments-collapse').forEach(el => {
+    document.querySelectorAll('.segments-collapse').forEach((el) => {
       el.dataset.loaded = 'false';
       el.classList.add('d-none');
     });
@@ -826,10 +971,18 @@
     const resultDiv = document.getElementById('modalSearchResult');
     if (!currentSearchSessionId) return;
 
-    resultDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> <span class="text-muted ms-2">搜索中...</span></div>';
+    resultDiv.innerHTML =
+      '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> <span class="text-muted ms-2">搜索中...</span></div>';
 
     try {
-      const res = await fetch('/api/danmaku/search?session_id=' + currentSearchSessionId + '&keyword=' + encodeURIComponent(keyword) + '&limit=50&offset=' + searchOffset);
+      const res = await fetch(
+        '/api/danmaku/search?session_id=' +
+          currentSearchSessionId +
+          '&keyword=' +
+          encodeURIComponent(keyword) +
+          '&limit=50&offset=' +
+          searchOffset
+      );
       const json = await res.json();
 
       if (!res.ok || json.status !== 'ok') {
@@ -842,8 +995,16 @@
         return;
       }
 
-      let html = '<div class="mb-2"><small class="text-muted">共 ' + json.total + ' 条匹配 (显示 ' + (searchOffset + 1) + '-' + Math.min(searchOffset + json.data.length, json.total) + ')</small></div>';
-      html += '<div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th style="width:90px;">时间</th><th style="width:130px;">用户</th><th>内容</th></tr></thead><tbody>';
+      let html =
+        '<div class="mb-2"><small class="text-muted">共 ' +
+        json.total +
+        ' 条匹配 (显示 ' +
+        (searchOffset + 1) +
+        '-' +
+        Math.min(searchOffset + json.data.length, json.total) +
+        ')</small></div>';
+      html +=
+        '<div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th style="width:90px;">时间</th><th style="width:130px;">用户</th><th>内容</th></tr></thead><tbody>';
 
       for (const d of json.data) {
         html += '<tr><td><small class="text-muted">' + (d.ts_str || '-') + '</small></td>';
@@ -854,8 +1015,16 @@
 
       if (json.total > json.limit) {
         html += '<div class="d-flex gap-2 mt-2">';
-        if (searchOffset > 0) html += '<button class="btn btn-sm btn-outline-secondary" onclick="searchOffset=Math.max(0,searchOffset-' + json.limit + ');modalSearch()">← 上一页</button>';
-        if (searchOffset + json.limit < json.total) html += '<button class="btn btn-sm btn-outline-secondary" onclick="searchOffset+=' + json.limit + ';modalSearch()">下一页 →</button>';
+        if (searchOffset > 0)
+          html +=
+            '<button class="btn btn-sm btn-outline-secondary" onclick="searchOffset=Math.max(0,searchOffset-' +
+            json.limit +
+            ');modalSearch()">← 上一页</button>';
+        if (searchOffset + json.limit < json.total)
+          html +=
+            '<button class="btn btn-sm btn-outline-secondary" onclick="searchOffset+=' +
+            json.limit +
+            ';modalSearch()">下一页 →</button>';
         html += '</div>';
       }
 
@@ -871,8 +1040,14 @@
     return text.replace(new RegExp('(' + escaped + ')', 'gi'), '<mark>$1</mark>');
   }
 
-  document.getElementById('modalSearchBtn')?.addEventListener('click', () => { searchOffset = 0; modalSearch(); });
+  document.getElementById('modalSearchBtn')?.addEventListener('click', () => {
+    searchOffset = 0;
+    modalSearch();
+  });
   document.getElementById('modalSearchInput')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { searchOffset = 0; modalSearch(); }
+    if (e.key === 'Enter') {
+      searchOffset = 0;
+      modalSearch();
+    }
   });
 </script>

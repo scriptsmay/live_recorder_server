@@ -90,7 +90,7 @@
 </div>
 
 <!-- 转码队列进度条 -->
-<div class="card mb-3">
+<!-- <div class="card mb-3">
   <div class="card-header">转码队列状态</div>
   <div class="card-body">
     <div class="mb-2 d-flex justify-content-between">
@@ -108,7 +108,7 @@
       <div class="progress-bar bg-warning" id="queueBar" role="progressbar" style="width: 0%">0</div>
     </div>
   </div>
-</div>
+</div> -->
 
 <div class="text-end">
   <a href="/logs" class="text-muted small"><span>&#128203;</span> 查看完整日志</a>
@@ -181,20 +181,20 @@
           .join('');
       }
 
-      // 转码进度条
-      const tc = d.transcode;
-      const slotPct = tc.concurrency > 0 ? Math.min(100, Math.round((tc.processing / tc.concurrency) * 100)) : 0;
-      document.getElementById('slotText').textContent = tc.processing + '/' + tc.concurrency;
-      const slotBar = document.getElementById('slotBar');
-      slotBar.style.width = slotPct + '%';
-      slotBar.textContent = slotPct + '%';
-      slotBar.className = 'progress-bar ' + (slotPct >= 100 ? 'bg-danger' : slotPct > 50 ? 'bg-warning' : 'bg-success');
+      // // 转码进度条
+      // const tc = d.transcode;
+      // const slotPct = tc.concurrency > 0 ? Math.min(100, Math.round((tc.processing / tc.concurrency) * 100)) : 0;
+      // document.getElementById('slotText').textContent = tc.processing + '/' + tc.concurrency;
+      // const slotBar = document.getElementById('slotBar');
+      // slotBar.style.width = slotPct + '%';
+      // slotBar.textContent = slotPct + '%';
+      // slotBar.className = 'progress-bar ' + (slotPct >= 100 ? 'bg-danger' : slotPct > 50 ? 'bg-warning' : 'bg-success');
 
-      const queuePct = Math.min(100, tc.queue_length * 10);
-      document.getElementById('queueText').textContent = tc.queue_length + ' 个任务';
-      const queueBar = document.getElementById('queueBar');
-      queueBar.style.width = queuePct + '%';
-      queueBar.textContent = tc.queue_length;
+      // const queuePct = Math.min(100, tc.queue_length * 10);
+      // document.getElementById('queueText').textContent = tc.queue_length + ' 个任务';
+      // const queueBar = document.getElementById('queueBar');
+      // queueBar.style.width = queuePct + '%';
+      // queueBar.textContent = tc.queue_length;
     } catch (err) {
       console.error('仪表盘加载失败:', err);
     }

@@ -383,7 +383,9 @@ async function runMigration() {
       ['danmaku_density_per_second', '20'],
       ['danmaku_font_family', 'Noto Sans CJK SC'],
       ['danmaku_font_size', '32'],
-      ['danmaku_opacity', '0.75'],
+      ['danmaku_opacity', '1.0'],
+      ['danmaku_outline_colour', '000000'],
+      ['danmaku_outline_width', '2'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(
