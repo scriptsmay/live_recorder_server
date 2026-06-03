@@ -332,7 +332,10 @@ async function runMigration() {
       ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0
     `);
     // danmaku_ass_path 已迁移到弹幕文件系统的确定性路径，不再写入 recording_files
-    // 保留列以兼容历史数据，DROP 推迟到发布后 1 个月（见下方 deferred migration）
+    // 保留列以兼容历史数据及 watchdog/RecorderService 中的引用，DROP 推迟到发布后 1 个月（见下方 deferred migration）
+    await client.query(`
+      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT ''
+    `);
 
     await client.query(`
       ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''

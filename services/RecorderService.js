@@ -780,10 +780,13 @@ class RecorderService {
 
       for (const row of staleRooms.rows) {
         // 优先尝试续播
-        const { reuseSession } = await this.checkReuseSession(row);
+        const { reuseSession, resumeCount } = await this.checkReuseSession(row);
         if (reuseSession) {
-          // 将状态标记为 'interrupted'
-          await pool.query(`UPDATE recording_sessions SET status = 'interrupted', updated_at = NOW() WHERE id = `, $0);
+          // 将旧会话状态标记为 'interrupted'
+          await pool.query(
+            `UPDATE recording_sessions SET status = 'interrupted', ended_at = NOW() WHERE id = $1`,
+            [resumeCount]
+          );
         }
 
         if (row.ffmpeg_pid) {
