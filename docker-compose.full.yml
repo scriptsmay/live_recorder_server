@@ -8,6 +8,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://default:password@redis:6379/1}
       APP_DATA_DIR: ${APP_DATA_DIR:-/data}
       VIDEO_DOWNLOAD_DIR: ${VIDEO_DOWNLOAD_DIR:-/data/video_downloads}
+      DANMAKU_OUTPUT_DIR: ${DANMAKU_OUTPUT_DIR:-/data/danmaku_output}
       BILIUP_WORK_DIR: ${BILIUP_WORK_DIR:-/data/biliup}
       BILIUP_PATH: ${BILIUP_PATH:-}
       MESSAGE_FEISHU_WEBHOOK: ${MESSAGE_FEISHU_WEBHOOK:-}
@@ -21,6 +22,7 @@ services:
       - '${PORT:-1123}:1123'
     volumes:
       - ./data/video_downloads:/data/video_downloads
+      - ./data/danmaku_output:/data/danmaku_output
       - ./data/biliup:/data/biliup
       - ./logs:/app/logs
     depends_on:

@@ -17,6 +17,7 @@ services:
       - '11123:1123'
     volumes:
       - ./data/video_downloads:/data/video_downloads
+      - ./data/danmaku_output:/data/danmaku_output
       - ./data/biliup:/data/biliup
       - ./logs:/app/logs
     restart: unless-stopped
