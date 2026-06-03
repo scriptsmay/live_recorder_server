@@ -65,7 +65,7 @@ Chrome Extension (danmaku)
 - `lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
 - `lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
 - `db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
-- `views/` — EJS templates (deprecated, htmlRouter disabled), `public/` — static assets, `frontend/` — Vue SPA source
+- `public/` — static assets, `frontend/` — Vue SPA source
 
 **Singletons:** `pollingManager`, `recordingManager`, `transcodeQueue`, `danmakuBurnQueue` (imported from their modules)
 
@@ -79,7 +79,6 @@ Chrome Extension (danmaku)
 - `frontend/src/stores/` — Pinia stores (app, danmaku-toolbox)
 - Dev: `cd frontend && npm run dev` (port 5173, proxies `/api` and `/hls` to backend on 3001)
 - Build: `cd frontend && npm run build` → outputs to `public/frontend/`, served by `router/spa.js` as SPA fallback
-- EJS `htmlRouter` is fully disabled; `views/` directory is deprecated and will be cleaned up
 
 **State storage:** Redis for transient state (live status, polling timers, active tasks with TTL). PostgreSQL for persistent data (rooms, sessions, recordings, settings).
 

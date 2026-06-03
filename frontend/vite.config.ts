@@ -22,16 +22,6 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '/logs': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        bypass: (req) => {
-          // 仅 /logs 路径的 HTML 导航由 Vite SPA 处理，API 请求仍代理到后端
-          if (req.url?.startsWith('/logs') && !req.url.startsWith('/logs/api')) {
-            return false
-          }
-        },
-      },
     },
   },
   build: {

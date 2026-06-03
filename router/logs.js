@@ -9,37 +9,7 @@ function sendLogError(res, err) {
   res.status(err.status || 500).json({ error: err.message || '日志读取失败' });
 }
 
-router.get('/logs', async (req, res) => {
-  try {
-    const files = await logFiles.listFiles();
-    const selectedFileName = files.includes(req.query.file) ? req.query.file : files[0] || '';
-    let selectedFileContent = '';
-    let truncated = false;
-
-    if (selectedFileName) {
-      const result = await logFiles.tailLines(selectedFileName, 2000);
-      selectedFileContent = result.lines.join('\n');
-      truncated = result.truncated;
-    }
-
-    res.render('logs', {
-      title: '日志查看',
-      logFiles: files,
-      selectedFileName,
-      selectedFileContent,
-      truncated,
-    });
-  } catch (err) {
-    console.error('[logs] 页面加载失败:', err);
-    res.status(500).render('logs', {
-      title: '日志查看',
-      logFiles: [],
-      selectedFileName: '',
-      selectedFileContent: '',
-      truncated: false,
-    });
-  }
-});
+// GET /logs 页面已由 Vue SPA (Logs.vue) 接管，不再使用 EJS 渲染
 
 router.get('/api/logs/files', async (req, res) => {
   try {

@@ -1,7 +1,6 @@
 const express = require('express');
 
 const hlsRouter = require('./hls');
-// const htmlRouter = require('./html');
 const logsRouter = require('./logs');
 const spaRouter = require('./spa');
 const { router: apiRouter } = require('./api');
@@ -22,10 +21,8 @@ function createRoutes() {
   router.use('/api', settingsRouter);
   router.use('/api', transcodeRouter);
   router.use('/api', danmakuRouter);
-  // Vue SPA 路由（放在 EJS htmlRouter 之前，优先匹配已迁移的页面）
+  // Vue SPA 路由（静态资源 + history 模式回退）
   router.use(spaRouter);
-  // EJS 页面路由（随着迁移逐步减少）
-  // router.use('/', htmlRouter);
 
   return router;
 }

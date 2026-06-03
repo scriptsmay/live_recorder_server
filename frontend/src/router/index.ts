@@ -60,6 +60,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/UploadRecords.vue'),
     meta: { title: '投稿记录' },
   },
+  // EJS 旧路径兼容重定向
+  {
+    path: '/upload_records',
+    redirect: '/upload-records',
+  },
   {
     path: '/settings',
     name: 'Settings',

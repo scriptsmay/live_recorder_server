@@ -63,7 +63,6 @@
 │   ├── index.js
 │   ├── migrate.js
 │   └── redis.js
-├── views/              # EJS 模板（已停用，htmlRouter 已注释）
 ├── frontend/           # Vue 3 SPA 前端（Vite + Tailwind + TypeScript）
 ├── public/             # 静态资源 + Vue 构建产物（public/frontend/）
 ├── scripts/            # 工具脚本
@@ -171,7 +170,7 @@ npm run lint && npm run format && npm run test
 - `/templates` —— 投稿模板管理
 - `/upload-records` —— 投稿记录（注：EJS 旧路径为 `/upload_records`）
 - `/settings` —— 全局设置
-- `/logs` —— 日志查看（注：存在 EJS 路由冲突，详见 `docs/todo/TODO.md`）
+- `/logs` —— 日志查看
 
 ## 关键环境变量
 

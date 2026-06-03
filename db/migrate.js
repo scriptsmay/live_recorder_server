@@ -350,7 +350,7 @@ async function runMigration() {
     `);
 
     // ========== 弹幕 settings 清理 ==========
-    // 清除 settings 表中已废弃的弹幕配置项（这些 key 已从 settings.ejs 和默认值中移除）
+    // 清除 settings 表中已废弃的弹幕配置项（这些 key 已从前端设置页和默认值中移除）
     // 注意：danmaku_font_size / danmaku_opacity 等仍在使用的设置项不清理
     await client.query(`
       DELETE FROM settings WHERE key IN ('auto_burn_danmaku', 'prefer_danmaku_burned_video', 'danmaku_preserve_clean_video')
