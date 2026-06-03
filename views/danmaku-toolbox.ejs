@@ -1,0 +1,677 @@
+<!-- 弹幕工具箱 -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">弹幕工具箱</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;">弹幕压制管理：会话筛选、批量压制、状态监控、产物管理</p>
+  </div>
+  <div>
+    <button class="btn btn-sm btn-outline-secondary" id="refreshAllBtn" title="刷新所有状态">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+      <span class="ms-1">刷新</span>
+    </button>
+  </div>
+</div>
+
+<!-- 队列状态总览 -->
+<div class="row g-3 mb-4" id="statusCards">
+  <div class="col-md-3 col-6">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted small mb-1">采集中</div>
+        <div class="fs-4 fw-bold" id="statActiveCaptures">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted small mb-1">排队中</div>
+        <div class="fs-4 fw-bold" id="statQueueLength">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted small mb-1">压制中</div>
+        <div class="fs-4 fw-bold" id="statProcessing">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted small mb-1">会话总数</div>
+        <div class="fs-4 fw-bold" id="statSessionCount">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 筛选条 -->
+<div class="filter-bar mb-4">
+  <div class="filter-group">
+    <span class="filter-label">弹幕状态：</span>
+    <button class="filter-tag active" data-dm-filter="all">全部</button>
+    <button class="filter-tag" data-dm-filter="has_data">有数据</button>
+    <button class="filter-tag" data-dm-filter="ass_ready">ASS 就绪</button>
+    <button class="filter-tag" data-dm-filter="burned">已压制</button>
+    <button class="filter-tag" data-dm-filter="unburned">未压制</button>
+  </div>
+  <div class="filter-group ms-md-3 mt-2 mt-md-0">
+    <div class="input-group input-group-sm" style="width: 240px;">
+      <input type="text" class="form-control" id="searchInput" placeholder="搜索房间名或 Session ID..." />
+      <button class="btn btn-outline-secondary" id="searchBtn">搜索</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批量操作栏 -->
+<div class="d-flex align-items-center mb-3 gap-2">
+  <button class="btn btn-sm btn-outline-warning" id="batchBurnBtn" disabled>
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>
+    批量压制选中会话
+  </button>
+  <button class="btn btn-sm btn-outline-info" id="batchAssBtn" disabled>批量生成 ASS</button>
+  <span class="text-muted small ms-2" id="selectedCount">已选 0 个会话</span>
+</div>
+
+<!-- 会话列表 -->
+<div id="sessionList">
+  <div class="text-center py-5">
+    <div class="spinner-border spinner-border-sm"></div>
+    <span class="text-muted ms-2">加载中...</span>
+  </div>
+</div>
+
+<!-- 弹幕搜索 Modal -->
+<div class="modal fade" id="searchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">弹幕搜索 <span class="text-muted" id="searchModalSession"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group mb-3">
+          <input type="text" class="form-control" id="modalSearchInput" placeholder="搜索弹幕内容或用户名..." />
+          <button class="btn btn-outline-secondary" id="modalSearchBtn">搜索</button>
+        </div>
+        <div id="modalSearchResult">
+          <p class="text-muted text-center">输入关键词搜索弹幕</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/_video_player') %>
+
+<script>
+  // ====== 全局状态 ======
+  let allSessions = [];
+  let currentFilter = 'all';
+  let searchKeyword = '';
+  let selectedSessions = new Set();
+  let searchModalInstance = null;
+  let currentSearchSessionId = null;
+  let searchOffset = 0;
+  let pollTimer = null;
+
+  // ====== 初始化 ======
+  document.addEventListener('DOMContentLoaded', () => {
+    searchModalInstance = new bootstrap.Modal(document.getElementById('searchModal'));
+    loadSessions();
+    loadQueueStatus();
+    // 每 15 秒自动刷新队列状态
+    pollTimer = setInterval(() => { loadQueueStatus(); }, 15000);
+  });
+
+  // ====== 数据加载 ======
+  async function loadSessions() {
+    try {
+      const res = await fetch('/api/danmaku-toolbox/sessions');
+      const json = await res.json();
+      if (json.status === 'ok') {
+        allSessions = json.data || [];
+        document.getElementById('statSessionCount').textContent = allSessions.length;
+        renderSessions();
+      } else {
+        toast('加载失败: ' + (json.message || ''));
+      }
+    } catch (err) {
+      toast('加载会话列表失败: ' + err.message);
+    }
+  }
+
+  async function loadQueueStatus() {
+    try {
+      const res = await fetch('/api/danmaku/status');
+      const json = await res.json();
+      if (json.status === 'ok') {
+        const d = json.data;
+        document.getElementById('statActiveCaptures').textContent = d.active_captures?.count || 0;
+        document.getElementById('statQueueLength').textContent = d.burn_queue?.queue_length || 0;
+        document.getElementById('statProcessing').textContent = d.burn_queue?.processing || 0;
+      }
+    } catch (_) {}
+  }
+
+  // ====== 渲染 ======
+  function renderSessions() {
+    const container = document.getElementById('sessionList');
+    let filtered = allSessions;
+
+    // 弹幕状态筛选
+    if (currentFilter === 'has_data') {
+      filtered = filtered.filter(s => s.danmaku_event_count > 0);
+    } else if (currentFilter === 'ass_ready') {
+      filtered = filtered.filter(s => s.has_ass_ready);
+    } else if (currentFilter === 'burned') {
+      filtered = filtered.filter(s => s.danmaku_burn_completed > 0);
+    } else if (currentFilter === 'unburned') {
+      filtered = filtered.filter(s => s.has_ass_ready && (s.danmaku_burn_completed || 0) < (s.ass_segment_count || 0));
+    }
+
+    // 关键词搜索
+    if (searchKeyword) {
+      const kw = searchKeyword.toLowerCase();
+      filtered = filtered.filter(s =>
+        String(s.id).includes(kw) ||
+        (s.room_name || '').toLowerCase().includes(kw) ||
+        (s.room_url || '').toLowerCase().includes(kw)
+      );
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="empty-state"><p class="text-muted mb-0">无匹配的弹幕会话</p></div>';
+      return;
+    }
+
+    let html = '';
+    for (const s of filtered) {
+      const checked = selectedSessions.has(s.id) ? 'checked' : '';
+      const burnTotal = s.danmaku_burn_total || 0;
+      const burnCompleted = s.danmaku_burn_completed || 0;
+      const burnFailed = s.danmaku_burn_failed || 0;
+      const eventCount = s.danmaku_event_count || 0;
+
+      // 弹幕状态
+      let dmBadge = '';
+      if (s.danmaku_status === 'recording') {
+        dmBadge = '<span class="badge badge-recording">录制中 (' + eventCount + ')</span>';
+      } else if (s.danmaku_status === 'completed') {
+        dmBadge = '<span class="badge badge-completed">已完成 (' + eventCount + ')</span>';
+      } else if (s.danmaku_status === 'failed') {
+        dmBadge = '<span class="badge badge-failed">失败</span>';
+      } else {
+        dmBadge = '<span class="badge bg-secondary">—</span>';
+      }
+
+      // 压制状态
+      let burnBadge = '';
+      if (burnTotal > 0) {
+        if (burnFailed > 0) {
+          burnBadge = '<span class="badge badge-failed">' + burnCompleted + '/' + burnTotal + ' (' + burnFailed + '失败)</span>';
+        } else if (burnCompleted === burnTotal) {
+          burnBadge = '<span class="badge badge-completed">完成 ' + burnCompleted + '/' + burnTotal + '</span>';
+        } else {
+          burnBadge = '<span class="badge badge-processing">进行中 ' + burnCompleted + '/' + burnTotal + '</span>';
+        }
+      } else {
+        burnBadge = '<span class="badge bg-secondary">—</span>';
+      }
+
+      // 压制进度
+      let progressBar = '';
+      if (burnTotal > 0 && burnCompleted < burnTotal && burnFailed === 0) {
+        const pct = Math.round(burnCompleted / burnTotal * 100);
+        progressBar = '<div class="progress burn-progress mt-1" style="height:6px;border-radius:3px;"><div class="progress-bar bg-success progress-bar-striped progress-bar-animated" style="width:' + pct + '%"></div></div>';
+      }
+
+      const isDone = s.status === 'completed' || s.status === 'interrupted';
+
+      html += '<div class="session-card-new" data-session-id="' + s.id + '">';
+      html += '<div class="session-card-header">';
+      html += '<div class="session-header-left">';
+      html += '<div class="form-check me-2"><input class="form-check-input session-check" type="checkbox" data-sid="' + s.id + '" ' + checked + '></div>';
+      html += '<span class="session-id-badge">#' + s.id + '</span>';
+      html += '<strong class="session-room-name">' + (s.room_name || s.room_url || '') + '</strong>';
+      html += '</div>';
+      html += '<div class="session-header-right">';
+      html += dmBadge + ' ' + burnBadge;
+      html += '</div>';
+      html += '</div>';
+
+      // 主体
+      html += '<div class="session-card-body-new" style="flex-direction:column;">';
+      html += '<div class="d-flex flex-wrap gap-3 align-items-center mb-2">';
+      html += '<small class="text-muted">弹幕: ' + eventCount + ' 条</small>';
+      if (s.ass_segment_count) html += '<small class="text-muted">ASS 分段: ' + s.ass_segment_count + '</small>';
+      if (burnTotal > 0) html += '<small class="text-muted">压制: ' + burnCompleted + '/' + burnTotal + '</small>';
+      html += '<small class="text-muted">会话: ' + (s.status === 'completed' ? '已完成' : s.status === 'recording' ? '录制中' : s.status) + '</small>';
+      html += progressBar;
+      html += '</div>';
+
+      // 操作按钮
+      html += '<div class="d-flex gap-2 flex-wrap">';
+      html += '<button class="btn btn-sm btn-outline-primary expandSegmentsBtn" data-sid="' + s.id + '">展开分段</button>';
+      if (isDone) {
+        html += '<button class="btn btn-sm btn-outline-info genAssBtn" data-sid="' + s.id + '">生成 ASS</button>';
+        html += '<button class="btn btn-sm btn-outline-warning burnSessionBtn" data-sid="' + s.id + '">全部压制</button>';
+      }
+      html += '<button class="btn btn-sm btn-outline-secondary searchDanmakuBtn" data-sid="' + s.id + '" data-room="' + (s.room_name || '') + '">搜索弹幕</button>';
+      html += '<a class="btn btn-sm btn-outline-dark" href="/sessions/' + s.id + '/danmaku">详情页</a>';
+      html += '</div>';
+
+      // 分段详情（折叠区）
+      html += '<div class="segments-collapse d-none mt-3" id="segments_' + s.id + '">';
+      html += '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
+      html += '</div>';
+
+      html += '</div>'; // body
+      html += '</div>'; // card
+    }
+
+    container.innerHTML = html;
+    updateSelectedCount();
+  }
+
+  // ====== 展开分段 ======
+  async function expandSegments(sessionId) {
+    const container = document.getElementById('segments_' + sessionId);
+    if (!container) return;
+
+    // 已加载过
+    if (container.dataset.loaded === 'true') {
+      container.classList.toggle('d-none');
+      return;
+    }
+
+    try {
+      // 获取分段和压制记录
+      const [filesRes, burnRes] = await Promise.all([
+        fetch('/api/recording_files?session_id=' + sessionId),
+        fetch('/api/danmaku_burn_records?session_id=' + sessionId),
+      ]);
+      const filesJson = await filesRes.json();
+      const burnJson = await burnRes.json();
+
+      const files = filesJson.data || [];
+      const burnRecords = burnJson.data || [];
+      const burnMap = {};
+      for (const br of burnRecords) {
+        burnMap[br.recording_file_id] = br;
+      }
+
+      if (files.length === 0) {
+        container.innerHTML = '<small class="text-muted">无分段文件</small>';
+        container.dataset.loaded = 'true';
+        container.classList.remove('d-none');
+        return;
+      }
+
+      let html = '<div class="table-responsive"><table class="table table-sm table-hover mb-0">';
+      html += '<thead class="table-light"><tr><th>#</th><th>文件名</th><th>大小</th><th>ASS</th><th>压制状态</th><th>产物</th><th>操作</th></tr></thead><tbody>';
+
+      for (const f of files) {
+        const br = burnMap[f.id];
+        const fileName = (f.file_path || '').split('/').pop() || '-';
+        const fileSize = f.file_size ? (f.file_size / 1024 / 1024).toFixed(1) + ' MB' : '-';
+
+        // ASS 状态
+        let assBadge = '<span class="badge bg-secondary">—</span>';
+        if (f.danmaku_ass_path) {
+          assBadge = '<span class="badge bg-info">ASS 就绪</span>';
+        }
+
+        // 压制状态
+        let burnBadge = '<span class="badge bg-secondary">未压制</span>';
+        if (br) {
+          const bMap = { queued: '<span class="badge bg-secondary">排队中</span>', processing: '<span class="badge badge-processing">压制中</span>', completed: '<span class="badge badge-completed">已完成</span>', failed: '<span class="badge badge-failed" title="' + (br.error || '').replace(/"/g, '&quot;') + '">失败</span>', skipped: '<span class="badge bg-warning">跳过</span>' };
+          burnBadge = bMap[br.status] || '<span class="badge bg-secondary">' + br.status + '</span>';
+        }
+
+        // 产物
+        let outputCell = '-';
+        if (br && br.status === 'completed' && br.output_path) {
+          const outputName = br.output_path.split('/').pop();
+          outputCell = '<small><code>' + outputName + '</code></small>';
+        }
+
+        // 操作
+        let actions = '';
+        if (br && br.status === 'completed') {
+          actions += '<button class="btn btn-sm btn-outline-success me-1 playBurnBtn" data-burn-id="' + br.id + '" data-name="' + (br.output_path || '').split('/').pop() + '">▶ 播放</button>';
+          if (br.log_path) {
+            actions += '<a href="/logs?file=' + encodeURIComponent(br.log_path.split('/').pop()) + '" class="btn btn-sm btn-outline-secondary me-1" target="_blank">日志</a>';
+          }
+          actions += '<button class="btn btn-sm btn-outline-danger me-1 deleteBurnBtn" data-burn-id="' + br.id + '" data-sid="' + sessionId + '">删除</button>';
+          actions += '<button class="btn btn-sm btn-outline-warning reBurnBtn" data-sid="' + sessionId + '">重压制</button>';
+        } else if (f.danmaku_ass_path) {
+          actions += '<button class="btn btn-sm btn-outline-warning burnFileBtn" data-sid="' + sessionId + '">压制</button>';
+        }
+        if (br && br.status === 'failed' && br.log_path) {
+          actions += '<a href="/logs?file=' + encodeURIComponent(br.log_path.split('/').pop()) + '" class="btn btn-sm btn-outline-secondary me-1" target="_blank">查看日志</a>';
+        }
+
+        html += '<tr>';
+        html += '<td>' + f.segment_index + '</td>';
+        html += '<td><small>' + fileName + '</small></td>';
+        html += '<td>' + fileSize + '</td>';
+        html += '<td>' + assBadge + '</td>';
+        html += '<td>' + burnBadge + '</td>';
+        html += '<td>' + outputCell + '</td>';
+        html += '<td>' + actions + '</td>';
+        html += '</tr>';
+      }
+
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+      container.dataset.loaded = 'true';
+      container.classList.remove('d-none');
+    } catch (err) {
+      container.innerHTML = '<small class="text-danger">加载失败: ' + err.message + '</small>';
+    }
+  }
+
+  // ====== 批量操作 ======
+  function updateSelectedCount() {
+    const count = selectedSessions.size;
+    document.getElementById('selectedCount').textContent = '已选 ' + count + ' 个会话';
+    document.getElementById('batchBurnBtn').disabled = count === 0;
+    document.getElementById('batchAssBtn').disabled = count === 0;
+  }
+
+  // ====== 事件委托 ======
+  document.addEventListener('click', async (e) => {
+    // 展开分段
+    const expandBtn = e.target.closest('.expandSegmentsBtn');
+    if (expandBtn) {
+      expandSegments(expandBtn.dataset.sid);
+      return;
+    }
+
+    // 生成 ASS
+    const genAssBtn = e.target.closest('.genAssBtn');
+    if (genAssBtn) {
+      const sid = genAssBtn.dataset.sid;
+      genAssBtn.disabled = true;
+      genAssBtn.textContent = '生成中...';
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/ass', { method: 'POST' });
+        const json = await res.json();
+        if (res.ok && json.status === 'ok') {
+          toast('ASS 生成成功: ' + json.data.event_count + ' 条弹幕');
+          setTimeout(() => loadSessions(), 1000);
+        } else {
+          toast('生成失败: ' + (json.message || ''));
+        }
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      } finally {
+        genAssBtn.disabled = false;
+        genAssBtn.textContent = '生成 ASS';
+      }
+      return;
+    }
+
+    // 全部压制
+    const burnSessionBtn = e.target.closest('.burnSessionBtn');
+    if (burnSessionBtn) {
+      const sid = burnSessionBtn.dataset.sid;
+      const confirmed = await showConfirm('确认将此会话全部可压制分段加入弹幕压制队列？');
+      if (!confirmed) return;
+      burnSessionBtn.disabled = true;
+      burnSessionBtn.textContent = '入队中...';
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: false }),
+        });
+        const json = await res.json();
+        if (res.ok && json.status === 'ok') {
+          toast(json.message);
+          setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+        } else {
+          toast('入队失败: ' + (json.message || ''));
+        }
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      } finally {
+        burnSessionBtn.disabled = false;
+        burnSessionBtn.textContent = '全部压制';
+      }
+      return;
+    }
+
+    // 搜索弹幕
+    const searchBtn = e.target.closest('.searchDanmakuBtn');
+    if (searchBtn) {
+      currentSearchSessionId = searchBtn.dataset.sid;
+      document.getElementById('searchModalSession').textContent = '#' + currentSearchSessionId + ' ' + (searchBtn.dataset.room || '');
+      document.getElementById('modalSearchInput').value = '';
+      document.getElementById('modalSearchResult').innerHTML = '<p class="text-muted text-center">输入关键词搜索弹幕</p>';
+      searchOffset = 0;
+      searchModalInstance.show();
+      setTimeout(() => document.getElementById('modalSearchInput').focus(), 300);
+      return;
+    }
+
+    // 播放压制产物
+    const playBtn = e.target.closest('.playBurnBtn');
+    if (playBtn) {
+      const burnId = playBtn.dataset.burnId;
+      const name = playBtn.dataset.name;
+      const streamUrl = '/api/danmaku/burn_output/' + burnId + '/stream';
+      if (typeof openVideoPlayer === 'function') {
+        openVideoPlayer(streamUrl, name, 'mp4');
+      } else {
+        window.open(streamUrl, '_blank');
+      }
+      return;
+    }
+
+    // 删除压制记录
+    const delBtn = e.target.closest('.deleteBurnBtn');
+    if (delBtn) {
+      const confirmed = await showConfirm('确认删除此压制记录及产物文件？');
+      if (!confirmed) return;
+      try {
+        const res = await fetch('/api/danmaku_burn_records/' + delBtn.dataset.burnId + '?delete_file=true', { method: 'DELETE' });
+        const json = await res.json();
+        if (res.ok) {
+          toast('已删除');
+          // 重新展开该会话分段
+          const segContainer = document.getElementById('segments_' + delBtn.dataset.sid);
+          if (segContainer) { segContainer.dataset.loaded = 'false'; segContainer.classList.add('d-none'); }
+          expandSegments(delBtn.dataset.sid);
+          loadSessions();
+        } else {
+          toast('删除失败: ' + (json.message || ''));
+        }
+      } catch (err) {
+        toast('删除失败: ' + err.message);
+      }
+      return;
+    }
+
+    // 重新压制
+    const reBurnBtn = e.target.closest('.reBurnBtn');
+    if (reBurnBtn) {
+      const sid = reBurnBtn.dataset.sid;
+      const confirmed = await showConfirm('确认强制重新压制此会话？（将覆盖已有产物）');
+      if (!confirmed) return;
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: true }),
+        });
+        const json = await res.json();
+        if (res.ok && json.status === 'ok') {
+          toast(json.message);
+          setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+        } else {
+          toast('入队失败: ' + (json.message || ''));
+        }
+      } catch (err) {
+        toast('请求失败: ' + err.message);
+      }
+      return;
+    }
+  });
+
+  // ====== Checkbox 选择 ======
+  document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('session-check')) {
+      const sid = parseInt(e.target.dataset.sid, 10);
+      if (e.target.checked) {
+        selectedSessions.add(sid);
+      } else {
+        selectedSessions.delete(sid);
+      }
+      updateSelectedCount();
+    }
+  });
+
+  // ====== 筛选标签 ======
+  document.querySelectorAll('[data-dm-filter]').forEach(tag => {
+    tag.addEventListener('click', () => {
+      document.querySelectorAll('[data-dm-filter]').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      currentFilter = tag.dataset.dmFilter;
+      renderSessions();
+    });
+  });
+
+  // ====== 搜索 ======
+  document.getElementById('searchBtn')?.addEventListener('click', () => {
+    searchKeyword = document.getElementById('searchInput').value.trim();
+    renderSessions();
+  });
+  document.getElementById('searchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      searchKeyword = e.target.value.trim();
+      renderSessions();
+    }
+  });
+
+  // ====== 批量压制 ======
+  document.getElementById('batchBurnBtn')?.addEventListener('click', async () => {
+    if (selectedSessions.size === 0) return;
+    const confirmed = await showConfirm('确认将 ' + selectedSessions.size + ' 个会话加入弹幕压制队列？');
+    if (!confirmed) return;
+    const btn = document.getElementById('batchBurnBtn');
+    btn.disabled = true;
+    btn.textContent = '批量入队中...';
+    let totalEnqueued = 0;
+    for (const sid of selectedSessions) {
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/burn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: false }),
+        });
+        const json = await res.json();
+        if (json.enqueued) totalEnqueued += json.enqueued;
+      } catch (_) {}
+    }
+    toast('批量入队完成: ' + totalEnqueued + ' 个分段');
+    btn.disabled = false;
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M8 16c.319 0 .616-.18.762-.471l.206-.412 2.049-4.098a.4.4 0 0 0-.078-.459L8.477 7.64a.2.2 0 0 1-.043-.118l.545-5.454a.25.25 0 0 0-.417-.203L5.93 4.488a.4.4 0 0 1-.459.078L2.35 3.004a.25.25 0 0 0-.325.325l1.562 3.121a.4.4 0 0 1-.078.459L.488 9.94a.25.25 0 0 0 .203.417l5.454.545a.2.2 0 0 1 .118.043l3.49 3.49A.25.25 0 0 0 8 16z"/></svg>批量压制选中会话';
+    selectedSessions.clear();
+    setTimeout(() => { loadSessions(); loadQueueStatus(); }, 1000);
+  });
+
+  // ====== 批量 ASS ======
+  document.getElementById('batchAssBtn')?.addEventListener('click', async () => {
+    if (selectedSessions.size === 0) return;
+    const confirmed = await showConfirm('确认为 ' + selectedSessions.size + ' 个会话重新生成 ASS？');
+    if (!confirmed) return;
+    const btn = document.getElementById('batchAssBtn');
+    btn.disabled = true;
+    btn.textContent = '批量生成中...';
+    let success = 0;
+    for (const sid of selectedSessions) {
+      try {
+        const res = await fetch('/api/sessions/' + sid + '/danmaku/ass', { method: 'POST' });
+        const json = await res.json();
+        if (json.status === 'ok') success++;
+      } catch (_) {}
+    }
+    toast('批量 ASS 生成完成: ' + success + '/' + selectedSessions.size);
+    btn.disabled = false;
+    btn.textContent = '批量生成 ASS';
+    setTimeout(() => loadSessions(), 1000);
+  });
+
+  // ====== 刷新 ======
+  document.getElementById('refreshAllBtn')?.addEventListener('click', () => {
+    loadSessions();
+    loadQueueStatus();
+    // 重置已加载的分段
+    document.querySelectorAll('.segments-collapse').forEach(el => {
+      el.dataset.loaded = 'false';
+      el.classList.add('d-none');
+    });
+    toast('已刷新');
+  });
+
+  // ====== 弹幕搜索 Modal ======
+  async function modalSearch() {
+    const keyword = document.getElementById('modalSearchInput').value.trim();
+    const resultDiv = document.getElementById('modalSearchResult');
+    if (!currentSearchSessionId) return;
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> 搜索中...</div>';
+
+    try {
+      const res = await fetch('/api/danmaku/search?session_id=' + currentSearchSessionId + '&keyword=' + encodeURIComponent(keyword) + '&limit=50&offset=' + searchOffset);
+      const json = await res.json();
+
+      if (!res.ok || json.status !== 'ok') {
+        resultDiv.innerHTML = '<p class="text-danger">搜索失败</p>';
+        return;
+      }
+
+      if (json.data.length === 0) {
+        resultDiv.innerHTML = '<p class="text-muted text-center">无匹配弹幕</p>';
+        return;
+      }
+
+      let html = '<div class="mb-2"><small class="text-muted">共 ' + json.total + ' 条匹配 (显示 ' + (searchOffset + 1) + '-' + Math.min(searchOffset + json.data.length, json.total) + ')</small></div>';
+      html += '<div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th style="width:90px;">时间</th><th style="width:120px;">用户</th><th>内容</th></tr></thead><tbody>';
+
+      for (const d of json.data) {
+        html += '<tr><td><small>' + (d.ts_str || '-') + '</small></td>';
+        html += '<td><small>' + (d.username || '-') + '</small></td>';
+        html += '<td>' + highlightKW(d.text, keyword) + '</td></tr>';
+      }
+      html += '</tbody></table></div>';
+
+      if (json.total > json.limit) {
+        html += '<div class="btn-group btn-group-sm mt-2">';
+        if (searchOffset > 0) html += '<button class="btn btn-outline-secondary" onclick="searchOffset=Math.max(0,searchOffset-' + json.limit + ');modalSearch()">上一页</button>';
+        if (searchOffset + json.limit < json.total) html += '<button class="btn btn-outline-secondary" onclick="searchOffset+=' + json.limit + ';modalSearch()">下一页</button>';
+        html += '</div>';
+      }
+
+      resultDiv.innerHTML = html;
+    } catch (err) {
+      resultDiv.innerHTML = '<p class="text-danger">搜索异常: ' + err.message + '</p>';
+    }
+  }
+
+  function highlightKW(text, keyword) {
+    if (!keyword) return text;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp('(' + escaped + ')', 'gi'), '<mark>$1</mark>');
+  }
+
+  document.getElementById('modalSearchBtn')?.addEventListener('click', () => { searchOffset = 0; modalSearch(); });
+  document.getElementById('modalSearchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { searchOffset = 0; modalSearch(); }
+  });
+</script>

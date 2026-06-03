@@ -45,6 +45,12 @@ Chrome Extension / PollingManager
     → Watchdog monitors processes
     → TranscodeQueue → Transcoder (TS→MP4)
     → UploadService → biliup CLI
+
+Chrome Extension (danmaku)
+    → POST /api/danmaku/batch
+    → DanmakuRecorder → danmaku.jsonl
+    → Session ends → DanmakuAssGenerator → danmaku.ass + segments
+    → User triggers via Toolbox → DanmakuBurnQueue → FFmpeg burn → *_danmaku.mp4
 ```
 
 **Key layers:**
@@ -52,17 +58,20 @@ Chrome Extension / PollingManager
 - `router/` — Express route handlers (thin, delegate to services)
 - `services/` — Business logic (RecorderService, RoomService, UploadService, DataService)
 - `lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
+- `lib/core/danmaku/` — Danmaku capture (DanmakuRecorder) and ASS subtitle generation (DanmakuAssGenerator)
+- `lib/core/DanmakuBurnQueue.js` — Redis-based danmaku burn queue (independent from TranscodeQueue)
+- `lib/core/danmaku-burner.js` — FFmpeg danmaku subtitle burning
 - `lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
 - `lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
 - `lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
 - `db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
 - `views/` — EJS templates, `public/` — static assets
 
-**Singletons:** `pollingManager`, `recordingManager`, `transcodeQueue` (imported from their modules)
+**Singletons:** `pollingManager`, `recordingManager`, `transcodeQueue`, `danmakuBurnQueue` (imported from their modules)
 
 **State storage:** Redis for transient state (live status, polling timers, active tasks with TTL). PostgreSQL for persistent data (rooms, sessions, recordings, settings).
 
-**File paths:** `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`
+**File paths:** `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`, danmaku data in `danmaku/` subdirectory, burn output in `DANMAKU_OUTPUT_DIR/[sessionId]/`
 
 ## Environment
 
@@ -86,7 +95,7 @@ Chrome Extension / PollingManager
 
 ## External Dependencies
 
-- **FFmpeg** — download engine and transcoder (must be installed separately)
+- **FFmpeg** — download engine, transcoder, and danmaku burn (must be installed separately)
 - **biliup** — Bilibili upload CLI (Python, installed via `pip`/`uv` in Docker)
 - Chrome extension at `../chrome_live_listener/` pushes stream URLs to this server's API
 

@@ -98,6 +98,66 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
      │  录制结束 → flush → 停止发送 │                                     │
 ```
 
+### 弹幕服务端处理流程
+
+弹幕录制结束后，服务端自动执行 ASS 字幕生成。弹幕压制为独立的工具箱功能，**不再自动触发**，由用户通过「弹幕工具箱」页面手动操作。
+
+```
+录制会话结束
+    │
+    ▼
+_handleDanmakuFinish()
+    │
+    ├── DanmakuRecorder.stopCapture()     停止采集
+    ├── DanmakuAssGenerator.generateFromJsonl()   生成会话级 ASS
+    │     → [sessionDir]/danmaku/danmaku.ass
+    └── DanmakuAssGenerator.generateSegmentAss()  生成分段 ASS
+          → [sessionDir]/danmaku/segments/*.ass
+          → 写入 recording_files.danmaku_ass_path
+
+用户通过弹幕工具箱手动操作
+    │
+    ├── 生成 ASS (POST /api/sessions/:id/danmaku/ass)
+    ├── 批量压制 (POST /api/sessions/:id/danmaku/burn)
+    │     │
+    │     ▼
+    │   DanmakuBurnQueue.enqueueSession()
+    │     │  检查 ASS 就绪 + 转码完成
+    │     │  输出到独立目录 DANMAKU_OUTPUT_DIR/[sessionId]/
+    │     ▼
+    │   DanmakuBurnQueue.processTask()
+    │     │  danmaku-burner → FFmpeg ASS 渲染
+    │     │  → *_danmaku.mp4
+    │     ▼
+    │   更新 danmaku_burn_records (completed/failed)
+    └── 产物管理：播放/下载/删除
+```
+
+**目录结构**：
+
+```
+VIDEO_DOWNLOAD_DIR/
+  └── [roomId]/[sessionId]/
+      ├── *.mp4 / *.ts                    ← 录制分段（纯净）
+      └── danmaku/                        ← 弹幕数据目录
+          ├── danmaku.jsonl               ← 原始弹幕
+          ├── danmaku.ass                 ← 会话级 ASS
+          └── segments/                   ← 分段 ASS
+
+DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
+  └── [sessionId]/
+      ├── *_danmaku.mp4                   ← 压制产物
+      └── logs/*.log                      ← FFmpeg 日志
+```
+
+**关键设计决策**：
+
+- 弹幕压制从录制流程中完全解耦，录制模块只负责「采集 + ASS 生成」，压制作为独立工具箱功能
+- 压制产物存放在独立目录，不与录制文件混合，避免文件扫描、统计、投稿环节的过滤负担
+- `recording_files.danmaku_ass_path` 作为 ASS 生成到压制入队之间的缓存字段保留
+- 兼容旧路径：JSONL 优先读取 `[sessionDir]/danmaku/danmaku.jsonl`，fallback 到旧路径 `[sessionDir]/danmaku.jsonl`
+- `danmaku_burn_records` 表集中管理所有压制数据，JOIN `recording_files` 查询状态
+
 ## 1. 会话生命周期
 
 **会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
@@ -152,7 +212,22 @@ VIDEO_DOWNLOAD_DIR/
 ├── [roomId]/                    # 房间ID目录
 │   ├── [sessionId]/             # 会话ID目录
 │   │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   │   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   │   └── danmaku/             # 弹幕数据目录
+│   │       ├── danmaku.jsonl    # 原始弹幕数据
+│   │       ├── danmaku.ass      # 会话级 ASS 字幕
+│   │       └── segments/        # 分段 ASS 字幕
+│   │           ├── 0.ass
+│   │           └── 1.ass
+```
+
+**压制产物独立目录**：
+
+```
+DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
+├── [sessionId]/                 # 按会话分组
+│   ├── {filename}_danmaku.mp4   # 压制产物
+│   └── logs/                    # FFmpeg 压制日志
 ```
 
 - 录制输出固定为 TS 格式(经 ffmpeg 录制)，容错性更强

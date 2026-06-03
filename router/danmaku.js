@@ -372,4 +372,128 @@ router.get('/danmaku/search', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/danmaku-toolbox/sessions
+ * 获取有弹幕数据的会话列表（工具箱专用）
+ */
+router.get('/danmaku-toolbox/sessions', async (req, res) => {
+  try {
+    const sql = `
+      SELECT s.id, s.room_url, s.status, s.started_at, s.ended_at, s.total_segments, s.total_size,
+             rm.room_name,
+             dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.error as danmaku_error,
+             COALESCE(dbr.total, 0) as danmaku_burn_total,
+             COALESCE(dbr.completed_count, 0) as danmaku_burn_completed,
+             COALESCE(dbr.failed_count, 0) as danmaku_burn_failed,
+             COALESCE(ass_counts.ass_segment_count, 0) as ass_segment_count,
+             COALESCE(ass_counts.has_ass_ready, false) as has_ass_ready
+      FROM recording_sessions s
+      LEFT JOIN rooms rm ON s.room_url = rm.room_url
+      INNER JOIN danmaku_capture_records dcr ON s.id = dcr.session_id
+      LEFT JOIN (
+        SELECT session_id,
+               COUNT(*) as total,
+               COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
+               COUNT(*) FILTER (WHERE status = 'failed') as failed_count
+        FROM danmaku_burn_records
+        GROUP BY session_id
+      ) dbr ON s.id = dbr.session_id
+      LEFT JOIN (
+        SELECT session_id,
+               COUNT(*) as ass_segment_count,
+               BOOL_OR(danmaku_ass_path != '' AND danmaku_ass_path IS NOT NULL) as has_ass_ready
+        FROM recording_files
+        GROUP BY session_id
+      ) ass_counts ON s.id = ass_counts.session_id
+      WHERE s.deleted_at IS NULL
+      ORDER BY s.id DESC
+      LIMIT 500
+    `;
+
+    const result = await pool.query(sql);
+
+    // 从 JSONL 文件修正弹幕条数
+    await Promise.all(
+      result.rows.map((row) => {
+        if (row.danmaku_raw_path && fs.existsSync(row.danmaku_raw_path)) {
+          return fs.promises
+            .readFile(row.danmaku_raw_path, 'utf-8')
+            .then((content) => {
+              row.danmaku_event_count = content.split('\n').filter(Boolean).length;
+            })
+            .catch(() => {});
+        }
+        return Promise.resolve();
+      })
+    );
+
+    // 去重：INNER JOIN 可能因多条 capture_records 产生重复
+    const seen = new Set();
+    const unique = [];
+    for (const row of result.rows) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        unique.push(row);
+      }
+    }
+
+    res.json({ status: 'ok', data: unique });
+  } catch (err) {
+    console.error('[api] 弹幕工具箱会话列表查询失败:', err.message);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+/**
+ * GET /api/danmaku/burn_output/:id/stream
+ * 流式播放弹幕压制产物文件
+ */
+router.get('/danmaku/burn_output/:id/stream', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await pool.query('SELECT output_path FROM danmaku_burn_records WHERE id = $1', [id]);
+
+    if (record.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '记录不存在' });
+    }
+
+    const filePath = record.rows[0].output_path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'Error', message: '压制产物文件不存在' });
+    }
+
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.flv': 'video/x-flv' };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    // 支持 Range 请求
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+      });
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    console.error('[api] 弹幕压制产物流式播放失败:', err.message);
+    res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
 module.exports = router;

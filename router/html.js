@@ -236,6 +236,15 @@ router.get('/sessions/:id/danmaku', async (req, res) => {
   }
 });
 
+router.get('/danmaku-toolbox', async (req, res) => {
+  try {
+    res.render('danmaku-toolbox', { title: '弹幕工具箱' });
+  } catch (err) {
+    console.error('[html] 弹幕工具箱加载失败:', err);
+    res.status(500).render('danmaku-toolbox', { title: '弹幕工具箱' });
+  }
+});
+
 router.get('/apiview', (req, res) => {
   const mdPath = path.join(__dirname, '..', 'docs', 'API.md');
   let content = fs.readFileSync(mdPath, 'utf-8');

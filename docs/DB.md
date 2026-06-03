@@ -36,10 +36,14 @@
 
 ### 缓存策略
 
-| 用途       | Key 模式                | TTL     | 说明                              |
-| ---------- | ----------------------- | ------- | --------------------------------- |
-| 直播间缓存 | `room:{room_url}`       | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询 |
-| 录制任务锁 | `active_task:{roomKey}` | 24 小时 | 防止重复录制，替代内存 Map        |
+| 用途       | Key 模式                        | TTL     | 说明                              |
+| ---------- | ------------------------------- | ------- | --------------------------------- |
+| 直播间缓存 | `room:{room_url}`               | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询 |
+| 录制任务锁 | `active_task:{roomKey}`         | 24 小时 | 防止重复录制，替代内存 Map        |
+| 转码队列   | `transcode_queue`               | 无      | Redis LIST，转码任务 FIFO 队列    |
+| 转码并发   | `transcode_processing_count`    | 无      | 当前处理中转码任务计数            |
+| 压制队列   | `danmaku_burn_queue`            | 无      | Redis LIST，弹幕压制任务 FIFO 队列 |
+| 压制并发   | `danmaku_burn_processing_count` | 无      | 当前处理中压制任务计数            |
 
 - 直播间写操作（创建/更新/删除/暂停/恢复/停止）后自动清除对应缓存
 - 应用启动时自动清理残留的录制任务锁
@@ -131,7 +135,7 @@
 | hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间              |
 | segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）      |
 | segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）      |
-| danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 分段级 ASS 字幕路径       |
+| danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 分段级 ASS 字幕路径（ASS 生成时写入，压制入队时读取） |
 | created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                  |
 
 **状态流转：**
@@ -252,6 +256,12 @@ KV 结构的全局配置表。
 | `auto_transcode`             | `true` | 是否自动转码 FLV 到 MP4                                    |
 | `transcode_delete_originals` | `true` | 转码后是否删除原 FLV 文件                                  |
 | `transcode_concurrency`      | `3`    | 转码队列并发数，控制同时处理的转码任务数                   |
+| `kuaishou_danmaku_enabled`   | `false`| 是否启用快手弹幕采集                                       |
+| `danmaku_burn_concurrency`   | `1`    | 弹幕压制队列并发数（强制最大 1）                           |
+| `danmaku_density_per_second` | `20`   | ASS 字幕每秒最大弹幕密度                                   |
+| `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                       |
+| `danmaku_font_size`          | `32`   | ASS 字体大小                                               |
+| `danmaku_opacity`            | `0.75` | ASS 弹幕不透明度                                           |
 
 ---
 
@@ -286,7 +296,7 @@ KV 结构的全局配置表。
 
 ### danmaku_burn_records — 弹幕压制记录
 
-**记录每个分段的弹幕压制（FFmpeg 渲染）任务。** 每个 `recording_file_id` 最多一条记录（UNIQUE 约束）。
+**记录每个分段的弹幕压制（FFmpeg 渲染）任务。** 每个 `recording_file_id` 最多一条记录（UNIQUE 约束）。压制产物输出到独立的 `DANMAKU_OUTPUT_DIR` 目录（默认 `VIDEO_DOWNLOAD_DIR/../danmaku_output`），与录制文件物理隔离。
 
 | 字段              | 类型          | 约束             | 说明                                |
 | ----------------- | ------------- | ---------------- | ----------------------------------- |
@@ -298,7 +308,7 @@ KV 结构的全局配置表。
 | segment_end_ms    | INTEGER       | DEFAULT 0        | 分段结束时间（毫秒）                |
 | input_path        | VARCHAR(1024) | NOT NULL         | 输入视频路径                        |
 | ass_path          | VARCHAR(1024) | NOT NULL         | ASS 字幕文件路径                    |
-| output_path       | VARCHAR(1024) | DEFAULT ''       | 压制输出视频路径（`*_danmaku.mp4`） |
+| output_path       | VARCHAR(1024) | DEFAULT ''       | 压制输出视频路径，独立目录 `DANMAKU_OUTPUT_DIR/[sessionId]/` 下 |
 | status            | VARCHAR(20)   | DEFAULT 'queued' | 状态流转见下                        |
 | error             | TEXT          | DEFAULT ''       | 失败时的错误信息                    |
 | log_path          | VARCHAR(1024) | DEFAULT ''       | FFmpeg 压制日志路径                 |

@@ -835,3 +835,192 @@ curl -X DELETE http://127.0.0.1:1123/api/transcode_records/1
 | `{YYYY}-{MM}-{DD}_{HH}-{mm}-{ss}` | `2026-05-14_14-30-22.mp4`     | `2026-05-14_15-30-22.mp4`     |
 
 不再使用序号 `_000` / `_001`，每个文件都有独立的时间戳。
+
+---
+
+## 弹幕管理
+
+### POST /api/danmaku/batch
+
+接收 Chrome Extension 批量推送的弹幕数据。
+
+**请求体：**
+
+| 字段       | 类型     | 必填 | 说明                 |
+| ---------- | -------- | ---- | -------------------- |
+| `room_url` | string   | 是   | 直播间 URL           |
+| `events`   | array    | 是   | 弹幕事件数组         |
+
+**示例：**
+
+```bash
+curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
+  -H 'Content-Type: application/json' \
+  -d '{"room_url":"https://live.kuaishou.com/u/xxx","events":[{"type":"comment","text":"666","username":"user1","ts_ms":1000}]}'
+```
+
+---
+
+### POST /api/sessions/:id/danmaku/ass
+
+手动重新生成会话的 ASS 字幕文件（含会话级和分段级）。
+
+**请求体（可选）：**
+
+| 字段           | 类型    | 说明                     |
+| -------------- | ------- | ------------------------ |
+| `videoWidth`   | number  | 视频宽度，默认 1920      |
+| `videoHeight`  | number  | 视频高度，默认 1080      |
+| `offsetMs`     | number  | 时间偏移（ms），默认 0   |
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "ass_path": "/data/videos/room1/session1/danmaku/danmaku.ass",
+    "event_count": 1234,
+    "segments": [{"assPath": "/data/videos/room1/session1/danmaku/segments/0.ass"}]
+  }
+}
+```
+
+---
+
+### POST /api/sessions/:id/danmaku/burn
+
+将会话的所有可压制分段加入弹幕压制队列。
+
+**请求体（可选）：**
+
+| 字段     | 类型    | 说明                       |
+| -------- | ------- | -------------------------- |
+| `force`  | boolean | 是否强制覆盖已有产物，默认 false |
+| `useQsv` | boolean | 是否使用 Intel QSV 加速，默认 false |
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "message": "已加入 3 个分段到弹幕压制队列",
+  "enqueued": 3
+}
+```
+
+---
+
+### GET /api/danmaku/status
+
+获取当前弹幕采集和压制队列的实时状态。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "active_captures": {"count": 1},
+    "burn_queue": {
+      "queue_length": 2,
+      "processing": 1,
+      "concurrency": 1
+    }
+  }
+}
+```
+
+---
+
+### GET /api/danmaku/search
+
+搜索指定会话的弹幕 JSONL 内容。
+
+**查询参数：**
+
+| 参数         | 类型   | 必填 | 说明                     |
+| ------------ | ------ | ---- | ------------------------ |
+| `session_id` | number | 是   | 会话 ID                  |
+| `keyword`    | string | 否   | 搜索关键词（匹配内容和用户名） |
+| `limit`      | number | 否   | 每页条数，默认 50，最大 200 |
+| `offset`     | number | 否   | 偏移量，默认 0           |
+
+---
+
+### GET /api/danmaku_capture_records
+
+查询弹幕采集记录。
+
+**查询参数：**
+
+| 参数         | 类型   | 说明            |
+| ------------ | ------ | --------------- |
+| `session_id` | number | 按会话筛选      |
+| `status`     | string | 按状态筛选      |
+
+---
+
+### GET /api/danmaku_burn_records
+
+查询弹幕压制记录。
+
+**查询参数：**
+
+| 参数         | 类型   | 说明            |
+| ------------ | ------ | --------------- |
+| `session_id` | number | 按会话筛选      |
+| `status`     | string | 按状态筛选      |
+
+---
+
+### DELETE /api/danmaku_burn_records/:id
+
+删除压制记录。
+
+**查询参数：**
+
+| 参数          | 类型    | 说明                     |
+| ------------- | ------- | ------------------------ |
+| `delete_file` | boolean | 是否同时删除产物文件，默认 false |
+
+---
+
+### GET /api/danmaku/burn_output/:id/stream
+
+流式播放弹幕压制产物文件。支持 HTTP Range 请求（拖拽播放）。
+
+**路径参数：**
+
+| 参数 | 说明              |
+| ---- | ----------------- |
+| `id` | danmaku_burn_records.id |
+
+**返回：** 视频流（`video/mp4`）
+
+---
+
+### GET /api/danmaku-toolbox/sessions
+
+获取有弹幕数据的会话列表（弹幕工具箱页面专用），仅返回存在弹幕采集记录的会话，含压制汇总统计。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "id": 42,
+      "room_name": "KSG小屿",
+      "danmaku_status": "completed",
+      "danmaku_event_count": 5678,
+      "danmaku_burn_total": 3,
+      "danmaku_burn_completed": 3,
+      "danmaku_burn_failed": 0,
+      "ass_segment_count": 3,
+      "has_ass_ready": true
+    }
+  ]
+}
+```

@@ -34,6 +34,11 @@
 │   │   ├── DownloaderFactory.js
 │   │   ├── DownloaderInterface.js
 │   │   └── FFmpegDownloader.js
+│   ├── danmaku/        # 弹幕采集与 ASS 字幕生成
+│   │   ├── DanmakuRecorder.js    # 弹幕采集器（JSONL 写入）
+│   │   └── DanmakuAssGenerator.js # ASS 字幕生成器
+│   ├── DanmakuBurnQueue.js # 弹幕压制队列（Redis 队列，独立于转码）
+│   ├── danmaku-burner.js   # FFmpeg 弹幕压制（ASS 渲染）
 │   ├── notify.js       # 通知服务
 │   ├── polling/       # 直播轮询检测
 │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
@@ -104,7 +109,7 @@ npm run lint && npm run format && npm run test
 ## 数据库
 
 - 启动时自动迁移建表（`db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
-- 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）
+- 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）、`danmaku_capture_records`（弹幕采集）、`danmaku_burn_records`（弹幕压制）
 - `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
 - `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
@@ -127,6 +132,19 @@ npm run lint && npm run format && npm run test
 - `GET /api/settings` —— 查询全局设置列表
 - `PUT /api/settings/:key` —— 更新全局设置项
 
+### 弹幕
+
+- `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据
+- `POST /api/sessions/:id/danmaku/ass` —— 手动重新生成会话 ASS 字幕
+- `POST /api/sessions/:id/danmaku/burn` —— 将会话加入弹幕压制队列
+- `GET /api/danmaku_capture_records` —— 查询弹幕采集记录
+- `GET /api/danmaku_burn_records` —— 查询弹幕压制记录
+- `DELETE /api/danmaku_burn_records/:id` —— 删除压制记录（可选删除文件）
+- `GET /api/danmaku/status` —— 获取弹幕采集和压制队列状态
+- `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
+- `GET /api/danmaku-toolbox/sessions` —— 获取有弹幕数据的会话列表（工具箱专用）
+- `GET /api/danmaku/burn_output/:id/stream` —— 流式播放压制产物文件
+
 ### 投稿
 
 - `GET/POST /api/upload_templates` —— 投稿模板列表 / 创建
@@ -146,12 +164,14 @@ npm run lint && npm run format && npm run test
 - `GET /templates` —— 投稿模板管理
 - `GET /upload_records` —— 投稿记录
 - `GET /transcode` —— 转码记录
+- `GET /danmaku-toolbox` —— 弹幕工具箱（会话筛选、批量压制、状态监控、产物管理）
 - `GET /sessions` —— 录制会话（含投稿按钮）
 - `GET /settings` —— 全局设置（录制/上传参数配置）
 
 ## 关键环境变量
 
 - `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建
+- `DANMAKU_OUTPUT_DIR` —— 弹幕压制产物输出目录，默认 `VIDEO_DOWNLOAD_DIR/../danmaku_output`
 - `PORT` —— 正式环境默认 1123 ，开发环境默认 3001
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
