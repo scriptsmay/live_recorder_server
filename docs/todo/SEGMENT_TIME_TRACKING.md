@@ -1,7 +1,7 @@
 # 分段文件时间记录实现方案
 
-> **状态**: 待实施
-> **最后更新**: 2026-06-02
+> **状态**: 已实施
+> **最后更新**: 2026-06-03
 > **关联文档**: `DANMAKU_BURN_DECOUPLE_PLAN.md`（Phase 4 前置依赖）
 
 ---
@@ -549,6 +549,28 @@ Step 6: 测试
   ├── 单元测试：RecordingManager 所有方法
   ├── 集成测试：录制 → 分段时间记录 → ASS 生成
   └── 回归测试：npm test 全量通过
+
+Step 7: 修复 finalizeSession() 与 watchdog 竞态条件（2026-06-03）
+  ├── 问题：finalizeSession() UPDATE recording_files 时记录可能尚未被 watchdog INSERT
+  ├── RecordingManager.finalizeSession() 添加影响行数日志
+  ├── DanmakuAssGenerator.generateSegmentAss() 新增 segmentTimes 参数（Map）
+  ├── RecorderService.finishSession() 捕获 tracker 数据，直接传递给 ASS 生成器
+  └── ASS 生成不再依赖 recording_files 的 DB 写入时序
+
+Step 8: 修复 API 重新生成路径 & backfillSegmentTimes 浮点数问题（2026-06-03）
+  ├── 问题：router/danmaku.js 手动触发 ASS 生成时仍读取 DB 中的 segment_start_ms=0
+  ├── router/danmaku.js 在生成分段 ASS 前检测缺失时间，自动调用 backfillSegmentTimes()
+  ├── backfillSegmentTimes() 对 ffprobe 返回的浮点毫秒值加 Math.round() 适配 INTEGER 列
+  └── SQL 查询增加 file_path 字段用于 segmentTimes Map 匹配
+
+Step 9: 修复分段排序 & ASS 路径不匹配问题（2026-06-03）
+  ├── 问题1：watchdog.scanActiveSegments() 中 segIndex 变量未递增，同一批次所有文件获得相同 segment_index
+  ├── 问题2：所有查询使用 ORDER BY segment_index 排序不可靠（同值时顺序随机）
+  ├── 问题3：DanmakuAssGenerator 以 seg.id 命名 ASS 文件，但 burn 路由以 segment_index 构建路径
+  ├── 修复1：watchdog.js segIndex 在每次 INSERT 后 segIndex++
+  ├── 修复2：所有 recording_files 查询改为 ORDER BY id ASC（DataService、danmaku router、RecorderService、watchdog、DanmakuBurnQueue）
+  ├── 修复3：burn 路由 ASS 检查改用 f.id 构建路径；DataService danmaku_ass_exists 改用确定性路径 danmaku/segments/{id}.ass
+  └── 修复4：DanmakuBurnQueue.enqueueSession() ASS 检查同样改用确定性路径
 ```
 
 ---
@@ -570,14 +592,17 @@ Step 6: 测试
 
 ## 完成标准
 
-- [ ] `recording_files.segment_start_ms` 和 `segment_end_ms` 在分段录制时正确记录（误差 < 1s）
-- [ ] 分段 ASS 只包含对应时间段的弹幕
-- [ ] 非分段录制不受影响（`segment_duration = 0`）
-- [ ] 旧数据兼容处理正常（ASS 包含所有弹幕，输出警告日志）
-- [ ] 心跳超时清理机制正常工作（10 分钟无心跳自动清理 tracker）
-- [ ] 异常退出时 `backfillSegmentTimes()` 能正确补充分段时间
-- [ ] watchdog `ON CONFLICT DO UPDATE` 不会覆盖 `finalizeSession()` 的写入
-- [ ] `npm test` 全量通过
+- [x] `recording_files.segment_start_ms` 和 `segment_end_ms` 在分段录制时正确记录（误差 < 1s）
+- [x] 分段 ASS 只包含对应时间段的弹幕
+- [x] 非分段录制不受影响（`segment_duration = 0`）
+- [x] 旧数据兼容处理正常（ASS 包含所有弹幕，输出警告日志）
+- [x] 心跳超时清理机制正常工作（10 分钟无心跳自动清理 tracker）
+- [x] 异常退出时 `backfillSegmentTimes()` 能正确补充分段时间
+- [x] watchdog `ON CONFLICT DO UPDATE` 不会覆盖 `finalizeSession()` 的写入
+- [x] `npm test` 全量通过
+- [x] 分段文件查询统一使用 `ORDER BY id ASC`，排序稳定可靠
+- [x] watchdog `segIndex` 在每次 INSERT 后正确递增
+- [x] ASS 文件路径检查统一使用确定性路径 `danmaku/segments/{id}.ass`
 - [ ] 集成测试通过（录制 → 分段时间 → ASS 生成完整链路）
 
 ---
@@ -585,6 +610,5 @@ Step 6: 测试
 ## 后续优化
 
 1. **持久化追踪**：将分段时间实时写入 Redis，防止进程崩溃丢失（当前用 ffprobe 补充作为兜底）
-2. **ffprobe 校验**：录制结束后用 ffprobe 获取实际时长，校验并修正 `segment_start_ms` / `segment_end_ms`
-3. **管理接口**：提供 API 查看当前活跃的 `RecordingManager` tracker 状态（调试用）
-4. **`performance.now()` 高精度**：若弹幕分段精度要求提高，可替换 `Date.now()`
+2. **管理接口**：提供 API 查看当前活跃的 `RecordingManager` tracker 状态（调试用）
+3. **`performance.now()` 高精度**：若弹幕分段精度要求提高，可替换 `Date.now()`

@@ -331,12 +331,33 @@ async function runMigration() {
     await client.query(`
       ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0
     `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT ''
-    `);
+    // danmaku_ass_path 已迁移到弹幕文件系统的确定性路径，不再写入 recording_files
+    // 保留列以兼容历史数据，DROP 推迟到发布后 1 个月（见下方 deferred migration）
+
     await client.query(`
       ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''
     `);
+
+    // danmaku_burn_records 新增字段：会话级 ASS 路径和 JSONL 路径
+    await client.query(`
+      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS session_ass_path VARCHAR(1024) DEFAULT ''
+    `);
+    await client.query(`
+      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS jsonl_path VARCHAR(1024) DEFAULT ''
+    `);
+
+    // ========== 弹幕 settings 清理 ==========
+    // 清除 settings 表中已废弃的弹幕配置项（这些 key 已从 settings.ejs 和默认值中移除）
+    // 注意：danmaku_font_size / danmaku_opacity 等仍在使用的设置项不清理
+    await client.query(`
+      DELETE FROM settings WHERE key IN ('auto_burn_danmaku', 'prefer_danmaku_burned_video', 'danmaku_preserve_clean_video')
+    `);
+
+    // ========== 推迟执行：recording_files 弹幕字段 DROP ==========
+    // 以下 migration 推迟到发布后至少 1 个月执行，确保无回滚需求后再取消注释
+    // -- await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
+    // -- 回滚 SQL（如需要，手动执行）：
+    // -- ALTER TABLE recording_files ADD COLUMN danmaku_ass_path VARCHAR(1024) DEFAULT '';
 
     const defaultSettings = [
       ['pool_size', '3'],

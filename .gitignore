@@ -30,6 +30,7 @@ pnpm-lock.yaml
 # development directories
 dev_downloads/
 dev_biliup/
+danmuku_output/
 
 test_downloads/
 test/tmp_*

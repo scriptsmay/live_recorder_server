@@ -6,6 +6,7 @@ const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
 const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
+const watchdog = require('../lib/core/watchdog');
 
 /**
  * POST /api/danmaku/batch
@@ -77,9 +78,19 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
     // 更新采集记录的 ASS 路径
     await pool.query(`UPDATE danmaku_capture_records SET ass_path = $1 WHERE session_id = $2`, [assPath, sessionId]);
 
-    // 为每个分段生成分段 ASS
+    // 检查是否有分段时间缺失（segment_start_ms = 0），如有则用 ffprobe 补充
+    const missingTimes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM recording_files WHERE session_id = $1 AND segment_start_ms = 0`,
+      [sessionId]
+    );
+    if (parseInt(missingTimes.rows[0].cnt, 10) > 0) {
+      console.log(`[弹幕ASS] 会话 ${sessionId} 有 ${missingTimes.rows[0].cnt} 个分段缺少时间信息，尝试 ffprobe 补充`);
+      await watchdog.backfillSegmentTimes(sessionId, pool);
+    }
+
+    // 为每个分段生成分段 ASS（重新查询以获取补充后的时间）
     const segments = await pool.query(
-      `SELECT id, segment_index, segment_start_ms, segment_end_ms FROM recording_files WHERE session_id = $1 ORDER BY segment_index`,
+      `SELECT id, segment_index, segment_start_ms, segment_end_ms, file_path FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
       [sessionId]
     );
 
@@ -95,10 +106,8 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
         offsetMs: offsetMs || 0,
       });
 
-      // 更新每个 recording_file 的 danmaku_ass_path
-      for (const seg of segmentResults) {
-        await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
-      }
+      // 分段 ASS 文件存放在确定性路径 danmakuDir/segments/{segment_index}.ass
+      // 不再写入 recording_files.danmaku_ass_path，由文件系统直接查询
     }
 
     res.json({
@@ -130,12 +139,19 @@ router.post('/sessions/:id/danmaku/burn', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
 
-    // 检查是否有分段 ASS
-    const files = await pool.query(`SELECT id, danmaku_ass_path FROM recording_files WHERE session_id = $1`, [
+    // 检查是否有分段 ASS（从确定性路径检查，不再依赖 recording_files.danmaku_ass_path）
+    const sessionInfo = await pool.query(`SELECT output_dir FROM recording_sessions WHERE id = $1`, [sessionId]);
+    const sessDir = sessionInfo.rows[0]?.output_dir;
+    const files = await pool.query(`SELECT id, segment_index FROM recording_files WHERE session_id = $1 ORDER BY id ASC`, [
       sessionId,
     ]);
 
-    const hasAss = files.rows.some((f) => f.danmaku_ass_path && fs.existsSync(f.danmaku_ass_path));
+    const hasAss = files.rows.some((f) => {
+      if (!sessDir) return false;
+      // ASS 文件按 id 命名（确定性路径 danmaku/segments/{id}.ass）
+      const assPath = path.join(sessDir, 'danmaku', 'segments', `${f.id}.ass`);
+      return fs.existsSync(assPath);
+    });
     if (!hasAss) {
       return res.status(400).json({
         status: 'Error',
@@ -379,14 +395,13 @@ router.get('/danmaku/search', async (req, res) => {
 router.get('/danmaku-toolbox/sessions', async (req, res) => {
   try {
     const sql = `
-      SELECT s.id, s.room_url, s.status, s.started_at, s.ended_at, s.total_segments, s.total_size,
+      SELECT s.id, s.room_url, s.status, s.started_at, s.ended_at, s.total_segments, s.total_size, s.output_dir,
              rm.room_name,
              dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.error as danmaku_error,
              COALESCE(dbr.total, 0) as danmaku_burn_total,
              COALESCE(dbr.completed_count, 0) as danmaku_burn_completed,
              COALESCE(dbr.failed_count, 0) as danmaku_burn_failed,
-             COALESCE(ass_counts.ass_segment_count, 0) as ass_segment_count,
-             COALESCE(ass_counts.has_ass_ready, false) as has_ass_ready
+             COALESCE(ass_counts.indexed_segments, 0) as ass_segment_count
       FROM recording_sessions s
       LEFT JOIN rooms rm ON s.room_url = rm.room_url
       INNER JOIN danmaku_capture_records dcr ON s.id = dcr.session_id
@@ -399,11 +414,11 @@ router.get('/danmaku-toolbox/sessions', async (req, res) => {
         GROUP BY session_id
       ) dbr ON s.id = dbr.session_id
       LEFT JOIN (
-        SELECT session_id,
-               COUNT(*) as ass_segment_count,
-               BOOL_OR(danmaku_ass_path != '' AND danmaku_ass_path IS NOT NULL) as has_ass_ready
-        FROM recording_files
-        GROUP BY session_id
+        SELECT rf.session_id,
+               COUNT(*) as total_segments,
+               COUNT(*) FILTER (WHERE rf.segment_index > 0) as indexed_segments
+        FROM recording_files rf
+        GROUP BY rf.session_id
       ) ass_counts ON s.id = ass_counts.session_id
       WHERE s.deleted_at IS NULL
       ORDER BY s.id DESC
@@ -426,6 +441,17 @@ router.get('/danmaku-toolbox/sessions', async (req, res) => {
         return Promise.resolve();
       })
     );
+
+    // 从文件系统检查 ASS 是否就绪（替代旧的 recording_files.danmaku_ass_path 检查）
+    for (const row of result.rows) {
+      if (row.output_dir && row.ass_segment_count > 0) {
+        const sampleAss = path.join(row.output_dir, 'danmaku', 'segments', '1.ass');
+        row.has_ass_ready = fs.existsSync(sampleAss);
+      } else {
+        row.has_ass_ready = false;
+      }
+      delete row.output_dir; // 不暴露给前端
+    }
 
     // 去重：INNER JOIN 可能因多条 capture_records 产生重复
     const seen = new Set();

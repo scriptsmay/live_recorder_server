@@ -237,8 +237,9 @@ class RecorderService {
     const engine = getActiveDownloader(room.polling_platform);
 
     // 将分段时间写入数据库
+    let trackerSegments = [];
     try {
-      await recordingManager.finalizeSession(sessionId, pool);
+      trackerSegments = await recordingManager.finalizeSession(sessionId, pool);
     } catch (err) {
       console.error(`[RecorderService] Failed to finalize segment times for session ${sessionId}:`, err);
       // 异常退出时尝试通过 ffprobe 补充分段时间
@@ -282,7 +283,7 @@ class RecorderService {
       });
 
       // 停止弹幕采集并生成 ASS
-      await this._handleDanmakuFinish(sessionId, room.room_url);
+      await this._handleDanmakuFinish(sessionId, room.room_url, trackerSegments);
 
       if (sessionId) {
         try {
@@ -388,8 +389,9 @@ class RecorderService {
    *
    * @param {number|string} sessionId - 录制会话 ID
    * @param {string} roomUrl - 房间 URL
+   * @param {Array} [trackerSegments] - 从 RecordingManager tracker 获取的分段时间数据
    */
-  static async _handleDanmakuFinish(sessionId, roomUrl) {
+  static async _handleDanmakuFinish(sessionId, roomUrl, trackerSegments = []) {
     try {
       // 停止弹幕采集
       const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl);
@@ -430,9 +432,17 @@ class RecorderService {
           sessionId,
         ]);
 
-        // 为每个分段生成分段 ASS
+        // 构建分段时间 Map（从 tracker 直接获取，不依赖 recording_files 的 DB 状态）
+        const segmentTimes = new Map();
+        for (const seg of trackerSegments) {
+          if (seg.filePath) {
+            segmentTimes.set(seg.filePath, { startMs: seg.startMs, endMs: seg.endMs });
+          }
+        }
+
+        // 为每个分段生成分段 ASS（包含 file_path 用于匹配 tracker 数据）
         const segments = await pool.query(
-          `SELECT id, segment_index, segment_start_ms, segment_end_ms FROM recording_files WHERE session_id = $1 ORDER BY segment_index`,
+          `SELECT id, segment_index, segment_start_ms, segment_end_ms, file_path FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
           [sessionId]
         );
 
@@ -442,6 +452,7 @@ class RecorderService {
             jsonlPath,
             outputDir: segOutputDir,
             segments: segments.rows,
+            segmentTimes: segmentTimes.size > 0 ? segmentTimes : null,
           });
 
           for (const seg of segResults) {

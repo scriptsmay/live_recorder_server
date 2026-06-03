@@ -191,7 +191,7 @@ class DataService {
         'SELECT dbr.*, rf.file_path as video_path FROM danmaku_burn_records dbr LEFT JOIN recording_files rf ON dbr.recording_file_id = rf.id WHERE dbr.session_id = $1 ORDER BY dbr.segment_index',
         [sid]
       ),
-      pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY segment_index', [sid]),
+      pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id ASC', [sid]),
       pool.query(
         'SELECT rm.* FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url WHERE s.id = $1',
         [sid]
@@ -202,11 +202,23 @@ class DataService {
     if (!session) return null;
 
     // 检查文件是否存在
-    const files = filesRes.rows.map((f) => ({
-      ...f,
-      file_exists: f.file_path ? require('fs').existsSync(f.file_path) : false,
-      danmaku_ass_exists: f.danmaku_ass_path ? require('fs').existsSync(f.danmaku_ass_path) : false,
-    }));
+    const fsModule = require('fs');
+    const pathModule = require('path');
+    const files = filesRes.rows.map((f) => {
+      // danmaku_ass_exists: 优先从 DB 记录检查，其次从确定性路径检查
+      let danmakuAssExists = false;
+      if (f.danmaku_ass_path && fsModule.existsSync(f.danmaku_ass_path)) {
+        danmakuAssExists = true;
+      } else if (session.output_dir) {
+        const deterministicPath = pathModule.join(session.output_dir, 'danmaku', 'segments', `${f.id}.ass`);
+        danmakuAssExists = fsModule.existsSync(deterministicPath);
+      }
+      return {
+        ...f,
+        file_exists: f.file_path ? fsModule.existsSync(f.file_path) : false,
+        danmaku_ass_exists: danmakuAssExists,
+      };
+    });
 
     // 弹幕采集记录：优先从 JSONL 文件计算真实条数（内存计数在服务重启后会丢失）
     const capture = captureRes.rows[0] || null;
