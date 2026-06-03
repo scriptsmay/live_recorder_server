@@ -13,7 +13,7 @@
  * 实现: router/logs.js 中添加 logFiles.listFiles() 调用即可
  */
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { apiGet, apiDelete, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
@@ -21,6 +21,7 @@ import { useConfirm } from '@/utils/confirm'
 const toast = useToast()
 const { confirm } = useConfirm()
 const route = useRoute()
+const router = useRouter()
 
 // ---- 状态 ----
 const logFiles = ref<string[]>([])
@@ -79,7 +80,7 @@ async function fetchFileList() {
     // 优先使用 URL query 参数指定的文件，其次默认选中第一个
     const queryFile = (route.query.file as string) || ''
     if (queryFile && logFiles.value.includes(queryFile)) {
-      await selectFile(queryFile)
+      await selectFile(queryFile, { updateQuery: false })
     } else if (logFiles.value.length > 0 && !selectedFile.value) {
       await selectFile(logFiles.value[0])
     }
@@ -92,7 +93,10 @@ async function fetchFileList() {
 }
 
 // ---- 选中文件并加载内容 ----
-async function selectFile(file: string) {
+async function selectFile(file: string, options: { updateQuery?: boolean } = {}) {
+  const { updateQuery = true } = options
+  if (!file || file === selectedFile.value) return
+
   // 关闭旧的 SSE 连接
   closeStream()
   liveEnabled.value = false
@@ -102,13 +106,22 @@ async function selectFile(file: string) {
   statusText.value = ''
   loadingContent.value = true
 
+  if (updateQuery && route.query.file !== file) {
+    await router.replace({
+      query: {
+        ...route.query,
+        file,
+      },
+    })
+  }
+
   try {
     const res = await apiGet<{
       file: string
       lines: string[]
       truncated: boolean
       offset?: number
-    }>(`/api/logs/content?file=${encodeURIComponent(file)}&tail=0`)
+    }>(`/api/logs/content?file=${encodeURIComponent(file)}&tail=${MAX_LINES}`)
 
     logLines.value = res.data.lines || []
 
@@ -215,6 +228,9 @@ async function handleDelete() {
     logLines.value = []
     statusText.value = ''
     fileSizeText.value = '-'
+    const query = { ...route.query }
+    delete query.file
+    await router.replace({ query })
     await fetchFileList()
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : '删除失败')
@@ -222,6 +238,17 @@ async function handleDelete() {
 }
 
 // ---- 生命周期 ----
+watch(
+  () => route.query.file,
+  (file) => {
+    const nextFile = typeof file === 'string' ? file : ''
+    if (!nextFile || nextFile === selectedFile.value) return
+    if (logFiles.value.includes(nextFile)) {
+      selectFile(nextFile, { updateQuery: false })
+    }
+  },
+)
+
 onMounted(fetchFileList)
 
 onUnmounted(() => {

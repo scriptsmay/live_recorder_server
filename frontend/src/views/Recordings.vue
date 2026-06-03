@@ -102,7 +102,7 @@ async function handlePlay(rec: RecordingRow) {
 
   try {
     // 优先尝试 HLS
-    const hlsRes = await apiGet<{ data: { is_ready: boolean; relative_path: string } }>(
+    const hlsRes = await apiGet<{ is_ready: boolean; relative_path: string }>(
       `/api/recordings/${rec.id}/hls`,
     )
     if (hlsRes.data?.is_ready) {

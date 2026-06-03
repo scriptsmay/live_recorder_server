@@ -35,6 +35,7 @@ export interface RecordingFile {
   file_path: string
   file_size: number | null
   danmaku_ass_path: string | null
+  danmaku_ass_exists: boolean
 }
 
 export interface BurnRecord {

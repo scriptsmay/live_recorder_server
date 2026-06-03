@@ -48,4 +48,61 @@ describe('DataService.getRecordingFiles', () => {
 
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('rf.session_id = $1'), [18]);
   });
+
+  test('按录制文件 id 解析确定性分段 ASS 路径', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 42,
+            session_id: 18,
+            file_path: '/tmp/video.ts',
+            session_output_dir: '/tmp/session-18',
+            danmaku_ass_path: '',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ count: '1' }],
+      });
+
+    const { rows } = await DataService.getRecordingFiles({ session_id: 18 });
+
+    expect(rows[0].danmaku_ass_exists).toBe(true);
+    expect(rows[0].danmaku_ass_path).toBe('/tmp/session-18/danmaku/segments/42.ass');
+  });
+});
+
+describe('DataService.getSessionDetail', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('会话已结束时修正遗留的 recording 弹幕状态', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 52, status: 'completed', ended_at: '2026-06-04T10:00:00.000Z', output_dir: '/tmp/s52' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 7, session_id: 52, status: 'recording', event_count: 0, raw_path: '/tmp/s52/danmaku.jsonl' }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [null] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const detail = await DataService.getSessionDetail(52);
+
+    expect(detail.capture.status).toBe('completed');
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("SET status = 'completed'"), [
+      '2026-06-04T10:00:00.000Z',
+      0,
+      7,
+    ]);
+  });
 });

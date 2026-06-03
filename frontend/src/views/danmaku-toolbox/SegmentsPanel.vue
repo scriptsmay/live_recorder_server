@@ -70,7 +70,9 @@ function getFileName(filePath: string | null): string {
 }
 
 function getAssBadge(file: RecordingFile) {
-  if (file.danmaku_ass_path) return { text: '就绪', cls: 'bg-green-100 text-green-700' }
+  if (file.danmaku_ass_exists || file.danmaku_ass_path) {
+    return { text: '就绪', cls: 'bg-green-100 text-green-700' }
+  }
   return { text: '—', cls: 'bg-gray-100 text-gray-500' }
 }
 

@@ -55,7 +55,8 @@ curl http://127.0.0.1:1123/api/health
 {
   "file": "access.log",
   "lines": ["GET /api/health 200 5ms"],
-  "truncated": true
+  "truncated": true,
+  "offset": 2048
 }
 ```
 
@@ -72,7 +73,7 @@ curl http://127.0.0.1:1123/api/health
 
 **事件：**
 
-- `ready`：连接就绪
+- `ready`：连接就绪，格式 `{ "file": "access.log", "truncated": false, "offset": 2048 }`
 - `log`：新增日志行，格式 `{ "line": "..." }`
 - `reset`：日志文件发生轮转或截断，客户端应清空旧内容后继续接收
 - `log-error`：读取日志时发生错误，格式 `{ "message": "..." }`
@@ -846,10 +847,10 @@ curl -X DELETE http://127.0.0.1:1123/api/transcode_records/1
 
 **请求体：**
 
-| 字段       | 类型     | 必填 | 说明                 |
-| ---------- | -------- | ---- | -------------------- |
-| `room_url` | string   | 是   | 直播间 URL           |
-| `events`   | array    | 是   | 弹幕事件数组         |
+| 字段       | 类型   | 必填 | 说明         |
+| ---------- | ------ | ---- | ------------ |
+| `room_url` | string | 是   | 直播间 URL   |
+| `events`   | array  | 是   | 弹幕事件数组 |
 
 **示例：**
 
@@ -867,11 +868,11 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **请求体（可选）：**
 
-| 字段           | 类型    | 说明                     |
-| -------------- | ------- | ------------------------ |
-| `videoWidth`   | number  | 视频宽度，默认 1920      |
-| `videoHeight`  | number  | 视频高度，默认 1080      |
-| `offsetMs`     | number  | 时间偏移（ms），默认 0   |
+| 字段          | 类型   | 说明                   |
+| ------------- | ------ | ---------------------- |
+| `videoWidth`  | number | 视频宽度，默认 1920    |
+| `videoHeight` | number | 视频高度，默认 1080    |
+| `offsetMs`    | number | 时间偏移（ms），默认 0 |
 
 **返回：**
 
@@ -881,10 +882,20 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
   "data": {
     "ass_path": "/data/videos/room1/session1/danmaku/danmaku.ass",
     "event_count": 1234,
-    "segments": [{"assPath": "/data/videos/room1/session1/danmaku/segments/0.ass"}]
+    "segments": [
+      {
+        "id": 123,
+        "assPath": "/data/videos/room1/session1/danmaku/segments/123.ass",
+        "eventCount": 120
+      }
+    ]
   }
 }
 ```
+
+分段级 ASS 文件使用 `recording_files.id` 命名：
+`{session.output_dir}/danmaku/segments/{recording_file_id}.ass`。接口会同时回填
+`recording_files.danmaku_ass_path` 以兼容旧流程；查询接口优先检查旧字段，随后检查确定性路径。
 
 ---
 
@@ -894,9 +905,9 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **请求体（可选）：**
 
-| 字段     | 类型    | 说明                       |
-| -------- | ------- | -------------------------- |
-| `force`  | boolean | 是否强制覆盖已有产物，默认 false |
+| 字段     | 类型    | 说明                                |
+| -------- | ------- | ----------------------------------- |
+| `force`  | boolean | 是否强制覆盖已有产物，默认 false    |
 | `useQsv` | boolean | 是否使用 Intel QSV 加速，默认 false |
 
 **返回：**
@@ -921,7 +932,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 {
   "status": "ok",
   "data": {
-    "active_captures": {"count": 1},
+    "active_captures": { "count": 1 },
     "burn_queue": {
       "queue_length": 2,
       "processing": 1,
@@ -939,12 +950,12 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数         | 类型   | 必填 | 说明                     |
-| ------------ | ------ | ---- | ------------------------ |
-| `session_id` | number | 是   | 会话 ID                  |
+| 参数         | 类型   | 必填 | 说明                           |
+| ------------ | ------ | ---- | ------------------------------ |
+| `session_id` | number | 是   | 会话 ID                        |
 | `keyword`    | string | 否   | 搜索关键词（匹配内容和用户名） |
-| `limit`      | number | 否   | 每页条数，默认 50，最大 200 |
-| `offset`     | number | 否   | 偏移量，默认 0           |
+| `limit`      | number | 否   | 每页条数，默认 50，最大 200    |
+| `offset`     | number | 否   | 偏移量，默认 0                 |
 
 ---
 
@@ -954,10 +965,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数         | 类型   | 说明            |
-| ------------ | ------ | --------------- |
-| `session_id` | number | 按会话筛选      |
-| `status`     | string | 按状态筛选      |
+| 参数         | 类型   | 说明       |
+| ------------ | ------ | ---------- |
+| `session_id` | number | 按会话筛选 |
+| `status`     | string | 按状态筛选 |
 
 ---
 
@@ -967,10 +978,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数         | 类型   | 说明            |
-| ------------ | ------ | --------------- |
-| `session_id` | number | 按会话筛选      |
-| `status`     | string | 按状态筛选      |
+| 参数         | 类型   | 说明       |
+| ------------ | ------ | ---------- |
+| `session_id` | number | 按会话筛选 |
+| `status`     | string | 按状态筛选 |
 
 ---
 
@@ -980,8 +991,8 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数          | 类型    | 说明                     |
-| ------------- | ------- | ------------------------ |
+| 参数          | 类型    | 说明                             |
+| ------------- | ------- | -------------------------------- |
 | `delete_file` | boolean | 是否同时删除产物文件，默认 false |
 
 ---
@@ -992,8 +1003,8 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **路径参数：**
 
-| 参数 | 说明              |
-| ---- | ----------------- |
+| 参数 | 说明                    |
+| ---- | ----------------------- |
 | `id` | danmaku_burn_records.id |
 
 **返回：** 视频流（`video/mp4`）

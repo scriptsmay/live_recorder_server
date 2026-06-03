@@ -639,11 +639,11 @@ Chrome Extension 发来的事件 `ts_ms` 是相对时间（可能为 `0`），�
 
 ### 修复
 
-| 文件 | 改动 |
-|---|---|
+| 文件                          | 改动                                                                                                                                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `services/RecorderService.js` | `_handleSessionFinish` 在 `recordingFiles.length === 0` 时主动扫描 `output_dir`，将符合条件的视频文件补插入 `recording_files`，并累加 `fileCount` / `fileSize`，确保后续 UPDATE session 时计数正确 |
-| `lib/core/watchdog.js` | `scanActiveSegments` 中 INSERT 新文件前调用 `probeSegmentDuration()` 写入 `duration_seconds`；删除多余的 `segIndex++`，每个文件只递增一次 |
-| `lib/core/scan-files.js` | `scanRecordingFiles` 关联文件到 session 后，检查 `insertRes.rowCount > 0` 才 `UPDATE total_segments + 1`，避免 `ON CONFLICT DO NOTHING` 命中时重复计数 |
+| `lib/core/watchdog.js`        | `scanActiveSegments` 中 INSERT 新文件前调用 `probeSegmentDuration()` 写入 `duration_seconds`；删除多余的 `segIndex++`，每个文件只递增一次                                                          |
+| `lib/core/scan-files.js`      | `scanRecordingFiles` 关联文件到 session 后，检查 `insertRes.rowCount > 0` 才 `UPDATE total_segments + 1`，避免 `ON CONFLICT DO NOTHING` 命中时重复计数                                             |
 
 ### 经验总结
 
@@ -651,3 +651,59 @@ Chrome Extension 发来的事件 `ts_ms` 是相对时间（可能为 `0`），�
 2. **多入口 INSERT 要保持计数一致**：`recording_files` 有三个 INSERT 入口（`scanActiveSegments`、`scanRecordingFiles`、`_handleSessionFinish`），每个入口都必须同步更新 `recording_sessions.total_segments`，漏一个就会出偏差
 3. **循环体内的重复递增要看 diff**：`segIndex++` 写了两遍，肉眼扫代码很容易忽略，review 时关注循环变量变更的重复出现
 4. **迁移脚本引入的字段要确认有写入方**：`duration_seconds` 从旧表迁过来后没有任何业务代码写入，属于典型的"迁而不管"，迁移后应逐一确认每个新字段在生产路径中有写入逻辑
+
+## 分段 ASS 路径规则不一致导致“生成成功但前端仍显示缺失”
+
+### 现象
+
+1. 手动调用 `POST /api/sessions/52/danmaku/ass` 返回成功，但会话文件列表里 ASS 状态仍为空
+2. 会话详情页中，已结束会话的弹幕采集状态仍显示 `录制中`
+3. 部分分段时间显示 `0s ~ 0s`，且看门狗没有补齐遗漏的分段 ASS
+
+### 根因
+
+分段 ASS 的文件命名规则在各模块中不一致：
+
+- `DanmakuAssGenerator.generateSegmentAss()` 实际写入 `danmaku/segments/{recording_files.id}.ass`
+- `DataService.getSessionDetail()` 和 `getRecordingFiles()` 曾按 `segment_index` 检查文件
+- 工具箱列表只抽样检查 `segments/1.ass`，当文件 id 不从 1 开始时误判未就绪
+- 手动 ASS 生成路径没有回填 `recording_files.danmaku_ass_path`，历史流程仍依赖旧字段
+
+此外，弹幕采集状态只在进程内 `stopCapture()` 正常执行时更新。服务重启或异常结束后，`recording_sessions.status` 已完成，但 `danmaku_capture_records.status` 可能仍停留在 `recording`。
+
+### 修复
+
+1. **统一路径规则**：分段 ASS 以 `{session.output_dir}/danmaku/segments/{recording_files.id}.ass` 为确定性路径；查询时先兼容旧字段，再检查 id 路径，最后兼容旧的 `segment_index` 路径。
+2. **手动生成回填旧字段**：`POST /api/sessions/:id/danmaku/ass` 生成分段 ASS 后同步更新 `recording_files.danmaku_ass_path`。
+3. **历史状态修正**：会话详情查询发现 session 已 `completed/interrupted` 但 capture 仍 `recording` 时，返回层修正为 `completed` 并异步回写数据库。
+4. **补时间逻辑更精确**：`backfillSegmentTimes()` 先判断是否存在缺失时间，再按文件顺序累加；有效分段保留原始时间，只对缺失分段用 `ffprobe` 补齐。
+5. **前端无效时间展示**：`segment_end_ms <= segment_start_ms` 时显示 `待补充`，不再显示误导性的 `0s ~ 0s`。
+
+### 经验总结
+
+1. **确定性路径要写成单一事实来源**：生成、查询、压制、补生成四条路径必须使用同一命名规则；注释里写 `segment_index`、实现里用 `id` 这种差异会变成前端误判。
+2. **兼容字段不能半废弃**：只要 `danmaku_ass_path` 还被队列或旧页面读取，生成路径就应该继续回填，直到所有读取方完成迁移。
+3. **状态展示不能只信单表**：录制会话已经结束时，关联采集记录仍 `recording` 应视为历史脏状态并修正，避免 UI 放大异常。
+
+## 日志页面 tail=0 语义误用导致“无法查看日志”
+
+### 现象
+
+Vue 日志页能加载日志文件列表，但选择文件后右侧内容为空；点击左侧日志文件时浏览器 URL 的 `?file=` 也没有同步更新。
+
+### 根因
+
+`Logs.vue` 用 `tail=0` 调用 `/api/logs/content`。在 `LogFileService.tailLines()` 中，`tail=0` 的语义是“不返回历史行，只返回当前 offset”，适合 SSE 从当前文件末尾开始追新内容，不适合作为普通查看接口。
+
+同时，Vue 迁移后只读取了初始 `route.query.file`，没有在 `selectFile()` 时写回 router query，也没有监听 query 变化。
+
+### 修复
+
+1. 普通内容查看改为请求 `tail=5000`，返回最近日志内容。
+2. `/api/logs/content` 和 SSE `ready` 事件返回 `offset`，前端可显示当前文件大小。
+3. `selectFile()` 使用 `router.replace()` 同步 `?file=`，并监听 query 变化以支持刷新、复制链接和浏览器前进后退。
+
+### 经验总结
+
+1. **同一个参数在不同场景下语义要明确**：`tail=0` 对实时流是“从末尾开始”，对查看页却是“空内容”。调用方要按场景选择参数。
+2. **SPA 迁移不能只读 URL**：列表选择、删除、刷新和浏览器导航都要维护 query 状态，否则页面可分享性和回退行为会退化。

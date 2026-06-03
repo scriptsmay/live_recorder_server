@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 
@@ -114,6 +116,44 @@ class DataService {
     return defaultValue;
   }
 
+  static _resolveSegmentAssPath(sessionOutputDir, file) {
+    if (file.danmaku_ass_path && fs.existsSync(file.danmaku_ass_path)) {
+      return file.danmaku_ass_path;
+    }
+
+    if (!sessionOutputDir || file.id == null) return null;
+
+    const paths = [path.join(sessionOutputDir, 'danmaku', 'segments', `${file.id}.ass`)];
+    if (file.segment_index != null && file.segment_index !== file.id) {
+      paths.push(path.join(sessionOutputDir, 'danmaku', 'segments', `${file.segment_index}.ass`));
+    }
+
+    return paths.find((assPath) => fs.existsSync(assPath)) || null;
+  }
+
+  static _normalizeFileSegmentTimes(files) {
+    let accumulatedMs = 0;
+
+    return files.map((file) => {
+      const normalized = { ...file };
+      const startMs = Number(normalized.segment_start_ms) || 0;
+      const endMs = Number(normalized.segment_end_ms) || 0;
+      const durationMs = Number(normalized.duration_seconds || 0) * 1000;
+
+      if (endMs <= startMs && durationMs > 0) {
+        normalized.segment_start_ms = accumulatedMs;
+        normalized.segment_end_ms = accumulatedMs + Math.round(durationMs);
+      }
+
+      const nextEnd = Number(normalized.segment_end_ms) || 0;
+      if (nextEnd > accumulatedMs) {
+        accumulatedMs = nextEnd;
+      }
+
+      return normalized;
+    });
+  }
+
   static async getSessions(options = {}) {
     const { room_url, room_id, status, limit = 50, page } = options;
     const conditions = ['s.deleted_at IS NULL'];
@@ -150,9 +190,9 @@ class DataService {
     // 从 JSONL 文件修正弹幕条数（DB 中的 event_count 可能在服务重启后失准）
     await Promise.all(
       result.rows.map((row) => {
-        if (row.danmaku_raw_path && require('fs').existsSync(row.danmaku_raw_path)) {
-          return require('fs')
-            .promises.readFile(row.danmaku_raw_path, 'utf-8')
+        if (row.danmaku_raw_path && fs.existsSync(row.danmaku_raw_path)) {
+          return fs.promises
+            .readFile(row.danmaku_raw_path, 'utf-8')
             .then((content) => {
               row.danmaku_event_count = content.split('\n').filter(Boolean).length;
             })
@@ -186,7 +226,7 @@ class DataService {
 
     const [sessionRes, captureRes, burnRes, filesRes, roomRes] = await Promise.all([
       pool.query('SELECT * FROM recording_sessions WHERE id = $1', [sid]),
-      pool.query('SELECT * FROM danmaku_capture_records WHERE session_id = $1', [sid]),
+      pool.query('SELECT * FROM danmaku_capture_records WHERE session_id = $1 ORDER BY id DESC LIMIT 1', [sid]),
       pool.query(
         'SELECT dbr.*, rf.file_path as video_path FROM danmaku_burn_records dbr LEFT JOIN recording_files rf ON dbr.recording_file_id = rf.id WHERE dbr.session_id = $1 ORDER BY dbr.segment_index',
         [sid]
@@ -201,35 +241,39 @@ class DataService {
     const session = sessionRes.rows[0] || null;
     if (!session) return null;
 
-    // 检查文件是否存在
-    const fsModule = require('fs');
-    const pathModule = require('path');
-    const files = filesRes.rows.map((f) => {
-      // danmaku_ass_exists: 从确定性路径检查（sessionDir/danmaku/segments/{segment_index}.ass）
-      let danmakuAssExists = false;
-      if (session.output_dir && f.segment_index != null) {
-        const deterministicPath = pathModule.join(session.output_dir, 'danmaku', 'segments', `${f.segment_index}.ass`);
-        danmakuAssExists = fsModule.existsSync(deterministicPath);
-      }
-      // 兼容旧数据：如果 DB 中仍有 danmaku_ass_path 且文件存在
-      if (!danmakuAssExists && f.danmaku_ass_path && fsModule.existsSync(f.danmaku_ass_path)) {
-        danmakuAssExists = true;
-      }
+    const files = this._normalizeFileSegmentTimes(filesRes.rows).map((f) => {
+      const assPath = this._resolveSegmentAssPath(session.output_dir, f);
       return {
         ...f,
-        file_exists: f.file_path ? fsModule.existsSync(f.file_path) : false,
-        danmaku_ass_exists: danmakuAssExists,
+        file_exists: f.file_path ? fs.existsSync(f.file_path) : false,
+        danmaku_ass_path: assPath || f.danmaku_ass_path,
+        danmaku_ass_exists: Boolean(assPath),
       };
     });
 
     // 弹幕采集记录：优先从 JSONL 文件计算真实条数（内存计数在服务重启后会丢失）
     const capture = captureRes.rows[0] || null;
-    if (capture && capture.raw_path && require('fs').existsSync(capture.raw_path)) {
+    if (capture && capture.raw_path && fs.existsSync(capture.raw_path)) {
       try {
-        const content = require('fs').readFileSync(capture.raw_path, 'utf-8');
+        const content = fs.readFileSync(capture.raw_path, 'utf-8');
         const lineCount = content.split('\n').filter(Boolean).length;
         capture.event_count = lineCount;
       } catch (_) {}
+    }
+
+    if (capture && capture.status === 'recording' && ['completed', 'interrupted'].includes(session.status)) {
+      capture.status = 'completed';
+      capture.ended_at = capture.ended_at || session.ended_at;
+      pool
+        .query(
+          `UPDATE danmaku_capture_records
+           SET status = 'completed',
+               ended_at = COALESCE(ended_at, $1, NOW()),
+               event_count = GREATEST(COALESCE(event_count, 0), $2)
+           WHERE id = $3 AND status = 'recording'`,
+          [session.ended_at, capture.event_count || 0, capture.id]
+        )
+        .catch(() => {});
     }
 
     return {
@@ -404,23 +448,14 @@ class DataService {
 
     return {
       rows: result.rows.map((rec) => {
-        // 从确定性路径检查 ASS 文件是否存在，替代旧的 recording_files.danmaku_ass_path
-        let danmaku_ass_exists = false;
-        if (rec.session_output_dir && rec.segment_index != null) {
-          const assPath = require('path').join(
-            rec.session_output_dir,
-            'danmaku',
-            'segments',
-            `${rec.segment_index}.ass`
-          );
-          danmaku_ass_exists = require('fs').existsSync(assPath);
-        }
+        const assPath = this._resolveSegmentAssPath(rec.session_output_dir, rec);
         return {
           ...rec,
-          file_exists: rec.file_path ? require('fs').existsSync(rec.file_path) : false,
+          danmaku_ass_path: assPath || rec.danmaku_ass_path,
+          file_exists: rec.file_path ? fs.existsSync(rec.file_path) : false,
           is_danmaku_burned: rec.burn_status === 'completed',
-          danmaku_burn_exists: rec.danmaku_burn_path ? require('fs').existsSync(rec.danmaku_burn_path) : false,
-          danmaku_ass_exists,
+          danmaku_burn_exists: rec.danmaku_burn_path ? fs.existsSync(rec.danmaku_burn_path) : false,
+          danmaku_ass_exists: Boolean(assPath),
         };
       }),
       total: parseInt(countResult.rows[0].count, 10),

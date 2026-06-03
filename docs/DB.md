@@ -115,28 +115,28 @@
 
 **会话详情、投稿操作、流媒体播放、文件统计均以此表作为数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
 
-| 字段              | 类型          | 约束                                           | 说明                                                  |
-| ----------------- | ------------- | ---------------------------------------------- | ----------------------------------------------------- |
-| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                                              |
-| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）                             |
-| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                                            |
-| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径                                          |
-| file_name         | VARCHAR(512)  |                                                | 文件名                                                |
-| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                                      |
-| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                                          |
-| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                                              |
-| ended_at          | TIMESTAMP     |                                                | 结束时间                                              |
-| completed_at      | TIMESTAMP     |                                                | 完成时间                                              |
-| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                                      |
-| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                                              |
-| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                                            |
-| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                                        |
-| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                                      |
-| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                                          |
-| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）                                  |
-| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）                                  |
-| danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | ~~分段级 ASS 字幕路径~~ **已废弃**，ASS 文件改由确定性路径 `{session.output_dir}/danmaku/segments/{segment_index}.ass` 查询，列保留以兼容历史数据，DROP 推迟执行 |
-| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                                              |
+| 字段              | 类型          | 约束                                           | 说明                                                                                                                                                         |
+| ----------------- | ------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                                                                                                                                                     |
+| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）                                                                                                                                    |
+| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                                                                                                                                                   |
+| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径                                                                                                                                                 |
+| file_name         | VARCHAR(512)  |                                                | 文件名                                                                                                                                                       |
+| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                                                                                                                                             |
+| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                                                                                                                                                 |
+| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                                                                                                                                                     |
+| ended_at          | TIMESTAMP     |                                                | 结束时间                                                                                                                                                     |
+| completed_at      | TIMESTAMP     |                                                | 完成时间                                                                                                                                                     |
+| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                                                                                                                                             |
+| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                                                                                                                                                     |
+| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                                                                                                                                                   |
+| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                                                                                                                                               |
+| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                                                                                                                                             |
+| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                                                                                                                                                 |
+| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）                                                                                                                                         |
+| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）                                                                                                                                         |
+| danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 兼容字段。分段级 ASS 文件以确定性路径 `{session.output_dir}/danmaku/segments/{recording_files.id}.ass` 为准，生成接口会回填该列以兼容历史流程，DROP 推迟执行 |
+| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                                                                                                                                                     |
 
 **状态流转：**
 

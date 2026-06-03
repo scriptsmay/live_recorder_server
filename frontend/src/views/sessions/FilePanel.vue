@@ -97,7 +97,7 @@ async function handlePlay(file: RecordingFile) {
   playerVisible.value = true
 
   try {
-    const hlsRes = await apiGet<{ data: { is_ready: boolean; relative_path: string } }>(
+    const hlsRes = await apiGet<{ is_ready: boolean; relative_path: string }>(
       `/api/recordings/${file.id}/hls`,
     )
     if (hlsRes.data?.is_ready) {

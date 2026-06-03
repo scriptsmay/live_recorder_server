@@ -66,7 +66,9 @@ const notFound = ref(false)
 
 // ---- Danmaku Search ----
 const searchKeyword = ref('')
-const searchResults = ref<Array<{ ts_ms: number; ts_str: string; text: string; username: string; user_id: string }>>([])
+const searchResults = ref<
+  Array<{ ts_ms: number; ts_str: string; text: string; username: string; user_id: string }>
+>([])
 const searchTotal = ref(0)
 const searchOffset = ref(0)
 const searchLimit = 50
@@ -82,7 +84,12 @@ const sessionStatusBadge = computed(() => {
     interrupted: { text: '中断', cls: 'bg-red-100 text-red-700' },
     pending: { text: '录制准备', cls: 'bg-gray-100 text-gray-500' },
   }
-  return map[detail.value.session.status] || { text: detail.value.session.status, cls: 'bg-gray-100 text-gray-500' }
+  return (
+    map[detail.value.session.status] || {
+      text: detail.value.session.status,
+      cls: 'bg-gray-100 text-gray-500',
+    }
+  )
 })
 
 const captureStatusBadge = computed(() => {
@@ -92,7 +99,12 @@ const captureStatusBadge = computed(() => {
     completed: { text: '已完成', cls: 'bg-blue-100 text-blue-700' },
     failed: { text: '失败', cls: 'bg-red-100 text-red-700' },
   }
-  return map[detail.value.capture.status] || { text: detail.value.capture.status, cls: 'bg-gray-100 text-gray-500' }
+  return (
+    map[detail.value.capture.status] || {
+      text: detail.value.capture.status,
+      cls: 'bg-gray-100 text-gray-500',
+    }
+  )
 })
 
 const roomDisplayName = computed(() => {
@@ -115,6 +127,12 @@ function formatFileSize(bytes: number | null) {
 function formatMs(ms: number | null | undefined) {
   if (ms == null) return '-'
   return (ms / 1000).toFixed(0) + 's'
+}
+
+function formatSegmentTime(startMs: number | null | undefined, endMs: number | null | undefined) {
+  if (startMs == null || endMs == null) return '-'
+  if (endMs <= startMs) return '待补充'
+  return `${formatMs(startMs)} ~ ${formatMs(endMs)}`
 }
 
 function fileName(filePath: string | null) {
@@ -226,12 +244,17 @@ onMounted(() => {
   <div>
     <!-- Loading -->
     <div v-if="loading" class="text-center py-16">
-      <div class="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+      <div
+        class="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+      />
       <span class="text-sm text-gray-500">加载中...</span>
     </div>
 
     <!-- Not Found -->
-    <div v-else-if="notFound" class="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+    <div
+      v-else-if="notFound"
+      class="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm"
+    >
       <p class="text-gray-500 mb-4">会话不存在</p>
       <router-link to="/sessions" class="text-sm text-brand-600 hover:text-brand-700 no-underline">
         返回会话列表
@@ -243,9 +266,7 @@ onMounted(() => {
       <!-- Page Header -->
       <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
         <div class="flex items-center gap-3">
-          <h1 class="text-2xl font-bold text-gray-900">
-            会话 #{{ detail.session.id }} 弹幕详情
-          </h1>
+          <h1 class="text-2xl font-bold text-gray-900">会话 #{{ detail.session.id }} 弹幕详情</h1>
           <router-link
             to="/sessions"
             class="px-3 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors no-underline"
@@ -277,7 +298,10 @@ onMounted(() => {
               <div class="flex">
                 <dt class="text-gray-400 w-20 shrink-0">状态</dt>
                 <dd>
-                  <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="sessionStatusBadge.cls">
+                  <span
+                    class="text-xs font-medium px-2 py-0.5 rounded-full"
+                    :class="sessionStatusBadge.cls"
+                  >
                     {{ sessionStatusBadge.text }}
                   </span>
                 </dd>
@@ -293,7 +317,9 @@ onMounted(() => {
               <div class="flex">
                 <dt class="text-gray-400 w-20 shrink-0">输出路径</dt>
                 <dd class="text-gray-700">
-                  <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{ detail.session.output_path || '-' }}</code>
+                  <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{
+                    detail.session.output_path || '-'
+                  }}</code>
                 </dd>
               </div>
             </dl>
@@ -302,9 +328,14 @@ onMounted(() => {
 
         <!-- Capture Info Card -->
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <div
+            class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between"
+          >
             <span class="text-sm font-medium text-gray-700">弹幕录制</span>
-            <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="captureStatusBadge.cls">
+            <span
+              class="text-xs font-medium px-2 py-0.5 rounded-full"
+              :class="captureStatusBadge.cls"
+            >
               {{ captureStatusBadge.text }}
             </span>
           </div>
@@ -313,18 +344,24 @@ onMounted(() => {
               <dl class="space-y-2.5 text-xs">
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">弹幕事件</dt>
-                  <dd class="text-gray-700"><strong>{{ detail.capture.event_count || 0 }}</strong> 条</dd>
+                  <dd class="text-gray-700">
+                    <strong>{{ detail.capture.event_count || 0 }}</strong> 条
+                  </dd>
                 </div>
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">JSONL 路径</dt>
                   <dd class="text-gray-700">
-                    <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{ detail.capture.raw_path || '-' }}</code>
+                    <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{
+                      detail.capture.raw_path || '-'
+                    }}</code>
                   </dd>
                 </div>
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">ASS 路径</dt>
                   <dd class="text-gray-700">
-                    <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{ detail.capture.ass_path || '-' }}</code>
+                    <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{
+                      detail.capture.ass_path || '-'
+                    }}</code>
                   </dd>
                 </div>
                 <div class="flex">
@@ -370,21 +407,34 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in detail.files" :key="f.id" class="border-b border-gray-50 hover:bg-gray-50/50">
+              <tr
+                v-for="f in detail.files"
+                :key="f.id"
+                class="border-b border-gray-50 hover:bg-gray-50/50"
+              >
                 <td class="px-3 py-2 text-gray-600">{{ f.id }}</td>
                 <td class="px-3 py-2 text-gray-600">{{ fileName(f.file_path) }}</td>
                 <td class="px-3 py-2 text-gray-600">{{ formatFileSize(f.file_size) }}</td>
                 <td class="px-3 py-2 text-gray-500">
-                  {{ formatMs(f.segment_start_ms) }} ~ {{ formatMs(f.segment_end_ms) }}
+                  {{ formatSegmentTime(f.segment_start_ms, f.segment_end_ms) }}
                 </td>
                 <td class="px-3 py-2">
-                  <span v-if="f.danmaku_ass_exists" class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                  <span
+                    v-if="f.danmaku_ass_exists"
+                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700"
+                  >
                     ASS 就绪
                   </span>
-                  <span v-else-if="f.danmaku_ass_path" class="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                  <span
+                    v-else-if="f.danmaku_ass_path"
+                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700"
+                  >
                     ASS 缺失
                   </span>
-                  <span v-else class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                  <span
+                    v-else
+                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"
+                  >
                     &mdash;
                   </span>
                 </td>
@@ -399,15 +449,25 @@ onMounted(() => {
                     </span>
                   </template>
                   <template v-else>
-                    <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">未压制</span>
+                    <span
+                      class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"
+                      >未压制</span
+                    >
                   </template>
                 </td>
                 <td class="px-3 py-2">
                   <template v-if="burnRecordForFile(f.id)">
-                    <span v-if="burnRecordForFile(f.id)!.status === 'completed'" class="text-green-600">
+                    <span
+                      v-if="burnRecordForFile(f.id)!.status === 'completed'"
+                      class="text-green-600"
+                    >
                       &#10004; 已压制
                     </span>
-                    <span v-else-if="burnRecordForFile(f.id)!.status === 'failed'" class="text-red-600" :title="burnRecordForFile(f.id)!.error || ''">
+                    <span
+                      v-else-if="burnRecordForFile(f.id)!.status === 'failed'"
+                      class="text-red-600"
+                      :title="burnRecordForFile(f.id)!.error || ''"
+                    >
                       &#10008; 失败
                     </span>
                     <span v-else class="text-gray-400">
@@ -418,7 +478,7 @@ onMounted(() => {
                       :href="logFileUrl(burnRecordForFile(f.id)!.log_path)"
                       target="_blank"
                       class="ml-1.5 px-1.5 py-0.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-gray-50 no-underline"
-                      :title="burnRecordForFile(f.id)!.log_path"
+                      :title="burnRecordForFile(f.id)!.log_path || undefined"
                     >
                       日志
                     </a>
@@ -433,7 +493,9 @@ onMounted(() => {
 
       <!-- Danmaku Search Panel -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+        <div
+          class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-wrap gap-2"
+        >
           <span class="text-sm font-medium text-gray-700">弹幕搜索</span>
           <div class="flex items-center gap-2">
             <input
@@ -454,20 +516,28 @@ onMounted(() => {
         <div class="p-4">
           <!-- Searching -->
           <div v-if="searching" class="text-center py-6">
-            <div class="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <div
+              class="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"
+            />
             <span class="text-xs text-gray-400">搜索中...</span>
           </div>
 
           <!-- Not yet searched -->
-          <p v-else-if="!searchExecuted" class="text-xs text-gray-400 text-center py-4">输入关键词搜索弹幕</p>
+          <p v-else-if="!searchExecuted" class="text-xs text-gray-400 text-center py-4">
+            输入关键词搜索弹幕
+          </p>
 
           <!-- No results -->
-          <p v-else-if="searchResults.length === 0" class="text-xs text-gray-400 text-center py-4">无匹配弹幕</p>
+          <p v-else-if="searchResults.length === 0" class="text-xs text-gray-400 text-center py-4">
+            无匹配弹幕
+          </p>
 
           <!-- Results -->
           <template v-else>
             <div class="mb-2 text-xs text-gray-400">
-              共 {{ searchTotal }} 条匹配 (显示 {{ searchOffset + 1 }}-{{ Math.min(searchOffset + searchResults.length, searchTotal) }})
+              共 {{ searchTotal }} 条匹配 (显示 {{ searchOffset + 1 }}-{{
+                Math.min(searchOffset + searchResults.length, searchTotal)
+              }})
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-xs">
@@ -479,10 +549,17 @@ onMounted(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(d, idx) in searchResults" :key="idx" class="border-b border-gray-50 hover:bg-gray-50/50">
+                  <tr
+                    v-for="(d, idx) in searchResults"
+                    :key="idx"
+                    class="border-b border-gray-50 hover:bg-gray-50/50"
+                  >
                     <td class="px-3 py-1.5 text-gray-500">{{ d.ts_str || '-' }}</td>
                     <td class="px-3 py-1.5 text-gray-600">{{ d.username || '-' }}</td>
-                    <td class="px-3 py-1.5 text-gray-700" v-html="highlightKeyword(d.text, searchKeyword)" />
+                    <td
+                      class="px-3 py-1.5 text-gray-700"
+                      v-html="highlightKeyword(d.text, searchKeyword)"
+                    />
                   </tr>
                 </tbody>
               </table>

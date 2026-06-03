@@ -27,6 +27,7 @@ router.get('/api/logs/content', async (req, res) => {
       file: result.file,
       lines: result.lines,
       truncated: result.truncated,
+      offset: result.offset,
     });
   } catch (err) {
     sendLogError(res, err);
@@ -90,6 +91,7 @@ router.get('/api/logs/stream', async (req, res) => {
     writeEvent('ready', {
       file: initial.file,
       truncated: initial.truncated,
+      offset: initial.offset,
     });
 
     for (const line of initial.lines) {

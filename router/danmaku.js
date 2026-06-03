@@ -78,6 +78,7 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
 
     const sessionDir = session.rows[0].output_dir;
     const danmakuDir = path.join(sessionDir, 'danmaku');
+    fs.mkdirSync(danmakuDir, { recursive: true });
     // 优先使用新路径，兼容旧路径
     const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
     const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
@@ -104,9 +105,25 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
     // 更新采集记录的 ASS 路径
     await pool.query(`UPDATE danmaku_capture_records SET ass_path = $1 WHERE session_id = $2`, [assPath, sessionId]);
 
+    await pool.query(
+      `UPDATE danmaku_capture_records dcr
+       SET status = 'completed',
+           ended_at = COALESCE(dcr.ended_at, s.ended_at, NOW()),
+           event_count = GREATEST(COALESCE(dcr.event_count, 0), $1)
+       FROM recording_sessions s
+       WHERE dcr.session_id = s.id
+         AND dcr.session_id = $2
+         AND dcr.status = 'recording'
+         AND s.status IN ('completed', 'interrupted')`,
+      [assResult.eventCount, sessionId]
+    );
+
     // 检查是否有分段时间缺失（segment_start_ms = 0），如有则用 ffprobe 补充
     const missingTimes = await pool.query(
-      `SELECT COUNT(*) AS cnt FROM recording_files WHERE session_id = $1 AND segment_start_ms = 0`,
+      `SELECT COUNT(*) AS cnt
+       FROM recording_files
+       WHERE session_id = $1
+         AND (segment_end_ms = 0 OR (segment_index > 1 AND segment_start_ms = 0))`,
       [sessionId]
     );
     if (parseInt(missingTimes.rows[0].cnt, 10) > 0) {
@@ -132,8 +149,11 @@ router.post('/sessions/:id/danmaku/ass', async (req, res) => {
         offsetMs: offsetMs || 0,
       });
 
-      // 分段 ASS 文件存放在确定性路径 danmakuDir/segments/{segment_index}.ass
-      // 不再写入 recording_files.danmaku_ass_path，由文件系统直接查询
+      // 分段 ASS 文件存放在确定性路径 danmakuDir/segments/{recording_file_id}.ass
+      // 同时回填旧字段，兼容依赖 danmaku_ass_path 的历史流程
+      for (const seg of segmentResults) {
+        await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
+      }
     }
 
     res.json({
@@ -168,9 +188,10 @@ router.post('/sessions/:id/danmaku/burn', async (req, res) => {
     // 检查是否有分段 ASS（从确定性路径检查，不再依赖 recording_files.danmaku_ass_path）
     const sessionInfo = await pool.query(`SELECT output_dir FROM recording_sessions WHERE id = $1`, [sessionId]);
     const sessDir = sessionInfo.rows[0]?.output_dir;
-    const files = await pool.query(`SELECT id, segment_index FROM recording_files WHERE session_id = $1 ORDER BY id ASC`, [
-      sessionId,
-    ]);
+    const files = await pool.query(
+      `SELECT id, segment_index FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
+      [sessionId]
+    );
 
     const hasAss = files.rows.some((f) => {
       if (!sessDir) return false;
@@ -468,14 +489,33 @@ router.get('/danmaku-toolbox/sessions', async (req, res) => {
       })
     );
 
+    const assFiles =
+      result.rows.length > 0
+        ? await pool.query(
+            `SELECT session_id, id, segment_index, danmaku_ass_path
+             FROM recording_files
+             WHERE session_id = ANY($1::int[])`,
+            [result.rows.map((row) => row.id)]
+          )
+        : { rows: [] };
+    const assFilesBySession = new Map();
+    for (const file of assFiles.rows) {
+      if (!assFilesBySession.has(file.session_id)) {
+        assFilesBySession.set(file.session_id, []);
+      }
+      assFilesBySession.get(file.session_id).push(file);
+    }
+
     // 从文件系统检查 ASS 是否就绪（替代旧的 recording_files.danmaku_ass_path 检查）
     for (const row of result.rows) {
-      if (row.output_dir && row.ass_segment_count > 0) {
-        const sampleAss = path.join(row.output_dir, 'danmaku', 'segments', '1.ass');
-        row.has_ass_ready = fs.existsSync(sampleAss);
-      } else {
-        row.has_ass_ready = false;
-      }
+      const files = assFilesBySession.get(row.id) || [];
+      row.has_ass_ready = files.some((file) => {
+        if (file.danmaku_ass_path && fs.existsSync(file.danmaku_ass_path)) return true;
+        if (!row.output_dir) return false;
+        const idPath = path.join(row.output_dir, 'danmaku', 'segments', `${file.id}.ass`);
+        const indexPath = path.join(row.output_dir, 'danmaku', 'segments', `${file.segment_index}.ass`);
+        return fs.existsSync(idPath) || fs.existsSync(indexPath);
+      });
       delete row.output_dir; // 不暴露给前端
     }
 

@@ -6,7 +6,6 @@
  * 默认 session_id = 49
  */
 
-const path = require('path');
 const env = process.env.NODE_ENV || 'development';
 require('../config/env').initEnv({ mode: env });
 
@@ -32,9 +31,7 @@ async function fix(sessionId) {
 
   console.log(`[修复前] 共 ${before.rows.length} 个分段：`);
   for (const row of before.rows) {
-    console.log(
-      `  id=${row.id}  ${row.file_name}  start=${row.segment_start_ms}ms  end=${row.segment_end_ms}ms`
-    );
+    console.log(`  id=${row.id}  ${row.file_name}  start=${row.segment_start_ms}ms  end=${row.segment_end_ms}ms`);
   }
 
   // 2. 重置为 0（让 backfillSegmentTimes 重新计算）
