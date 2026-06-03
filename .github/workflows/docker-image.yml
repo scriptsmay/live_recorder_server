@@ -1,52 +1,66 @@
-name: Docker Image CI
+name: Build and Push Docker Image
 
 on:
   push:
     tags:
       - 'v*'
+    # 如果你修改了 Dockerfile 相关文件才触发，可以解开下面的注释节省 Action 额度
+    # paths:
+    #   - 'Dockerfile*'
+    #   - 'package.json'
+    #   - 'package-lock.json'
+  # 允许在 GitHub Actions 页面手动点击运行
+  workflow_dispatch:
 
-# 定义权限，必须有 write 权限才能推送到 GHCR
-permissions:
-  packages: write
-  contents: read
+env:
+  # 默认推送到 GitHub 自带的容器镜像库 (GHCR)，不需要你额外注册 Docker Hub 账号
+  REGISTRY: ghcr.io
+  # 镜像名称，自动读取 "你的GitHub用户名/仓库名" (全小写)
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # 赋予 GITHUB_TOKEN 推送镜像到 GHCR 的权限，免除手动配置 Secret 的烦恼
+    permissions:
+      contents: read
+      packages: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: 1. Checkout repository 检出代码
+        uses: actions/checkout@v4
 
-      # 1. 登录到 GitHub Container Registry
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
+      - name: 2. Set up Docker Buildx 配置高阶构建环境
+        # Buildx 是使用高级缓存 (type=gha) 的前提
+        uses: docker/setup-buildx-action@v3
+
+      - name: 3. Log in to the Container registry 登录镜像库
+        uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.MY_TOKEN }}
+          # 直接使用 GitHub 提供的内置 Token，无需手动去 Secrets 里配置！
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. 提取元数据（自动生成标签，如 :main 和 :sha-xxxx）
-      - name: Extract metadata
+      - name: 4. Extract metadata 自动生成镜像标签
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 自动打两个 Tag：一个是 latest（主分支），一个是 git commit 的短 hash（方便回退）
           tags: |
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
 
-      # 3. 设置 Buildx（用于缓存优化）
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # 4. 构建并推送
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
+      - name: 5. Build and push Docker image 构建并推送
+        uses: docker/build-push-action@v5
         with:
           context: .
-          push: true # 设置为 true 就会自动推送
+          file: ./Dockerfile
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 🚀 神奇魔法：开启 GitHub Actions 原生缓存机制
+          # 它可以把 Playwright 和大体积的 Chromium 缓存下来，后续构建速度直接起飞
           cache-from: type=gha
           cache-to: type=gha,mode=max
