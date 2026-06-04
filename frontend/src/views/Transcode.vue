@@ -46,11 +46,6 @@ const page = ref(1)
 const loading = ref(true)
 const typeFilter = ref('all')
 
-function formatDate(d: string | null | undefined) {
-  if (!d) return '-'
-  return new Date(d).toLocaleString('zh-CN')
-}
-
 function fileName(fp: string | null) {
   if (!fp) return '-'
   return fp.split('/').pop() || '-'
@@ -375,14 +370,14 @@ onMounted(loadData)
             <table class="w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-16">类型</th>
-                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-14">ID</th>
+                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">类型</th>
+                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-16">ID</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500">会话 / 直播间</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500">原文件</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500">输出文件</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">状态</th>
-                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-28">入队时间</th>
-                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-28">完成时间</th>
+                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-36">入队时间</th>
+                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-36">完成时间</th>
                   <th class="px-4 py-3 text-right font-medium text-gray-500 w-24">操作</th>
                 </tr>
               </thead>
@@ -431,8 +426,8 @@ onMounted(loadData)
                       {{ r.error }}
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ formatDate(r.enqueued_at) }}</td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ formatDate(r.completed_at) }}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(r.enqueued_at) }}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(r.completed_at) }}</td>
                   <td class="px-4 py-3 text-right">
                     <button
                       class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
@@ -490,8 +485,8 @@ onMounted(loadData)
                       {{ b.error }}
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ formatDate(b.enqueued_at) }}</td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ formatDate(b.completed_at) }}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(b.enqueued_at) }}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(b.completed_at) }}</td>
                   <td class="px-4 py-3 text-right">
                     <button
                       class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"

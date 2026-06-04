@@ -66,14 +66,6 @@ function toggleRefresh() {
   }
 }
 
-// --- 工具函数 ---
-function formatDate(d: string | null | undefined): string {
-  if (!d) return '-'
-  const date = new Date(d)
-  if (isNaN(date.getTime())) return '-'
-  return date.toLocaleString('zh-CN')
-}
-
 function formatDuration(d: string | null | undefined): string {
   if (!d) return '-'
   const target = new Date(d)
@@ -327,7 +319,7 @@ onUnmounted(() => {
                   </router-link>
                 </td>
                 <td class="px-6 py-3 font-mono text-xs text-gray-500">{{ rec.pid }}</td>
-                <td class="px-6 py-3 text-gray-500 text-xs">{{ formatDate(rec.started_at) }}</td>
+                <td class="px-6 py-3 text-gray-500 text-xs">{{ $formatTime(rec.started_at) }}</td>
                 <td class="px-6 py-3">
                   <span
                     class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"

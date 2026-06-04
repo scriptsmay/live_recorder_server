@@ -46,12 +46,6 @@ const playerSrc = ref('')
 const playerTitle = ref('视频播放')
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hlsPlayer: Hls | null = null
-
-function formatDate(d: string | null | undefined) {
-  if (!d) return '-'
-  return new Date(d).toLocaleString('zh-CN')
-}
-
 function formatBytes(bytes: number) {
   if (!bytes) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -358,7 +352,7 @@ watch(
                 </span>
               </td>
               <td class="px-4 py-3 text-xs text-gray-500">
-                {{ formatDate(rec.session_started_at || rec.started_at) }}
+                {{ $formatTime(rec.session_started_at || rec.started_at) }}
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1.5">

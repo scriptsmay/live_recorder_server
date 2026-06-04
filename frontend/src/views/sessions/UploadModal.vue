@@ -14,6 +14,7 @@ const props = defineProps<{
   open: boolean
   sessionId: number | null
   templates: UploadTemplate[]
+  uploadSource?: 'original' | 'danmaku'
 }>()
 
 const emit = defineEmits<{
@@ -69,7 +70,10 @@ async function handleSubmit() {
   try {
     const res = await apiPost<{ status: string; message?: string }>(
       `/api/sessions/${props.sessionId}/upload`,
-      { template_id: parseInt(selectedTemplateId.value, 10) },
+      {
+        template_id: parseInt(selectedTemplateId.value, 10),
+        upload_source: props.uploadSource || 'original',
+      },
     )
     if (res.status !== 'ok') {
       errorMsg.value = res.message || '投稿失败'

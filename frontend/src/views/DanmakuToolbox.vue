@@ -323,11 +323,12 @@ function handleRefreshAll() {
       @close="searchModalVisible = false"
     />
 
-    <!-- 投稿弹窗 -->
+    <!-- 投稿弹窗（弹幕工具箱：使用弹幕压制后视频） -->
     <UploadModal
       :open="uploadModalOpen"
       :session-id="uploadSessionId"
       :templates="templates"
+      upload-source="danmaku"
       @close="uploadModalOpen = false"
       @submitted="handleUploadSubmitted"
       @error="handleUploadError"

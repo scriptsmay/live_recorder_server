@@ -30,10 +30,6 @@ const detailVisible = ref(false)
 const detailRecord = ref<UploadRecord | null>(null)
 
 // ---- 工具函数 ----
-function formatDate(d: string | null | undefined) {
-  if (!d) return '-'
-  return new Date(d).toLocaleString('zh-CN')
-}
 
 interface Badge {
   text: string
@@ -160,7 +156,7 @@ onMounted(fetchRecords)
                 </a>
                 <span v-else class="text-gray-400">-</span>
               </td>
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ formatDate(r.created_at) }}</td>
+              <td class="px-4 py-3 text-gray-500 text-xs">{{ $formatTime(r.created_at) }}</td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-2">
                   <button

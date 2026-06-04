@@ -712,16 +712,23 @@ curl -X POST http://127.0.0.1:1123/api/upload_templates \
 
 **请求体：**
 
-| 参数        | 类型    | 必填 | 说明                        |
-| ----------- | ------- | ---- | --------------------------- |
-| template_id | integer | 否   | 投稿模板 ID，不传则自动选择 |
+| 参数          | 类型    | 必填 | 说明                                                               |
+| ------------- | ------- | ---- | ------------------------------------------------------------------ |
+| template_id   | integer | 是   | 投稿模板 ID                                                         |
+| upload_source | string  | 否   | 投稿文件来源：`original`=源视频（默认），`danmaku`=弹幕压制后的视频 |
 
 **示例：**
 
 ```bash
+# 使用源视频投稿（默认）
 curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
   -H 'Content-Type: application/json' \
-  -d '{"template_id": 1}'
+  -d '{"template_id": 1, "upload_source": "original"}'
+
+# 使用弹幕压制后的视频投稿
+curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
+  -H 'Content-Type: application/json' \
+  -d '{"template_id": 1, "upload_source": "danmaku"}'
 ```
 
 **返回：**

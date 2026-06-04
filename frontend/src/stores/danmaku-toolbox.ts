@@ -141,7 +141,7 @@ export const useDanmakuToolboxStore = defineStore('danmaku-toolbox', () => {
   }> {
     const [filesRes, burnRes] = await Promise.all([
       apiGet<{ rows: RecordingFile[]; total: number }>(
-        `/api/recording_files?session_id=${sessionId}`,
+        `/api/recording_files?session_id=${sessionId}&order=asc`,
       ),
       apiGet<BurnRecord[]>(`/api/danmaku_burn_records?session_id=${sessionId}`),
     ])

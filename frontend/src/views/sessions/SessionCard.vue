@@ -114,10 +114,6 @@ const uploadBadgeCls = (status: string) => {
 }
 
 // ---- Helpers ----
-function formatDate(d: string | null | undefined) {
-  if (!d) return '-'
-  return new Date(d).toLocaleString('zh-CN')
-}
 
 function formatBytes(bytes: number | string | null | undefined) {
   const n = Number(bytes)
@@ -256,11 +252,11 @@ onMounted(async () => {
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
           <div>
             <span class="text-gray-400">开始时间</span>
-            <div class="text-gray-700 mt-0.5">{{ formatDate(session.started_at) }}</div>
+            <div class="text-gray-700 mt-0.5">{{ $formatTime(session.started_at) }}</div>
           </div>
           <div>
             <span class="text-gray-400">结束时间</span>
-            <div class="text-gray-700 mt-0.5">{{ formatDate(session.ended_at) }}</div>
+            <div class="text-gray-700 mt-0.5">{{ $formatTime(session.ended_at) }}</div>
           </div>
           <div>
             <span class="text-gray-400">分片数</span>

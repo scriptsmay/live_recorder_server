@@ -9,11 +9,6 @@ defineSlots<{
 
 const appStore = useAppStore()
 
-function formatDateTime(iso: string) {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleString('zh-CN')
-}
-
 onMounted(() => {
   appStore.fetchHealth()
 })
@@ -30,7 +25,7 @@ onMounted(() => {
     >
       <span>
         <strong class="text-gray-500">系统启动时间:</strong>
-        {{ formatDateTime(appStore.serverStartTime) }}
+        {{ $formatTime(appStore.serverStartTime) }}
       </span>
       <span>
         <strong class="text-gray-500">应用版本:</strong>

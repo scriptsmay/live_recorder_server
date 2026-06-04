@@ -114,11 +114,6 @@ const roomDisplayName = computed(() => {
 })
 
 // ---- Helpers ----
-function formatDate(d: string | null | undefined) {
-  if (!d) return '-'
-  return new Date(d).toLocaleString('zh-CN')
-}
-
 function formatFileSize(bytes: number | null) {
   if (!bytes) return '-'
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
@@ -308,11 +303,11 @@ onMounted(() => {
               </div>
               <div class="flex">
                 <dt class="text-gray-400 w-20 shrink-0">开始时间</dt>
-                <dd class="text-gray-700">{{ formatDate(detail.session.started_at) }}</dd>
+                <dd class="text-gray-700">{{ $formatTime(detail.session.started_at) }}</dd>
               </div>
               <div class="flex">
                 <dt class="text-gray-400 w-20 shrink-0">结束时间</dt>
-                <dd class="text-gray-700">{{ formatDate(detail.session.ended_at) }}</dd>
+                <dd class="text-gray-700">{{ $formatTime(detail.session.ended_at) }}</dd>
               </div>
               <div class="flex">
                 <dt class="text-gray-400 w-20 shrink-0">输出路径</dt>
@@ -366,11 +361,11 @@ onMounted(() => {
                 </div>
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">开始采集</dt>
-                  <dd class="text-gray-700">{{ formatDate(detail.capture.started_at) }}</dd>
+                  <dd class="text-gray-700">{{ $formatTime(detail.capture.started_at) }}</dd>
                 </div>
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">结束采集</dt>
-                  <dd class="text-gray-700">{{ formatDate(detail.capture.ended_at) }}</dd>
+                  <dd class="text-gray-700">{{ $formatTime(detail.capture.ended_at) }}</dd>
                 </div>
                 <div v-if="detail.capture.error" class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">错误</dt>
