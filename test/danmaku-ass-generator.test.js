@@ -343,7 +343,7 @@ describe('DanmakuAssGenerator._buildAssFile', () => {
   test('包含样式定义行', () => {
     const ass = danmakuAssGenerator._buildAssFile(1920, 1080, style, []);
     expect(ass).toContain('Style: Scroll,');
-    expect(ass).toContain(',2,10,10,5,1');
+    expect(ass).toContain(',2,20,20,80,1');
   });
 
   test('720p 字号缩放', () => {

@@ -22,6 +22,8 @@ const records = ref<UploadRecord[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+// 每页 N 条，避免分页异常
+const pageSize = 10
 
 // ---- 详情弹窗 ----
 const detailVisible = ref(false)
@@ -58,7 +60,7 @@ async function fetchRecords() {
   loading.value = true
   try {
     const res = await apiGet<PaginatedResponse<UploadRecord>>(
-      `/api/upload_records?limit=50&page=${page.value}`,
+      `/api/upload_records?limit=${pageSize}&page=${page.value}`,
     )
     records.value = res.data.rows
     total.value = res.data.total
@@ -190,7 +192,7 @@ onMounted(fetchRecords)
       <div v-if="detailVisible" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="fixed inset-0 bg-black/40" @click="closeDetail" />
         <div
-          class="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
+          class="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col"
         >
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-900">输出详情 - #{{ detailRecord?.id }}</h3>

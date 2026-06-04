@@ -27,6 +27,7 @@ export interface Room {
   polling_interval: number
   polling_platform: string | null
   last_live_status: boolean
+  last_polled_at: string | null
   segment_duration: number
   filename_template: string
   upload_template_id: number | null

@@ -14,6 +14,7 @@ import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
 import RoomFormModal from './rooms/RoomFormModal.vue'
 import type { Room, UploadTemplate } from '@/types/api'
+import { formatTime } from '@/utils/lib'
 
 interface SettingsMap {
   downloader?: string
@@ -57,7 +58,7 @@ const countPaused = computed(() => rooms.value.filter((r) => r.status === 'pause
 async function fetchRooms() {
   loading.value = true
   try {
-    const res = await apiGet<Room[]>(`/api/rooms?page=${page.value}&limit=50`)
+    const res = await apiGet<Room[]>(`/api/rooms?page=${page.value}&limit=10`)
     rooms.value = res.data ?? []
     total.value = (res as unknown as { total?: number }).total ?? rooms.value.length
   } catch (err) {
@@ -194,9 +195,11 @@ onMounted(() => {
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-sm font-medium"
         >
           <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-            <path
-              d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"
-            />
+            <g transform="translate(4 4)">
+              <path
+                d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"
+              />
+            </g>
           </svg>
           {{ downloaderName }}
         </span>
@@ -361,7 +364,7 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500">直播间</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-[100px]">状态</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-[150px]">开关</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-[110px]">轮询</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 w-[160px]">轮询</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">配置</th>
               <th class="px-4 py-3 text-right font-medium text-gray-500 w-[220px]">操作</th>
             </tr>
@@ -400,7 +403,7 @@ onMounted(() => {
                   class="text-xs text-gray-400 hover:text-brand-600 truncate block max-w-[300px]"
                   :title="r.room_url"
                 >
-                  {{ r.room_url.length > 50 ? r.room_url.slice(0, 50) + '...' : r.room_url }}
+                  {{ r.room_url }}
                 </a>
               </td>
 
@@ -421,28 +424,24 @@ onMounted(() => {
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
                   <span
-                    class="flex items-center gap-1 text-xs"
-                    :class="r.notification_enabled !== false ? 'text-amber-600' : 'text-gray-300'"
-                    title="通知"
+                    class="flex items-center gap-1 text-xs px-1 py-0.5 rounded-md border"
+                    :class="
+                      r.notification_enabled !== false
+                        ? 'text-amber-600 rounded-md border-amber-300'
+                        : 'text-gray-300'
+                    "
                   >
-                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path
-                        d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.903a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.903z"
-                      />
-                    </svg>
                     通知
                   </span>
                   <span
-                    class="flex items-center gap-1 text-xs"
-                    :class="r.monitoring_enabled !== false ? 'text-blue-600' : 'text-gray-300'"
-                    title="监听"
+                    class="flex items-center gap-1 text-xs px-1 py-0.5 rounded-md border"
+                    :class="
+                      r.monitoring_enabled !== false
+                        ? 'text-blue-600 border-blue-300'
+                        : 'text-gray-300'
+                    "
                   >
-                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path
-                        d="M2 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H4zm13 2.383-4.758 2.855L15 11.114v-5.73zm-.034 6.878L9.271 8.82 8 9.583 6.728 8.82l-5.694 3.44A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.739zM1 11.114l4.758-2.876L1 5.383v5.73z"
-                      />
-                    </svg>
-                    监听
+                    录制
                   </span>
                 </div>
               </td>
@@ -451,19 +450,27 @@ onMounted(() => {
               <td class="px-4 py-3">
                 <template v-if="r.polling_enabled">
                   <div class="flex items-center gap-1.5 mb-1">
-                    <span
-                      class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"
-                    ></span>
-                    <span class="text-xs font-medium text-green-600">轮询中</span>
+                    <div class="flex items-center gap-1.5">
+                      <span
+                        class="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"
+                      ></span>
+                      <span class="text-xs font-medium text-green-600">轮询开启</span>
+                    </div>
+                    <span class="text-xs text-gray-400">· {{ r.polling_interval }}s</span>
                   </div>
-                  <span
-                    class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
-                    :class="
-                      r.last_live_status ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
-                    "
-                  >
-                    {{ r.last_live_status ? '直播中' : '未开播' }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="items-center px-1.5 py-0.5 rounded text-xs font-medium"
+                      :class="
+                        r.last_live_status ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+                      "
+                    >
+                      {{ r.last_live_status ? '直播中' : '未开播' }}
+                    </span>
+                    <span class="text-xs text-gray-400" title="上次轮询时间">
+                      {{ r.last_polled_at ? formatTime(r.last_polled_at, 'HH:mm') : '-' }}
+                    </span>
+                  </div>
                 </template>
                 <span v-else class="text-xs text-gray-400">未开启</span>
               </td>

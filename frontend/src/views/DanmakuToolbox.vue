@@ -175,6 +175,23 @@ function handleRefreshAll() {
       </button>
     </div>
 
+    <!-- 增加一个提示区域 -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
+      <div class="text-sm text-gray-500 text-sm">
+        <span class="font-bold text-md">关于操作的说明：</span>
+        <p class="block mt-1">
+          <strong>生成ASS</strong
+          >：根据弹幕jsonl数据文件，结合会话的视频文件生成对应的字幕文件，这里会将字幕样式一起写入ASS文件中。
+        </p>
+        <p class="block mt-1">
+          <strong>压制视频</strong>：压制视频就是执行 ffmpeg 转码命令将字幕文件通过
+          <code>-vf subtitles='xxx.ass'</code>
+          命令输出mp4文件。如果已有压制视频文件，则跳过操作。
+        </p>
+        <p class="block mt-1"><strong>强制重压</strong>：无视已有压制视频，重新生成新视频。</p>
+      </div>
+    </div>
+
     <!-- 状态卡片 -->
     <StatusCards
       :active-captures="store.queueStatus?.active_captures?.count ?? 0"

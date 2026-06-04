@@ -439,8 +439,25 @@ class RecorderService {
       // 停止弹幕采集
       const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl);
 
-      if (!captureId || eventCount === 0) {
-        console.log(`[弹幕] 会话 ${sessionId} 无弹幕数据或采集未启动`);
+      if (!captureId) {
+        console.log(`[弹幕] 会话 ${sessionId} 采集未启动或已停止`);
+        // 即使采集未启动，也要确保将 recording 状态更新为 completed（处理服务器重启场景）
+        await pool.query(
+          `UPDATE danmaku_capture_records SET status = 'completed', ended_at = COALESCE(ended_at, NOW())
+           WHERE session_id = $1 AND status = 'recording'`,
+          [sessionId]
+        );
+        return;
+      }
+
+      if (eventCount === 0) {
+        console.log(`[弹幕] 会话 ${sessionId} 无弹幕数据`);
+        // 无数据也要更新状态为 completed
+        await pool.query(
+          `UPDATE danmaku_capture_records SET status = 'completed', ended_at = NOW(), event_count = 0
+           WHERE id = $1`,
+          [captureId]
+        );
         return;
       }
 

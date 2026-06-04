@@ -463,7 +463,7 @@ router.get('/danmaku-toolbox/sessions', async (req, res) => {
       LEFT JOIN (
         SELECT rf.session_id,
                COUNT(*) as total_segments,
-               COUNT(*) FILTER (WHERE rf.segment_index > 0) as indexed_segments
+               COUNT(*) as indexed_segments
         FROM recording_files rf
         GROUP BY rf.session_id
       ) ass_counts ON s.id = ass_counts.session_id

@@ -9,6 +9,7 @@ import Hls from 'hls.js'
 import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
+import Pagination from '@/components/Pagination.vue'
 import type { Room } from '@/types/api'
 
 const toast = useToast()
@@ -37,6 +38,7 @@ const rooms = ref<Room[]>([])
 const total = ref(0)
 const loading = ref(true)
 const roomFilter = ref('')
+const page = ref(1)
 
 // Video player modal
 const playerVisible = ref(false)
@@ -68,9 +70,13 @@ async function loadData() {
   loading.value = true
   roomFilter.value = currentRoomFilter.value
   try {
-    const query = roomFilter.value ? `?room_url=${encodeURIComponent(roomFilter.value)}` : ''
+    const params = new URLSearchParams()
+    if (roomFilter.value) params.set('room_url', roomFilter.value)
+    params.set('page', String(page.value))
+    params.set('limit', '50')
+    const qs = params.toString() ? `?${params.toString()}` : ''
     const [recRes, roomRes] = await Promise.all([
-      apiGet<{ rows: RecordingRow[]; total: number }>(`/api/recording_files${query}`),
+      apiGet<{ rows: RecordingRow[]; total: number }>(`/api/recording_files${qs}`),
       apiGet<Room[] | { rows: Room[]; total: number }>('/api/rooms'),
     ])
     recordings.value = recRes.data.rows ?? []
@@ -85,7 +91,13 @@ async function loadData() {
   }
 }
 
+function handlePageChange(p: number) {
+  page.value = p
+  loadData()
+}
+
 function handleRoomFilter(roomUrl: string) {
+  page.value = 1
   router.push({ path: '/recordings', query: roomUrl ? { room_url: roomUrl } : {} })
 }
 
@@ -215,9 +227,12 @@ function statusLabel(status: string) {
 
 onMounted(loadData)
 
-watch(() => route.query.room_url, () => {
-  loadData()
-})
+watch(
+  () => route.query.room_url,
+  () => {
+    loadData()
+  },
+)
 </script>
 
 <template>
@@ -377,6 +392,11 @@ watch(() => route.query.room_url, () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- 分页 -->
+      <div class="px-4 py-3 border-t border-gray-200">
+        <Pagination :current="page" :total="total" @change="handlePageChange" />
       </div>
     </div>
 

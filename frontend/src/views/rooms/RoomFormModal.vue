@@ -9,6 +9,7 @@
 import { ref, reactive, watch } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
+import SwitchField from '@/components/SwitchField.vue'
 import type { Room, RoomFormData, UploadTemplate } from '@/types/api'
 
 const props = defineProps<{
@@ -131,7 +132,7 @@ function onOverlayClick(e: MouseEvent) {
         class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         @click="onOverlayClick"
       >
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
           <!-- 头部 -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-900">
@@ -178,10 +179,11 @@ function onOverlayClick(e: MouseEvent) {
 
             <!-- 直播间地址 -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1" for="room-url">
                 直播间地址 <span class="text-red-500">*</span>
               </label>
               <input
+                id="room-url"
                 v-model="form.room_url"
                 type="text"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
@@ -194,8 +196,11 @@ function onOverlayClick(e: MouseEvent) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <!-- 直播间名称 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">直播间名称</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1" for="room-name"
+                  >直播间名称</label
+                >
                 <input
+                  id="room-name"
                   v-model="form.room_name"
                   type="text"
                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
@@ -206,7 +211,7 @@ function onOverlayClick(e: MouseEvent) {
 
               <!-- 文件名模板 -->
               <div v-if="!limited">
-                <label class="block text-sm font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1" for="filename-template">
                   文件名模板
                   <span class="text-gray-400 font-normal"
                     >(默认
@@ -215,6 +220,7 @@ function onOverlayClick(e: MouseEvent) {
                   >
                 </label>
                 <input
+                  id="filename-template"
                   v-model="form.filename_template"
                   type="text"
                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
@@ -236,10 +242,11 @@ function onOverlayClick(e: MouseEvent) {
             <div v-if="!limited" class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <!-- 分段时长 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1"
+                <label class="block text-sm font-medium text-gray-700 mb-1" for="segment-duration"
                   >分段录制时长（秒，0 = 不分段）</label
                 >
                 <input
+                  id="segment-duration"
                   v-model.number="form.segment_duration"
                   type="number"
                   min="0"
@@ -251,8 +258,11 @@ function onOverlayClick(e: MouseEvent) {
 
               <!-- 投稿模板 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">投稿模板</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1" for="upload-template"
+                  >投稿模板</label
+                >
                 <select
+                  id="upload-template"
                   v-model="form.upload_template_id"
                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
                 >
@@ -265,8 +275,11 @@ function onOverlayClick(e: MouseEvent) {
 
             <!-- 投稿模板（limited 模式下也要展示） -->
             <div v-if="limited">
-              <label class="block text-sm font-medium text-gray-700 mb-1">投稿模板</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1" for="upload-template"
+                >投稿模板</label
+              >
               <select
+                id="upload-template"
                 v-model="form.upload_template_id"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
               >
@@ -279,64 +292,37 @@ function onOverlayClick(e: MouseEvent) {
             <!-- 开关行 -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <!-- 通知开关 -->
-              <label class="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  class="relative w-10 h-5 rounded-full transition-colors"
-                  :class="form.notification_enabled ? 'bg-brand-600' : 'bg-gray-300'"
-                  @click="form.notification_enabled = !form.notification_enabled"
-                >
-                  <span
-                    class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-                    :class="{ 'translate-x-5': form.notification_enabled }"
-                  ></span>
-                </div>
-                <div>
-                  <span class="text-sm font-medium text-gray-700">启用通知</span>
-                  <p class="text-xs text-gray-400">开始/投稿时发送通知</p>
-                </div>
-              </label>
+              <SwitchField
+                v-model="form.notification_enabled"
+                label="启用通知"
+                description="录制/投稿/备份时发送通知"
+              />
 
               <!-- 监听开关 -->
-              <label v-if="!limited" class="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  class="relative w-10 h-5 rounded-full transition-colors"
-                  :class="form.monitoring_enabled ? 'bg-brand-600' : 'bg-gray-300'"
-                  @click="form.monitoring_enabled = !form.monitoring_enabled"
-                >
-                  <span
-                    class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-                    :class="{ 'translate-x-5': form.monitoring_enabled }"
-                  ></span>
-                </div>
-                <div>
-                  <span class="text-sm font-medium text-gray-700">启用监听</span>
-                  <p class="text-xs text-gray-400">收到通知后启动 ffmpeg</p>
-                </div>
-              </label>
+              <SwitchField
+                v-if="!limited"
+                v-model="form.monitoring_enabled"
+                label="启用监听"
+                description="收到api请求后启动 ffmpeg 录制"
+              />
             </div>
 
             <!-- 轮询设置 -->
             <div v-if="!limited" class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <label class="flex items-center gap-3 cursor-pointer select-none">
-                <div
-                  class="relative w-10 h-5 rounded-full transition-colors"
-                  :class="form.polling_enabled ? 'bg-brand-600' : 'bg-gray-300'"
-                  @click="form.polling_enabled = !form.polling_enabled"
-                >
-                  <span
-                    class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-                    :class="{ 'translate-x-5': form.polling_enabled }"
-                  ></span>
-                </div>
-                <div>
-                  <span class="text-sm font-medium text-gray-700">启用轮询</span>
-                  <p class="text-xs text-gray-400">定期查询开播状态</p>
-                </div>
-              </label>
+              <div>
+                <SwitchField
+                  v-model="form.polling_enabled"
+                  label="启用轮询"
+                  description="定期查询开播状态"
+                />
+              </div>
 
               <div v-if="form.polling_enabled">
-                <label class="block text-sm font-medium text-gray-700 mb-1">轮询间隔（秒）</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1" for="polling-interval"
+                  >轮询间隔（秒）</label
+                >
                 <input
+                  id="polling-interval"
                   v-model.number="form.polling_interval"
                   type="number"
                   min="30"

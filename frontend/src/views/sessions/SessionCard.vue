@@ -90,8 +90,8 @@ const burnBadge = computed(() => {
 
 const truncatedStreamUrl = computed(() => {
   const url = props.session.stream_url || ''
-  if (url.length <= 60) return url
-  return url.slice(0, 60) + '\u2026'
+  if (url.length <= 100) return url
+  return url.slice(0, 100) + '\u2026'
 })
 
 const logFileUrl = computed(() => {
@@ -132,15 +132,58 @@ function formatBytes(bytes: number | string | null | undefined) {
   return val.toFixed(1) + ' ' + units[i]
 }
 
+// 统一的成功提示函数（可以对接你上一问的 Bootstrap Toast）
+function handleCopySuccess(text: string) {
+  console.log('复制成功:', text)
+  // 如果你有 toast 函数，可以在这里调用：
+  toast.success('已复制直播流地址')
+}
 async function copyStreamUrl() {
   const url = props.session.stream_url
   if (!url) return
-  try {
-    await navigator.clipboard.writeText(url)
-    toast.success('已复制直播流地址')
-  } catch {
-    toast.error('复制失败')
+  // 1. 优先使用现代的 Clipboard API（如果是 HTTPS 或 Localhost）
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(url)
+      .then(() => handleCopySuccess(url))
+      .catch((err) => console.error('现代复制API失败:', err))
+  } else {
+    // 2. 降级方案：针对 HTTP 环境或老旧浏览器
+    // 创建一个隐藏的 input 元素
+    const textArea = document.createElement('textarea')
+    textArea.value = url
+
+    // 避开滚动条影响，将其定位到屏幕外
+    textArea.style.position = 'fixed'
+    textArea.style.top = '-9999px'
+    document.body.appendChild(textArea)
+
+    // 选中文字并执行复制命令
+    textArea.focus()
+    textArea.select()
+
+    try {
+      const successful = document.execCommand('copy')
+      if (successful) {
+        handleCopySuccess(url)
+      } else {
+        toast.error('复制失败')
+      }
+    } catch (err) {
+      console.error('降级复制方案失败:', err)
+    }
+
+    // 移除临时创建的元素
+    document.body.removeChild(textArea)
   }
+
+  // try {
+  //   await navigator.clipboard.writeText(url)
+  //   toast.success('已复制直播流地址')
+  // } catch (err) {
+  //   console.error('复制直播流地址失败', err)
+  //   toast.error('复制失败')
+  // }
 }
 
 // ---- Lifecycle ----
@@ -198,17 +241,15 @@ onMounted(async () => {
       <!-- Left Column: Recording Info -->
       <div class="flex-1 p-4 border-b md:border-b-0 md:border-r border-gray-100">
         <!-- Section Header -->
-        <div class="flex items-center gap-1.5 mb-3">
-          <svg class="w-3.5 h-3.5 text-gray-500" fill="currentColor" viewBox="0 0 16 16">
+        <div class="flex items-center gap-1.5 mb-3 text-amber-500">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16">
             <path
               fill-rule="evenodd"
               d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2zm11.5 5.175 3.5 1.556V4.269l-3.5 1.556zM2 4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"
             />
           </svg>
-          <span class="text-sm font-medium text-gray-700">直播录制</span>
-          <span v-if="session.caption" class="text-xs text-gray-400 ml-2 truncate">{{
-            session.caption
-          }}</span>
+          <span class="text-sm font-medium">(直播录制)</span>
+          <span v-if="session.caption" class="text-xs ml-2">{{ session.caption }}</span>
         </div>
 
         <!-- Info Grid -->
