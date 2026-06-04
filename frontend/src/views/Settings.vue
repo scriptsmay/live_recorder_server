@@ -199,7 +199,8 @@ const settingGroups: SettingGroup[] = [
         key: 'danmaku_font_family',
         label: '弹幕字体',
         desc: 'ASS 渲染使用的字体名称',
-        type: 'text',
+        type: 'select',
+        options: ['Noto Sans CJK SC', 'Noto Sans CJK SC Medium', 'Source Han Sans SC Medium'],
       },
       {
         key: 'danmaku_font_size',
@@ -349,6 +350,17 @@ onMounted(fetchSettings)
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="flex items-center justify-between mt-6">
+      <h1 class="text-2xl font-bold text-gray-900"></h1>
+      <button
+        class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="saving || loading"
+        @click="saveSettings"
+      >
+        {{ saving ? '保存中...' : '保存设置' }}
+      </button>
     </div>
   </div>
 </template>

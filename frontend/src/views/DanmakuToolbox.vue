@@ -90,6 +90,8 @@ function toggleSelect(sessionId: number) {
 
 // ---- 操作 ----
 async function handleGenerateAss(sessionId: number) {
+  const ok = await confirm('生成ASS文件需要一定时间，确认继续？')
+  if (!ok) return
   const success = await store.generateAss(sessionId)
   if (success) {
     setTimeout(() => store.fetchSessions(), 1000)
@@ -138,7 +140,7 @@ async function handleBatchBurn() {
 
 async function handleBatchAss() {
   if (selectedSessions.value.size === 0) return
-  const ok = await confirm(`确认为 ${selectedSessions.value.size} 个会话重新生成 ASS？`)
+  const ok = await confirm(`确认为 ${selectedSessions.value.size} 个会话重新生成ASS？`)
   if (!ok) return
 
   let success = 0
