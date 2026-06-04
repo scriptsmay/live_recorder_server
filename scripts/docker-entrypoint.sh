@@ -3,9 +3,10 @@ set -eu
 
 APP_DATA_DIR="${APP_DATA_DIR:-/data}"
 VIDEO_DOWNLOAD_DIR="${VIDEO_DOWNLOAD_DIR:-$APP_DATA_DIR/video_downloads}"
+DANMAKU_OUTPUT_DIR="${DANMAKU_OUTPUT_DIR:-$APP_DATA_DIR/danmaku_output}"
 BILIUP_WORK_DIR="${BILIUP_WORK_DIR:-$APP_DATA_DIR/biliup}"
 
-mkdir -p "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
+mkdir -p "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" "$DANMAKU_OUTPUT_DIR" /app/logs
 
 wait_for_postgres() {
   node <<'NODE'
