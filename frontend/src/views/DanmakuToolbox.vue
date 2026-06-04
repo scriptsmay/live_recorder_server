@@ -3,9 +3,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDanmakuToolboxStore, type ToolboxSession } from '@/stores/danmaku-toolbox'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
+import { apiGet, ApiError } from '@/utils/api'
 import StatusCards from './danmaku-toolbox/StatusCards.vue'
 import SessionCard from './danmaku-toolbox/SessionCard.vue'
 import DanmakuSearchModal from './danmaku-toolbox/DanmakuSearchModal.vue'
+import UploadModal from './sessions/UploadModal.vue'
+import type { UploadTemplate } from '@/types/api'
 
 const store = useDanmakuToolboxStore()
 const toast = useToast()
@@ -15,6 +18,7 @@ const { confirm } = useConfirm()
 const currentFilter = ref('all')
 const searchKeyword = ref('')
 const selectedSessions = ref<Set<number>>(new Set())
+const templates = ref<UploadTemplate[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // 搜索弹窗
@@ -22,6 +26,10 @@ const searchModalVisible = ref(false)
 const searchModalSessionId = ref<number | null>(null)
 const searchModalRoomName = ref('')
 const searchModalRef = ref<InstanceType<typeof DanmakuSearchModal> | null>(null)
+
+// 投稿弹窗
+const uploadModalOpen = ref(false)
+const uploadSessionId = ref<number | null>(null)
 
 // ---- 筛选逻辑 ----
 const filterOptions = [
@@ -64,7 +72,7 @@ const selectedCount = computed(() => selectedSessions.value.size)
 
 // ---- 生命周期 ----
 onMounted(async () => {
-  await Promise.all([store.fetchSessions(), store.fetchQueueStatus()])
+  await Promise.all([store.fetchSessions(), store.fetchQueueStatus(), fetchUploadTemplates()])
   pollTimer = setInterval(() => {
     store.fetchQueueStatus()
   }, 15000)
@@ -118,6 +126,29 @@ function handleSearchDanmaku(sessionId: number, roomName: string) {
   searchModalRoomName.value = roomName
   searchModalVisible.value = true
   searchModalRef.value?.reset()
+}
+
+async function fetchUploadTemplates() {
+  try {
+    const res = await apiGet<UploadTemplate[]>('/api/upload_templates')
+    templates.value = res.data || []
+  } catch (err) {
+    toast.error('加载投稿模板失败: ' + (err instanceof ApiError ? err.message : String(err)))
+  }
+}
+
+function handleUpload(sessionId: number) {
+  uploadSessionId.value = sessionId
+  uploadModalOpen.value = true
+}
+
+function handleUploadSubmitted(message: string) {
+  toast.success(message || '投稿任务已提交')
+  uploadModalOpen.value = false
+}
+
+function handleUploadError(message: string) {
+  toast.error('投稿失败: ' + message)
 }
 
 async function handleBatchBurn() {
@@ -278,6 +309,7 @@ function handleRefreshAll() {
           @generate-ass="handleGenerateAss"
           @burn-session="handleBurnSession"
           @search-danmaku="handleSearchDanmaku"
+          @upload="handleUpload"
         />
       </template>
     </div>
@@ -289,6 +321,16 @@ function handleRefreshAll() {
       :session-id="searchModalSessionId"
       :room-name="searchModalRoomName"
       @close="searchModalVisible = false"
+    />
+
+    <!-- 投稿弹窗 -->
+    <UploadModal
+      :open="uploadModalOpen"
+      :session-id="uploadSessionId"
+      :templates="templates"
+      @close="uploadModalOpen = false"
+      @submitted="handleUploadSubmitted"
+      @error="handleUploadError"
     />
   </div>
 </template>
