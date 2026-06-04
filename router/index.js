@@ -14,7 +14,7 @@ function createRoutes() {
   const router = express.Router();
 
   router.use(hlsRouter);
-  router.use(logsRouter);
+  router.use('/api', logsRouter);
   router.use('/api', apiRouter);
   router.use('/api', roomsRouter);
   router.use('/api', uploadRouter);
@@ -26,7 +26,7 @@ function createRoutes() {
 
   // 给个默认跳转到前端界面，方便访问
   router.get('/', (req, res) => {
-    res.redirect('/api');
+    res.redirect('/dashboard');
   });
 
   return router;

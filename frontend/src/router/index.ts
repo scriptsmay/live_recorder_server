@@ -87,7 +87,7 @@ const router = createRouter({
 // 路由守卫：自动设置页面标题
 router.beforeEach((to) => {
   const title = to.meta.title as string | undefined
-  document.title = title ? `${title} - 直播录制平台` : '直播录制平台'
+  document.title = title ? `${title} - K-Recorder` : 'K-Recorder'
 })
 
 export default router
