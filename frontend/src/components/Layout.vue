@@ -17,7 +17,7 @@ onMounted(() => {
 <template>
   <div class="min-h-screen flex flex-col">
     <Navbar />
-    <main class="flex-1 px-4 py-6 max-w-[1600px] mx-auto w-full">
+    <main class="flex-1 px-4 py-6 mx-auto w-full">
       <slot />
     </main>
     <footer

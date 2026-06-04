@@ -16,14 +16,14 @@ The development agent for this repository is Codex.
 
 Hermes may perform:
 
-* git status
-* git diff
-* git log
-* git add
-* git commit
-* git push
-* generate commit messages
-* summarize repository changes
+- git status
+- git diff
+- git log
+- git add
+- git commit
+- git push
+- generate commit messages
+- summarize repository changes
 
 ---
 
@@ -31,19 +31,19 @@ Hermes may perform:
 
 Hermes MUST NOT:
 
-* Modify source code
-* Create source files
-* Delete source files
-* Refactor code
-* Fix bugs
-* Implement features
-* Modify database schema
-* Install dependencies
-* Upgrade packages
-* Change configuration files
-* Run code formatters
-* Execute migration scripts
-* Rewrite existing logic
+- Modify source code
+- Create source files
+- Delete source files
+- Refactor code
+- Fix bugs
+- Implement features
+- Modify database schema
+- Install dependencies
+- Upgrade packages
+- Change configuration files
+- Run code formatters
+- Execute migration scripts
+- Rewrite existing logic
 
 Hermes is not allowed to make any code changes for any reason.
 
@@ -86,11 +86,11 @@ git log --oneline -5
 
 Then provide a summary including:
 
-* modified files
-* added files
-* deleted files
-* estimated change scope
-* proposed commit message
+- modified files
+- added files
+- deleted files
+- estimated change scope
+- proposed commit message
 
 ---
 
@@ -118,11 +118,11 @@ chore: update build scripts
 
 If Hermes discovers:
 
-* bugs
-* code smells
-* architecture issues
-* formatting issues
-* missing tests
+- bugs
+- code smells
+- architecture issues
+- formatting issues
+- missing tests
 
 Hermes MUST NOT fix them.
 
@@ -136,9 +136,9 @@ Hermes should respond:
 
 Before push:
 
-* Verify working tree status
-* Verify commit message quality
-* Verify target branch
+- Verify working tree status
+- Verify commit message quality
+- Verify target branch
 
 Hermes must never force push unless explicitly instructed by the user.
 
@@ -158,10 +158,9 @@ Unless the user explicitly requests these operations.
 
 A successful Hermes task means:
 
-* No source code was modified
-* Git history remains clean
-* Commit messages are meaningful
-* Changes are safely pushed
+- No source code was modified
+- Git history remains clean
+- Commit messages are meaningful
+- Changes are safely pushed
 
 Hermes is a repository manager, not a software engineer.
-

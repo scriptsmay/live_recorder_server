@@ -4,16 +4,16 @@
 
 ## 技术栈
 
-| 分类 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.5 | Composition API + `<script setup>` |
-| TypeScript | 6.0 | 严格模式，`erasableSyntaxOnly`、`noUnusedLocals`、`noUnusedParameters` |
-| Vite | 8.0 | 开发服务器 + 生产构建 |
-| Tailwind CSS | 4.3 | `@tailwindcss/vite` 插件 + `@theme` 声明自定义 token |
-| Pinia | 3.0 | 全局状态管理（Composition API store） |
-| Vue Router | 4.6 | history 模式，路由懒加载 |
-| ESLint | 10.x | flat config，集成 TypeScript、Vue、Prettier 规则 |
-| Prettier | 3.8 | 代码格式化（通过 ESLint 插件集成） |
+| 分类         | 版本 | 说明                                                                   |
+| ------------ | ---- | ---------------------------------------------------------------------- |
+| Vue          | 3.5  | Composition API + `<script setup>`                                     |
+| TypeScript   | 6.0  | 严格模式，`erasableSyntaxOnly`、`noUnusedLocals`、`noUnusedParameters` |
+| Vite         | 8.0  | 开发服务器 + 生产构建                                                  |
+| Tailwind CSS | 4.3  | `@tailwindcss/vite` 插件 + `@theme` 声明自定义 token                   |
+| Pinia        | 3.0  | 全局状态管理（Composition API store）                                  |
+| Vue Router   | 4.6  | history 模式，路由懒加载                                               |
+| ESLint       | 10.x | flat config，集成 TypeScript、Vue、Prettier 规则                       |
+| Prettier     | 3.8  | 代码格式化（通过 ESLint 插件集成）                                     |
 
 ## 目录结构
 
@@ -180,11 +180,11 @@ try {
 
 ```css
 @theme {
-  --color-brand-50:  #fff7ed;   /* 最浅 */
-  --color-brand-500: #f97316;   /* 主色 */
-  --color-brand-600: #ea580c;   /* 悬停/强调 */
-  --color-brand-900: #7c2d12;   /* 最深 */
-  --color-surface:   #fdf8f3;   /* 页面背景 */
+  --color-brand-50: #fff7ed; /* 最浅 */
+  --color-brand-500: #f97316; /* 主色 */
+  --color-brand-600: #ea580c; /* 悬停/强调 */
+  --color-brand-900: #7c2d12; /* 最深 */
+  --color-surface: #fdf8f3; /* 页面背景 */
 }
 ```
 

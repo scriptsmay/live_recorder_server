@@ -134,13 +134,20 @@ export interface UploadTemplateFormData {
 
 export interface UploadRecord {
   id: number
-  session_id: number
+  session_id: number | null
   template_id: number | null
   template_name: string
-  bv_id: string | null
+  title: string
   status: string
   message: string | null
   output: string | null
+  error_message: string | null
+  file_count: number
+  total_size: number
+  upload_files: string
+  bv_id: string | null
+  started_at: string
+  completed_at: string | null
   created_at: string
 }
 

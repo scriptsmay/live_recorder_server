@@ -56,9 +56,7 @@ if (spaExists) {
     ];
 
     // 动态路由模式匹配
-    const spaDynamicPatterns = [
-      /^\/sessions\/\d+\/danmaku$/,
-    ];
+    const spaDynamicPatterns = [/^\/sessions\/\d+\/danmaku$/];
 
     if (spaRoutes.includes(req.path) || spaDynamicPatterns.some((p) => p.test(req.path))) {
       return res.sendFile(INDEX_HTML);

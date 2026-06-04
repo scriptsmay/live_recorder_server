@@ -209,11 +209,7 @@ router.post('/sessions/:id/upload', async (req, res) => {
     }
 
     const sessionData = session.rows[0];
-    const result = await UploadService.executeUpload(
-      sessionData,
-      tmpl.rows[0],
-      upload_source || 'original'
-    );
+    const result = await UploadService.executeUpload(sessionData, tmpl.rows[0], upload_source || 'original');
     if (result.error) {
       return res.json({ status: 'Error', message: result.message });
     }

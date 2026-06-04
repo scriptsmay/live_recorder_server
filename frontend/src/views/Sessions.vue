@@ -167,69 +167,68 @@ function handleUploadError(message: string) {
       <p class="text-sm text-gray-500 mt-1">所有直播间的录制记录与弹幕处理</p>
     </div>
 
-    <!-- Status Filter Bar -->
-    <div class="bg-white rounded-xl border border-gray-200 p-3 mb-3 shadow-sm">
-      <div class="flex items-center flex-wrap gap-2">
-        <span class="text-sm text-gray-500 shrink-0">状态：</span>
-        <button
-          v-for="tab in statusTabs"
-          :key="tab.value"
-          class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors"
-          :class="
-            statusFilter === tab.value
-              ? 'bg-brand-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          "
-          @click="statusFilter = tab.value"
-        >
-          <span
-            v-if="tab.value !== 'all'"
-            class="w-2 h-2 rounded-full shrink-0"
-            :class="{
-              'bg-green-400': tab.value === 'recording',
-              'bg-blue-400': tab.value === 'completed',
-              'bg-red-400': tab.value === 'interrupted',
-            }"
-          />
-          {{ tab.label }}
-          <span v-if="tab.value !== 'all'" class="ml-0.5 opacity-70"
-            >({{ statusCounts[tab.value] || 0 }})</span
+    <div class="bg-white rounded-xl border border-gray-200 p-4 mb-3 shadow-sm">
+      <!-- Status Filter Bar -->
+      <div class="mb-4">
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="text-sm text-gray-500 shrink-0">状态：</span>
+          <button
+            v-for="tab in statusTabs"
+            :key="tab.value"
+            class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full transition-colors"
+            :class="
+              statusFilter === tab.value
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            "
+            @click="statusFilter = tab.value"
           >
-        </button>
+            <span
+              v-if="tab.value !== 'all'"
+              class="w-2 h-2 rounded-full shrink-0"
+              :class="{
+                'bg-green-400': tab.value === 'recording',
+                'bg-blue-400': tab.value === 'completed',
+                'bg-red-400': tab.value === 'interrupted',
+              }"
+            />
+            {{ tab.label }}
+            <span v-if="tab.value !== 'all'" class="ml-0.5 opacity-70"
+              >({{ statusCounts[tab.value] || 0 }})</span
+            >
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Room Filter Bar -->
-    <div
-      v-if="rooms.length > 0"
-      class="bg-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm"
-    >
-      <div class="flex items-center flex-wrap gap-2">
-        <span class="text-sm text-gray-500 shrink-0">直播间：</span>
-        <button
-          class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
-          :class="
-            !currentRoomId
-              ? 'bg-brand-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          "
-          @click="selectRoom('')"
-        >
-          全部
-        </button>
-        <button
-          v-for="room in rooms"
-          :key="room.id"
-          class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
-          :class="
-            currentRoomId === String(room.id)
-              ? 'bg-brand-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          "
-          @click="selectRoom(String(room.id))"
-        >
-          {{ room.room_name || '未命名' }}
-        </button>
+      <!-- Room Filter Bar -->
+      <div v-if="rooms.length > 0" class="">
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="text-sm text-gray-500 shrink-0">主播：</span>
+          <button
+            class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
+            :class="
+              !currentRoomId
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            "
+            @click="selectRoom('')"
+          >
+            全部
+          </button>
+          <button
+            v-for="room in rooms"
+            :key="room.id"
+            class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
+            :class="
+              currentRoomId === String(room.id)
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            "
+            @click="selectRoom(String(room.id))"
+          >
+            {{ room.room_name || '未命名' }}
+          </button>
+        </div>
       </div>
     </div>
 

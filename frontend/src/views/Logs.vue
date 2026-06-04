@@ -386,7 +386,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 日志内容区域 -->
-          <div ref="logPanelRef" class="overflow-auto" style="max-height: 60vh; min-height: 300px">
+          <div ref="logPanelRef" class="overflow-auto" style="max-height: 70vh; min-height: 300px">
             <!-- 加载中 -->
             <div v-if="loadingContent" class="flex items-center justify-center py-12">
               <div
@@ -406,7 +406,7 @@ onUnmounted(() => {
             <!-- 日志行 -->
             <pre
               v-else
-              class="mb-0 p-4 text-xs leading-relaxed text-gray-700 font-mono whitespace-pre"
+              class="mb-0 p-2 text-75 leading-relaxed text-gray-600 font-mono whitespace-pre"
             ><template v-for="(line, idx) in logLines" :key="idx">{{ line }}
 </template></pre>
           </div>

@@ -27,14 +27,15 @@ const activePath = computed(() => route.path)
 
 <template>
   <nav class="bg-gray-900 border-b-2 border-brand-500 sticky top-0 z-50 shadow-sm">
-    <div class="max-w-[1600px] mx-auto px-4">
+    <div class="mx-auto px-4">
       <div class="flex items-center justify-between h-14">
         <!-- 品牌标识 -->
         <router-link
           to="/dashboard"
           class="text-white font-semibold text-lg tracking-wide shrink-0 hover:text-brand-400 transition-colors"
         >
-          直播录制服务
+          <img src="/logo.svg" alt="Live Recorder" class="h-6 inline-block align-middle" />
+          K-Recorder
         </router-link>
 
         <!-- 桌面导航 -->

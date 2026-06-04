@@ -210,13 +210,20 @@ async function handleDelete(rec: RecordingRow) {
 }
 
 function statusStyle(status: string) {
-  if (status === 'completed') return 'bg-green-100 text-green-700'
-  if (status === 'recording') return 'bg-blue-100 text-blue-700'
-  return 'bg-red-100 text-red-700'
+  const statusStyleMap: Record<string, string> = {
+    completed: 'bg-green-100 text-green-700',
+    recording: 'bg-blue-100 text-blue-700',
+    interrupted: 'bg-red-100 text-red-700',
+    deleted: 'bg-stone-100 text-stone-500',
+  }
+  return statusStyleMap[status] || 'bg-gray-100 text-gray-600'
 }
 
 function statusLabel(status: string) {
-  return { completed: '已完成', recording: '录制中', interrupted: '中断' }[status] || status
+  return (
+    { completed: '已完成', recording: '录制中', interrupted: '中断', deleted: '已删除' }[status] ||
+    status
+  )
 }
 
 onMounted(loadData)

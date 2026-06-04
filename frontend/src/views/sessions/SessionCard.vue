@@ -201,10 +201,7 @@ onMounted(async () => {
     class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3 hover:shadow-md transition-shadow"
   >
     <!-- Card Header -->
-    <div
-      class="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 flex-wrap"
-      style="background: linear-gradient(135deg, #fff7ed 0%, #ffffff 60%)"
-    >
+    <div class="flex items-center gap-2.5 px-4 py-3 border-b border-amber-100 flex-wrap">
       <span
         class="inline-flex items-center bg-brand-600 text-white text-xs font-bold px-2 py-0.5 rounded-md shrink-0"
       >
