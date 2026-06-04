@@ -70,10 +70,6 @@ code,
   padding: 0.15em 0.4em;
   border-radius: 4px;
 }
-pre {
-  font-size: 0.75rem;
-}
-
 button {
   cursor: pointer;
 }

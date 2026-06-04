@@ -12,6 +12,7 @@ import { apiGet, apiDelete, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
+import Modal from '@/components/Modal.vue'
 import type { UploadRecord, PaginatedResponse } from '@/types/api'
 
 const toast = useToast()
@@ -31,7 +32,7 @@ const detailRecord = ref<UploadRecord | null>(null)
 
 // ---- 文件列表弹窗 ----
 const filesVisible = ref(false)
-const filesRecordId = ref<number | null>(null)
+const filesRecord = ref<UploadRecord | null>(null)
 const filesContent = ref<string[]>([])
 
 // ---- 工具函数 ----
@@ -89,13 +90,14 @@ function closeDetail() {
 }
 
 // ---- 查看文件列表 ----
-function formatSize(bytes: number): string {
-  if (!bytes) return '-'
+function formatSize(bytes: number | null | undefined): string {
+  if (bytes == null || bytes < 0) return '-'
+  if (bytes === 0) return '0 B'
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 function showFiles(record: UploadRecord) {
-  filesRecordId.value = record.id
+  filesRecord.value = record
   try {
     filesContent.value = record.upload_files ? JSON.parse(record.upload_files) : []
   } catch {
@@ -106,7 +108,7 @@ function showFiles(record: UploadRecord) {
 
 function closeFiles() {
   filesVisible.value = false
-  filesRecordId.value = null
+  filesRecord.value = null
   filesContent.value = []
 }
 
@@ -247,77 +249,34 @@ onMounted(fetchRecords)
     </div>
 
     <!-- 输出详情弹窗 -->
-    <Teleport to="body">
-      <div v-if="detailVisible" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 bg-black/40" @click="closeDetail" />
-        <div
-          class="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col"
+    <Modal v-model:visible="detailVisible" :title="`输出详情 - #${detailRecord?.id}`">
+      <div class="px-6 py-4">
+        <pre
+          class="text-xs text-gray-700 whitespace-pre-wrap break-all font-mono bg-gray-50 rounded-lg p-4"
+          >{{ detailRecord?.output || '(无输出)' }}</pre
         >
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">输出详情 - #{{ detailRecord?.id }}</h3>
-            <button
-              class="text-gray-400 hover:text-gray-600 transition-colors"
-              @click="closeDetail"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-          <div class="px-6 py-4 overflow-y-auto flex-1">
-            <pre
-              class="text-xs text-gray-700 whitespace-pre-wrap break-all font-mono bg-gray-50 rounded-lg p-4"
-              >{{ detailRecord?.output || '(无输出)' }}</pre
-            >
-          </div>
-        </div>
       </div>
-    </Teleport>
+    </Modal>
 
     <!-- 文件列表弹窗 -->
-    <Teleport to="body">
-      <div v-if="filesVisible" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 bg-black/40" @click="closeFiles" />
-        <div
-          class="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col"
-        >
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">投稿文件 - #{{ filesRecordId }}</h3>
-            <button class="text-gray-400 hover:text-gray-600 transition-colors" @click="closeFiles">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-          <div class="px-6 py-4 overflow-y-auto flex-1">
-            <table v-if="filesContent.length > 0" class="w-full text-sm">
-              <thead>
-                <tr>
-                  <th class="text-left font-medium text-gray-500 pb-2">#</th>
-                  <th class="text-left font-medium text-gray-500 pb-2">文件路径</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(fp, i) in filesContent" :key="i" class="border-t border-gray-100">
-                  <td class="py-2 text-gray-500 pr-4">{{ i + 1 }}</td>
-                  <td class="py-2 text-gray-700 text-xs font-mono break-all">{{ fp }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="text-center text-gray-400 py-8">无文件记录</div>
-          </div>
-        </div>
+    <Modal v-model:visible="filesVisible" :title="`投稿文件 - #${filesRecord?.id}`">
+      <div class="px-6 py-4">
+        <table v-if="filesContent.length > 0" class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="text-left font-medium text-gray-500 pb-2">#</th>
+              <th class="text-left font-medium text-gray-500 pb-2">文件路径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(fp, i) in filesContent" :key="i" class="border-t border-gray-100">
+              <td class="py-2 text-gray-500 pr-4">{{ i + 1 }}</td>
+              <td class="py-2 text-gray-700 text-xs font-mono break-all">{{ fp }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="text-center text-gray-400 py-8">无文件记录</div>
       </div>
-    </Teleport>
+    </Modal>
   </div>
 </template>
