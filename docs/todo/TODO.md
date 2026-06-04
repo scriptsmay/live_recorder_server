@@ -8,12 +8,8 @@
 
 2. ~~[弹幕压制模块独立化重构开发计划](../finished_plan/DANMAKU_BURN_DECOUPLE/DANMAKU_BURN_DECOUPLE_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/DANMAKU_BURN_DECOUPLE/`
 
-3. ~~EJS → Vue 前端迁移（主体页面）~~ → 已完成（2026-06-04）
-
-4. ~~前端 Vue 迁移遗留问题：日志页面无法正常查看日志、点击左侧文件选择时 URL query 没有更新~~ → 已修复（2026-06-04）
-
-5. ~~弹幕录制模块遗留问题：已完成会话弹幕状态仍显示录制中、手动生成 ASS 后状态为空、分段时间显示 0s ~ 0s~~ → 已修复（2026-06-04）
-
 ## 待完成计划
 
 暂无。
+
+为什么弹幕工具箱页面（danmaku-toolbox）点击展开文件（组件： SegmentsPanel.vue ）时要同时请求2个API： `api/recording_files?session_id=51` 和 `api/danmaku_burn_records?session_id=51` 是出于什么设计这么做的？

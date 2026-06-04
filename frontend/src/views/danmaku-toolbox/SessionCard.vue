@@ -152,7 +152,7 @@ const sessionBadge = computed(() => {
       </div>
 
       <!-- 操作按钮 -->
-      <div class="flex items-center flex-wrap gap-1.5 mt-2">
+      <div class="flex items-center flex-wrap gap-2 mt-3">
         <button
           class="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
           @click="segmentsExpanded = !segmentsExpanded"
@@ -162,19 +162,19 @@ const sessionBadge = computed(() => {
 
         <template v-if="isDone">
           <button
-            class="px-2.5 py-1 text-xs font-medium rounded-md border border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors"
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-sky-700 text-sky-700 hover:bg-sky-50 transition-colors"
             @click="emit('generate-ass', session.id)"
           >
             生成 ASS
           </button>
           <button
-            class="px-2.5 py-1 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-amber-500 bg-amber-500 text-white hover:bg-amber-600 transition-colors"
             @click="emit('burn-session', session.id, false)"
           >
             全部压制
           </button>
           <button
-            class="px-2.5 py-1 text-xs font-medium rounded-md border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-red-700 text-red-600 hover:bg-red-50 transition-colors"
             @click="emit('burn-session', session.id, true)"
           >
             强制重压
@@ -182,7 +182,7 @@ const sessionBadge = computed(() => {
         </template>
 
         <button
-          class="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          class="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-400 text-gray-500 hover:bg-gray-50 transition-colors"
           @click="emit('search-danmaku', session.id, session.room_name || '')"
         >
           搜索弹幕
@@ -190,7 +190,7 @@ const sessionBadge = computed(() => {
 
         <router-link
           :to="`/sessions/${session.id}/danmaku`"
-          class="px-2.5 py-1 text-xs font-medium rounded-md border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors no-underline"
+          class="px-2.5 py-1 text-xs font-medium rounded-md border border-blue-700 text-blue-700 hover:bg-blue-50 transition-colors no-underline"
         >
           详情页
         </router-link>

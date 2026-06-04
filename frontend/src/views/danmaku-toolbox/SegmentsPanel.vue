@@ -32,7 +32,7 @@ const burnMap = ref<Record<number, BurnRecord>>({})
 onMounted(async () => {
   if (props.loaded) {
     localLoaded.value = true
-    return
+    // return
   }
   await loadData()
 })
@@ -131,8 +131,8 @@ function handlePlayBurn(burnId: number) {
           <tr class="text-left text-gray-500 border-b border-gray-200">
             <th class="px-3 py-2 font-medium w-10 text-center">#</th>
             <th class="px-3 py-2 font-medium">文件名</th>
-            <th class="px-3 py-2 font-medium w-20">大小</th>
-            <th class="px-3 py-2 font-medium w-16">ASS</th>
+            <th class="px-3 py-2 font-medium w-28">大小</th>
+            <th class="px-3 py-2 font-medium w-18">ASS</th>
             <th class="px-3 py-2 font-medium w-24">压制状态</th>
             <th class="px-3 py-2 font-medium">产物文件</th>
             <th class="px-3 py-2 font-medium w-48 text-right">操作</th>
@@ -149,7 +149,7 @@ function handlePlayBurn(burnId: number) {
             </td>
             <td class="px-3 py-2">
               <code
-                class="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 max-w-[200px] inline-block truncate align-middle"
+                class="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 max-w-[600px] inline-block truncate align-middle"
                 :title="getFileName(file.file_path)"
                 >{{ getFileName(file.file_path) }}</code
               >
@@ -177,7 +177,7 @@ function handlePlayBurn(burnId: number) {
                 v-if="burnMap[file.id]?.status === 'completed' && burnMap[file.id]?.output_path"
               >
                 <code
-                  class="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 inline-block truncate max-w-[180px] align-middle"
+                  class="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 inline-block truncate max-w-[580px] align-middle"
                   :title="getFileName(burnMap[file.id].output_path)"
                   >{{ getFileName(burnMap[file.id].output_path) }}</code
                 >
