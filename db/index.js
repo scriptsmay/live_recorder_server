@@ -30,7 +30,7 @@ pool.on('error', (err) => {
 });
 
 pool.on('connect', () => {
-  console.log('[DB] PostgreSQL 连接已建立');
+  // '[DB] PostgreSQL 连接已建立'
 });
 
 module.exports = pool;

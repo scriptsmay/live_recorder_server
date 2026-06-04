@@ -99,18 +99,6 @@
 
 > **注意**：此表已废弃，数据已迁移到 `recording_files` 表。新代码不再向此表写入数据，建议在确认系统稳定后删除此表。
 
-| 字段          | 类型          | 约束                                           | 说明                        |
-| ------------- | ------------- | ---------------------------------------------- | --------------------------- |
-| id            | SERIAL        | PRIMARY KEY                                    | 自增主键                    |
-| session_id    | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话                    |
-| segment_index | INTEGER       | DEFAULT 0                                      | 分片序号                    |
-| room_url      | VARCHAR(512)  | FK → rooms(room_url) ON DELETE CASCADE         | 关联直播间                  |
-| file_path     | VARCHAR(1024) | DEFAULT ''                                     | 文件路径（唯一约束）        |
-| file_size     | BIGINT        | DEFAULT 0                                      | 文件大小（字节）            |
-| started_at    | TIMESTAMP     | DEFAULT NOW()                                  | 开始时间                    |
-| ended_at      | TIMESTAMP     |                                                | 结束时间                    |
-| status        | VARCHAR(20)   | DEFAULT 'recording'                            | `completed` / `interrupted` |
-
 ### recording_files — 录制文件（主表）
 
 **会话详情、投稿操作、流媒体播放、文件统计均以此表作为数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
