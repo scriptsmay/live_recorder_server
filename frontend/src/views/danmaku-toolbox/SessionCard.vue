@@ -13,6 +13,7 @@ const emit = defineEmits<{
   'generate-ass': [sessionId: number]
   'burn-session': [sessionId: number, force: boolean]
   'search-danmaku': [sessionId: number, roomName: string]
+  upload: [sessionId: number]
 }>()
 
 const segmentsExpanded = ref(false)
@@ -161,6 +162,12 @@ const sessionBadge = computed(() => {
         </button>
 
         <template v-if="isDone">
+          <button
+            class="px-2.5 py-1 text-xs font-medium rounded-md border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+            @click="emit('upload', session.id)"
+          >
+            投稿
+          </button>
           <button
             class="px-2.5 py-1 text-xs font-medium rounded-md border border-sky-700 text-sky-700 hover:bg-sky-50 transition-colors"
             @click="emit('generate-ass', session.id)"
