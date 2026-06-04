@@ -5,7 +5,7 @@
  * - 点击遮罩关闭
  * - 支持自定义标题和宽度
  */
-const props = withDefaults(
+withDefaults(
   defineProps<{
     visible: boolean
     title?: string
@@ -34,7 +34,10 @@ function close() {
         class="relative bg-white rounded-xl shadow-xl w-full mx-4 max-h-[80vh] flex flex-col"
         :class="maxWidth"
       >
-        <div v-if="title || $slots.header" class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div
+          v-if="title || $slots.header"
+          class="flex items-center justify-between px-6 py-4 border-b border-gray-200"
+        >
           <slot name="header">
             <h3 class="text-lg font-semibold text-gray-900">{{ title }}</h3>
           </slot>

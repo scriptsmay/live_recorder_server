@@ -40,7 +40,8 @@ router.post('/rooms', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
 
-    const polling_platform = polling_enabled ? detectPlatform(room_url) : null;
+    // 直接根据room_url自动检测平台
+    const polling_platform = detectPlatform(room_url) || null;
 
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
     if (exist.rows.length > 0) {
@@ -105,10 +106,12 @@ router.post('/rooms', async (req, res) => {
         polling_interval || 60,
       ]
     );
+    res.json({ status: 'ok', data: result.rows[0], updated: false });
+
+    // 后续启动轮询
     if (polling_enabled === true) {
       await pollingManager.reloadRoom(result.rows[0].id);
     }
-    res.json({ status: 'ok', data: result.rows[0], updated: false });
   } catch (err) {
     console.error('[rooms] 创建失败:', err);
     res.status(500).json({ status: 'Error', message: '创建失败' });
@@ -160,12 +163,11 @@ router.put('/rooms/:id', async (req, res) => {
       }
     }
 
-    if (req.body.polling_enabled) {
-      const detectedPlatform = detectPlatform(existing.rows[0].room_url);
-      if (detectedPlatform) {
-        sets.push('polling_platform = $' + (values.length + 1));
-        values.push(detectedPlatform);
-      }
+    // 平台检测在 room_url 不变的情况下自动更新，且仅在平台检测有结果时才更新，避免误覆盖
+    const detectedPlatform = detectPlatform(existing.rows[0].room_url);
+    if (detectedPlatform) {
+      sets.push('polling_platform = $' + (values.length + 1));
+      values.push(detectedPlatform);
     }
 
     if (sets.length === 0) {

@@ -84,11 +84,6 @@ function showDetail(record: UploadRecord) {
   detailVisible.value = true
 }
 
-function closeDetail() {
-  detailVisible.value = false
-  detailRecord.value = null
-}
-
 // ---- 查看文件列表 ----
 function formatSize(bytes: number | null | undefined): string {
   if (bytes == null || bytes < 0) return '-'
@@ -104,12 +99,6 @@ function showFiles(record: UploadRecord) {
     filesContent.value = []
   }
   filesVisible.value = true
-}
-
-function closeFiles() {
-  filesVisible.value = false
-  filesRecord.value = null
-  filesContent.value = []
 }
 
 // ---- 删除 ----
