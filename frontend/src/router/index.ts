@@ -77,6 +77,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Logs.vue'),
     meta: { title: '日志' },
   },
+  {
+    path: '/api-doc',
+    name: 'ApiDoc',
+    component: () => import('@/views/ApiDoc.vue'),
+    meta: { title: 'API 文档' },
+  },
 ]
 
 const router = createRouter({
