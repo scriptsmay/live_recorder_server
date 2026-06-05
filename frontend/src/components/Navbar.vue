@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { label: '投稿记录', to: '/upload-records' },
   { label: '设置', to: '/settings' },
   { label: '日志', to: '/logs' },
+  { label: 'API 文档', to: '/api-doc' },
 ]
 
 const activePath = computed(() => route.path)

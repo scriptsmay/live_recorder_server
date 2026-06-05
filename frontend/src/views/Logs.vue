@@ -262,8 +262,6 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">日志查看</h1>
-
     <div class="flex flex-col md:flex-row gap-4">
       <!-- 左侧：文件列表 -->
       <div class="md:w-64 lg:w-72 shrink-0">

@@ -6,6 +6,13 @@ const path = require('path');
 const readline = require('readline');
 require('../config/env').initEnv();
 
+// PS. 打错了标签需要重新发布的，可以执行这个命令：
+// git tag -f v1.4.1
+// git push origin v1.4.1 -f
+// 会强制覆盖远程标签，谨慎使用！最好先在本地删除标签再推送：
+// git tag -d v1.4.1
+// git push origin --delete v1.4.1
+
 const packagePath = path.join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 

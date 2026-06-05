@@ -1,4 +1,4 @@
-# 直播录制平台 - 前端
+# 直播录制平台 K-Recorder - 前端
 
 本项目是 `live_recorder_server` 的 Vue 3 SPA 前端，从原有 Express + EJS 服务端渲染逐步迁移而来。采用前后端渐进式迁移策略：已迁移的页面由 Vue Router 接管，未迁移的页面继续走 EJS 渲染，两套路由在同一 Express 服务中共存。
 

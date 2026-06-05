@@ -26,6 +26,7 @@ yarn.lock
 pnpm-lock.yaml
 .pnp.cjs
 .DS_Store
+.tag_tmp
 
 public/frontend/
 

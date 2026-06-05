@@ -18,6 +18,7 @@ const { version } = require('../package.json');
 const { dockerImageVersion, startTime } = require('../config/app-info');
 
 router.get('/', (req, res) => {
+  // 这里输出API文档吧。
   res.status(200).json({
     message: '欢迎使用API服务。',
     status: 'ok',
@@ -395,6 +396,18 @@ router.delete('/recordings/:id', async (req, res) => {
     console.error('[api] 删除录制记录失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });
   }
+});
+
+router.get('/api-doc', (req, res) => {
+  const mdPath = path.join(__dirname, '../docs/API.md');
+
+  fs.readFile(mdPath, 'utf8', (err, data) => {
+    if (err) {
+      console.error('[api] 读取 API 文档失败:', err);
+      return res.status(500).json({ message: '无法读取 API 文档' });
+    }
+    res.json({ content: data });
+  });
 });
 
 router.get('/recordings/:id/stream', async (req, res) => {
