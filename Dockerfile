@@ -23,7 +23,7 @@ RUN npm install --omit=dev
 
 # 阶段3：下载并解压最新的 FFmpeg 静态二进制文件
 FROM alpine:latest AS ffmpeg-downloader
-RUN apk add --no-essential curl tar xz
+RUN apk add --no-cache curl tar xz
 RUN curl -L -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
     && tar -xJf ffmpeg-git-amd64-static.tar.xz \
     && mv ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ \
@@ -56,7 +56,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
 # 复制前端构建产物到 public/frontend/
-COPY --from=frontend-builder /app/frontend/../public/frontend ./public/frontend
+COPY --from=frontend-builder /app/public/frontend ./public/frontend
 
 RUN mkdir -p /data/video_downloads /data/biliup /app/logs \
     && chmod +x scripts/docker-entrypoint.sh
