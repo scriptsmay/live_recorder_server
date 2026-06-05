@@ -131,7 +131,7 @@ if [ "${1:-}" = "--dev" ]; then
 fi
 
 echo -e "${BOLD}═══════════════════════════════════════════════${RESET}"
-echo -e "${BOLD}  Live Recorder Server — 系统环境检测${RESET}"
+echo -e "${BOLD}  K-Recorder — 系统环境检测${RESET}"
 echo -e "${BOLD}═══════════════════════════════════════════════${RESET}"
 echo -e "  项目路径: $PROJECT_DIR"
 

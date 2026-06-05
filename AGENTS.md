@@ -1,4 +1,4 @@
-# Live Recorder Server — 智能体备忘录
+# K-Recorder — 智能体备忘录
 
 ## 技术栈
 

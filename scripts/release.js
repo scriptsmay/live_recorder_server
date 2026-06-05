@@ -189,7 +189,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('=== Live Recorder Server Release Script ===');
+  console.log('=== K-Recorder Release Script ===');
   console.log(`Current version: ${packageJson.version}`);
 
   checkGitStatus();

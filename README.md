@@ -1,4 +1,4 @@
-# Live Recorder Server
+# K-Recorder
 
 基于 Node.js + Express 的直播录制服务器，支持自动监控、弹幕采集、视频转码和自动投稿。
 

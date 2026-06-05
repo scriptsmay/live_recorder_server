@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Live Recorder Server - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. (Douyu/斗鱼 support is currently unavailable due to platform stream timeout issues) (Douyin/抖音 support is available)
+K-Recorder - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. (Douyu/斗鱼 support is currently unavailable due to platform stream timeout issues) (Douyin/抖音 support is available)
 
 ## Commands
 
