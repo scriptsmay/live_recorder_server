@@ -10,6 +10,8 @@
 
 ## 待完成计划
 
-暂无。
+1. [快手轮询 Checker 技术调研](KUAISHOU_POLLING_CHECKER_TECH_RESEARCH.md)
+
+2. [快手轮询 Checker 开发计划](KUAISHOU_POLLING_CHECKER_DEV_PLAN.md)
 
 为什么弹幕工具箱页面（danmaku-toolbox）点击展开文件（组件： SegmentsPanel.vue ）时要同时请求2个API： `api/recording_files?session_id=51` 和 `api/danmaku_burn_records?session_id=51` 是出于什么设计这么做的？
