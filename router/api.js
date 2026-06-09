@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const dayjs = require('dayjs');
 const express = require('express');
 const router = express.Router();
 const config = require('../config/config');
@@ -106,7 +107,7 @@ router.post('/notify/feishu_webhook', async (req, res) => {
       });
     }
 
-    const sendContent = `${title}\n${content}\n${new Date().toISOString()}`;
+    const sendContent = `${title}\n${content}\n${dayjs().format('YYYY-MM-DD HH:mm:ss')}`;
     const response = await axios({
       url: config.MESSAGE_FEISHU_WEBHOOK,
       method: 'post',

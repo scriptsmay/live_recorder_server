@@ -13,7 +13,10 @@ const danmakuRouter = require('./danmaku');
 function createRoutes() {
   const router = express.Router();
 
+  // 路由 /hls/* 直接提供视频文件访问，支持 Range 请求
   router.use(hlsRouter);
+
+  // API 路由
   router.use('/api', logsRouter);
   router.use('/api', apiRouter);
   router.use('/api', roomsRouter);
@@ -27,6 +30,17 @@ function createRoutes() {
   // 给个默认跳转到前端界面，方便访问
   router.get('/', (req, res) => {
     res.redirect('/dashboard');
+  });
+
+  // 404 兜底 —— 必须放在所有路由之后
+  router.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ status: 'Error', message: '接口不存在' });
+    }
+    if (path.extname(req.path)) {
+      return next();
+    }
+    res.status(404).sendFile(path.join(__dirname, '..', 'public', '404.html'));
   });
 
   return router;
