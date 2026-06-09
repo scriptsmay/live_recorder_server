@@ -49,15 +49,15 @@ npm install playwright-core
 
 新增环境变量建议：
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `REMOTE_BROWSER_WS_ENDPOINT` | 空 | 远程浏览器 WebSocket 地址，例如 `ws://192.168.0.247:11300/chromium/playwright` |
-| `KUAISHOU_CHECKER_ENABLED` | `true` | 是否启用快手浏览器 Checker |
-| `KUAISHOU_CHECKER_TIMEOUT_MS` | `45000` | 单次页面检查超时 |
-| `KUAISHOU_CHECKER_WAIT_MS` | `12000` | 页面进入后等待初始状态稳定的时间 |
-| `KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS` | `60` | 单房间最小检查间隔 |
-| `KUAISHOU_CHECKER_BACKOFF_SECONDS` | `180` | 触发风控后的退避时间 |
-| `KUAISHOU_CHECKER_HEADLESS_USER_AGENT` | Chrome 121 desktop UA | 页面 UA |
+| 变量                                    | 默认值                | 说明                                                                            |
+| --------------------------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| `REMOTE_BROWSER_WS_ENDPOINT`            | 空                    | 远程浏览器 WebSocket 地址，例如 `ws://192.168.0.247:11300/chromium/playwright` |
+| `KUAISHOU_CHECKER_ENABLED`              | `true`                | 是否启用快手浏览器 Checker                                                      |
+| `KUAISHOU_CHECKER_TIMEOUT_MS`           | `45000`               | 单次页面检查超时                                                                |
+| `KUAISHOU_CHECKER_WAIT_MS`              | `12000`               | 页面进入后等待初始状态稳定的时间                                                |
+| `KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS` | `60`                  | 单房间最小检查间隔                                                              |
+| `KUAISHOU_CHECKER_BACKOFF_SECONDS`      | `180`                 | 触发风控后的退避时间                                                            |
+| `KUAISHOU_CHECKER_HEADLESS_USER_AGENT`  | Chrome 121 desktop UA | 页面 UA                                                                         |
 
 如果 `REMOTE_BROWSER_WS_ENDPOINT` 未配置，`KuaishouChecker` 应返回明确错误，且不注册或不启用轮询。
 
@@ -73,6 +73,7 @@ npm install playwright-core
 - 为每次检查创建独立 context/page。
 - 提供资源拦截能力。
 - 支持健康检查和关闭连接。
+- 防止远程 Browserless 僵尸页面、僵尸 context 泄漏。
 
 建议接口：
 
@@ -84,11 +85,32 @@ class RemoteBrowserClient {
 }
 ```
 
+生命周期要求：
+
+- `withPage()` 必须用 `browser.newContext()` 创建全新隔离上下文，再从 context 创建 page；禁止复用上一次检查的 page 或直接 `browser.newPage()`。
+- 每次检查完成后必须在 `finally` 中依次执行 `page.close()` 和 `context.close()`，即使 `task` 抛错、超时或出现未等待 promise 的 rejection。
+- `withPage()` 应设置整体超时；超时后关闭当前 page/context，并向上抛出明确错误。
+- 如果 browser 连接断开，清空内部 browser 引用；下一次 `getBrowser()` 重新连接，不继续使用旧对象。
+- `close()` 需要关闭已连接 browser，并容忍重复调用或连接已断开的情况。
+
 资源拦截建议：
 
 - 允许：主文档、核心 JS、必要 XHR。
 - 阻断：图片、字体、media、Sentry、日志上报、验证码 iframe、广告。
 - 不要阻断 `live.kuaishou.com/live_api/liveroom/livedetail`，这是页面初始状态来源之一。
+- 开发和 smoke 测试阶段先记录被拦截资源命中情况；如果严格拦截后更容易出现 `400002`、`请求过快` 或验证码，应放行首屏必要静态资源，避免拦截策略本身触发风控。
+
+上下文隔离要求：
+
+- 每轮检查必须是全新 context，避免 Cookie、LocalStorage、IndexedDB、Cache Storage 继承上一轮风控标记。
+- 默认不持久化登录态；本阶段不实现 cookie jar 或 profile 复用。
+- context 创建时统一设置 UA、viewport、locale、timezone 等基础环境，减少页面状态差异。
+
+可选 stealth 处理：
+
+- 初始实现只做基础 UA 和 viewport 配置。
+- 如果 smoke 测试中频繁出现 `400002`、`请求过快`，或页面明显识别出 Playwright 自动化环境，再通过 `context.addInitScript()` 或 `page.addInitScript()` 增加最小 stealth 补丁。
+- stealth 补丁只用于降低原生自动化特征，例如重写 `navigator.webdriver`，不得扩展到验证码自动破解、登录绕过或签名逆向。
 
 ### 2. `lib/core/polling/KuaishouChecker.js`
 
@@ -118,12 +140,12 @@ static canHandleUrl(url) {
 
 结果映射：
 
-| 页面状态 | Checker 行为 |
-| --- | --- |
-| `isLiving=true` | 返回 `isLive=true`，`recordable=true`，尽量返回 `streamUrl` |
-| `isLiving=false` 且页面含 `主播尚未开播` | 返回 `isLive=false`，`recordable=true`，`streamUrl=null` |
-| `请求过快` / 验证码 / 400002 | 抛错，不返回 `isLive=false` |
-| 无 `__INITIAL_STATE__` | 抛错，不更新上一轮状态 |
+| 页面状态                                 | Checker 行为                                                |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `isLiving=true`                          | 返回 `isLive=true`，`recordable=true`，尽量返回 `streamUrl` |
+| `isLiving=false` 且页面含 `主播尚未开播` | 返回 `isLive=false`，`recordable=true`，`streamUrl=null`    |
+| `请求过快` / 验证码 / 400002             | 抛错，不返回 `isLive=false`                                 |
+| 无 `__INITIAL_STATE__`                   | 抛错，不更新上一轮状态                                      |
 
 ### 3. `lib/core/polling/checkers.js`
 
@@ -167,11 +189,7 @@ if (result.error) {
 ```js
 const author = item.author || {};
 const roomName =
-  author.userName ||
-  author.user_name ||
-  author.name ||
-  author.nickname ||
-  pageTitle.replace(/-快手直播$/, '');
+  author.userName || author.user_name || author.name || author.nickname || pageTitle.replace(/-快手直播$/, '');
 ```
 
 开播状态：
@@ -191,13 +209,22 @@ FLV 选择：
 
 ```js
 function pickBestStreamUrl(liveStream) {
-  const reps = liveStream?.playUrls?.h264?.adaptationSet?.representation || [];
+  const reps =
+    liveStream?.playUrls?.h264?.adaptationSet?.representation ||
+    liveStream?.playUrls?.h265?.adaptationSet?.representation ||
+    [];
   const candidates = reps
     .filter((r) => r.url && !r.hidden && /\.flv(\?|$)/i.test(r.url))
     .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
   return candidates[0]?.url || null;
 }
 ```
+
+注意：
+
+- 优先选择 H.264，便于 FFmpeg 录制和后续转码兼容。
+- H.264 不存在时 fallback 到 H.265/HEVC，避免平台切换编码后误判不可录制。
+- 如果 H.265 URL 被选中，日志中应标记编码类型，便于排查后续转码兼容问题。
 
 日志输出时必须脱敏：
 
@@ -234,7 +261,10 @@ polling:live_status:{roomId}
 - 正常直播 state 返回 `isLive=true`、`roomName`、`streamUrl`。
 - 正常未开播 state 返回 `isLive=false`、`roomName`、`streamUrl=null`。
 - `errorType.title=请求过快，请稍后重试` 时抛出 `KUAISHOU_ANTICRAWL`。
+- H.264 缺失但 H.265 存在时，能 fallback 返回 H.265 FLV。
 - FLV URL 脱敏函数不泄漏签名参数。
+- `RemoteBrowserClient.withPage()` 在成功、抛错、超时三种路径下都调用 `page.close()` 和 `context.close()`。
+- `RemoteBrowserClient.withPage()` 每次调用都创建新 context，不复用 Cookie 或 LocalStorage。
 
 ### 集成 smoke
 
@@ -258,17 +288,26 @@ node scripts/smoke-kuaishou-checker.js
 
 smoke 脚本默认两轮，间隔 70 秒。若出现 `KUAISHOU_ANTICRAWL`，输出 `UNKNOWN` 并标记为风控，不算作下播。
 
+smoke 注意事项：
+
+- 第一轮先使用资源拦截；如果两个固定 URL 都出现风控或 `400002`，再增加一次“放行首屏静态资源”的对照运行。
+- smoke 输出应包含资源拦截摘要、是否命中 stealth 补丁、browser 重连次数、page/context 关闭结果。
+- 不要把 smoke 间隔调低到 60 秒以下；短间隔结果不能作为稳定性结论。
+
 ## 开发步骤
 
 1. 新增 `playwright-core` 依赖。
 2. 新增 `RemoteBrowserClient`，实现 browserless 连接、页面创建、资源拦截、关闭。
-3. 新增 `KuaishouChecker`，实现页面加载、状态抽取、风控识别、FLV 选择。
-4. 注册 `kuaishou` 到 `checkers.js`。
-5. 给 `PollingManager` 增加 `result.error` 不更新状态保护。
-6. 给平台检测和 DB 文档补充 `kuaishou` 已支持轮询。
-7. 新增 `test/polling-kuaishou.test.js`。
-8. 新增可选 smoke 脚本并在文档中说明不要频繁运行。
-9. 执行 `npm run lint && npm test`。
+3. 为 `RemoteBrowserClient` 补齐生命周期测试，确认异常和超时路径不会遗留 page/context。
+4. 新增 `KuaishouChecker`，实现页面加载、状态抽取、风控识别、FLV 选择。
+5. 给 FLV 选择增加 H.264 优先、H.265 fallback。
+6. 在 smoke 脚本中记录资源拦截和风控命中情况，必要时再启用最小 stealth 补丁。
+7. 注册 `kuaishou` 到 `checkers.js`。
+8. 给 `PollingManager` 增加 `result.error` 不更新状态保护。
+9. 给平台检测和 DB 文档补充 `kuaishou` 已支持轮询。
+10. 新增 `test/polling-kuaishou.test.js`。
+11. 新增可选 smoke 脚本并在文档中说明不要频繁运行。
+12. 执行 `npm run lint && npm test`。
 
 ## 验收命令
 
@@ -284,14 +323,22 @@ REMOTE_BROWSER_WS_ENDPOINT=ws://192.168.0.247:11300/chromium/playwright node scr
 
 - 快手风控策略变化，页面返回 `请求过快` 或验证码。
 - Browserless 服务不可用。
+- 远程 Browserless page/context 未关闭导致僵尸页面积累，最终耗尽内存或连接数。
+- Cookie、LocalStorage 等状态在轮询间泄漏，导致单房间风控标记被连续继承。
+- 过于激进的资源拦截被前端风控识别，反而提高 `400002` 命中率。
 - 直播页 JS 包 hash 更新，字段结构变化。
+- 平台优先下发 H.265，原 H.264-only 解析导致误判没有可录制流。
 - FLV URL 有签名时效，轮询取到后必须尽快用于录制。
 
 缓解：
 
 - 风控状态抛错，不覆盖上一轮状态。
 - 快手 Checker 受 `KUAISHOU_CHECKER_ENABLED` 控制，可快速关闭。
+- `RemoteBrowserClient.withPage()` 强制 `try...finally` 关闭 page/context，并在断连后重连。
+- 每次检查创建全新 browser context，不复用浏览器存储状态。
+- smoke 测试保留严格拦截和放行首屏静态资源两种策略对照。
 - 字段抽取保留多路径 fallback。
+- FLV 选择优先 H.264，缺失时 fallback H.265。
 - `streamUrl` 不持久化长期复用，只传给当前录制启动流程。
 
 回滚：
