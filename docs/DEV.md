@@ -59,12 +59,11 @@ node scripts/cleanup-dev.js
 
 ## 快手轮询 smoke
 
-快手轮询 Checker 需要远程 Browserless/Chromium。开发环境可用以下命令验证远程浏览器、平台级串行限速、风控处理和 FLV 抽取：
+快手轮询 Checker 使用纯 HTTP API 直连。开发环境可用以下命令验证平台级串行限速、风控处理和 FLV 抽取：
 
 ```bash
-REMOTE_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/chromium?token=change-me-browserless-token \
-node scripts/smoke-kuaishou-checker.js
+npm run smoke:kuaishou
 ```
 
-默认 smoke 两轮，每轮串行检查 `KSGJuHao` 和 `KPL704668133`，跨房间等待快手 Checker 内部固定的 20 秒全局间隔，轮间等待 `KUAISHOU_SMOKE_INTERVAL_SECONDS=70` 秒。
-输出中会包含 `hadSession` / `hasSession`，用于确认 Redis 中的快手 cookie session 是否被复用。
+默认 smoke 两轮，每轮串行检查 `KSGJuHao` 和 `KPL704668133`，跨房间等待快手 Checker 内部固定的 10 秒全局间隔，轮间等待 `KUAISHOU_SMOKE_INTERVAL_SECONDS=70` 秒。
+可通过 `KUAISHOU_API_TIMEOUT_MS` 调整单次 HTTP 请求超时，默认 15000 毫秒。

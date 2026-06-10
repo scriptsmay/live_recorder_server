@@ -14,8 +14,14 @@
 
 5. ~~[快手轮询反爬改进方案](../finished_plan/KUAISHOU_ANTICRAWL_IMPROVEMENT/KUAISHOU_ANTICRAWL_IMPROVEMENT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_ANTICRAWL_IMPROVEMENT/`
 
+6. ~~[快手 Checker API 直连方案](../finished_plan/KUAISHOU_API_DIRECT/KUAISHOU_API_DIRECT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_API_DIRECT/`
+
 ## 待完成计划
 
-6. [快手 Checker API 直连方案](KUAISHOU_API_DIRECT_PLAN.md) — 将快手轮询 Checker 从浏览器模式切换为纯 HTTP API 模式，彻底绕过头less Chromium 的 TLS 指纹反爬。
+暂无。
+
+## 设计说明待整理
 
 为什么弹幕工具箱页面（danmaku-toolbox）点击展开文件（组件： SegmentsPanel.vue ）时要同时请求2个API： `api/recording_files?session_id=51` 和 `api/danmaku_burn_records?session_id=51` 是出于什么设计这么做的？
+
+答：这是故意拆分的数据源设计。`recording_files` 是录制分段文件的事实表，负责展示每个原始视频分段的文件名、路径、大小、状态、分段序号和时间范围；`danmaku_burn_records` 是弹幕压制任务/产物表，负责展示每个分段是否已压制、压制状态、输出文件、错误信息和删除操作。弹幕压制被独立成队列后，一个录制分段可以没有压制记录，也可能有正在处理/失败/完成的压制记录；前端需要先拿完整分段列表，再按 `recording_file_id` 或 `segment_index` 合并压制状态，所以并行请求两个 API 比把压制状态塞回 `recording_files` 更符合模块解耦设计。

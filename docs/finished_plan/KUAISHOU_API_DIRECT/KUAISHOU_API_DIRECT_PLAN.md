@@ -101,7 +101,7 @@
 
 ```html
 <title data-vm-ssr="true">KSG无言-快手直播</title>
-<meta name="keywords" content="快手,直播,游戏直播,热门游戏,高清游戏,KSG无言,3xhpa8nk4a7xdg6">
+<meta name="keywords" content="快手,直播,游戏直播,热门游戏,高清游戏,KSG无言,3xhpa8nk4a7xdg6" />
 ```
 
 提取方式：`document.title.replace(/-快手直播$/, '')` 或正则匹配 `<title[^>]*>([^<]+)</title>`。
@@ -138,9 +138,15 @@ checkStatus()
 
 ```js
 class KuaishouChecker extends PlatformChecker {
-  static getPlatformId() { return 'kuaishou'; }
-  static canHandleUrl(url) { return /(?:live\.)?kuaishou\.com/i.test(url || ''); }
-  static extractPrincipalId(url) { /* 现有逻辑不变 */ }
+  static getPlatformId() {
+    return 'kuaishou';
+  }
+  static canHandleUrl(url) {
+    return /(?:live\.)?kuaishou\.com/i.test(url || '');
+  }
+  static extractPrincipalId(url) {
+    /* 现有逻辑不变 */
+  }
 
   async checkStatus() {
     // 1. Redis 守卫（backoff、interval、lock）— 复用现有逻辑
@@ -164,7 +170,8 @@ class KuaishouChecker extends PlatformChecker {
 
 ```js
 const DEFAULT_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
   Accept: 'application/json',
   Referer: 'https://live.kuaishou.com/',
   Origin: 'https://live.kuaishou.com',
@@ -183,13 +190,13 @@ UA 使用主流 Chrome 版本，定期更新。不需要与 Browserless Chromium
 
 ### 环境变量变更
 
-| 变量 | 变更 | 说明 |
-|------|------|------|
-| `REMOTE_BROWSER_WS_ENDPOINT` | 不再需要（快手） | 其他平台如果有浏览器 Checker 仍可能需要 |
-| `KUAISHOU_CHECKER_ENABLED` | 保留 | 控制是否启用快手轮询 |
-| `POLLING_KUAISHOU_COOKIE` | 移除 | 纯 HTTP 不需要 cookie |
-| `KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES` | 移除 | 不再加载页面 |
-| `KUAISHOU_API_TIMEOUT_MS` | 新增，默认 15000 | HTTP 请求超时 |
+| 变量                                            | 变更             | 说明                                    |
+| ----------------------------------------------- | ---------------- | --------------------------------------- |
+| `REMOTE_BROWSER_WS_ENDPOINT`                    | 不再需要（快手） | 其他平台如果有浏览器 Checker 仍可能需要 |
+| `KUAISHOU_CHECKER_ENABLED`                      | 保留             | 控制是否启用快手轮询                    |
+| `POLLING_KUAISHOU_COOKIE`                       | 移除             | 纯 HTTP 不需要 cookie                   |
+| `KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES` | 移除             | 不再加载页面                            |
+| `KUAISHOU_API_TIMEOUT_MS`                       | 新增，默认 15000 | HTTP 请求超时                           |
 
 ### `RemoteBrowserClient` 和 `humanBehavior`
 
@@ -206,12 +213,12 @@ UA 使用主流 Chrome 版本，定期更新。不需要与 Browserless Chromium
 
 API 请求比浏览器轻量很多，可以适当调整默认参数：
 
-| 参数 | 浏览器模式 | API 模式 | 说明 |
-|------|-----------|----------|------|
-| 房间间隔 | 60s | 60s | 保持不变，避免过于激进 |
-| 全局间隔 | 20s | 10s | API 请求轻量，可适当缩短 |
-| Backoff | 180s | 120s | API 反爬概率低，缩短退避 |
-| 超时 | 45s | 15s | HTTP 请求远快于浏览器页面加载 |
+| 参数     | 浏览器模式 | API 模式 | 说明                          |
+| -------- | ---------- | -------- | ----------------------------- |
+| 房间间隔 | 60s        | 60s      | 保持不变，避免过于激进        |
+| 全局间隔 | 20s        | 10s      | API 请求轻量，可适当缩短      |
+| Backoff  | 180s       | 120s     | API 反爬概率低，缩短退避      |
+| 超时     | 45s        | 15s      | HTTP 请求远快于浏览器页面加载 |
 
 轮询间隔（`polling_interval`）建议保持 90s 不变，不因为切换到 API 就提高频率——过快请求仍可能触发 IP 级风控。
 

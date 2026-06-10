@@ -120,60 +120,34 @@ MESSAGE_GOTIFY_PRIORITY=5
 `POST /api/notify/feishu_webhook` 仅用于飞书转发；未配置
 `MESSAGE_FEISHU_WEBHOOK` 时返回 HTTP 503。
 
-## 快手轮询与 Browserless
+## 快手轮询
 
-快手轮询 Checker 需要真实 Chromium 页面环境。Docker 从零部署时，推荐使用
-`docker-compose.browserless.yml` 作为 overlay，把 Browserless 和 app 放在同一个
-Compose 网络内：
+快手轮询 Checker 使用纯 HTTP API 直连，不需要 Browserless/Chromium。Docker 从零部署时直接启动主 compose 即可：
 
 ```bash
 cp .env.docker.example .env.docker
-# 编辑 .env.docker，至少修改 POSTGRES_PASSWORD、REDIS_PASSWORD、BROWSERLESS_TOKEN
+# 编辑 .env.docker，至少修改 POSTGRES_PASSWORD、REDIS_PASSWORD
 docker compose \
   --env-file .env.docker \
   -f docker-compose.full.yml \
-  -f docker-compose.browserless.yml \
   up -d --build
 ```
 
-overlay 会启动 `browserless` 服务，并把 app 内的
-`REMOTE_BROWSER_WS_ENDPOINT` 设置为：
-
-```text
-ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}
-```
-
-这里使用 `/chromium` CDP endpoint，因为服务端代码通过
-`playwright-core` 的 `chromium.connectOverCDP()` 连接远程浏览器；不要把它配置成
-native Playwright endpoint `/chromium/playwright`。
-
-Browserless 默认不映射宿主机端口，仅供 Compose 网络内的 app 访问。需要从宿主机调试
-Browserless 时，可以临时在 `docker-compose.browserless.yml` 中给
-`browserless` 增加端口映射：
-
-```yaml
-ports:
-  - '3000:3000'
-```
-
-快手轮询烟测建议在 app 容器内执行，避免宿主机端口映射差异：
+快手轮询烟测建议在 app 容器内执行，确认容器出口网络可访问快手 API：
 
 ```bash
 docker compose \
   --env-file .env.docker \
   -f docker-compose.full.yml \
-  -f docker-compose.browserless.yml \
   exec app npm run smoke:kuaishou
 ```
 
 生产环境建议：
 
-- `BROWSERLESS_TOKEN` 使用高强度随机值，不要保留示例默认值
-- `BROWSERLESS_CONCURRENT=1`，保持快手检查串行，降低触发风控的概率
-- `BROWSERLESS_TIMEOUT_MS=60000` 即可覆盖快手 Checker 内部 45 秒页面超时
-- `POLLING_KUAISHOU_COOKIE` 可选，仅作为 Redis 中还没有快手 session 时的初始访问态种子
-- 快手 cookie session、随机等待和滚动模拟由系统常量控制，不需要在 `.env.docker` 中调参
-- 只有需要从宿主机直接调试时才暴露 Browserless 端口
+- `KUAISHOU_CHECKER_ENABLED=false` 可快速关闭快手轮询
+- `KUAISHOU_API_TIMEOUT_MS=15000` 通常足够；出口网络较慢时可适当调高
+- 保持直播间 `polling_interval` 不低于 60 秒，避免过快请求触发 IP 级风控
+- 快手平台级锁、跨房间全局间隔和 backoff 由系统常量控制，不需要在 `.env.docker` 中调参
 
 ## NAS 备份
 

@@ -47,8 +47,10 @@
     "express": "^5.2.1",
     "morgan": "^1.10.1",
     "pg": "^8.20.0",
-    "playwright-core": "^1.60.0",
     "redis": "^5.12.1"
+  },
+  "optionalDependencies": {
+    "playwright-core": "^1.60.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

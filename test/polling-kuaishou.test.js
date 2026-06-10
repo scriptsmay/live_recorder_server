@@ -36,73 +36,64 @@ function createRedisMock(options = {}) {
   };
 }
 
-function createPageMock(snapshot) {
+function createJsonResponse(data, options = {}) {
   return {
-    goto: jest.fn().mockResolvedValue(undefined),
-    waitForFunction: jest.fn().mockResolvedValue(undefined),
-    waitForTimeout: jest.fn().mockResolvedValue(undefined),
-    evaluate: jest.fn().mockResolvedValue(snapshot),
+    ok: options.ok ?? true,
+    status: options.status || 200,
+    json: jest.fn().mockResolvedValue(data),
+    text: jest.fn().mockResolvedValue(JSON.stringify(data)),
   };
 }
 
-function createBrowserClientMock(snapshot, options = {}) {
-  const page = createPageMock(snapshot);
+function createTextResponse(text, options = {}) {
   return {
-    endpoint: 'ws://test',
-    page,
-    withPage: jest.fn(async (task, withPageOptions = {}) => {
-      const result = await task(page);
-      if (options.storageStateToSave && withPageOptions.saveStorageState) {
-        await withPageOptions.saveStorageState(options.storageStateToSave);
-      }
-      return result;
-    }),
+    ok: options.ok ?? true,
+    status: options.status || 200,
+    json: jest.fn().mockResolvedValue({}),
+    text: jest.fn().mockResolvedValue(text),
   };
 }
 
-function createLiveSnapshot(overrides = {}) {
+function createLiveDetailPayload(overrides = {}) {
   return {
-    title: 'KPL王者荣耀职业联赛-快手直播',
-    bodyText: 'KPL王者荣耀职业联赛 在线观众',
-    state: {
-      liveroom: {
-        activeIndex: 0,
-        playList: [
-          {
-            isLiving: true,
-            caption: 'KPL直播',
-            author: { userName: 'KPL王者荣耀职业联赛' },
-            liveStream: {
-              playUrls: {
-                h264: {
-                  adaptationSet: {
-                    representation: [
-                      { url: 'https://example.com/low.flv?txSecret=abc', bitrate: 800 },
-                      { url: 'https://example.com/high.flv?txSecret=abc', bitrate: 2000 },
-                    ],
-                  },
-                },
-              },
-            },
-            ...overrides,
-          },
-        ],
+    data: {
+      result: 1,
+      author: {
+        living: true,
+        userName: 'KPL王者荣耀职业联赛',
       },
+      liveStream: {
+        caption: 'KPL直播',
+        playUrls: {
+          h264: {
+            adaptationSet: {
+              representation: [
+                { url: 'https://example.com/low.flv?txSecret=abc', bitrate: 800 },
+                { url: 'https://example.com/high.flv?txSecret=abc', bitrate: 2000 },
+              ],
+            },
+          },
+        },
+      },
+      ...overrides,
     },
   };
 }
 
 describe('KuaishouChecker', () => {
   const originalEnv = { ...process.env };
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     process.env.KUAISHOU_CHECKER_ENABLED = 'true';
+    global.fetch = jest.fn();
   });
 
   afterAll(() => {
     process.env = originalEnv;
+    global.fetch = originalFetch;
   });
 
   it('returns correct platform id and handles kuaishou URLs', () => {
@@ -117,12 +108,10 @@ describe('KuaishouChecker', () => {
     expect(KuaishouChecker.extractPrincipalId('https://live.kuaishou.com/u/KPL704668133?foo=bar')).toBe('KPL704668133');
   });
 
-  it('returns live status with best h264 FLV URL', async () => {
-    const redis = createRedisMock();
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
+  it('returns live status with best h264 FLV URL from livedetail API', async () => {
+    global.fetch.mockResolvedValueOnce(createJsonResponse(createLiveDetailPayload()));
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis,
-      browserClient,
+      redis: createRedisMock(),
       now: () => 100000,
     });
 
@@ -136,19 +125,22 @@ describe('KuaishouChecker', () => {
       codec: 'h264',
       bitrate: 2000,
     });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toContain('/live_api/liveroom/livedetail?principalId=KPL704668133');
   });
 
-  it('returns offline status when room is not living', async () => {
-    const snapshot = createLiveSnapshot({
-      isLiving: false,
+  it('returns offline status and fills missing room name from HTML title', async () => {
+    const payload = createLiveDetailPayload({
+      result: 2,
+      author: { living: false },
       liveStream: {},
     });
-    snapshot.title = 'KSG句号-快手直播';
-    snapshot.bodyText = 'KSG句号 主播尚未开播，可以观看其他直播';
-    snapshot.state.liveroom.playList[0].author = { userName: 'KSG句号' };
+    const redis = createRedisMock();
+    global.fetch
+      .mockResolvedValueOnce(createJsonResponse(payload))
+      .mockResolvedValueOnce(createTextResponse('<title data-vm-ssr="true">KSG句号-快手直播</title>'));
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KSGJuHao', {
-      redis: createRedisMock(),
-      browserClient: createBrowserClientMock(snapshot),
+      redis,
       now: () => 100000,
     });
 
@@ -157,32 +149,66 @@ describe('KuaishouChecker', () => {
     expect(result.isLive).toBe(false);
     expect(result.roomName).toBe('KSG句号');
     expect(result.streamUrl).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[1][0]).toBe('https://live.kuaishou.com/u/KSGJuHao');
+    expect(redis.setEx).toHaveBeenCalledWith('kuaishou:checker:room_name:KSGJuHao', 86400, 'KSG句号');
   });
 
-  it('throws KUAISHOU_ANTICRAWL for request-too-fast state', async () => {
-    const snapshot = createLiveSnapshot({
-      errorType: { title: '请求过快，请稍后重试' },
+  it('falls back to profile/public when livedetail request fails', async () => {
+    global.fetch.mockResolvedValueOnce(createJsonResponse({}, { ok: false, status: 500 })).mockResolvedValueOnce(
+      createJsonResponse({
+        data: {
+          result: 1,
+          live: {
+            living: true,
+            author: { userName: 'KSG无言' },
+            playUrls: [{ url: 'https://example.com/profile.flv?txSecret=abc', bitrate: 1200 }],
+          },
+        },
+      })
+    );
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/3xhpa8nk4a7xdg6', {
+      redis: createRedisMock(),
+      now: () => 100000,
     });
+
+    const result = await checker.checkStatus();
+
+    expect(result.isLive).toBe(true);
+    expect(result.roomName).toBe('KSG无言');
+    expect(result.streamUrl).toBe('https://example.com/profile.flv?txSecret=abc');
+    expect(global.fetch.mock.calls[1][0]).toContain('/live_api/profile/public?principalId=3xhpa8nk4a7xdg6');
+  });
+
+  it('throws KUAISHOU_ANTICRAWL and sets backoff for captcha result', async () => {
     const redis = createRedisMock();
+    global.fetch.mockResolvedValueOnce(
+      createJsonResponse({
+        data: {
+          result: 400002,
+          message: '验证码',
+        },
+      })
+    );
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KSGJuHao', {
       redis,
-      browserClient: createBrowserClientMock(snapshot),
       now: () => 100000,
     });
 
     await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_ANTICRAWL');
-    expect(redis.setEx).toHaveBeenCalledWith('kuaishou:checker:backoff:KSGJuHao', 180, '1');
-    expect(redis.setEx).toHaveBeenCalledWith('kuaishou:checker:platform_backoff', 180, '1');
+    expect(redis.setEx).toHaveBeenCalledWith('kuaishou:checker:backoff:KSGJuHao', 120, '1');
+    expect(redis.setEx).toHaveBeenCalledWith('kuaishou:checker:platform_backoff', 120, '1');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to h265 when h264 is missing', () => {
+  it('falls back to hevc when h264 is missing', () => {
     const stream = KuaishouChecker.pickBestStreamUrl({
       playUrls: {
-        h265: {
+        hevc: {
           adaptationSet: {
             representation: [
-              { url: 'https://example.com/h265-low.flv', bitrate: 500 },
-              { url: 'https://example.com/h265-high.flv', bitrate: 1500 },
+              { url: 'https://example.com/hevc-low.flv', bitrate: 500 },
+              { url: 'https://example.com/hevc-high.flv', bitrate: 1500 },
             ],
           },
         },
@@ -190,8 +216,8 @@ describe('KuaishouChecker', () => {
     });
 
     expect(stream).toEqual({
-      url: 'https://example.com/h265-high.flv',
-      codec: 'h265',
+      url: 'https://example.com/hevc-high.flv',
+      codec: 'hevc',
       bitrate: 1500,
     });
   });
@@ -202,203 +228,66 @@ describe('KuaishouChecker', () => {
     );
   });
 
-  it('parses kuaishou cookie header into playwright cookies', () => {
-    expect(KuaishouChecker.parseCookieHeader('did=web_x; client_key=abc; Path=/; HttpOnly')).toEqual([
-      {
-        name: 'did',
-        value: 'web_x',
-        domain: '.kuaishou.com',
-        path: '/',
-        secure: true,
-        httpOnly: false,
-        sameSite: 'Lax',
-      },
-      {
-        name: 'client_key',
-        value: 'abc',
-        domain: '.kuaishou.com',
-        path: '/',
-        secure: true,
-        httpOnly: false,
-        sameSite: 'Lax',
-      },
-    ]);
-  });
-
-  it('does not open browser when platform lock is busy', async () => {
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
+  it('does not fetch API when platform lock is busy', async () => {
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
       redis: createRedisMock({ lockBusyKey: 'kuaishou:checker:platform_lock' }),
-      browserClient,
       now: () => 100000,
     });
 
     await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_PLATFORM_LOCK_BUSY');
-    expect(browserClient.withPage).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('does not open browser when platform interval is active', async () => {
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
+  it('does not fetch API when platform interval is active', async () => {
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
       redis: createRedisMock({
         initial: {
           'kuaishou:checker:platform_last_poll': '95000',
         },
       }),
-      browserClient,
       now: () => 100000,
     });
 
     await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_PLATFORM_RATE_LIMITED');
-    expect(browserClient.withPage).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('loads persisted kuaishou session cookies by default', async () => {
-    const storedSession = {
-      cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
-    };
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis: createRedisMock({
-        initial: {
-          'kuaishou:checker:session:platform': JSON.stringify(storedSession),
-        },
-      }),
-      browserClient,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual(storedSession);
-  });
-
-  it('uses POLLING_KUAISHOU_COOKIE as initial session seed when redis has no session', async () => {
-    process.env.POLLING_KUAISHOU_COOKIE = 'did=seed_did; client_key=seed_client';
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis: createRedisMock(),
-      browserClient,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual({
-      cookies: [
-        expect.objectContaining({ name: 'did', value: 'seed_did', domain: '.kuaishou.com' }),
-        expect.objectContaining({ name: 'client_key', value: 'seed_client', domain: '.kuaishou.com' }),
-      ],
-    });
-  });
-
-  it('prefers redis session over POLLING_KUAISHOU_COOKIE seed', async () => {
-    process.env.POLLING_KUAISHOU_COOKIE = 'did=seed_did';
-    const storedSession = {
-      cookies: [{ name: 'did', value: 'redis_did', domain: '.kuaishou.com', path: '/' }],
-    };
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis: createRedisMock({
-        initial: {
-          'kuaishou:checker:session:platform': JSON.stringify(storedSession),
-        },
-      }),
-      browserClient,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual(storedSession);
-  });
-
-  it('saves only kuaishou cookies after a poll', async () => {
-    const redis = createRedisMock();
-    const browserClient = createBrowserClientMock(createLiveSnapshot(), {
-      storageStateToSave: {
-        cookies: [
-          { name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' },
-          { name: 'third_party', value: '1', domain: '.example.com', path: '/' },
-        ],
-      },
-    });
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis,
-      browserClient,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(redis.setEx).toHaveBeenCalledWith(
-      'kuaishou:checker:session:platform',
-      604800,
-      JSON.stringify({
-        cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
-      })
+  it('uses cached room name instead of fetching HTML when API name is missing', async () => {
+    global.fetch.mockResolvedValueOnce(
+      createJsonResponse(
+        createLiveDetailPayload({
+          result: 2,
+          author: { living: false },
+          liveStream: {},
+        })
+      )
     );
-  });
-
-  it('ignores corrupted persisted session JSON', async () => {
-    delete process.env.POLLING_KUAISHOU_COOKIE;
-    const browserClient = createBrowserClientMock(createLiveSnapshot());
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KSGJuHao', {
       redis: createRedisMock({
         initial: {
-          'kuaishou:checker:session:platform': '{bad-json',
+          'kuaishou:checker:room_name:KSGJuHao': 'KSG句号',
         },
       }),
-      browserClient,
       now: () => 100000,
     });
 
-    await checker.checkStatus();
+    const result = await checker.checkStatus();
 
-    expect(browserClient.withPage.mock.calls[0][1].storageState).toBeUndefined();
+    expect(result.roomName).toBe('KSG句号');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('simulates human behavior by default', async () => {
-    const humanBehavior = {
-      simulateHumanBehavior: jest.fn().mockResolvedValue(undefined),
-    };
+  it('uses API mode timing constants and timeout env override', () => {
+    process.env.KUAISHOU_API_TIMEOUT_MS = '9000';
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
       redis: createRedisMock(),
-      browserClient: createBrowserClientMock(createLiveSnapshot()),
-      humanBehavior,
-      now: () => 100000,
     });
 
-    await checker.checkStatus();
-
-    expect(humanBehavior.simulateHumanBehavior).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({
-        minDelayMs: 1500,
-        maxDelayMs: 4000,
-        scrollCount: 2,
-      })
-    );
-  });
-
-  it('uses fixed internal behavior and session tuning constants', () => {
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis: createRedisMock(),
-      browserClient: createBrowserClientMock(createLiveSnapshot()),
-    });
-
-    expect(checker.getTimeoutMs()).toBe(45000);
-    expect(checker.getWaitMs()).toBe(12000);
+    expect(checker.getTimeoutMs()).toBe(9000);
     expect(checker.getRoomIntervalSeconds()).toBe(60);
-    expect(checker.getGlobalIntervalSeconds()).toBe(20);
-    expect(checker.getBackoffSeconds()).toBe(180);
-    expect(checker.getSessionTtlSeconds()).toBe(604800);
-    expect(checker.getSessionKey()).toBe('kuaishou:checker:session:platform');
-    expect(checker.getHumanBehaviorOptions()).toEqual({
-      minDelayMs: 1500,
-      maxDelayMs: 4000,
-      scrollCount: 2,
-    });
+    expect(checker.getGlobalIntervalSeconds()).toBe(10);
+    expect(checker.getBackoffSeconds()).toBe(120);
+    expect(checker.getSessionKey()).toBe('kuaishou:checker:session:deprecated');
   });
 });
 

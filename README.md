@@ -77,29 +77,20 @@ npm run stop
 
 ### 快手轮询配置
 
-快手轮询 Checker 依赖远程 Browserless/Chromium，并通过平台级单并发和全局间隔降低风控概率。
+快手轮询 Checker 使用快手公开 HTTP API 直连，不依赖 Browserless/Chromium。内部仍通过平台级单并发、跨房间全局间隔和 backoff 降低风控概率。
 
-| 配置项                     | 说明                         | 默认值 |
-| -------------------------- | ---------------------------- | ------ |
-| REMOTE_BROWSER_WS_ENDPOINT | 远程 Chromium WebSocket 地址 | -      |
-| KUAISHOU_CHECKER_ENABLED   | 是否启用快手 Checker         | true   |
-| POLLING_KUAISHOU_COOKIE    | 快手初始 Cookie              | -      |
+| 配置项                   | 说明                  | 默认值 |
+| ------------------------ | --------------------- | ------ |
+| KUAISHOU_CHECKER_ENABLED | 是否启用快手 Checker  | true   |
+| KUAISHOU_API_TIMEOUT_MS  | 单次 HTTP 请求超时 ms | 15000  |
 
-Docker 从零部署时可叠加 `docker-compose.browserless.yml` 一起启动 Browserless：
+快手 smoke 可直接运行：
 
 ```bash
-docker compose --env-file .env.docker \
-  -f docker-compose.full.yml \
-  -f docker-compose.browserless.yml \
-  up -d --build
+npm run smoke:kuaishou
 ```
 
-服务端使用 `chromium.connectOverCDP()`，因此 Browserless 地址应使用
-`/chromium` CDP endpoint，例如
-`ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
-
-快手轮询内部的超时、等待、backoff、UA、cookie session 和行为模拟参数使用系统常量，不作为用户配置暴露。
-`POLLING_KUAISHOU_COOKIE` 仅作为 Redis 中还没有快手 session 时的初始访问态种子，后续会由系统自动持久化并刷新快手 cookie。
+快手轮询内部的 UA、backoff、平台锁和全局间隔使用系统常量，不作为用户配置暴露。房间名缺失时会按 24 小时 Redis 缓存频率请求直播页 HTML 提取 `<title>`。
 
 ## 项目结构
 
@@ -127,7 +118,7 @@ docker compose --env-file .env.docker \
 │   ├── polling/                # 直播轮询检测
 │   │   ├── PlatformChecker.js     # 平台检查器基类（策略模式）
 │   │   ├── HuyaChecker.js         # 虎牙平台检查器
-│   │   ├── KuaishouChecker.js     # 快手平台检查器（远程 Browserless）
+│   │   ├── KuaishouChecker.js     # 快手平台检查器（HTTP API 直连）
 │   │   └── PollingManager.js      # 轮询管理器（定时调度、状态转换检测）
 │   ├── TranscodeQueue.js       # 转码队列（Redis 队列 + 并发控制）
 │   ├── transcoder.js           # 视频转码（FFmpeg -c copy TS → MP4）
