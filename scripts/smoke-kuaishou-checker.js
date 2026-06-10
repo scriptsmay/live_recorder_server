@@ -28,11 +28,19 @@ function redactUrl(url) {
 async function checkTarget(target) {
   const startedAt = new Date();
   const checker = new KuaishouChecker(target.url);
+  const principalId = checker.getRoomKey();
+  const sessionKey = checker.getSessionKey(principalId);
+  const hadSession = await checker.hasStoredSession(principalId);
 
   try {
     const result = await checker.checkStatus();
+    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
+      principalId,
+      sessionKey,
+      hadSession,
+      hasSession,
       startedAt: startedAt.toISOString(),
       status: 'ok',
       isLive: result.isLive,
@@ -41,8 +49,13 @@ async function checkTarget(target) {
       streamInfo: result.streamInfo,
     };
   } catch (err) {
+    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
+      principalId,
+      sessionKey,
+      hadSession,
+      hasSession,
       startedAt: startedAt.toISOString(),
       status: 'unknown',
       error: err.message,
@@ -86,6 +99,13 @@ async function main() {
   console.log(
     `[kuaishou-smoke] stealth=${process.env.KUAISHOU_CHECKER_STEALTH === 'true'} allowFirstScreenResources=${
       process.env.KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES === 'true'
+    }`
+  );
+  console.log(
+    `[kuaishou-smoke] persistSession=${
+      process.env.KUAISHOU_CHECKER_PERSIST_SESSION !== 'false'
+    } sessionScope=${process.env.KUAISHOU_CHECKER_SESSION_SCOPE || 'platform'} simulateHuman=${
+      process.env.KUAISHOU_CHECKER_SIMULATE_HUMAN !== 'false'
     }`
   );
 

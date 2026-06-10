@@ -563,7 +563,9 @@ PollingManager (单例)
 ### KuaishouChecker 实现要点
 
 - 依赖 `playwright-core` 连接远程 Browserless/Chromium，不下载本地浏览器。
-- 每次检查通过 `RemoteBrowserClient.withPage()` 创建全新 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
+- 每次检查通过 `RemoteBrowserClient.withPage()` 创建 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
+- 支持 Redis 持久化快手 cookie session，默认按平台共享，key 为 `kuaishou:checker:session:platform`；可通过 `KUAISHOU_CHECKER_SESSION_SCOPE=room` 切换为按房间隔离。
+- 默认启用轻量人类行为模拟：页面状态 ready 后、数据提取前随机等待并滚动，降低每次访问都像全新自动化页面的特征。
 - 读取快手直播页 `window.__INITIAL_STATE__.liveroom.playList[activeIndex]` 判断主播名、开播状态和 FLV 地址。
 - 风控、验证码、`请求过快`、`400002` 均视为未知状态并抛错，不写成 `isLive=false`。
 - FLV 选择优先 H.264，缺失时 fallback 到 H.265/HEVC。

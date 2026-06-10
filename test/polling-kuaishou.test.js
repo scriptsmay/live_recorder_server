@@ -40,16 +40,23 @@ function createPageMock(snapshot) {
   return {
     goto: jest.fn().mockResolvedValue(undefined),
     waitForFunction: jest.fn().mockResolvedValue(undefined),
+    waitForTimeout: jest.fn().mockResolvedValue(undefined),
     evaluate: jest.fn().mockResolvedValue(snapshot),
   };
 }
 
-function createBrowserClientMock(snapshot) {
+function createBrowserClientMock(snapshot, options = {}) {
   const page = createPageMock(snapshot);
   return {
     endpoint: 'ws://test',
     page,
-    withPage: jest.fn(async (task) => task(page)),
+    withPage: jest.fn(async (task, withPageOptions = {}) => {
+      const result = await task(page);
+      if (options.storageStateToSave && withPageOptions.saveStorageState) {
+        await withPageOptions.saveStorageState(options.storageStateToSave);
+      }
+      return result;
+    }),
   };
 }
 
@@ -224,6 +231,155 @@ describe('KuaishouChecker', () => {
     await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_PLATFORM_RATE_LIMITED');
     expect(browserClient.withPage).not.toHaveBeenCalled();
   });
+
+  it('loads persisted kuaishou session cookies by default', async () => {
+    const storedSession = {
+      cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+    };
+    const browserClient = createBrowserClientMock(createLiveSnapshot());
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock({
+        initial: {
+          'kuaishou:checker:session:platform': JSON.stringify(storedSession),
+        },
+      }),
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual(storedSession);
+  });
+
+  it('saves only kuaishou cookies after a poll', async () => {
+    const redis = createRedisMock();
+    const browserClient = createBrowserClientMock(createLiveSnapshot(), {
+      storageStateToSave: {
+        cookies: [
+          { name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' },
+          { name: 'third_party', value: '1', domain: '.example.com', path: '/' },
+        ],
+      },
+    });
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis,
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(redis.setEx).toHaveBeenCalledWith(
+      'kuaishou:checker:session:platform',
+      604800,
+      JSON.stringify({
+        cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+      })
+    );
+  });
+
+  it('uses room-scoped session keys when configured', async () => {
+    process.env.KUAISHOU_CHECKER_SESSION_SCOPE = 'room';
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KSGJuHao', {
+      redis: createRedisMock(),
+      browserClient: createBrowserClientMock(createLiveSnapshot()),
+      now: () => 100000,
+    });
+
+    expect(checker.getSessionKey()).toBe('kuaishou:checker:session:room:KSGJuHao');
+  });
+
+  it('does not read or write session keys when session persistence is disabled', async () => {
+    process.env.KUAISHOU_CHECKER_PERSIST_SESSION = 'false';
+    const redis = createRedisMock();
+    const browserClient = createBrowserClientMock(createLiveSnapshot(), {
+      storageStateToSave: {
+        cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+      },
+    });
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis,
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(redis.get).not.toHaveBeenCalledWith('kuaishou:checker:session:platform');
+    expect(redis.setEx).not.toHaveBeenCalledWith(
+      'kuaishou:checker:session:platform',
+      expect.any(Number),
+      expect.any(String)
+    );
+  });
+
+  it('ignores corrupted persisted session JSON', async () => {
+    const browserClient = createBrowserClientMock(createLiveSnapshot());
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock({
+        initial: {
+          'kuaishou:checker:session:platform': '{bad-json',
+        },
+      }),
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(browserClient.withPage.mock.calls[0][1].storageState).toBeUndefined();
+  });
+
+  it('simulates human behavior by default', async () => {
+    const humanBehavior = {
+      simulateHumanBehavior: jest.fn().mockResolvedValue(undefined),
+    };
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock(),
+      browserClient: createBrowserClientMock(createLiveSnapshot()),
+      humanBehavior,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(humanBehavior.simulateHumanBehavior).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        minDelayMs: 1500,
+        maxDelayMs: 4000,
+        scrollCount: 2,
+      })
+    );
+  });
+
+  it('does not simulate human behavior when disabled', async () => {
+    process.env.KUAISHOU_CHECKER_SIMULATE_HUMAN = 'false';
+    const humanBehavior = {
+      simulateHumanBehavior: jest.fn().mockResolvedValue(undefined),
+    };
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock(),
+      browserClient: createBrowserClientMock(createLiveSnapshot()),
+      humanBehavior,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(humanBehavior.simulateHumanBehavior).not.toHaveBeenCalled();
+  });
+
+  it('allows scroll count zero in human behavior options', () => {
+    process.env.KUAISHOU_CHECKER_SIMULATE_SCROLL_COUNT = '0';
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock(),
+      browserClient: createBrowserClientMock(createLiveSnapshot()),
+    });
+
+    expect(checker.getHumanBehaviorOptions().scrollCount).toBe(0);
+  });
 });
 
 describe('RemoteBrowserClient', () => {
@@ -235,6 +391,9 @@ describe('RemoteBrowserClient', () => {
     const context = {
       addInitScript: jest.fn().mockResolvedValue(undefined),
       newPage: jest.fn().mockResolvedValue(page),
+      storageState: jest.fn().mockResolvedValue({
+        cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+      }),
       close: jest.fn().mockResolvedValue(undefined),
     };
     const browser = {
@@ -295,5 +454,23 @@ describe('RemoteBrowserClient', () => {
     await client.withPage(async () => 'second');
 
     expect(fake.browser.newContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads and saves storage state around a page task', async () => {
+    const fake = createFakeBrowser();
+    const client = new RemoteBrowserClient({ endpoint: 'ws://test' });
+    const storageState = {
+      cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+    };
+    const saveStorageState = jest.fn().mockResolvedValue(undefined);
+    client.getBrowser = jest.fn().mockResolvedValue(fake.browser);
+
+    await client.withPage(async () => 'ok', {
+      storageState,
+      saveStorageState,
+    });
+
+    expect(fake.browser.newContext).toHaveBeenCalledWith(expect.objectContaining({ storageState }));
+    expect(saveStorageState).toHaveBeenCalledWith(storageState);
   });
 });
