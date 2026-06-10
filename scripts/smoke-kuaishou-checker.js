@@ -4,6 +4,8 @@ require('../config/env').initEnv();
 
 const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
 
+const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 20;
+
 const TARGETS = [
   {
     name: 'KSGJuHao',
@@ -90,24 +92,13 @@ async function main() {
 
   const rounds = parseInt(process.env.KUAISHOU_SMOKE_ROUNDS || '2', 10);
   const intervalSeconds = parseInt(process.env.KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
-  const globalIntervalSeconds = parseInt(process.env.KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS || '20', 10);
+  const globalIntervalSeconds = KUAISHOU_GLOBAL_INTERVAL_SECONDS;
 
   console.log('[kuaishou-smoke] endpoint configured');
   console.log(
     `[kuaishou-smoke] rounds=${rounds} interval=${intervalSeconds}s globalInterval=${globalIntervalSeconds}s`
   );
-  console.log(
-    `[kuaishou-smoke] stealth=${process.env.KUAISHOU_CHECKER_STEALTH === 'true'} allowFirstScreenResources=${
-      process.env.KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES === 'true'
-    }`
-  );
-  console.log(
-    `[kuaishou-smoke] persistSession=${
-      process.env.KUAISHOU_CHECKER_PERSIST_SESSION !== 'false'
-    } sessionScope=${process.env.KUAISHOU_CHECKER_SESSION_SCOPE || 'platform'} simulateHuman=${
-      process.env.KUAISHOU_CHECKER_SIMULATE_HUMAN !== 'false'
-    }`
-  );
+  console.log('[kuaishou-smoke] sessionScope=platform simulateHuman=true');
 
   for (let round = 1; round <= rounds; round += 1) {
     await runRound(round, globalIntervalSeconds);

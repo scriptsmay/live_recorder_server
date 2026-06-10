@@ -66,5 +66,5 @@ REMOTE_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/chromium?token=change-me-browserl
 node scripts/smoke-kuaishou-checker.js
 ```
 
-默认 smoke 两轮，每轮串行检查 `KSGJuHao` 和 `KPL704668133`，跨房间等待 `KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS`，轮间等待 `KUAISHOU_SMOKE_INTERVAL_SECONDS=70` 秒。
-输出中会包含 `hadSession` / `hasSession`，用于确认 Redis 中的快手 cookie session 是否被复用。默认开启 `KUAISHOU_CHECKER_SIMULATE_HUMAN=true`，如需快速验证解析逻辑，可临时设置 `KUAISHOU_CHECKER_SIMULATE_HUMAN=false`。
+默认 smoke 两轮，每轮串行检查 `KSGJuHao` 和 `KPL704668133`，跨房间等待快手 Checker 内部固定的 20 秒全局间隔，轮间等待 `KUAISHOU_SMOKE_INTERVAL_SECONDS=70` 秒。
+输出中会包含 `hadSession` / `hasSession`，用于确认 Redis 中的快手 cookie session 是否被复用。

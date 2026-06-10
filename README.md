@@ -79,24 +79,10 @@ npm run stop
 
 快手轮询 Checker 依赖远程 Browserless/Chromium，并通过平台级单并发和全局间隔降低风控概率。
 
-| 配置项                                        | 说明                          | 默认值   |
-| --------------------------------------------- | ----------------------------- | -------- |
-| REMOTE_BROWSER_WS_ENDPOINT                    | 远程 Chromium WebSocket 地址  | -        |
-| KUAISHOU_CHECKER_ENABLED                      | 是否启用快手 Checker          | true     |
-| KUAISHOU_CHECKER_TIMEOUT_MS                   | 单次检查超时                  | 45000    |
-| KUAISHOU_CHECKER_WAIT_MS                      | 页面状态等待时间              | 12000    |
-| KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS         | 单房间最小检查间隔            | 60       |
-| KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS      | 快手跨房间全局最小间隔        | 20       |
-| KUAISHOU_CHECKER_BACKOFF_SECONDS              | 风控后退避时间                | 180      |
-| KUAISHOU_CHECKER_STEALTH                      | 是否启用最小自动化特征补丁    | false    |
-| KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES | 是否放行首屏图片/字体资源     | false    |
-| KUAISHOU_CHECKER_PERSIST_SESSION              | 是否持久化快手 cookie session | true     |
-| KUAISHOU_CHECKER_SESSION_TTL_SECONDS          | session 在 Redis 中的 TTL     | 604800   |
-| KUAISHOU_CHECKER_SESSION_SCOPE                | session 范围：platform/room   | platform |
-| KUAISHOU_CHECKER_SIMULATE_HUMAN               | 是否模拟随机等待和滚动        | true     |
-| KUAISHOU_CHECKER_SIMULATE_MIN_DELAY_MS        | 页面加载后最小等待时间        | 1500     |
-| KUAISHOU_CHECKER_SIMULATE_MAX_DELAY_MS        | 页面加载后最大等待时间        | 4000     |
-| KUAISHOU_CHECKER_SIMULATE_SCROLL_COUNT        | 模拟滚动次数，0 表示不滚动    | 2        |
+| 配置项                     | 说明                         | 默认值 |
+| -------------------------- | ---------------------------- | ------ |
+| REMOTE_BROWSER_WS_ENDPOINT | 远程 Chromium WebSocket 地址 | -      |
+| KUAISHOU_CHECKER_ENABLED   | 是否启用快手 Checker         | true   |
 
 Docker 从零部署时可叠加 `docker-compose.browserless.yml` 一起启动 Browserless：
 
@@ -111,8 +97,7 @@ docker compose --env-file .env.docker \
 `/chromium` CDP endpoint，例如
 `ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
 
-如果快手反爬误伤，可以分别设置 `KUAISHOU_CHECKER_PERSIST_SESSION=false`
-或 `KUAISHOU_CHECKER_SIMULATE_HUMAN=false` 回退到无 session / 无行为模拟模式。
+快手轮询内部的超时、等待、backoff、UA、cookie session 和行为模拟参数使用系统常量，不作为用户配置暴露。
 
 ## 项目结构
 
@@ -180,7 +165,7 @@ docker compose --env-file .env.docker \
 │   ├── DEV.md                  # 开发指南
 │   ├── TEST.md                 # 测试文档
 │   └── todo/                   # 开发计划文档
-└── test/                       # Jest 测试（297 个用例）
+└── test/                       # Jest 测试（294 个用例）
 ```
 
 ## 弹幕功能架构
@@ -210,7 +195,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 ## 测试
 
 ```bash
-# 运行所有测试（297 个用例）
+# 运行所有测试（294 个用例）
 npm test
 
 # 监听模式

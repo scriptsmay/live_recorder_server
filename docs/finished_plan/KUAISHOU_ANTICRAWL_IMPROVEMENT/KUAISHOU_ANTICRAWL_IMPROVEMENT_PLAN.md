@@ -2,6 +2,10 @@
 
 创建日期：2026-06-10
 
+## 最终实现修订
+
+初版方案为便于调试，设计了较多快手专属环境变量。实际落地后，为避免可选小模块的配置项喧宾夺主，已将超时、等待、backoff、UA、session TTL、session scope 和行为模拟参数收敛为代码常量；用户侧只保留 `REMOTE_BROWSER_WS_ENDPOINT` 与 `KUAISHOU_CHECKER_ENABLED` 两个必要入口。
+
 ## 背景
 
 快手轮询 Checker 基础功能已开发完成（见 `docs/finished_plan/KUAISHOU_POLLING_CHECKER/`），单元测试 13/13 全部通过，全量回归 283 用例无回归。但冒烟测试中，首次访问即触发快手反爬（"请求过快，请稍后重试"），导致两个目标直播间均未能获取到真实数据。

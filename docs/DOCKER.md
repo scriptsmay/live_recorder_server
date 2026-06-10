@@ -170,17 +170,9 @@ docker compose \
 
 - `BROWSERLESS_TOKEN` 使用高强度随机值，不要保留示例默认值
 - `BROWSERLESS_CONCURRENT=1`，保持快手检查串行，降低触发风控的概率
-- `BROWSERLESS_TIMEOUT_MS` 应略高于 `KUAISHOU_CHECKER_TIMEOUT_MS`
-- 默认开启 `KUAISHOU_CHECKER_PERSIST_SESSION=true`，快手 cookie session 会写入 Redis，默认 key 为 `kuaishou:checker:session:platform`
-- 默认开启 `KUAISHOU_CHECKER_SIMULATE_HUMAN=true`，页面加载后会增加随机等待和滚动；如需压缩耗时可调低延迟或设置滚动次数为 `0`
+- `BROWSERLESS_TIMEOUT_MS=60000` 即可覆盖快手 Checker 内部 45 秒页面超时
+- 快手 cookie session、随机等待和滚动模拟由系统常量控制，不需要在 `.env.docker` 中调参
 - 只有需要从宿主机直接调试时才暴露 Browserless 端口
-
-快速回滚快手反爬改进：
-
-```env
-KUAISHOU_CHECKER_PERSIST_SESSION=false
-KUAISHOU_CHECKER_SIMULATE_HUMAN=false
-```
 
 ## NAS 备份
 

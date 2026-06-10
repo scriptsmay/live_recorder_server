@@ -99,8 +99,6 @@ describe('KuaishouChecker', () => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     process.env.KUAISHOU_CHECKER_ENABLED = 'true';
-    process.env.KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS = '20';
-    process.env.KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS = '60';
   });
 
   afterAll(() => {
@@ -279,41 +277,6 @@ describe('KuaishouChecker', () => {
     );
   });
 
-  it('uses room-scoped session keys when configured', async () => {
-    process.env.KUAISHOU_CHECKER_SESSION_SCOPE = 'room';
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KSGJuHao', {
-      redis: createRedisMock(),
-      browserClient: createBrowserClientMock(createLiveSnapshot()),
-      now: () => 100000,
-    });
-
-    expect(checker.getSessionKey()).toBe('kuaishou:checker:session:room:KSGJuHao');
-  });
-
-  it('does not read or write session keys when session persistence is disabled', async () => {
-    process.env.KUAISHOU_CHECKER_PERSIST_SESSION = 'false';
-    const redis = createRedisMock();
-    const browserClient = createBrowserClientMock(createLiveSnapshot(), {
-      storageStateToSave: {
-        cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
-      },
-    });
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis,
-      browserClient,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(redis.get).not.toHaveBeenCalledWith('kuaishou:checker:session:platform');
-    expect(redis.setEx).not.toHaveBeenCalledWith(
-      'kuaishou:checker:session:platform',
-      expect.any(Number),
-      expect.any(String)
-    );
-  });
-
   it('ignores corrupted persisted session JSON', async () => {
     const browserClient = createBrowserClientMock(createLiveSnapshot());
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
@@ -354,31 +317,24 @@ describe('KuaishouChecker', () => {
     );
   });
 
-  it('does not simulate human behavior when disabled', async () => {
-    process.env.KUAISHOU_CHECKER_SIMULATE_HUMAN = 'false';
-    const humanBehavior = {
-      simulateHumanBehavior: jest.fn().mockResolvedValue(undefined),
-    };
-    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
-      redis: createRedisMock(),
-      browserClient: createBrowserClientMock(createLiveSnapshot()),
-      humanBehavior,
-      now: () => 100000,
-    });
-
-    await checker.checkStatus();
-
-    expect(humanBehavior.simulateHumanBehavior).not.toHaveBeenCalled();
-  });
-
-  it('allows scroll count zero in human behavior options', () => {
-    process.env.KUAISHOU_CHECKER_SIMULATE_SCROLL_COUNT = '0';
+  it('uses fixed internal behavior and session tuning constants', () => {
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
       redis: createRedisMock(),
       browserClient: createBrowserClientMock(createLiveSnapshot()),
     });
 
-    expect(checker.getHumanBehaviorOptions().scrollCount).toBe(0);
+    expect(checker.getTimeoutMs()).toBe(45000);
+    expect(checker.getWaitMs()).toBe(12000);
+    expect(checker.getRoomIntervalSeconds()).toBe(60);
+    expect(checker.getGlobalIntervalSeconds()).toBe(20);
+    expect(checker.getBackoffSeconds()).toBe(180);
+    expect(checker.getSessionTtlSeconds()).toBe(604800);
+    expect(checker.getSessionKey()).toBe('kuaishou:checker:session:platform');
+    expect(checker.getHumanBehaviorOptions()).toEqual({
+      minDelayMs: 1500,
+      maxDelayMs: 4000,
+      scrollCount: 2,
+    });
   });
 });
 
