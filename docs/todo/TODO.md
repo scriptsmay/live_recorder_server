@@ -16,9 +16,11 @@
 
 6. ~~[快手 Checker API 直连方案](../finished_plan/KUAISHOU_API_DIRECT/KUAISHOU_API_DIRECT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_API_DIRECT/`
 
+7. ~~[仪表盘（Dashboard）改造计划](../finished_plan/DASHBOARD_UPGRADE/DASHBOARD_UPGRADE_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/DASHBOARD_UPGRADE/`
+
 ## 待完成计划
 
-1. [仪表盘（Dashboard）改造计划](DASHBOARD_UPGRADE_PLAN.md) — 将 Dashboard 从"实时录制状态板"升级为系统运维概览，新增弹幕/轮询/统计摘要/近期活动等维度
+暂无。
 
 ## 设计说明待整理
 

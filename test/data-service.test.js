@@ -106,3 +106,71 @@ describe('DataService.getSessionDetail', () => {
     ]);
   });
 });
+
+describe('DataService dashboard helpers', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('聚合 Dashboard 今日摘要', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            sessions_today: '3',
+            sessions_today_total_size: '2048',
+            interrupted_today: '1',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ uploads_today: '2', uploads_failed_today: '1' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ orphaned_files: '4' }],
+      });
+
+    const summary = await DataService.getDashboardSummary('2026-06-10T00:00:00.000Z');
+
+    expect(summary).toEqual({
+      sessions_today: 3,
+      sessions_today_total_size: 2048,
+      interrupted_today: 1,
+      uploads_today: 2,
+      uploads_failed_today: 1,
+      orphaned_files: 4,
+    });
+    expect(pool.query).toHaveBeenCalledTimes(3);
+    expect(pool.query.mock.calls[0][1]).toEqual(['2026-06-10T00:00:00.000Z']);
+    expect(pool.query.mock.calls[1][1]).toEqual(['2026-06-10T00:00:00.000Z']);
+  });
+
+  test('查询 Dashboard 近期活动并限制条数', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        {
+          type: 'session_completed',
+          title: '测试房间 录制完成',
+          detail: '2 个分段, 1 MB',
+          timestamp: '2026-06-10T12:00:00.000Z',
+          link: '/sessions',
+        },
+      ],
+    });
+
+    const activities = await DataService.getRecentActivity(5);
+
+    expect(activities).toHaveLength(1);
+    expect(activities[0].type).toBe('session_completed');
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), [5]);
+    expect(pool.query.mock.calls[0][0]).toContain('LEFT JOIN rooms rm ON rs.room_url = rm.room_url');
+    expect(pool.query.mock.calls[0][0]).toContain('LEFT JOIN recording_files rf ON rf.file_path = tr.original_path');
+  });
+
+  test('统计直播间总数', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ count: '8' }] });
+
+    await expect(DataService.getRoomTotal()).resolves.toBe(8);
+    expect(pool.query).toHaveBeenCalledWith('SELECT COUNT(*) FROM rooms');
+  });
+});

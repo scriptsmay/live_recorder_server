@@ -57,7 +57,7 @@ frontend/
 │   │   └── ConfirmDialog.vue     # 确认对话框（Teleport + 遮罩层 + 动画）
 │   │
 │   └── views/
-│       ├── Dashboard.vue         # 仪表盘：统计卡片、活跃录制表、5s 自动刷新
+│       ├── Dashboard.vue         # 仪表盘：运维概览、活跃录制、近期活动、5s 自动刷新
 │       ├── Rooms.vue             # 直播间：CRUD、状态筛选、暂停/恢复/停止操作
 │       ├── rooms/
 │       │   └── RoomFormModal.vue # 直播间表单弹窗（Teleport，活跃房间限制编辑模式）
@@ -194,7 +194,7 @@ try {
 
 ### Dashboard（仪表盘）
 
-展示平台运行概览：4 张渐变统计卡（活跃录制数、进程池大小、转码队列、待处理任务）、活跃录制详情表格。默认 5 秒轮询 `/api/dashboard/status` 和 `/api/health`，可手动暂停自动刷新。
+展示系统运维概览：6 张渐变统计卡（活跃录制、转码队列、轮询状态、弹幕状态、今日录制、今日投稿）、活跃录制详情表格、近期活动时间线和系统状态行。默认 5 秒轮询 `/api/dashboard/status`，健康状态来自全局 `appStore`。
 
 ### Rooms（直播间）
 

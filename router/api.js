@@ -11,6 +11,9 @@ const RecorderService = require('../services/RecorderService');
 const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
+const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
+const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
+const pollingManager = require('../lib/core/polling/PollingManager');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
 
@@ -253,6 +256,20 @@ router.get('/dashboard/status', async (req, res) => {
     const transcodeProcessing = await transcodeQueue.getCurrentProcessingCount();
     const transcodeConcurrency = transcodeQueue.concurrency;
 
+    // 弹幕采集与压制队列状态
+    const danmakuActiveStats = danmakuRecorder.getActiveStats();
+    const danmakuBurnQueueLength = await danmakuBurnQueue.getQueueLength();
+    const danmakuBurnProcessing = await danmakuBurnQueue.getCurrentProcessingCount();
+
+    const todayStart = dayjs().startOf('day').toISOString();
+    const [summary, recentActivity, roomTotal] = await Promise.all([
+      DataService.getDashboardSummary(todayStart),
+      DataService.getRecentActivity(10),
+      DataService.getRoomTotal(),
+    ]);
+
+    const pollingSnapshot = pollingManager.getPollingSnapshot();
+
     // 池容量
     let poolSize = 3;
     try {
@@ -271,6 +288,22 @@ router.get('/dashboard/status', async (req, res) => {
           processing: transcodeProcessing,
           concurrency: transcodeConcurrency,
         },
+        danmaku: {
+          active_captures: Array.isArray(danmakuActiveStats)
+            ? danmakuActiveStats.length
+            : danmakuActiveStats?.count || 0,
+          burn_queue: {
+            queue_length: danmakuBurnQueueLength,
+            processing: danmakuBurnProcessing,
+            concurrency: danmakuBurnQueue.concurrency,
+          },
+        },
+        polling: {
+          ...pollingSnapshot,
+          total_rooms: roomTotal,
+        },
+        summary,
+        recent_activity: recentActivity,
       },
     });
   } catch (err) {

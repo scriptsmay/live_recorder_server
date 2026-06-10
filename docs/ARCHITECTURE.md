@@ -505,9 +505,17 @@ PollingManager (单例)
 │   └── kuaishou → KuaishouChecker (live_api/liveroom + profile/public)
 ├── PlatformChecker.fetchJson/fetchText
 │   └── platform HTTP APIs
-└── timers 调度表
-    └── room:{id} → setInterval(pollRoom, interval)
+├── timers 调度表
+│   └── room:{id} → setInterval(pollRoom, interval)
+├── roomLiveStatus
+│   └── roomId → boolean                 # Redis live_status 恢复 + 成功轮询后刷新
+└── roomPollingMeta
+    └── roomId → { platform, roomName }  # Dashboard 轮询快照元数据
 ```
+
+`PollingManager.getPollingSnapshot()` 为 Dashboard 提供轮询概览，返回启用轮询数、总直播间数、当前开播数和按平台拆分统计。该方法只读取 `roomPollingMeta` 与 `roomLiveStatus` 两个内存 Map，不在 Dashboard 请求路径里逐房间访问 Redis 或数据库。
+
+Dashboard 后端入口为 `GET /api/dashboard/status`，路由层只做编排：活跃录制与队列状态来自 Redis 队列/内存单例，统计摘要与近期活动由 `DataService.getDashboardSummary()`、`DataService.getRecentActivity()` 封装 SQL 查询。
 
 ### PlatformChecker 基类
 

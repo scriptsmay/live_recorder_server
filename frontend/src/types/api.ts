@@ -188,6 +188,10 @@ export interface DashboardStatus {
     processing: number
     concurrency: number
   }
+  danmaku?: DashboardDanmaku
+  polling?: DashboardPolling
+  summary?: DashboardSummary
+  recent_activity?: ActivityItem[]
 }
 
 export interface ActiveRecording {
@@ -197,6 +201,45 @@ export interface ActiveRecording {
   session_id: number
   started_at: string
   downloader: string
+}
+
+export interface DashboardDanmaku {
+  active_captures: number
+  burn_queue: {
+    queue_length: number
+    processing: number
+    concurrency: number
+  }
+}
+
+export interface DashboardPolling {
+  total_polled: number
+  total_rooms: number
+  currently_live: number
+  platform_breakdown: Record<string, { total: number; live: number }>
+}
+
+export interface DashboardSummary {
+  sessions_today: number
+  sessions_today_total_size: number
+  interrupted_today: number
+  uploads_today: number
+  uploads_failed_today: number
+  orphaned_files: number
+}
+
+export interface ActivityItem {
+  type:
+    | 'session_completed'
+    | 'session_interrupted'
+    | 'upload_success'
+    | 'upload_failed'
+    | 'transcode_completed'
+    | 'transcode_failed'
+  title: string
+  detail: string
+  timestamp: string
+  link: string | null
 }
 
 // ====== 全局设置 ======

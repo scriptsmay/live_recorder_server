@@ -36,6 +36,77 @@ curl http://127.0.0.1:1123/api/health
 
 ---
 
+## 仪表盘
+
+### GET /api/dashboard/status
+
+获取 Dashboard 运维概览数据。接口聚合活跃录制、转码队列、弹幕采集/压制队列、轮询快照、今日摘要和近期活动，前端 Dashboard 只需调用此接口。
+
+**响应示例：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "active_recordings": [
+      {
+        "room_url": "https://www.huya.com/123",
+        "room_name": "主播名",
+        "pid": 12345,
+        "session_id": 51,
+        "started_at": "2026-06-10T12:00:00.000Z",
+        "downloader": "ffmpeg"
+      }
+    ],
+    "active_count": 1,
+    "pool_size": 3,
+    "transcode": {
+      "queue_length": 2,
+      "processing": 1,
+      "concurrency": 3
+    },
+    "danmaku": {
+      "active_captures": 1,
+      "burn_queue": {
+        "queue_length": 0,
+        "processing": 1,
+        "concurrency": 1
+      }
+    },
+    "polling": {
+      "total_polled": 8,
+      "total_rooms": 12,
+      "currently_live": 3,
+      "platform_breakdown": {
+        "huya": { "total": 3, "live": 1 },
+        "kuaishou": { "total": 5, "live": 2 }
+      }
+    },
+    "summary": {
+      "sessions_today": 6,
+      "sessions_today_total_size": 4831838208,
+      "interrupted_today": 1,
+      "uploads_today": 2,
+      "uploads_failed_today": 0,
+      "orphaned_files": 0
+    },
+    "recent_activity": [
+      {
+        "type": "session_completed",
+        "title": "主播名 录制完成",
+        "detail": "3 个分段, 1 GB",
+        "timestamp": "2026-06-10T14:32:00.000Z",
+        "link": "/sessions"
+      }
+    ]
+  }
+}
+```
+
+`polling` 来自 `PollingManager.getPollingSnapshot()`，只读取内存 Map，不在请求路径中逐房间访问 Redis。`summary` 的今日统计由应用服务器当天零点时间戳计算，避免依赖数据库服务器时区。
+
+---
+
 ## 日志查看
 
 ### GET /api/logs/content

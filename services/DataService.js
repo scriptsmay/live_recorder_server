@@ -116,6 +116,107 @@ class DataService {
     return defaultValue;
   }
 
+  static async getRoomTotal() {
+    const result = await pool.query('SELECT COUNT(*) FROM rooms');
+    return parseInt(result.rows[0]?.count || '0', 10);
+  }
+
+  static async getDashboardSummary(todayStart) {
+    const [sessionStats, uploadStats, orphanedStats] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'completed') AS sessions_today,
+           COALESCE(SUM(total_size) FILTER (WHERE status = 'completed'), 0) AS sessions_today_total_size,
+           COUNT(*) FILTER (WHERE status = 'interrupted') AS interrupted_today
+         FROM recording_sessions
+         WHERE ended_at >= $1`,
+        [todayStart]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'success') AS uploads_today,
+           COUNT(*) FILTER (WHERE status = 'failed') AS uploads_failed_today
+         FROM upload_records
+         WHERE created_at >= $1`,
+        [todayStart]
+      ),
+      pool.query(`SELECT COUNT(*) AS orphaned_files FROM recording_files WHERE status = 'orphaned'`),
+    ]);
+
+    const sessions = sessionStats.rows[0] || {};
+    const uploads = uploadStats.rows[0] || {};
+    const orphaned = orphanedStats.rows[0] || {};
+
+    return {
+      sessions_today: parseInt(sessions.sessions_today || '0', 10),
+      sessions_today_total_size: parseInt(sessions.sessions_today_total_size || '0', 10),
+      interrupted_today: parseInt(sessions.interrupted_today || '0', 10),
+      uploads_today: parseInt(uploads.uploads_today || '0', 10),
+      uploads_failed_today: parseInt(uploads.uploads_failed_today || '0', 10),
+      orphaned_files: parseInt(orphaned.orphaned_files || '0', 10),
+    };
+  }
+
+  static async getRecentActivity(limit = 10) {
+    const result = await pool.query(
+      `SELECT type, title, detail, timestamp, link
+       FROM (
+         SELECT 'session_completed' AS type,
+                COALESCE(rm.room_name, rs.room_url, '未知直播间') || ' 录制完成' AS title,
+                COALESCE(rs.total_segments::text, '0') || ' 个分段, ' ||
+                  pg_size_pretty(COALESCE(rs.total_size, 0)::bigint) AS detail,
+                rs.ended_at AS timestamp,
+                '/sessions' AS link
+         FROM recording_sessions rs
+         LEFT JOIN rooms rm ON rs.room_url = rm.room_url
+         WHERE rs.status = 'completed' AND rs.ended_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT 'session_interrupted' AS type,
+                COALESCE(rm.room_name, rs.room_url, '未知直播间') || ' 录制中断' AS title,
+                COALESCE(rs.total_segments::text, '0') || ' 个分段' AS detail,
+                rs.ended_at AS timestamp,
+                '/sessions' AS link
+         FROM recording_sessions rs
+         LEFT JOIN rooms rm ON rs.room_url = rm.room_url
+         WHERE rs.status = 'interrupted' AND rs.ended_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT CASE WHEN ur.status = 'success' THEN 'upload_success'
+                     ELSE 'upload_failed' END AS type,
+                COALESCE(NULLIF(ur.title, ''), '未命名投稿') AS title,
+                COALESCE(NULLIF(ur.bv_id, ''), ur.status) AS detail,
+                ur.completed_at AS timestamp,
+                '/upload-records' AS link
+         FROM upload_records ur
+         WHERE ur.status IN ('success', 'failed') AND ur.completed_at IS NOT NULL
+
+         UNION ALL
+
+         SELECT CASE WHEN tr.status = 'completed' THEN 'transcode_completed'
+                     ELSE 'transcode_failed' END AS type,
+                REGEXP_REPLACE(tr.original_path, '^.*/', '') AS title,
+                CASE
+                  WHEN COALESCE(rf.file_size, 0) > 0 THEN pg_size_pretty(rf.file_size::bigint)
+                  WHEN tr.status = 'completed' THEN '转码完成'
+                  ELSE '转码失败'
+                END AS detail,
+                tr.completed_at AS timestamp,
+                '/transcode' AS link
+         FROM transcode_records tr
+         LEFT JOIN recording_files rf ON rf.file_path = tr.original_path
+         WHERE tr.status IN ('completed', 'failed') AND tr.completed_at IS NOT NULL
+       ) activities
+       ORDER BY timestamp DESC
+       LIMIT $1`,
+      [parseInt(limit, 10) || 10]
+    );
+
+    return result.rows;
+  }
+
   static _resolveSegmentAssPath(sessionOutputDir, file) {
     if (file.danmaku_ass_path && fs.existsSync(file.danmaku_ass_path)) {
       return file.danmaku_ass_path;

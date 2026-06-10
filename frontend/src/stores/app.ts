@@ -10,6 +10,9 @@ export const useAppStore = defineStore('app', () => {
   const dockerImageVersion = ref('')
   const serverStartTime = ref('')
   const isHealthy = ref(true)
+  const dbHealthy = ref<boolean | null>(null)
+  const redisHealthy = ref<boolean | null>(null)
+  const healthLoaded = ref(false)
   const sidebarCollapsed = ref(false)
 
   async function fetchHealth() {
@@ -20,8 +23,14 @@ export const useAppStore = defineStore('app', () => {
       dockerImageVersion.value = data.docker_image_version ?? ''
       serverStartTime.value = data.server_start_time ?? ''
       isHealthy.value = data.ok === true
+      dbHealthy.value = data.db === true
+      redisHealthy.value = data.redis === true
     } catch {
       isHealthy.value = false
+      dbHealthy.value = false
+      redisHealthy.value = false
+    } finally {
+      healthLoaded.value = true
     }
   }
 
@@ -34,6 +43,9 @@ export const useAppStore = defineStore('app', () => {
     dockerImageVersion,
     serverStartTime,
     isHealthy,
+    dbHealthy,
+    redisHealthy,
+    healthLoaded,
     sidebarCollapsed,
     fetchHealth,
     toggleSidebar,

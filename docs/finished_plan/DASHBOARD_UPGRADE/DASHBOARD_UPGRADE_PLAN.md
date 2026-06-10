@@ -1,5 +1,7 @@
 # 仪表盘（Dashboard）改造计划
 
+状态：已完成并归档（2026-06-10）
+
 ## 背景
 
 当前仪表盘只展示了 4 个统计卡片（活跃录制、转码队列、直播间总数、转码并发）和一张活跃录制表格，本质上是一个"谁在录"的实时状态页。但系统在过去几轮迭代中已经新增了弹幕采集/压制流水线、HLS 生成、5 平台轮询系统、自动投稿等成熟子系统，仪表盘完全没有反映这些能力。
@@ -27,13 +29,13 @@
 
 改造后以下现有内容将被移除或替代：
 
-| 现有内容 | 处理方式 | 原因 |
-|----------|----------|------|
-| "直播间总数"卡片 | **移除**，房间总数信息融入"轮询状态"卡片（`total_polled` + 副文字"已配置 x 间"） | 单纯的房间总数缺乏运维价值，轮询卡片已覆盖 |
-| "转码并发"卡片 | **移除**，并发信息降级为转码队列卡片的副文字（"处理中 x / 并发 y"） | 并发数是静态配置，不需要独占一个卡片 |
-| Dashboard 底部健康指示（健康圆点 + 版本号 + "查看完整日志"链接） | **移除**，收敛到"系统状态"面板；版本信息由全局 Layout footer 统一展示 | 消除与 Layout footer 的重复信息 |
-| Dashboard 内部的 `/api/health` 独立请求 | **移除**，改用 appStore 全局健康状态 | Layout 已在 `onMounted` 调用 `fetchHealth()`，Dashboard 不应重复请求 |
-| Dashboard 内部的 `/api/rooms` 请求（仅取 `total`） | **移除**，房间统计由后端 dashboard API 统一返回 | 消除冗余请求 |
+| 现有内容                                                         | 处理方式                                                                         | 原因                                                                 |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| "直播间总数"卡片                                                 | **移除**，房间总数信息融入"轮询状态"卡片（`total_polled` + 副文字"已配置 x 间"） | 单纯的房间总数缺乏运维价值，轮询卡片已覆盖                           |
+| "转码并发"卡片                                                   | **移除**，并发信息降级为转码队列卡片的副文字（"处理中 x / 并发 y"）              | 并发数是静态配置，不需要独占一个卡片                                 |
+| Dashboard 底部健康指示（健康圆点 + 版本号 + "查看完整日志"链接） | **移除**，收敛到"系统状态"面板；版本信息由全局 Layout footer 统一展示            | 消除与 Layout footer 的重复信息                                      |
+| Dashboard 内部的 `/api/health` 独立请求                          | **移除**，改用 appStore 全局健康状态                                             | Layout 已在 `onMounted` 调用 `fetchHealth()`，Dashboard 不应重复请求 |
+| Dashboard 内部的 `/api/rooms` 请求（仅取 `total`）               | **移除**，房间统计由后端 dashboard API 统一返回                                  | 消除冗余请求                                                         |
 
 ---
 
@@ -220,13 +222,13 @@ getPollingSnapshot() {
 
 快照更新时机：
 
-| 触发点 | 更新内容 |
-|--------|----------|
-| `loadPollingRooms()` | 设置 `_totalRooms = rooms.length` |
-| `startRoomPolling(room)` | 写入 `roomPollingMeta.set(room.id, ...)` |
-| `stopRoomPolling(roomId)` | 删除 `roomPollingMeta.delete(roomId)` 和可选的 `roomLiveStatus.delete(roomId)` |
-| `checkRoom(room)` 成功拿到非 error 结果 | 更新 `roomLiveStatus.set(room.id, isLive)` |
-| `stop()` | 清空 `timers` 和 `roomPollingMeta`，`roomLiveStatus` 可保留用于下一次启动恢复 |
+| 触发点                                  | 更新内容                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------ |
+| `loadPollingRooms()`                    | 设置 `_totalRooms = rooms.length`                                              |
+| `startRoomPolling(room)`                | 写入 `roomPollingMeta.set(room.id, ...)`                                       |
+| `stopRoomPolling(roomId)`               | 删除 `roomPollingMeta.delete(roomId)` 和可选的 `roomLiveStatus.delete(roomId)` |
+| `checkRoom(room)` 成功拿到非 error 结果 | 更新 `roomLiveStatus.set(room.id, isLive)`                                     |
+| `stop()`                                | 清空 `timers` 和 `roomPollingMeta`，`roomLiveStatus` 可保留用于下一次启动恢复  |
 
 Dashboard API 中直接调用：
 
@@ -432,19 +434,19 @@ LIMIT 10;
 
 **第一排（核心实时状态）**：
 
-| 卡片 | 主数字 | 副文字 | 数据来源 |
-|------|--------|--------|----------|
-| 活跃录制 | `active_count` | 线程池 x/y | `data.active_count`, `data.pool_size` |
-| 转码队列 | `transcode.queue_length` | 处理中 x / 并发 y | `data.transcode` |
-| 轮询状态 | `polling.total_polled` | 直播中 x / 已配置 y | `data.polling` |
+| 卡片     | 主数字                   | 副文字              | 数据来源                              |
+| -------- | ------------------------ | ------------------- | ------------------------------------- |
+| 活跃录制 | `active_count`           | 线程池 x/y          | `data.active_count`, `data.pool_size` |
+| 转码队列 | `transcode.queue_length` | 处理中 x / 并发 y   | `data.transcode`                      |
+| 轮询状态 | `polling.total_polled`   | 直播中 x / 已配置 y | `data.polling`                        |
 
 **第二排（辅助统计）**：
 
-| 卡片 | 主数字 | 副文字 | 数据来源 |
-|------|--------|--------|----------|
+| 卡片     | 主数字                    | 副文字                       | 数据来源       |
+| -------- | ------------------------- | ---------------------------- | -------------- |
 | 弹幕状态 | `danmaku.active_captures` | 采集 x / 压制等待 y 处理中 z | `data.danmaku` |
-| 今日录制 | `summary.sessions_today` | x GB / ⚠ 中断 y | `data.summary` |
-| 今日投稿 | `summary.uploads_today` | 失败 x | `data.summary` |
+| 今日录制 | `summary.sessions_today`  | x GB / ⚠ 中断 y              | `data.summary` |
+| 今日投稿 | `summary.uploads_today`   | 失败 x                       | `data.summary` |
 
 **弹幕卡片语义说明**：主数字展示"采集"会话数（实时状态），副文字中"压制"指压制队列（后处理状态），二者用"采集"/"压制"标签明确区分，避免用户混淆。
 
@@ -452,14 +454,14 @@ LIMIT 10;
 
 卡片样式沿用现有渐变背景 + 白色文字的设计语言。配色方案：
 
-| 卡片 | 渐变 |
-|------|------|
-| 活跃录制 | `from-blue-500 to-blue-600`（保留现有） |
+| 卡片     | 渐变                                      |
+| -------- | ----------------------------------------- |
+| 活跃录制 | `from-blue-500 to-blue-600`（保留现有）   |
 | 转码队列 | `from-amber-500 to-amber-600`（保留现有） |
-| 轮询状态 | `from-indigo-500 to-indigo-600` |
-| 弹幕状态 | `from-cyan-500 to-cyan-600` |
-| 今日录制 | `from-teal-500 to-teal-600` |
-| 今日投稿 | `from-rose-500 to-rose-600` |
+| 轮询状态 | `from-indigo-500 to-indigo-600`           |
+| 弹幕状态 | `from-cyan-500 to-cyan-600`               |
+| 今日录制 | `from-teal-500 to-teal-600`               |
+| 今日投稿 | `from-rose-500 to-rose-600`               |
 
 ### 2.3 近期活动区
 
@@ -482,9 +484,7 @@ LIMIT 10;
 
 ```html
 <TransitionGroup name="activity-list" tag="div">
-  <div v-for="item in activities" :key="item.type + item.timestamp" ...>
-    ...
-  </div>
+  <div v-for="item in activities" :key="item.type + item.timestamp" ...>...</div>
 </TransitionGroup>
 ```
 
@@ -540,9 +540,21 @@ LIMIT 10;
 **向后兼容降级**：前端使用 `??` 提供默认值，确保在后端未部署新版本时页面不崩溃：
 
 ```typescript
-const polling = dashboard.value?.polling ?? { total_polled: 0, total_rooms: roomTotal.value, currently_live: 0, platform_breakdown: {} }
-const summary = dashboard.value?.summary ?? { sessions_today: 0, sessions_today_total_size: 0, interrupted_today: 0, uploads_today: 0, uploads_failed_today: 0, orphaned_files: 0 }
-const recentActivity = dashboard.value?.recent_activity ?? []
+const polling = dashboard.value?.polling ?? {
+  total_polled: 0,
+  total_rooms: roomTotal.value,
+  currently_live: 0,
+  platform_breakdown: {},
+};
+const summary = dashboard.value?.summary ?? {
+  sessions_today: 0,
+  sessions_today_total_size: 0,
+  interrupted_today: 0,
+  uploads_today: 0,
+  uploads_failed_today: 0,
+  orphaned_files: 0,
+};
+const recentActivity = dashboard.value?.recent_activity ?? [];
 ```
 
 ---
@@ -565,11 +577,11 @@ const recentActivity = dashboard.value?.recent_activity ?? []
 const [statusRes, roomsRes, healthRaw] = await Promise.all([
   apiGet('/api/dashboard/status'),
   apiGet('/api/rooms'),
-  fetch('/api/health').then(r => r.json()),
-])
+  fetch('/api/health').then((r) => r.json()),
+]);
 
 // 改造后：1 个请求 + store 已有的 health 状态
-const statusRes = await apiGet<DashboardStatus>('/api/dashboard/status')
+const statusRes = await apiGet<DashboardStatus>('/api/dashboard/status');
 // 健康状态、版本信息从 appStore 读取（Layout 已经在全局调用 fetchHealth）
 ```
 
@@ -579,39 +591,44 @@ const statusRes = await apiGet<DashboardStatus>('/api/dashboard/status')
 
 ```typescript
 export interface DashboardStatus {
-  active_recordings: ActiveRecording[]
-  active_count: number
-  pool_size: number
-  transcode: { queue_length: number; processing: number; concurrency: number }
+  active_recordings: ActiveRecording[];
+  active_count: number;
+  pool_size: number;
+  transcode: { queue_length: number; processing: number; concurrency: number };
   // 新增
   danmaku: {
-    active_captures: number
-    burn_queue: { queue_length: number; processing: number; concurrency: number }
-  }
+    active_captures: number;
+    burn_queue: { queue_length: number; processing: number; concurrency: number };
+  };
   polling: {
-    total_polled: number
-    total_rooms: number
-    currently_live: number
-    platform_breakdown: Record<string, { total: number; live: number }>
-  }
+    total_polled: number;
+    total_rooms: number;
+    currently_live: number;
+    platform_breakdown: Record<string, { total: number; live: number }>;
+  };
   summary: {
-    sessions_today: number
-    sessions_today_total_size: number
-    interrupted_today: number
-    uploads_today: number
-    uploads_failed_today: number
-    orphaned_files: number
-  }
-  recent_activity: ActivityItem[]
+    sessions_today: number;
+    sessions_today_total_size: number;
+    interrupted_today: number;
+    uploads_today: number;
+    uploads_failed_today: number;
+    orphaned_files: number;
+  };
+  recent_activity: ActivityItem[];
 }
 
 export interface ActivityItem {
-  type: 'session_completed' | 'session_interrupted' | 'upload_success'
-        | 'upload_failed' | 'transcode_completed' | 'transcode_failed'
-  title: string
-  detail: string
-  timestamp: string
-  link: string | null
+  type:
+    | 'session_completed'
+    | 'session_interrupted'
+    | 'upload_success'
+    | 'upload_failed'
+    | 'transcode_completed'
+    | 'transcode_failed';
+  title: string;
+  detail: string;
+  timestamp: string;
+  link: string | null;
 }
 ```
 
@@ -621,23 +638,23 @@ export interface ActivityItem {
 
 ```typescript
 // stores/app.ts 新增
-const dbHealthy = ref(true)
-const redisHealthy = ref(true)
+const dbHealthy = ref(true);
+const redisHealthy = ref(true);
 
 async function fetchHealth() {
   try {
-    const res = await fetch('/api/health')
-    const data = await res.json()
-    appVersion.value = data.version ?? ''
-    dockerImageVersion.value = data.docker_image_version ?? ''
-    serverStartTime.value = data.server_start_time ?? ''
-    dbHealthy.value = data.db === true
-    redisHealthy.value = data.redis === true
-    isHealthy.value = data.ok === true
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    appVersion.value = data.version ?? '';
+    dockerImageVersion.value = data.docker_image_version ?? '';
+    serverStartTime.value = data.server_start_time ?? '';
+    dbHealthy.value = data.db === true;
+    redisHealthy.value = data.redis === true;
+    isHealthy.value = data.ok === true;
   } catch {
-    isHealthy.value = false
-    dbHealthy.value = false
-    redisHealthy.value = false
+    isHealthy.value = false;
+    dbHealthy.value = false;
+    redisHealthy.value = false;
   }
 }
 ```
@@ -672,18 +689,18 @@ Phase 1 后端扩展是向后兼容的（只新增字段，不修改/删除现�
 
 以下时间为**纯开发时间**，不含联调、测试和 code review。实际含测试的交付时间建议按 1.5~2 倍估算。
 
-| 阶段 | 主要工作 | 开发时间 | 含测试预估 |
-|------|----------|----------|------------|
-| Phase 1.1 弹幕状态 | 引入 danmakuRecorder / danmakuBurnQueue，聚合数据 | 15 min | 30 min |
-| Phase 1.2 轮询概览 | PollingManager `roomPollingMeta` + `getPollingSnapshot()` | 1 h | 1.5 h |
-| Phase 1.3 统计摘要 | DataService 新增方法，聚合 SQL + 时区处理 | 30 min | 45 min |
-| Phase 1.4 近期活动 | UNION ALL 查询，NULL 处理，路径/文件名提取 | 40 min | 1 h |
-| Phase 2.1-2.2 统计卡片 | 6 个卡片 + 3+3 网格布局 + 中断数展示 | 40 min | 1 h |
-| Phase 2.3 近期活动区 | ActivityTimeline 组件 + TransitionGroup 动画 | 40 min | 1 h |
-| Phase 2.4 系统状态区 | 状态行 + appStore 扩展 | 20 min | 30 min |
-| Phase 2.5-2.6 空状态/错误态 | 骨架屏 + 降级展示 + 向后兼容 | 30 min | 45 min |
-| Phase 3 代码整理 | DataService 封装、类型更新、请求简化 | 20 min | 30 min |
-| **合计** | | **~4.75 h** | **~7.5 h（约 1 天）** |
+| 阶段                        | 主要工作                                                  | 开发时间    | 含测试预估            |
+| --------------------------- | --------------------------------------------------------- | ----------- | --------------------- |
+| Phase 1.1 弹幕状态          | 引入 danmakuRecorder / danmakuBurnQueue，聚合数据         | 15 min      | 30 min                |
+| Phase 1.2 轮询概览          | PollingManager `roomPollingMeta` + `getPollingSnapshot()` | 1 h         | 1.5 h                 |
+| Phase 1.3 统计摘要          | DataService 新增方法，聚合 SQL + 时区处理                 | 30 min      | 45 min                |
+| Phase 1.4 近期活动          | UNION ALL 查询，NULL 处理，路径/文件名提取                | 40 min      | 1 h                   |
+| Phase 2.1-2.2 统计卡片      | 6 个卡片 + 3+3 网格布局 + 中断数展示                      | 40 min      | 1 h                   |
+| Phase 2.3 近期活动区        | ActivityTimeline 组件 + TransitionGroup 动画              | 40 min      | 1 h                   |
+| Phase 2.4 系统状态区        | 状态行 + appStore 扩展                                    | 20 min      | 30 min                |
+| Phase 2.5-2.6 空状态/错误态 | 骨架屏 + 降级展示 + 向后兼容                              | 30 min      | 45 min                |
+| Phase 3 代码整理            | DataService 封装、类型更新、请求简化                      | 20 min      | 30 min                |
+| **合计**                    |                                                           | **~4.75 h** | **~7.5 h（约 1 天）** |
 
 ---
 
@@ -691,35 +708,35 @@ Phase 1 后端扩展是向后兼容的（只新增字段，不修改/删除现�
 
 ### 后端测试
 
-| 测试场景 | 预期结果 | 验证方式 |
-|----------|----------|----------|
-| 轮询房间数为 0 | `polling.total_polled = 0`，`platform_breakdown` 为空对象 | 停止所有轮询后请求 |
-| 所有房间均未开播 | `polling.currently_live = 0` | 正常场景 |
-| 今日无录制/投稿 | `summary.sessions_today = 0`，`uploads_today = 0` | 正常场景 |
-| `total_segments` 为 NULL | 近期活动 `detail` 显示 "0 个分段" 而非 null | 构造脏数据验证 |
-| `original_path` 无法关联文件大小 | 转码活动 `detail` 显示状态文字而非空串 | 删除 recording_files 对应记录 |
-| DB 时区与应用不一致 | 使用应用传入的 `todayStart`，统计结果不受 DB 时区影响 | 修改 DB timezone 参数 |
-| Redis 连接异常 | 轮询快照使用内存 Map，不受 Redis 影响 | 停止 Redis 后请求 |
-| `getActiveStats()` 返回数组/对象 | 两种格式均正确处理 `active_captures` | mock 不同返回值 |
-| `startRoomPolling()` 后 | `roomPollingMeta` 记录 roomId/platform，Dashboard 平台统计正确 | 单元测试或集成测试 |
-| `stopRoomPolling()` 后 | `total_polled` 下降，平台 total 同步下降 | 单元测试或集成测试 |
-| `reloadRoom()` 关闭轮询 | `roomPollingMeta` 清理对应房间 | 单元测试或集成测试 |
+| 测试场景                         | 预期结果                                                       | 验证方式                      |
+| -------------------------------- | -------------------------------------------------------------- | ----------------------------- |
+| 轮询房间数为 0                   | `polling.total_polled = 0`，`platform_breakdown` 为空对象      | 停止所有轮询后请求            |
+| 所有房间均未开播                 | `polling.currently_live = 0`                                   | 正常场景                      |
+| 今日无录制/投稿                  | `summary.sessions_today = 0`，`uploads_today = 0`              | 正常场景                      |
+| `total_segments` 为 NULL         | 近期活动 `detail` 显示 "0 个分段" 而非 null                    | 构造脏数据验证                |
+| `original_path` 无法关联文件大小 | 转码活动 `detail` 显示状态文字而非空串                         | 删除 recording_files 对应记录 |
+| DB 时区与应用不一致              | 使用应用传入的 `todayStart`，统计结果不受 DB 时区影响          | 修改 DB timezone 参数         |
+| Redis 连接异常                   | 轮询快照使用内存 Map，不受 Redis 影响                          | 停止 Redis 后请求             |
+| `getActiveStats()` 返回数组/对象 | 两种格式均正确处理 `active_captures`                           | mock 不同返回值               |
+| `startRoomPolling()` 后          | `roomPollingMeta` 记录 roomId/platform，Dashboard 平台统计正确 | 单元测试或集成测试            |
+| `stopRoomPolling()` 后           | `total_polled` 下降，平台 total 同步下降                       | 单元测试或集成测试            |
+| `reloadRoom()` 关闭轮询          | `roomPollingMeta` 清理对应房间                                 | 单元测试或集成测试            |
 
 ### 前端测试
 
-| 测试场景 | 预期结果 |
-|----------|----------|
-| 后端未部署新版（`summary` 为 undefined） | 卡片显示 `--`，不报错 |
-| `recent_activity` 为空数组 | 显示"暂无近期活动" |
-| 所有卡片数据正常 | 6 个卡片均显示正确数字和副文字 |
-| `interrupted_today = 0` | 今日录制卡片不显示中断提示 |
-| `interrupted_today > 0` | 今日录制卡片显示 `⚠ 中断 x`，黄色/红色高亮 |
-| `orphaned_files = 0` | 系统状态区孤文件不显示或灰色 |
-| `orphaned_files > 0` | 孤文件数用黄色警告色 |
-| `link` 为 null 的活动条目 | 渲染为纯文本，不可点击 |
-| `link` 为路径字符串 | 渲染为 router-link，可跳转 |
-| 5 秒自动刷新 | 新增活动有 slide-fade 过渡动画，无闪烁 |
-| 移动端访问 | 3+3 网格降级为单列，触摸反馈正常 |
+| 测试场景                                 | 预期结果                                   |
+| ---------------------------------------- | ------------------------------------------ |
+| 后端未部署新版（`summary` 为 undefined） | 卡片显示 `--`，不报错                      |
+| `recent_activity` 为空数组               | 显示"暂无近期活动"                         |
+| 所有卡片数据正常                         | 6 个卡片均显示正确数字和副文字             |
+| `interrupted_today = 0`                  | 今日录制卡片不显示中断提示                 |
+| `interrupted_today > 0`                  | 今日录制卡片显示 `⚠ 中断 x`，黄色/红色高亮 |
+| `orphaned_files = 0`                     | 系统状态区孤文件不显示或灰色               |
+| `orphaned_files > 0`                     | 孤文件数用黄色警告色                       |
+| `link` 为 null 的活动条目                | 渲染为纯文本，不可点击                     |
+| `link` 为路径字符串                      | 渲染为 router-link，可跳转                 |
+| 5 秒自动刷新                             | 新增活动有 slide-fade 过渡动画，无闪烁     |
+| 移动端访问                               | 3+3 网格降级为单列，触摸反馈正常           |
 
 ---
 
