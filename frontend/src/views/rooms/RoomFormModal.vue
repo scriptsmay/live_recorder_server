@@ -27,6 +27,8 @@ const emit = defineEmits<{
 const toast = useToast()
 const saving = ref(false)
 
+const DEFAULT_POLLING_INTERVAL = 90
+
 const form = reactive<RoomFormData & { room_url: string }>({
   room_url: '',
   room_name: '',
@@ -36,7 +38,7 @@ const form = reactive<RoomFormData & { room_url: string }>({
   monitoring_enabled: true,
   upload_template_id: null,
   polling_enabled: false,
-  polling_interval: 60,
+  polling_interval: DEFAULT_POLLING_INTERVAL,
 })
 
 function resetForm() {
@@ -48,7 +50,7 @@ function resetForm() {
   form.monitoring_enabled = true
   form.upload_template_id = null
   form.polling_enabled = false
-  form.polling_interval = 60
+  form.polling_interval = DEFAULT_POLLING_INTERVAL
 }
 
 // 打开弹窗时加载数据
@@ -69,7 +71,7 @@ watch(
         form.monitoring_enabled = r.monitoring_enabled !== false
         form.upload_template_id = r.upload_template_id ?? null
         form.polling_enabled = r.polling_enabled === true
-        form.polling_interval = r.polling_interval || 60
+        form.polling_interval = r.polling_interval || DEFAULT_POLLING_INTERVAL
       } catch (err) {
         toast.error('加载直播间失败: ' + (err instanceof ApiError ? err.message : '未知错误'))
         emit('close')
@@ -99,7 +101,7 @@ async function handleSave() {
           monitoring_enabled: form.monitoring_enabled,
           upload_template_id: form.upload_template_id,
           polling_enabled: form.polling_enabled,
-          polling_interval: form.polling_enabled ? form.polling_interval : 60,
+          polling_interval: form.polling_enabled ? form.polling_interval : DEFAULT_POLLING_INTERVAL,
         }
 
     if (props.editId) {

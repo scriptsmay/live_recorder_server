@@ -20,6 +20,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "PORT=3001 NODE_ENV=development node --watch app.js",
+    "dev:frontend": "cd ./frontend && npm run dev",
     "dev:backend": "PORT=3001 NODE_ENV=development node --watch app.js > /tmp/dev-server.log 2>&1 & echo $! > /tmp/dev-server.pid && echo 'Dev Server started on port 3001'",
     "dev:stop": "kill $(lsof -ti :3001) && echo 'Dev Server stopped'",
     "dev:win": "set PORT=3001&& set NODE_ENV=development&& node --watch app.js",
