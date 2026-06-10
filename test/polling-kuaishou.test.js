@@ -202,6 +202,29 @@ describe('KuaishouChecker', () => {
     );
   });
 
+  it('parses kuaishou cookie header into playwright cookies', () => {
+    expect(KuaishouChecker.parseCookieHeader('did=web_x; client_key=abc; Path=/; HttpOnly')).toEqual([
+      {
+        name: 'did',
+        value: 'web_x',
+        domain: '.kuaishou.com',
+        path: '/',
+        secure: true,
+        httpOnly: false,
+        sameSite: 'Lax',
+      },
+      {
+        name: 'client_key',
+        value: 'abc',
+        domain: '.kuaishou.com',
+        path: '/',
+        secure: true,
+        httpOnly: false,
+        sameSite: 'Lax',
+      },
+    ]);
+  });
+
   it('does not open browser when platform lock is busy', async () => {
     const browserClient = createBrowserClientMock(createLiveSnapshot());
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
@@ -233,6 +256,46 @@ describe('KuaishouChecker', () => {
   it('loads persisted kuaishou session cookies by default', async () => {
     const storedSession = {
       cookies: [{ name: 'did', value: 'web_x', domain: '.kuaishou.com', path: '/' }],
+    };
+    const browserClient = createBrowserClientMock(createLiveSnapshot());
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock({
+        initial: {
+          'kuaishou:checker:session:platform': JSON.stringify(storedSession),
+        },
+      }),
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual(storedSession);
+  });
+
+  it('uses POLLING_KUAISHOU_COOKIE as initial session seed when redis has no session', async () => {
+    process.env.POLLING_KUAISHOU_COOKIE = 'did=seed_did; client_key=seed_client';
+    const browserClient = createBrowserClientMock(createLiveSnapshot());
+    const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock(),
+      browserClient,
+      now: () => 100000,
+    });
+
+    await checker.checkStatus();
+
+    expect(browserClient.withPage.mock.calls[0][1].storageState).toEqual({
+      cookies: [
+        expect.objectContaining({ name: 'did', value: 'seed_did', domain: '.kuaishou.com' }),
+        expect.objectContaining({ name: 'client_key', value: 'seed_client', domain: '.kuaishou.com' }),
+      ],
+    });
+  });
+
+  it('prefers redis session over POLLING_KUAISHOU_COOKIE seed', async () => {
+    process.env.POLLING_KUAISHOU_COOKIE = 'did=seed_did';
+    const storedSession = {
+      cookies: [{ name: 'did', value: 'redis_did', domain: '.kuaishou.com', path: '/' }],
     };
     const browserClient = createBrowserClientMock(createLiveSnapshot());
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {

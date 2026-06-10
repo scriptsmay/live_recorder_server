@@ -5,6 +5,7 @@ services:
     environment:
       REMOTE_BROWSER_WS_ENDPOINT: ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN:-change-me-browserless-token}
       KUAISHOU_CHECKER_ENABLED: ${KUAISHOU_CHECKER_ENABLED:-true}
+      POLLING_KUAISHOU_COOKIE: ${POLLING_KUAISHOU_COOKIE:-}
     depends_on:
       browserless:
         condition: service_started

@@ -83,6 +83,7 @@ npm run stop
 | -------------------------- | ---------------------------- | ------ |
 | REMOTE_BROWSER_WS_ENDPOINT | 远程 Chromium WebSocket 地址 | -      |
 | KUAISHOU_CHECKER_ENABLED   | 是否启用快手 Checker         | true   |
+| POLLING_KUAISHOU_COOKIE    | 快手初始 Cookie              | -      |
 
 Docker 从零部署时可叠加 `docker-compose.browserless.yml` 一起启动 Browserless：
 
@@ -98,6 +99,7 @@ docker compose --env-file .env.docker \
 `ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
 
 快手轮询内部的超时、等待、backoff、UA、cookie session 和行为模拟参数使用系统常量，不作为用户配置暴露。
+`POLLING_KUAISHOU_COOKIE` 仅作为 Redis 中还没有快手 session 时的初始访问态种子，后续会由系统自动持久化并刷新快手 cookie。
 
 ## 项目结构
 
@@ -165,7 +167,7 @@ docker compose --env-file .env.docker \
 │   ├── DEV.md                  # 开发指南
 │   ├── TEST.md                 # 测试文档
 │   └── todo/                   # 开发计划文档
-└── test/                       # Jest 测试（294 个用例）
+└── test/                       # Jest 测试（297 个用例）
 ```
 
 ## 弹幕功能架构
@@ -195,7 +197,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 ## 测试
 
 ```bash
-# 运行所有测试（294 个用例）
+# 运行所有测试（297 个用例）
 npm test
 
 # 监听模式

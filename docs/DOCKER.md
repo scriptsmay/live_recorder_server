@@ -171,6 +171,7 @@ docker compose \
 - `BROWSERLESS_TOKEN` 使用高强度随机值，不要保留示例默认值
 - `BROWSERLESS_CONCURRENT=1`，保持快手检查串行，降低触发风控的概率
 - `BROWSERLESS_TIMEOUT_MS=60000` 即可覆盖快手 Checker 内部 45 秒页面超时
+- `POLLING_KUAISHOU_COOKIE` 可选，仅作为 Redis 中还没有快手 session 时的初始访问态种子
 - 快手 cookie session、随机等待和滚动模拟由系统常量控制，不需要在 `.env.docker` 中调参
 - 只有需要从宿主机直接调试时才暴露 Browserless 端口
 
