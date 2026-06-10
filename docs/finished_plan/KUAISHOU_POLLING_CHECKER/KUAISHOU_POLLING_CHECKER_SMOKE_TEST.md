@@ -87,6 +87,100 @@
 
 快手的 IP 级封禁冷却时间较长（预估 10-30 分钟），这属于正常的反爬策略行为，不影响生产环境的稳定性（生产环境单房间间隔 60-90 秒，不会触发密集请求）。
 
+## Browserless 服务端配置优化
+
+应用层的 stealth 和资源拦截修复后，进一步优化了 Browserless 容器配置，将反爬防护从应用层下沉到浏览器层：
+
+```yaml
+services:
+  nas-chromium:
+    image: browserless/chrome:latest
+    container_name: nas_chromium
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Shanghai
+      - CONNECTION_TIMEOUT=1800000
+      - DEFAULT_STEALTH=true
+      - DEFAULT_LAUNCH_ARGS=["--disable-blink-features=AutomationControlled"]
+      - PREBOOT_CHROME=true
+      - PREBOOT_QUANTITY=1
+      - MAX_CONCURRENT_SESSIONS=3
+      - MAX_MEMORY_PERCENT=80
+    ports:
+      - "11300:3000"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1536M
+```
+
+关键配置说明：
+
+- `DEFAULT_STEALTH=true`：在 Browserless 创建 Chromium 实例时全局注入 `navigator.webdriver` 补丁，比应用层的 `addInitScript` 更底层。
+- `DEFAULT_LAUNCH_ARGS=["--disable-blink-features=AutomationControlled"]`：Chrome 启动参数层面禁用自动化标记，与 stealth 形成双重保障。注意值必须是 JSON 数组格式，外层用单引号包裹避免 YAML 解析。
+- `PREBOOT_CHROME=true` + `PREBOOT_QUANTITY=1`：预启动 1 个 Chromium 实例，首次连接延迟从数秒降至约 1 秒。
+- `MAX_CONCURRENT_SESSIONS=3`：快手轮询串行执行，不需要 10 个并发，降低内存压力。
+
+## 最终冒烟测试（Browserless 配置优化后）
+
+Browserless 容器更新配置后重新运行冒烟测试，2 个目标全部成功：
+
+**KSGJuHao（第 1 个请求）：成功**
+
+```json
+{
+  "target": "KSGJuHao",
+  "principalId": "KSGJuHao",
+  "sessionKey": "kuaishou:checker:session:platform",
+  "hadSession": false,
+  "hasSession": true,
+  "status": "ok",
+  "isLive": false,
+  "roomName": "KSG句号",
+  "streamUrl": null,
+  "streamInfo": null
+}
+```
+
+**KPL704668133（第 2 个请求，20 秒后）：成功**
+
+```json
+{
+  "target": "KPL704668133",
+  "principalId": "KPL704668133",
+  "sessionKey": "kuaishou:checker:session:platform",
+  "hadSession": true,
+  "hasSession": true,
+  "status": "ok",
+  "isLive": true,
+  "roomName": "KPL王者荣耀职业联赛",
+  "streamUrl": "https://tx-origin.pull.yximgs.com/...flv?txSecret=<redacted>",
+  "streamInfo": {
+    "format": "flv",
+    "codec": "h264",
+    "bitrate": 8000
+  }
+}
+```
+
+验证点：
+
+- 两个目标间隔 20 秒，均成功获取到真实数据，未触发反爬。
+- KSG 正确返回 `isLive: false`，KPL 正确返回 `isLive: true`。
+- KPL 成功提取到 H.264 FLV 流地址，码率 8000kbps。
+- cookie 持久化链路完整验证：KSG 从 env 种子加载（`hadSession: false`），保存到 Redis（`hasSession: true`），KPL 从 Redis 复用（`hadSession: true`）。
+
+## 结论
+
+快手轮询 Checker 功能验证通过。最终生效的反爬配置组合：
+
+1. **Browserless 服务端**：`DEFAULT_STEALTH=true` + `--disable-blink-features=AutomationControlled`，从浏览器引擎层面消除自动化特征。
+2. **应用层**：`KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES=true`，禁用资源拦截避免页面完整性检测。
+3. **Cookie 持久化**：`POLLING_KUAISHOU_COOKIE` 种子 + Redis 跨轮询保持，模拟回头用户。
+
 ## 单元测试
 
 代码修复后运行全量测试：
@@ -95,7 +189,9 @@
 - 全量回归测试：297/297 通过，18 个测试套件
 - 零回归
 
-## 生产部署配置建议
+## 生产部署配置
+
+应用层（`.env`）：
 
 ```bash
 REMOTE_BROWSER_WS_ENDPOINT=ws://192.168.0.247:11300/chromium/playwright
@@ -104,9 +200,10 @@ KUAISHOU_CHECKER_ENABLED=true
 KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES=true
 ```
 
+Browserless 容器（`docker-compose.yml`）：见"Browserless 服务端配置优化"章节。
+
 注意事项：
 
 - `POLLING_KUAISHOU_COOKIE` 作为种子 cookie，首次访问时注入，后续由 Redis 持久化管理。cookie 有过期时间（约 7 天），过期后需要重新从浏览器提取并更新。
 - `KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES=true` 会禁用资源拦截，页面加载量会增大，但能避免资源拦截触发反爬。
 - 快手房间的轮询间隔建议保持在 60 秒以上，跨房间间隔保持 20 秒以上。
-- 如果 Browserless 出口 IP 被封，需要等待 10-30 分钟冷却，或重启 Browserless 服务换 IP。

@@ -757,6 +757,14 @@ Vue 日志页能加载日志文件列表，但选择文件后右侧内容为空�
 
 KSGJuHao 冒烟成功：`isLive: false, roomName: "KSG句号"`，cookie 持久化链路（env → Redis → 复用）完整验证通过。
 
+后续进一步优化了 Browserless 容器配置，将反爬防护从应用层下沉到浏览器层：
+
+- `DEFAULT_STEALTH=true`：Browserless 创建 Chromium 时全局注入 webdriver 补丁，比应用层 `addInitScript` 更底层。
+- `DEFAULT_LAUNCH_ARGS=["--disable-blink-features=AutomationControlled"]`：Chrome 启动参数层面禁用自动化标记。注意值必须是 JSON 数组格式。
+- `DEFAULT_USER_DATA_DIR`：尝试配置持久化浏览器 profile，但遇到 Docker volume 权限问题（`EACCES: permission denied`），因为 named volume 默认 root 权限而容器内跑在 PUID=1000。去掉后不影响功能，cookie 持久化由应用层 Redis 负责。
+
+Browserless 配置优化后重新冒烟，2 个目标（KSGJuHao + KPL704668133，20 秒间隔）**全部成功**。之前仅应用层 stealth 时 KPL 作为第二个请求会触发反爬，Browserless 服务端 stealth 生效后不再触发。
+
 ### 经验总结
 
 1. **`navigator.webdriver` 是快手反爬的第一道检测线**：Playwright 默认设置此属性为 `true`，一个简单的 `Object.defineProperty` 补丁就能绕过。但对于更复杂的反爬系统（如 Cloudflare Bot Management），单靠这一个补丁不够。
@@ -764,3 +772,5 @@ KSGJuHao 冒烟成功：`isLive: false, roomName: "KSG句号"`，cookie 持久�
 3. **IP 级频率限制独立于浏览器指纹**：即使单个请求完全模拟真人，短时间内的多请求仍然会被 IP 维度聚合风控。生产环境必须保证足够的轮询间隔。
 4. **调试反爬问题要逐步排除变量**：cookie、资源拦截、stealth 三个变量需要逐一测试，不能同时改多个参数，否则无法定位真正的触发因素。
 5. **cookie 有生命周期**：`POLLING_KUAISHOU_COOKIE` 中的 cookie（如 `did`、`kwssectoken`）有过期时间（约 7 天），过期后需要重新提取。应在文档中说明维护流程。
+6. **反爬防护应在浏览器层面而非应用层面**：应用层 `addInitScript` 是在页面加载时注入 JS，Browserless 的 `DEFAULT_STEALTH` 是在 Chromium 实例创建时注入，后者更底层、更难被反爬检测覆盖。对于 Browserless 场景，优先配置服务端参数，应用层作为补充。
+7. **Docker named volume 的权限陷阱**：`docker volume create` 创建的卷默认 root 权限，如果容器进程以非 root 用户运行（如 PUID=1000），写入挂载目录会报 `EACCES`。解决方式：去掉 volume 改用容器内部临时目录，或用 bind mount 并手动 `chown`。
