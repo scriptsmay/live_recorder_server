@@ -16,4 +16,6 @@
 
 ## 待完成计划
 
+6. [快手 Checker API 直连方案](KUAISHOU_API_DIRECT_PLAN.md) — 将快手轮询 Checker 从浏览器模式切换为纯 HTTP API 模式，彻底绕过头less Chromium 的 TLS 指纹反爬。
+
 为什么弹幕工具箱页面（danmaku-toolbox）点击展开文件（组件： SegmentsPanel.vue ）时要同时请求2个API： `api/recording_files?session_id=51` 和 `api/danmaku_burn_records?session_id=51` 是出于什么设计这么做的？
