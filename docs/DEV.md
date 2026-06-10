@@ -62,7 +62,7 @@ node scripts/cleanup-dev.js
 快手轮询 Checker 需要远程 Browserless/Chromium。开发环境可用以下命令验证远程浏览器、平台级串行限速、风控处理和 FLV 抽取：
 
 ```bash
-REMOTE_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/chromium/playwright \
+REMOTE_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/chromium?token=change-me-browserless-token \
 node scripts/smoke-kuaishou-checker.js
 ```
 

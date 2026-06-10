@@ -29,6 +29,9 @@ Docker Compose 会启动 3 个服务：
 
 容器内不使用 PM2。进程重启由 Docker `restart: unless-stopped` 管理。
 
+如需启用快手轮询，可以叠加 `docker-compose.browserless.yml`，额外启动
+Browserless/Chromium 服务供 `KuaishouChecker` 远程打开直播页。
+
 ## 配置文件
 
 复制 `.env.docker.example` 为 `.env.docker` 后按需修改：
@@ -116,6 +119,59 @@ MESSAGE_GOTIFY_PRIORITY=5
 
 `POST /api/notify/feishu_webhook` 仅用于飞书转发；未配置
 `MESSAGE_FEISHU_WEBHOOK` 时返回 HTTP 503。
+
+## 快手轮询与 Browserless
+
+快手轮询 Checker 需要真实 Chromium 页面环境。Docker 从零部署时，推荐使用
+`docker-compose.browserless.yml` 作为 overlay，把 Browserless 和 app 放在同一个
+Compose 网络内：
+
+```bash
+cp .env.docker.example .env.docker
+# 编辑 .env.docker，至少修改 POSTGRES_PASSWORD、REDIS_PASSWORD、BROWSERLESS_TOKEN
+docker compose \
+  --env-file .env.docker \
+  -f docker-compose.full.yml \
+  -f docker-compose.browserless.yml \
+  up -d --build
+```
+
+overlay 会启动 `browserless` 服务，并把 app 内的
+`REMOTE_BROWSER_WS_ENDPOINT` 设置为：
+
+```text
+ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}
+```
+
+这里使用 `/chromium` CDP endpoint，因为服务端代码通过
+`playwright-core` 的 `chromium.connectOverCDP()` 连接远程浏览器；不要把它配置成
+native Playwright endpoint `/chromium/playwright`。
+
+Browserless 默认不映射宿主机端口，仅供 Compose 网络内的 app 访问。需要从宿主机调试
+Browserless 时，可以临时在 `docker-compose.browserless.yml` 中给
+`browserless` 增加端口映射：
+
+```yaml
+ports:
+  - '3000:3000'
+```
+
+快手轮询烟测建议在 app 容器内执行，避免宿主机端口映射差异：
+
+```bash
+docker compose \
+  --env-file .env.docker \
+  -f docker-compose.full.yml \
+  -f docker-compose.browserless.yml \
+  exec app npm run smoke:kuaishou
+```
+
+生产环境建议：
+
+- `BROWSERLESS_TOKEN` 使用高强度随机值，不要保留示例默认值
+- `BROWSERLESS_CONCURRENT=1`，保持快手检查串行，降低触发风控的概率
+- `BROWSERLESS_TIMEOUT_MS` 应略高于 `KUAISHOU_CHECKER_TIMEOUT_MS`
+- 只有需要从宿主机直接调试时才暴露 Browserless 端口
 
 ## NAS 备份
 

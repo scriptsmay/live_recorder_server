@@ -91,6 +91,19 @@ npm run stop
 | KUAISHOU_CHECKER_STEALTH                      | 是否启用最小自动化特征补丁   | false  |
 | KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES | 是否放行首屏图片/字体资源    | false  |
 
+Docker 从零部署时可叠加 `docker-compose.browserless.yml` 一起启动 Browserless：
+
+```bash
+docker compose --env-file .env.docker \
+  -f docker-compose.full.yml \
+  -f docker-compose.browserless.yml \
+  up -d --build
+```
+
+服务端使用 `chromium.connectOverCDP()`，因此 Browserless 地址应使用
+`/chromium` CDP endpoint，例如
+`ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
+
 ## 项目结构
 
 ```text

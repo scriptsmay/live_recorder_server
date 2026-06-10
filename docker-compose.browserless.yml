@@ -1,0 +1,29 @@
+# Optional overlay for docker-compose.full.yml.
+# Usage: docker compose --env-file .env.docker -f docker-compose.full.yml -f docker-compose.browserless.yml up -d --build
+services:
+  app:
+    environment:
+      REMOTE_BROWSER_WS_ENDPOINT: ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN:-change-me-browserless-token}
+      KUAISHOU_CHECKER_ENABLED: ${KUAISHOU_CHECKER_ENABLED:-true}
+      KUAISHOU_CHECKER_TIMEOUT_MS: ${KUAISHOU_CHECKER_TIMEOUT_MS:-45000}
+      KUAISHOU_CHECKER_WAIT_MS: ${KUAISHOU_CHECKER_WAIT_MS:-12000}
+      KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS: ${KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS:-60}
+      KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS: ${KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS:-20}
+      KUAISHOU_CHECKER_BACKOFF_SECONDS: ${KUAISHOU_CHECKER_BACKOFF_SECONDS:-180}
+      KUAISHOU_CHECKER_HEADLESS_USER_AGENT: ${KUAISHOU_CHECKER_HEADLESS_USER_AGENT:-}
+      KUAISHOU_CHECKER_STEALTH: ${KUAISHOU_CHECKER_STEALTH:-false}
+      KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES: ${KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES:-false}
+    depends_on:
+      browserless:
+        condition: service_started
+
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    shm_size: 2gb
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      TOKEN: ${BROWSERLESS_TOKEN:-change-me-browserless-token}
+      CONCURRENT: ${BROWSERLESS_CONCURRENT:-1}
+      QUEUED: ${BROWSERLESS_QUEUED:-5}
+      TIMEOUT: ${BROWSERLESS_TIMEOUT_MS:-60000}
+    restart: unless-stopped
