@@ -20,16 +20,9 @@ services:
       QUEUED: ${BROWSERLESS_QUEUED:-5}
       TIMEOUT: ${BROWSERLESS_TIMEOUT_MS:-60000}
       # 反爬：浏览器层面全局启用 stealth + 禁用自动化标记
-      DEFAULT_STEALTH: "true"
+      DEFAULT_STEALTH: 'true'
       DEFAULT_LAUNCH_ARGS: '["--disable-blink-features=AutomationControlled"]'
-      # 持久化浏览器 profile，保留 cookie/设备指纹
-      DEFAULT_USER_DATA_DIR: /tmp/chrome-profile
       # 预启动 1 个 Chromium 实例，降低首次连接延迟
-      PREBOOT_CHROME: "true"
-      PREBOOT_QUANTITY: "1"
-    volumes:
-      - browserless-profile:/tmp/chrome-profile
+      PREBOOT_CHROME: 'true'
+      PREBOOT_QUANTITY: '1'
     restart: unless-stopped
-
-volumes:
-  browserless-profile:
