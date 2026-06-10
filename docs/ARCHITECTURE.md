@@ -501,7 +501,10 @@ PollingManager (单例)
 │   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
 │   │                          signers/douyu.js (完整签名 + 单飞机制)
 │   │                          signers/douyu-vip.js (VIP房间 JS 签名)
-│   └── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
+│   ├── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
+│   └── kuaishou → KuaishouChecker (RemoteBrowserClient + __INITIAL_STATE__)
+├── RemoteBrowserClient
+│   └── browserless/Chromium (REMOTE_BROWSER_WS_ENDPOINT)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
 ```
@@ -557,6 +560,16 @@ PollingManager (单例)
 - **画质选择**：支持 `rate` 参数选择画质等级
 - **流格式检测**：自动判断 HLS (m3u8) 或 FLV 格式
 
+### KuaishouChecker 实现要点
+
+- 依赖 `playwright-core` 连接远程 Browserless/Chromium，不下载本地浏览器。
+- 每次检查通过 `RemoteBrowserClient.withPage()` 创建全新 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
+- 读取快手直播页 `window.__INITIAL_STATE__.liveroom.playList[activeIndex]` 判断主播名、开播状态和 FLV 地址。
+- 风控、验证码、`请求过快`、`400002` 均视为未知状态并抛错，不写成 `isLive=false`。
+- FLV 选择优先 H.264，缺失时 fallback 到 H.265/HEVC。
+- 快手平台级并发固定为 1；跨房间通过 Redis `kuaishou:checker:platform_lock` 和 `kuaishou:checker:platform_last_poll` 串行限速。
+- 任一房间触发风控后写入房间 backoff 和平台级 backoff，保留上一轮 Redis 直播状态。
+
 ### 轮询流程
 
 ```text
@@ -572,6 +585,7 @@ router/rooms.js (新增/修改房间)
             ├─ pollRoom(room)                       # 首次立即执行（0~5s jitter）
             │    └─ checkRoom(room)
             │         ├─ PlatformChecker.checkStatus()   # 平台 API
+            │         │    └─ KuaishouChecker 使用平台级 Redis 锁串行访问 Browserless
             │         ├─ 状态转换检测 (wasLive→isLive)
             │         ├─ Redis SET (TTL=interval×2)      # 瞬时状态缓存
             │         └─ _tryStartRecording()             # 开播触发录制
@@ -585,11 +599,12 @@ router/rooms.js (新增/修改房间)
 
 ### 数据存储策略
 
-| 数据                | 存储                    | 原因         |
-| ------------------- | ----------------------- | ------------ |
-| 直播状态 / 轮询时间 | Redis，TTL=`interval*2` | 瞬时数据     |
-| 房间配置            | DB `rooms` 表           | 持久配置     |
-| room_name           | DB，仅在首次为空时填充  | 用户可自定义 |
+| 数据                 | 存储                    | 原因           |
+| -------------------- | ----------------------- | -------------- |
+| 直播状态 / 轮询时间  | Redis，TTL=`interval*2` | 瞬时数据       |
+| 快手平台锁 / backoff | Redis，短 TTL           | 风控与并发保护 |
+| 房间配置             | DB `rooms` 表           | 持久配置       |
+| room_name            | DB，仅在首次为空时填充  | 用户可自定义   |
 
 ### 安全机制
 
@@ -597,6 +612,7 @@ router/rooms.js (新增/修改房间)
 - **状态转换判定**：仅 `!wasLive && isLive` 触发录制
 - **防重复**：`RecorderService.startRecording()` 有 Redis `active_task` 保护
 - **jitter**：0~5s 随机延迟防惊群
+- **快手平台级串行**：同一 Browserless 出口下快手房间不并发检查，并限制跨房间连续页面加载间隔
 
 ### 扩展新平台
 

@@ -56,3 +56,14 @@ node scripts/cleanup-dev.js
 - 录制进程日志（ffmpeg 输出）在 `logs/` 目录
 - 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
 - Redis DB 编号：`2`（生产使用 `1`）
+
+## 快手轮询 smoke
+
+快手轮询 Checker 需要远程 Browserless/Chromium。开发环境可用以下命令验证远程浏览器、平台级串行限速、风控处理和 FLV 抽取：
+
+```bash
+REMOTE_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/chromium/playwright \
+node scripts/smoke-kuaishou-checker.js
+```
+
+默认 smoke 两轮，每轮串行检查 `KSGJuHao` 和 `KPL704668133`，跨房间等待 `KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS`，轮间等待 `KUAISHOU_SMOKE_INTERVAL_SECONDS=70` 秒。

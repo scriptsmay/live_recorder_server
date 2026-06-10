@@ -56,24 +56,24 @@
 
 记录直播间状态和配置。
 
-| 字段                 | 类型          | 约束                              | 说明                                                                                |
-| -------------------- | ------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
-| id                   | SERIAL        | PRIMARY KEY                       | 自增主键                                                                            |
-| room_url             | VARCHAR(512)  | UNIQUE NOT NULL                   | 直播间地址（唯一标识）                                                              |
-| room_name            | VARCHAR(255)  | DEFAULT ''                        | 直播间名称                                                                          |
-| status               | VARCHAR(20)   | DEFAULT 'idle'                    | 状态：`idle` / `recording` / `paused`                                               |
-| filename_template    | VARCHAR(255)  | DEFAULT '{room_name}\_{datetime}' | 文件名模板                                                                          |
-| output_path          | VARCHAR(1024) | DEFAULT ''                        | 最新录制文件路径                                                                    |
-| ffmpeg_pid           | INTEGER       |                                   | ffmpeg 进程 ID（用于暂停/恢复）                                                     |
-| segment_duration     | INTEGER       | DEFAULT 0                         | 分段录制时长（秒），0 表示不分段                                                    |
-| notification_enabled | BOOLEAN       | DEFAULT TRUE                      | 通知开关，关闭后不发送录制/投稿通知                                                 |
-| monitoring_enabled   | BOOLEAN       | DEFAULT TRUE                      | 监听开关，关闭后 API 触发时不启动 ffmpeg                                            |
-| upload_template_id   | INTEGER       | FK → upload_templates(id)         | 关联的投稿模板                                                                      |
-| polling_enabled      | BOOLEAN       | DEFAULT FALSE                     | 轮询开关，启用后定期检测开播状态                                                    |
-| polling_platform     | VARCHAR(50)   |                                   | 轮询平台：`huya`、`bilibili`、`douyin`（已实现），`douyu`（不可用-平台流2分钟超时） |
-| polling_interval     | INTEGER       | DEFAULT 60                        | 轮询间隔（秒）                                                                      |
-| created_at           | TIMESTAMP     | DEFAULT NOW()                     | 创建时间                                                                            |
-| updated_at           | TIMESTAMP     | DEFAULT NOW()                     | 更新时间                                                                            |
+| 字段                 | 类型          | 约束                              | 说明                                                                                            |
+| -------------------- | ------------- | --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| id                   | SERIAL        | PRIMARY KEY                       | 自增主键                                                                                        |
+| room_url             | VARCHAR(512)  | UNIQUE NOT NULL                   | 直播间地址（唯一标识）                                                                          |
+| room_name            | VARCHAR(255)  | DEFAULT ''                        | 直播间名称                                                                                      |
+| status               | VARCHAR(20)   | DEFAULT 'idle'                    | 状态：`idle` / `recording` / `paused`                                                           |
+| filename_template    | VARCHAR(255)  | DEFAULT '{room_name}\_{datetime}' | 文件名模板                                                                                      |
+| output_path          | VARCHAR(1024) | DEFAULT ''                        | 最新录制文件路径                                                                                |
+| ffmpeg_pid           | INTEGER       |                                   | ffmpeg 进程 ID（用于暂停/恢复）                                                                 |
+| segment_duration     | INTEGER       | DEFAULT 0                         | 分段录制时长（秒），0 表示不分段                                                                |
+| notification_enabled | BOOLEAN       | DEFAULT TRUE                      | 通知开关，关闭后不发送录制/投稿通知                                                             |
+| monitoring_enabled   | BOOLEAN       | DEFAULT TRUE                      | 监听开关，关闭后 API 触发时不启动 ffmpeg                                                        |
+| upload_template_id   | INTEGER       | FK → upload_templates(id)         | 关联的投稿模板                                                                                  |
+| polling_enabled      | BOOLEAN       | DEFAULT FALSE                     | 轮询开关，启用后定期检测开播状态                                                                |
+| polling_platform     | VARCHAR(50)   |                                   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`（已实现），`douyu`（不可用-平台流2分钟超时） |
+| polling_interval     | INTEGER       | DEFAULT 60                        | 轮询间隔（秒）                                                                                  |
+| created_at           | TIMESTAMP     | DEFAULT NOW()                     | 创建时间                                                                                        |
+| updated_at           | TIMESTAMP     | DEFAULT NOW()                     | 更新时间                                                                                        |
 
 ### recording_sessions — 录制会话
 

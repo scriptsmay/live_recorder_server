@@ -11,7 +11,7 @@ function sendLogError(res, err) {
 
 // GET /logs 页面已由 Vue SPA (Logs.vue) 接管，不再使用 EJS 渲染
 
-router.get('/logs/files', async (req, res) => {
+router.get(['/logs/files', '/api/logs/files'], async (req, res) => {
   try {
     const files = await logFiles.listFiles();
     res.json({ status: 'ok', data: files });
@@ -20,7 +20,7 @@ router.get('/logs/files', async (req, res) => {
   }
 });
 
-router.get('/logs/content', async (req, res) => {
+router.get(['/logs/content', '/api/logs/content'], async (req, res) => {
   try {
     const result = await logFiles.tailLines(req.query.file, req.query.tail);
     res.json({
@@ -37,7 +37,7 @@ router.get('/logs/content', async (req, res) => {
   }
 });
 
-router.get('/logs/stream', async (req, res) => {
+router.get(['/logs/stream', '/api/logs/stream'], async (req, res) => {
   let offset = 0;
   let buffer = '';
   let timer = null;
@@ -114,7 +114,7 @@ router.get('/logs/stream', async (req, res) => {
   }
 });
 
-router.delete('/logs', async (req, res) => {
+router.delete(['/logs', '/api/logs'], async (req, res) => {
   try {
     const fileName = req.body?.file;
     const filePath = await logFiles.resolveLogPath(fileName);

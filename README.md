@@ -13,7 +13,7 @@
 - **弹幕工具箱**：独立的 Web 界面，管理弹幕采集状态、批量压制、产物播放和下载
 - **自动转码**：边下边转码（TS → MP4），转码队列 + 并发控制
 - **HLS 生成**：自动为转码后的 MP4 生成 HLS 分片，支持在线播放
-- **直播轮询**：策略模式支持多平台（虎牙已实现），检测到开播自动触发录制
+- **直播轮询**：策略模式支持虎牙、B 站、抖音、快手等平台，检测到开播自动触发录制
 - **自动投稿**：录制完成自动调用 biliup 投稿到 Bilibili，支持模板化投稿
 - **看门狗**：自动扫描录制目录，跟踪文件状态，清理孤立文件
 - **通知系统**：录制开始/结束/投稿等事件推送通知（飞书 Webhook / Gotify）
@@ -75,6 +75,22 @@ npm run stop
 | MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址              | -                                         |
 | MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token              | -                                         |
 
+### 快手轮询配置
+
+快手轮询 Checker 依赖远程 Browserless/Chromium，并通过平台级单并发和全局间隔降低风控概率。
+
+| 配置项                                        | 说明                         | 默认值 |
+| --------------------------------------------- | ---------------------------- | ------ |
+| REMOTE_BROWSER_WS_ENDPOINT                    | 远程 Chromium WebSocket 地址 | -      |
+| KUAISHOU_CHECKER_ENABLED                      | 是否启用快手 Checker         | true   |
+| KUAISHOU_CHECKER_TIMEOUT_MS                   | 单次检查超时                 | 45000  |
+| KUAISHOU_CHECKER_WAIT_MS                      | 页面状态等待时间             | 12000  |
+| KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS         | 单房间最小检查间隔           | 60     |
+| KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS      | 快手跨房间全局最小间隔       | 20     |
+| KUAISHOU_CHECKER_BACKOFF_SECONDS              | 风控后退避时间               | 180    |
+| KUAISHOU_CHECKER_STEALTH                      | 是否启用最小自动化特征补丁   | false  |
+| KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES | 是否放行首屏图片/字体资源    | false  |
+
 ## 项目结构
 
 ```text
@@ -101,6 +117,7 @@ npm run stop
 │   ├── polling/                # 直播轮询检测
 │   │   ├── PlatformChecker.js     # 平台检查器基类（策略模式）
 │   │   ├── HuyaChecker.js         # 虎牙平台检查器
+│   │   ├── KuaishouChecker.js     # 快手平台检查器（远程 Browserless）
 │   │   └── PollingManager.js      # 轮询管理器（定时调度、状态转换检测）
 │   ├── TranscodeQueue.js       # 转码队列（Redis 队列 + 并发控制）
 │   ├── transcoder.js           # 视频转码（FFmpeg -c copy TS → MP4）

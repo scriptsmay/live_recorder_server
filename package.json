@@ -33,6 +33,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:api": "jest test/api-coverage.test.js --verbose",
+    "smoke:kuaishou": "node scripts/smoke-kuaishou-checker.js",
     "check-env": "bash scripts/check-env.sh",
     "release:patch": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
@@ -46,6 +47,7 @@
     "express": "^5.2.1",
     "morgan": "^1.10.1",
     "pg": "^8.20.0",
+    "playwright-core": "^1.60.0",
     "redis": "^5.12.1"
   },
   "devDependencies": {
