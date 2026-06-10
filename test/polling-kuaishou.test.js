@@ -341,6 +341,7 @@ describe('KuaishouChecker', () => {
   });
 
   it('ignores corrupted persisted session JSON', async () => {
+    delete process.env.POLLING_KUAISHOU_COOKIE;
     const browserClient = createBrowserClientMock(createLiveSnapshot());
     const checker = new KuaishouChecker('https://live.kuaishou.com/u/KPL704668133', {
       redis: createRedisMock({

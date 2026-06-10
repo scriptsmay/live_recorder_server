@@ -99,6 +99,11 @@ async function main() {
     `[kuaishou-smoke] rounds=${rounds} interval=${intervalSeconds}s globalInterval=${globalIntervalSeconds}s`
   );
   console.log('[kuaishou-smoke] sessionScope=platform simulateHuman=true');
+  console.log(
+    `[kuaishou-smoke] stealth=${process.env.KUAISHOU_CHECKER_STEALTH !== 'false'} allowFirstScreenResources=${
+      process.env.KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES === 'true'
+    }`
+  );
 
   for (let round = 1; round <= rounds; round += 1) {
     await runRound(round, globalIntervalSeconds);

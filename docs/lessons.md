@@ -711,3 +711,56 @@ Vue 日志页能加载日志文件列表，但选择文件后右侧内容为空�
 1. **同一个参数在不同场景下语义要明确**：`tail=0` 对实时流是“从末尾开始”，对查看页却是“空内容”。调用方要按场景选择参数。
 2. **SPA 迁移不能只读 URL**：列表选择、删除、刷新和浏览器导航都要维护 query 状态，否则页面可分享性和回退行为会退化。
 3. **API 统一封装要求统一响应契约**：使用 `apiGet` 的接口必须返回 `{ status, data }`；裸对象会在前端被当成 `ApiResponse`，造成运行时异常。
+
+## 快手轮询反爬调试：stealth、资源拦截与 cookie 持久化
+
+### 背景
+
+快手轮询 Checker 使用远程 Browserless/Chromium 加载直播间页面，从 `window.__INITIAL_STATE__` 提取开播状态和 FLV 流地址。首次冒烟测试即触发快手反爬（"请求过快，请稍后重试"），两个目标直播间均未获取到真实数据。
+
+### 问题链
+
+```
+远程 Chromium 打开快手直播间
+  → navigator.webdriver = true（Playwright 默认行为）
+  → 快手前端 JS 检测到自动化特征
+  → SSR 返回 errorType.title = "请求过快，请稍后重试"
+  → KuaishouChecker 抛出 KUAISHOU_ANTICRAWL
+  → 设置 180 秒平台级 backoff
+  → 后续所有请求被 backoff 拦截
+```
+
+### 排查过程
+
+**第一步：怀疑是 cookie 缺失。** 每次 `withPage` 创建全新浏览器上下文，无任何 cookie，对快手而言是"全新设备"。通过本机浏览器提取了 7 个关键 cookie（`did`、`_did`、`userId`、`kwssectoken` 等）注入，但仍然反爬。
+
+**第二步：怀疑是资源拦截。** `RemoteBrowserClient` 默认拦截图片、字体、媒体、Sentry、日志、`/collect/i` 等 URL。禁用拦截（`blockResources: false`）+ 带 cookie 仍然反爬。
+
+**第三步：发现 `navigator.webdriver` 是关键。** 用 `stealth: true`（注入 `Object.defineProperty(navigator, 'webdriver', { get: () => undefined })`）+ 无资源拦截 + cookie，**成功获取到完整直播页面数据**。
+
+**第四步：发现 IP 级频率限制。** 同一 Browserless 出口 IP 在 20 秒内连续请求两个不同直播间，第二个请求触发反爬。密集测试后 IP 被封禁，5 分钟内未恢复。
+
+### 修复
+
+1. `DEFAULT_STEALTH` 从 `false` 改为 `true`，stealth 默认开启。
+2. `KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES=true` 时完全禁用资源拦截。
+3. 新增 `POLLING_KUAISHOU_COOKIE` 环境变量作为种子 cookie，首次访问时注入，后续由 Redis 持久化。
+
+### 最终验证结果
+
+| 组合 | 结果 |
+|------|------|
+| cookies only（无 stealth，有资源拦截） | 反爬 |
+| cookies + stealth + 有资源拦截 | Playwright 运行时错误 |
+| cookies + stealth + 无资源拦截 | **成功** |
+| 连续请求两个直播间（20 秒间隔） | 第二个触发 IP 级反爬 |
+
+KSGJuHao 冒烟成功：`isLive: false, roomName: "KSG句号"`，cookie 持久化链路（env → Redis → 复用）完整验证通过。
+
+### 经验总结
+
+1. **`navigator.webdriver` 是快手反爬的第一道检测线**：Playwright 默认设置此属性为 `true`，一个简单的 `Object.defineProperty` 补丁就能绕过。但对于更复杂的反爬系统（如 Cloudflare Bot Management），单靠这一个补丁不够。
+2. **资源拦截本身可能触发反爬**：快手可能通过检测页面资源加载完整性（图片、字体是否正常加载）来判断是否为真实浏览器。拦截策略需要在"减少请求量"和"保持页面真实性"之间权衡。
+3. **IP 级频率限制独立于浏览器指纹**：即使单个请求完全模拟真人，短时间内的多请求仍然会被 IP 维度聚合风控。生产环境必须保证足够的轮询间隔。
+4. **调试反爬问题要逐步排除变量**：cookie、资源拦截、stealth 三个变量需要逐一测试，不能同时改多个参数，否则无法定位真正的触发因素。
+5. **cookie 有生命周期**：`POLLING_KUAISHOU_COOKIE` 中的 cookie（如 `did`、`kwssectoken`）有过期时间（约 7 天），过期后需要重新提取。应在文档中说明维护流程。
