@@ -49,15 +49,16 @@ npm install playwright-core
 
 新增环境变量建议：
 
-| 变量                                    | 默认值                | 说明                                                                            |
-| --------------------------------------- | --------------------- | ------------------------------------------------------------------------------- |
-| `REMOTE_BROWSER_WS_ENDPOINT`            | 空                    | 远程浏览器 WebSocket 地址，例如 `ws://192.168.0.247:11300/chromium/playwright` |
-| `KUAISHOU_CHECKER_ENABLED`              | `true`                | 是否启用快手浏览器 Checker                                                      |
-| `KUAISHOU_CHECKER_TIMEOUT_MS`           | `45000`               | 单次页面检查超时                                                                |
-| `KUAISHOU_CHECKER_WAIT_MS`              | `12000`               | 页面进入后等待初始状态稳定的时间                                                |
-| `KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS` | `60`                  | 单房间最小检查间隔                                                              |
-| `KUAISHOU_CHECKER_BACKOFF_SECONDS`      | `180`                 | 触发风控后的退避时间                                                            |
-| `KUAISHOU_CHECKER_HEADLESS_USER_AGENT`  | Chrome 121 desktop UA | 页面 UA                                                                         |
+| 变量                                       | 默认值                | 说明                                                                            |
+| ------------------------------------------ | --------------------- | ------------------------------------------------------------------------------- |
+| `REMOTE_BROWSER_WS_ENDPOINT`               | 空                    | 远程浏览器 WebSocket 地址，例如 `ws://192.168.0.247:11300/chromium/playwright` |
+| `KUAISHOU_CHECKER_ENABLED`                 | `true`                | 是否启用快手浏览器 Checker                                                      |
+| `KUAISHOU_CHECKER_TIMEOUT_MS`              | `45000`               | 单次页面检查超时                                                                |
+| `KUAISHOU_CHECKER_WAIT_MS`                 | `12000`               | 页面进入后等待初始状态稳定的时间                                                |
+| `KUAISHOU_CHECKER_MIN_INTERVAL_SECONDS`    | `60`                  | 单房间最小检查间隔                                                              |
+| `KUAISHOU_CHECKER_GLOBAL_INTERVAL_SECONDS` | `20`                  | 快手平台级最小检查间隔，限制不同快手房间之间的连续页面加载                      |
+| `KUAISHOU_CHECKER_BACKOFF_SECONDS`         | `180`                 | 触发风控后的退避时间                                                            |
+| `KUAISHOU_CHECKER_HEADLESS_USER_AGENT`     | Chrome 121 desktop UA | 页面 UA                                                                         |
 
 如果 `REMOTE_BROWSER_WS_ENDPOINT` 未配置，`KuaishouChecker` 应返回明确错误，且不注册或不启用轮询。
 
@@ -239,11 +240,24 @@ url.replace(/([?&](txSecret|hwSecret|wsSecret|stat|token|sign|sig)=)[^&]+/gi, '$
 - 快手房间默认 `polling_interval=90` 秒。
 - 最小允许值 `60` 秒。
 - 每个快手房间使用 Redis 分布式锁，避免多实例或重复 reload 并发检查。
+- 快手平台级并发固定为 `1`，同一时间只允许打开一个快手直播间页面。
+- 不同快手房间之间也需要全局节流，建议最小间隔 `20` 秒并保留 0~5 秒 jitter。
 - 触发 `KUAISHOU_ANTICRAWL` 后退避 180 秒，并保留上一轮状态。
+
+平台级串行说明：
+
+- 当前调研没有区分“同一直播间短间隔请求”和“短时间连续请求多个直播间”两个变量，不能假设只要单房间间隔足够就安全。
+- 快手风控可能按 Browserless 出口 IP、浏览器指纹、无登录态 session 或请求节奏聚合判断；因此初版不做快手跨房间并发。
+- `KuaishouChecker` 在打开浏览器页面前必须先获取平台级 Redis 锁；锁被占用时抛出 `KUAISHOU_PLATFORM_LOCK_BUSY`，不更新上一轮状态。
+- 平台级 `last_poll` 未满足全局间隔时抛出 `KUAISHOU_PLATFORM_RATE_LIMITED`，等待下一轮调度，不抢跑打开页面。
+- 任一房间命中 `KUAISHOU_ANTICRAWL` 时，除房间 backoff 外，可以设置短暂平台级 backoff，降低连续风控扩大风险。
 
 Redis key：
 
 ```text
+kuaishou:checker:platform_lock
+kuaishou:checker:platform_last_poll
+kuaishou:checker:platform_backoff
 kuaishou:checker:last_poll:{roomIdOrPrincipalId}
 kuaishou:checker:lock:{roomIdOrPrincipalId}
 kuaishou:checker:backoff:{roomIdOrPrincipalId}
@@ -265,6 +279,8 @@ polling:live_status:{roomId}
 - FLV URL 脱敏函数不泄漏签名参数。
 - `RemoteBrowserClient.withPage()` 在成功、抛错、超时三种路径下都调用 `page.close()` 和 `context.close()`。
 - `RemoteBrowserClient.withPage()` 每次调用都创建新 context，不复用 Cookie 或 LocalStorage。
+- 快手平台级锁被占用时返回 `KUAISHOU_PLATFORM_LOCK_BUSY`，不调用 `RemoteBrowserClient.withPage()`。
+- 快手平台级 last_poll 未满足全局间隔时返回 `KUAISHOU_PLATFORM_RATE_LIMITED`，不打开页面。
 
 ### 集成 smoke
 
@@ -292,6 +308,7 @@ smoke 注意事项：
 
 - 第一轮先使用资源拦截；如果两个固定 URL 都出现风控或 `400002`，再增加一次“放行首屏静态资源”的对照运行。
 - smoke 输出应包含资源拦截摘要、是否命中 stealth 补丁、browser 重连次数、page/context 关闭结果。
+- smoke 输出应记录两个 URL 的实际开始检查时间，确认跨房间没有并发且满足平台级全局间隔。
 - 不要把 smoke 间隔调低到 60 秒以下；短间隔结果不能作为稳定性结论。
 
 ## 开发步骤
@@ -300,14 +317,15 @@ smoke 注意事项：
 2. 新增 `RemoteBrowserClient`，实现 browserless 连接、页面创建、资源拦截、关闭。
 3. 为 `RemoteBrowserClient` 补齐生命周期测试，确认异常和超时路径不会遗留 page/context。
 4. 新增 `KuaishouChecker`，实现页面加载、状态抽取、风控识别、FLV 选择。
-5. 给 FLV 选择增加 H.264 优先、H.265 fallback。
-6. 在 smoke 脚本中记录资源拦截和风控命中情况，必要时再启用最小 stealth 补丁。
-7. 注册 `kuaishou` 到 `checkers.js`。
-8. 给 `PollingManager` 增加 `result.error` 不更新状态保护。
-9. 给平台检测和 DB 文档补充 `kuaishou` 已支持轮询。
-10. 新增 `test/polling-kuaishou.test.js`。
-11. 新增可选 smoke 脚本并在文档中说明不要频繁运行。
-12. 执行 `npm run lint && npm test`。
+5. 给快手检查增加平台级 Redis 锁、平台级 last_poll 和平台级 backoff，确保跨房间串行。
+6. 给 FLV 选择增加 H.264 优先、H.265 fallback。
+7. 在 smoke 脚本中记录资源拦截、跨房间启动间隔和风控命中情况，必要时再启用最小 stealth 补丁。
+8. 注册 `kuaishou` 到 `checkers.js`。
+9. 给 `PollingManager` 增加 `result.error` 不更新状态保护。
+10. 给平台检测和 DB 文档补充 `kuaishou` 已支持轮询。
+11. 新增 `test/polling-kuaishou.test.js`。
+12. 新增可选 smoke 脚本并在文档中说明不要频繁运行。
+13. 执行 `npm run lint && npm test`。
 
 ## 验收命令
 
@@ -325,6 +343,7 @@ REMOTE_BROWSER_WS_ENDPOINT=ws://192.168.0.247:11300/chromium/playwright node scr
 - Browserless 服务不可用。
 - 远程 Browserless page/context 未关闭导致僵尸页面积累，最终耗尽内存或连接数。
 - Cookie、LocalStorage 等状态在轮询间泄漏，导致单房间风控标记被连续继承。
+- 多个快手房间在短时间内从同一 Browserless 出口连续加载，触发平台按 IP 或浏览器指纹聚合风控。
 - 过于激进的资源拦截被前端风控识别，反而提高 `400002` 命中率。
 - 直播页 JS 包 hash 更新，字段结构变化。
 - 平台优先下发 H.265，原 H.264-only 解析导致误判没有可录制流。
@@ -336,6 +355,7 @@ REMOTE_BROWSER_WS_ENDPOINT=ws://192.168.0.247:11300/chromium/playwright node scr
 - 快手 Checker 受 `KUAISHOU_CHECKER_ENABLED` 控制，可快速关闭。
 - `RemoteBrowserClient.withPage()` 强制 `try...finally` 关闭 page/context，并在断连后重连。
 - 每次检查创建全新 browser context，不复用浏览器存储状态。
+- 快手平台级单并发执行，并对不同房间之间的页面加载做全局最小间隔限制。
 - smoke 测试保留严格拦截和放行首屏静态资源两种策略对照。
 - 字段抽取保留多路径 fallback。
 - FLV 选择优先 H.264，缺失时 fallback H.265。

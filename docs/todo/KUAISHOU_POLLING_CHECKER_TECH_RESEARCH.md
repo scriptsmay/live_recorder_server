@@ -8,21 +8,21 @@
 
 本次调研验证的目标直播间：
 
-| 主播 | URL | 预期状态 |
-| --- | --- | --- |
-| KSG句号 | `https://live.kuaishou.com/u/KSGJuHao` | 未开播 |
-| KPL王者荣耀职业联赛 | `https://live.kuaishou.com/u/KPL704668133` | 直播中 |
+| 主播                | URL                                        | 预期状态 |
+| ------------------- | ------------------------------------------ | -------- |
+| KSG句号             | `https://live.kuaishou.com/u/KSGJuHao`     | 未开播   |
+| KPL王者荣耀职业联赛 | `https://live.kuaishou.com/u/KPL704668133` | 直播中   |
 
 ## 远程浏览器配置
 
 已有 infra 配置可直接复用：
 
-| 项目 | 值 |
-| --- | --- |
-| Browserless HTTP | `http://192.168.0.247:11300` |
-| Playwright CDP | `ws://192.168.0.247:11300/chromium/playwright` |
-| Browserless WebSocket | `ws://192.168.0.247:11300` |
-| 当前服务版本 | `HeadlessChrome/121.0.6167.85`, `Puppeteer/21.9.0` |
+| 项目                  | 值                                                 |
+| --------------------- | -------------------------------------------------- |
+| Browserless HTTP      | `http://192.168.0.247:11300`                      |
+| Playwright CDP        | `ws://192.168.0.247:11300/chromium/playwright`    |
+| Browserless WebSocket | `ws://192.168.0.247:11300`                        |
+| 当前服务版本          | `HeadlessChrome/121.0.6167.85`, `Puppeteer/21.9.0` |
 
 调研使用 `chromium.connectOverCDP('ws://192.168.0.247:11300/chromium/playwright')` 连接成功。`live-recorder-server` 当前没有 Playwright/Puppeteer 依赖，正式开发建议引入 `playwright-core`，只连接远程浏览器，不下载本地 Chromium。
 
@@ -85,19 +85,26 @@ KSG句号
 
 ### 第一轮远程浏览器探测
 
-| URL | 页面标题 | 抽取结果 |
-| --- | --- | --- |
-| `KSGJuHao` | `KSG句号-快手直播` | 可见文本包含 `KSG句号` 和 `主播尚未开播，可以观看其他直播` |
+| URL            | 页面标题                       | 抽取结果                                                                     |
+| -------------- | ------------------------------ | ---------------------------------------------------------------------------- |
+| `KSGJuHao`     | `KSG句号-快手直播`             | 可见文本包含 `KSG句号` 和 `主播尚未开播，可以观看其他直播`                   |
 | `KPL704668133` | `KPL王者荣耀职业联赛-快手直播` | `playList[0].isLiving=true`，主播名为 `KPL王者荣耀职业联赛`，可抽取 FLV 地址 |
 
 ### 70 秒间隔轮询探测
 
 调研脚本执行两轮，轮间等待 70 秒。
 
-| URL | 第 1 轮 | 第 2 轮 | 结论 |
-| --- | --- | --- | --- |
-| `KPL704668133` | `isLiving=true`，主播名稳定，FLV 地址可取 | `isLiving=true`，主播名稳定，FLV 地址可取 | 直播中状态稳定 |
-| `KSGJuHao` | 出现 `请求过快，请稍后重试` | 仍出现 `请求过快，请稍后重试` | 调研期间短时间访问过密，触发风控；该状态不能当作下播 |
+| URL            | 第 1 轮                                   | 第 2 轮                                   | 结论                                                 |
+| -------------- | ----------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `KPL704668133` | `isLiving=true`，主播名稳定，FLV 地址可取 | `isLiving=true`，主播名稳定，FLV 地址可取 | 直播中状态稳定                                       |
+| `KSGJuHao`     | 出现 `请求过快，请稍后重试`               | 仍出现 `请求过快，请稍后重试`             | 调研期间短时间访问过密，触发风控；该状态不能当作下播 |
+
+本轮调研没有隔离验证两个变量：
+
+- 同一个直播间在短间隔内重复请求。
+- 同一 Browserless 出口 / 浏览器指纹在短时间内连续请求多个快手直播间。
+
+因此不能把风控原因归因到单房间间隔过短。跨房间连续请求同样可能触发快手按 IP、浏览器指纹、无登录态 session 或请求节奏聚合的风控。
 
 重要观察：
 
@@ -146,6 +153,8 @@ const offline = item.isLiving === false && /主播尚未开播/.test(document.bo
 
 - 不要在一个房间上低于 60 秒重复加载页面。
 - 不要并发检查同一快手房间。
+- 初版不要并发检查多个快手房间；同一 Browserless 出口下快手平台级并发建议固定为 `1`。
+- 不同快手房间之间也应设置全局最小间隔和 jitter，避免跨房间连续页面加载触发聚合风控。
 - 不要在一次检查中触发 `loadMore`、`websocketinfo` 或登录二维码之外的额外交互。
 - 不要把 `请求过快` 解析成 `isLive=false`，否则会误发下播通知或覆盖 Redis 状态。
 - 不要在日志里输出完整 FLV URL，签名参数有时效性，也不适合长期留存。
@@ -157,12 +166,13 @@ const offline = item.isLiving === false && /主播尚未开播/.test(document.bo
 - 新增 `KuaishouChecker`，使用远程浏览器读取页面初始状态。
 - 风控/验证码/请求过快时抛出异常，让 `PollingManager` 保持上一轮状态。
 - 每房间强制最小轮询间隔 60 秒；建议默认 90 秒。
+- 快手平台级检查串行执行；跨房间使用全局 Redis 锁和全局 `last_poll` 节流。
 - 阻断图片、字体、日志上报、Sentry、验证码 iframe 等非必要资源，降低请求量。
 
 中期方案：
 
 - 抽象 `RemoteBrowserClient`，让快手 Checker 独占复用。
-- Redis 记录 `kuaishou:checker:last_poll:{roomKey}` 和 `kuaishou:checker:anticrawl:{roomKey}`，命中风控后指数退避。
+- Redis 记录 `kuaishou:checker:last_poll:{roomKey}`、`kuaishou:checker:anticrawl:{roomKey}`、`kuaishou:checker:platform_lock` 和 `kuaishou:checker:platform_last_poll`，命中风控后指数退避。
 - 将 `result.error` 的状态处理从 Checker 层统一到 `PollingManager`，避免未来平台误把未知状态写成下播。
 
 ## 验收标准
