@@ -422,10 +422,12 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(c(`[test-checker] Fatal error: ${err.message}`, color.red));
-  if (process.env.DEBUG) {
-    console.error(err.stack);
-  }
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit())
+  .catch((err) => {
+    console.error(c(`[test-checker] Fatal error: ${err.message}`, color.red));
+    if (process.env.DEBUG) {
+      console.error(err.stack);
+    }
+    process.exit(1);
+  });
