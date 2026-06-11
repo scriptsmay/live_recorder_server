@@ -774,3 +774,27 @@ Browserless 配置优化后重新冒烟，2 个目标（KSGJuHao + KPL704668133�
 5. **cookie 有生命周期**：`POLLING_KUAISHOU_COOKIE` 中的 cookie（如 `did`、`kwssectoken`）有过期时间（约 7 天），过期后需要重新提取。应在文档中说明维护流程。
 6. **反爬防护应在浏览器层面而非应用层面**：应用层 `addInitScript` 是在页面加载时注入 JS，Browserless 的 `DEFAULT_STEALTH` 是在 Chromium 实例创建时注入，后者更底层、更难被反爬检测覆盖。对于 Browserless 场景，优先配置服务端参数，应用层作为补充。
 7. **Docker named volume 的权限陷阱**：`docker volume create` 创建的卷默认 root 权限，如果容器进程以非 root 用户运行（如 PUID=1000），写入挂载目录会报 `EACCES`。解决方式：去掉 volume 改用容器内部临时目录，或用 bind mount 并手动 `chown`。
+
+## Dockerfile 外部依赖下载要有降级备选
+
+### 现象
+
+Docker 构建突然失败，`johnvansickle.com` 下载 ffmpeg 静态二进制报错 exit code 2，昨天还正常。该站点无 SLA 承诺，随时可能宕机或限速。
+
+### 修复
+
+```dockerfile
+RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
+    || (echo "[Dockerfile] johnvansickle 下载失败，尝试 BtbN 镜像..." \
+        && curl -fSL -o ffmpeg-git-amd64-static.tar.xz \
+           https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz) \
+    && tar -xJf ffmpeg-git-amd64-static.tar.xz \
+    && mv ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ \
+    && mv ffmpeg-git-*-amd64-static/ffprobe /usr/local/bin/
+```
+
+### 经验总结
+
+1. **Dockerfile 中 `curl` 默认不失败**：不加 `-f` 参数时，HTTP 404/500 仍返回 exit code 0，`||` 降级不会触发。必须加 `-f`（`--fail`）确保非 2xx 时返回错误码。
+2. **外部二进制下载要有降级源**：`johnvansickle.com` 是个人维护站点无 SLA，BtbN GitHub Release 由 GitHub 托管更稳定。两者互补。
+3. **Docker 构建失败要先看具体阶段**：多阶段构建中错误可能出现在任意阶段，定位到具体 `RUN` 行再排查，避免误改代码。
