@@ -24,7 +24,10 @@ RUN npm install --omit=dev
 # 阶段3：下载并解压最新的 FFmpeg 静态二进制文件
 FROM alpine:latest AS ffmpeg-downloader
 RUN apk add --no-cache curl tar xz
-RUN curl -L -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
+RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
+    || (echo "[Dockerfile] johnvansickle 下载失败，尝试 BtbN 镜像..." \
+        && curl -fSL -o ffmpeg-git-amd64-static.tar.xz \
+           https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz) \
     && tar -xJf ffmpeg-git-amd64-static.tar.xz \
     && mv ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ \
     && mv ffmpeg-git-*-amd64-static/ffprobe /usr/local/bin/
