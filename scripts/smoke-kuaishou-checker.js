@@ -5,8 +5,8 @@ require('../config/env').initEnv();
 const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
 
 const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 20;
-const KUAISHOU_SMOKE_ROUNDS = 2;
-const KUAISHOU_SMOKE_INTERVAL_SECONDS = 121;
+const KUAISHOU_SMOKE_ROUNDS = parseInt(process.env.KUAISHOU_SMOKE_ROUNDS || '2', 10);
+const KUAISHOU_SMOKE_INTERVAL_SECONDS = parseInt(process.env.KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
 
 const TARGETS = [
   {
@@ -25,49 +25,32 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function redactUrl(url) {
-  return KuaishouChecker.redactUrl(url);
-}
-
 async function checkTarget(target) {
   const startedAt = new Date();
   const checker = new KuaishouChecker(target.url);
-  const principalId = checker.getRoomKey();
-  const sessionKey = checker.getSessionKey(principalId);
-  const hadSession = await checker.hasStoredSession(principalId);
 
   try {
     const result = await checker.checkStatus();
-    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
-      principalId,
-      sessionKey,
-      hadSession,
-      hasSession,
       startedAt: startedAt.toISOString(),
       status: 'ok',
       isLive: result.isLive,
       roomName: result.roomName,
-      streamUrl: redactUrl(result.streamUrl),
+      streamUrl: KuaishouChecker.redactUrl(result.streamUrl),
       streamInfo: result.streamInfo,
     };
   } catch (err) {
-    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
-      principalId,
-      sessionKey,
-      hadSession,
-      hasSession,
       startedAt: startedAt.toISOString(),
-      status: 'unknown',
+      status: 'error',
       error: err.message,
     };
   }
 }
 
-async function runRound(round, globalIntervalSeconds) {
+async function runRound(round) {
   console.log(`\n[kuaishou-smoke] round=${round}`);
   const results = [];
 
@@ -78,7 +61,7 @@ async function runRound(round, globalIntervalSeconds) {
     console.log(JSON.stringify(result, null, 2));
 
     if (index < TARGETS.length - 1) {
-      await sleep(globalIntervalSeconds * 1000);
+      await sleep(KUAISHOU_GLOBAL_INTERVAL_SECONDS * 1000);
     }
   }
 
@@ -86,31 +69,13 @@ async function runRound(round, globalIntervalSeconds) {
 }
 
 async function main() {
-  if (!process.env.REMOTE_BROWSER_WS_ENDPOINT) {
-    console.error('REMOTE_BROWSER_WS_ENDPOINT is required');
-    process.exitCode = 1;
-    return;
-  }
+  console.log(`[kuaishou-smoke] rounds=${KUAISHOU_SMOKE_ROUNDS} interval=${KUAISHOU_SMOKE_INTERVAL_SECONDS}s`);
+  console.log('[kuaishou-smoke] method=http-get-extract-state');
 
-  const rounds = parseInt(KUAISHOU_SMOKE_ROUNDS || '2', 10);
-  const intervalSeconds = parseInt(KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
-  const globalIntervalSeconds = KUAISHOU_GLOBAL_INTERVAL_SECONDS;
-
-  console.log('[kuaishou-smoke] endpoint configured');
-  console.log(
-    `[kuaishou-smoke] rounds=${rounds} interval=${intervalSeconds}s globalInterval=${globalIntervalSeconds}s`
-  );
-  console.log('[kuaishou-smoke] sessionScope=platform simulateHuman=true');
-  console.log(
-    `[kuaishou-smoke] stealth=${process.env.KUAISHOU_CHECKER_STEALTH !== 'false'} allowFirstScreenResources=${
-      process.env.KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES === 'true'
-    }`
-  );
-
-  for (let round = 1; round <= rounds; round += 1) {
-    await runRound(round, globalIntervalSeconds);
-    if (round < rounds) {
-      await sleep(intervalSeconds * 1000);
+  for (let round = 1; round <= KUAISHOU_SMOKE_ROUNDS; round += 1) {
+    await runRound(round);
+    if (round < KUAISHOU_SMOKE_ROUNDS) {
+      await sleep(KUAISHOU_SMOKE_INTERVAL_SECONDS * 1000);
     }
   }
 }
