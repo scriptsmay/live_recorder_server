@@ -53,9 +53,9 @@ function c(text, ...codes) {
 
 const SAMPLE_URLS = {
   bilibili: 'https://live.bilibili.com/1',
-  douyu: 'https://www.douyu.com/1',
+  douyu: 'https://www.douyu.com/36252',
   huya: 'https://www.huya.com/kaerlol',
-  douyin: 'https://live.douyin.com/1',
+  douyin: 'https://live.douyin.com/61204923995',
   kuaishou: 'https://live.kuaishou.com/u/KPL704668133',
 };
 

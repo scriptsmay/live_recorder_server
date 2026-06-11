@@ -5,18 +5,20 @@ require('../config/env').initEnv();
 const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
 
 const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 20;
+const KUAISHOU_SMOKE_ROUNDS = 2;
+const KUAISHOU_SMOKE_INTERVAL_SECONDS = 121;
 
 const TARGETS = [
-  {
-    name: 'KSGJuHao',
-    url: 'https://live.kuaishou.com/u/KSGJuHao',
-    expectedName: 'KSG句号',
-  },
   {
     name: 'KPL704668133',
     url: 'https://live.kuaishou.com/u/KPL704668133',
     expectedName: 'KPL王者荣耀职业联赛',
   },
+  // {
+  //   name: 'KSGJuHao',
+  //   url: 'https://live.kuaishou.com/u/KSGJuHao',
+  //   expectedName: 'KSG句号',
+  // },
 ];
 
 function sleep(ms) {
@@ -90,8 +92,8 @@ async function main() {
     return;
   }
 
-  const rounds = parseInt(process.env.KUAISHOU_SMOKE_ROUNDS || '2', 10);
-  const intervalSeconds = parseInt(process.env.KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
+  const rounds = parseInt(KUAISHOU_SMOKE_ROUNDS || '2', 10);
+  const intervalSeconds = parseInt(KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
   const globalIntervalSeconds = KUAISHOU_GLOBAL_INTERVAL_SECONDS;
 
   console.log('[kuaishou-smoke] endpoint configured');
@@ -113,7 +115,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('[kuaishou-smoke] failed:', err);
-  process.exitCode = 1;
-});
+main()
+  .catch((err) => {
+    console.error('[kuaishou-smoke] failed:', err);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    process.exit(process.exitCode || 0);
+  });
