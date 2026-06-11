@@ -4,13 +4,13 @@
 
 ## 测试环境
 
-| 项目 | 值 |
-|------|-----|
-| Browserless 地址 | `ws://192.168.0.247:11300/chromium/playwright` |
-| Chromium 版本 | HeadlessChrome/121.0.6167.85 |
-| 目标直播间 1 | `https://live.kuaishou.com/u/KSGJuHao`（KSG句号，预期未开播） |
-| 目标直播间 2 | `https://live.kuaishou.com/u/KPL704668133`（KPL王者荣耀职业联赛，预期直播中） |
-| Cookie 来源 | 本机浏览器访问快手直播间后提取 `document.cookie`，7 个 cookie |
+| 项目             | 值                                                                            |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Browserless 地址 | `ws://192.168.0.247:11300/chromium/playwright`                               |
+| Chromium 版本    | HeadlessChrome/121.0.6167.85                                                  |
+| 目标直播间 1     | `https://live.kuaishou.com/u/KSGJuHao`（KSG句号，预期未开播）                 |
+| 目标直播间 2     | `https://live.kuaishou.com/u/KPL704668133`（KPL王者荣耀职业联赛，预期直播中） |
+| Cookie 来源      | 本机浏览器访问快手直播间后提取 `document.cookie`，7 个 cookie                 |
 
 ## 代码变更摘要
 
@@ -27,11 +27,11 @@
 
 使用 `RemoteBrowserClient.withPage` 直接测试，目标 KPL704668133，携带 seed cookie：
 
-| stealth | blockResources | 结果 | 说明 |
-|---------|---------------|------|------|
-| false | true（默认拦截） | 反爬：`请求过快，请稍后重试` | 快手识别出 `navigator.webdriver=true` |
-| true | true（默认拦截） | Playwright 运行时错误：`instanceof is not an object` | stealth init script 与资源拦截环境冲突 |
-| true | false（不拦截） | **成功**：获取到完整直播页面数据 | 正确组合 |
+| stealth | blockResources   | 结果                                                 | 说明                                   |
+| ------- | ---------------- | ---------------------------------------------------- | -------------------------------------- |
+| false   | true（默认拦截） | 反爬：`请求过快，请稍后重试`                         | 快手识别出 `navigator.webdriver=true`  |
+| true    | true（默认拦截） | Playwright 运行时错误：`instanceof is not an object` | stealth init script 与资源拦截环境冲突 |
+| true    | false（不拦截）  | **成功**：获取到完整直播页面数据                     | 正确组合                               |
 
 结论：**`stealth: true` + `blockResources: false` 是绕过快手反爬的必要条件。**
 
@@ -80,10 +80,10 @@
 
 密集测试导致 Browserless 出口 IP 被快手临时封禁后，进行了冷却恢复测试：
 
-| 等待时间 | 结果 |
-|---------|------|
-| 2 分钟 | 仍然反爬 |
-| 5 分钟 | 仍然反爬 |
+| 等待时间 | 结果     |
+| -------- | -------- |
+| 2 分钟   | 仍然反爬 |
+| 5 分钟   | 仍然反爬 |
 
 快手的 IP 级封禁冷却时间较长（预估 10-30 分钟），这属于正常的反爬策略行为，不影响生产环境的稳定性（生产环境单房间间隔 60-90 秒，不会触发密集请求）。
 
@@ -108,7 +108,7 @@ services:
       - MAX_CONCURRENT_SESSIONS=3
       - MAX_MEMORY_PERCENT=80
     ports:
-      - "11300:3000"
+      - '11300:3000'
     restart: always
     deploy:
       resources:

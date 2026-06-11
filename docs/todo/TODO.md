@@ -14,7 +14,7 @@
 
 5. ~~[快手轮询反爬改进方案](../finished_plan/KUAISHOU_ANTICRAWL_IMPROVEMENT/KUAISHOU_ANTICRAWL_IMPROVEMENT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_ANTICRAWL_IMPROVEMENT/`
 
-6. ~~[快手 Checker API 直连方案](../finished_plan/KUAISHOU_API_DIRECT/KUAISHOU_API_DIRECT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_API_DIRECT/`
+6. ~~[快手 Checker API 直连方案](../finished_plan/KUAISHOU_API_DIRECT/KUAISHOU_API_DIRECT_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/KUAISHOU_API_DIRECT/`。API 直连作为备用方案（KuaishouAPIChecker），主方案恢复为远程浏览器模式。
 
 7. ~~[仪表盘（Dashboard）改造计划](../finished_plan/DASHBOARD_UPGRADE/DASHBOARD_UPGRADE_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/DASHBOARD_UPGRADE/`
 

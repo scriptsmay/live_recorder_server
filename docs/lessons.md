@@ -748,12 +748,12 @@ Vue 日志页能加载日志文件列表，但选择文件后右侧内容为空�
 
 ### 最终验证结果
 
-| 组合 | 结果 |
-|------|------|
-| cookies only（无 stealth，有资源拦截） | 反爬 |
-| cookies + stealth + 有资源拦截 | Playwright 运行时错误 |
-| cookies + stealth + 无资源拦截 | **成功** |
-| 连续请求两个直播间（20 秒间隔） | 第二个触发 IP 级反爬 |
+| 组合                                   | 结果                  |
+| -------------------------------------- | --------------------- |
+| cookies only（无 stealth，有资源拦截） | 反爬                  |
+| cookies + stealth + 有资源拦截         | Playwright 运行时错误 |
+| cookies + stealth + 无资源拦截         | **成功**              |
+| 连续请求两个直播间（20 秒间隔）        | 第二个触发 IP 级反爬  |
 
 KSGJuHao 冒烟成功：`isLive: false, roomName: "KSG句号"`，cookie 持久化链路（env → Redis → 复用）完整验证通过。
 

@@ -2,9 +2,10 @@
 
 require('../config/env').initEnv();
 
-const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
+const redis = require('../db/redis');
+const KuaishouChecker = require('../lib/core/polling/KuaishouAPIChecker');
 
-const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 20;
+const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 10;
 
 const TARGETS = [
   {
@@ -31,18 +32,12 @@ async function checkTarget(target) {
   const startedAt = new Date();
   const checker = new KuaishouChecker(target.url);
   const principalId = checker.getRoomKey();
-  const sessionKey = checker.getSessionKey(principalId);
-  const hadSession = await checker.hasStoredSession(principalId);
 
   try {
     const result = await checker.checkStatus();
-    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
       principalId,
-      sessionKey,
-      hadSession,
-      hasSession,
       startedAt: startedAt.toISOString(),
       status: 'ok',
       isLive: result.isLive,
@@ -51,13 +46,9 @@ async function checkTarget(target) {
       streamInfo: result.streamInfo,
     };
   } catch (err) {
-    const hasSession = await checker.hasStoredSession(principalId);
     return {
       target: target.name,
       principalId,
-      sessionKey,
-      hadSession,
-      hasSession,
       startedAt: startedAt.toISOString(),
       status: 'unknown',
       error: err.message,
@@ -84,26 +75,15 @@ async function runRound(round, globalIntervalSeconds) {
 }
 
 async function main() {
-  if (!process.env.REMOTE_BROWSER_WS_ENDPOINT) {
-    console.error('REMOTE_BROWSER_WS_ENDPOINT is required');
-    process.exitCode = 1;
-    return;
-  }
-
   const rounds = parseInt(process.env.KUAISHOU_SMOKE_ROUNDS || '2', 10);
   const intervalSeconds = parseInt(process.env.KUAISHOU_SMOKE_INTERVAL_SECONDS || '70', 10);
   const globalIntervalSeconds = KUAISHOU_GLOBAL_INTERVAL_SECONDS;
 
-  console.log('[kuaishou-smoke] endpoint configured');
+  console.log('[kuaishou-smoke] mode=direct-api');
   console.log(
     `[kuaishou-smoke] rounds=${rounds} interval=${intervalSeconds}s globalInterval=${globalIntervalSeconds}s`
   );
-  console.log('[kuaishou-smoke] sessionScope=platform simulateHuman=true');
-  console.log(
-    `[kuaishou-smoke] stealth=${process.env.KUAISHOU_CHECKER_STEALTH !== 'false'} allowFirstScreenResources=${
-      process.env.KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES === 'true'
-    }`
-  );
+  console.log(`[kuaishou-smoke] timeoutMs=${process.env.KUAISHOU_API_TIMEOUT_MS || '15000'}`);
 
   for (let round = 1; round <= rounds; round += 1) {
     await runRound(round, globalIntervalSeconds);
@@ -113,7 +93,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('[kuaishou-smoke] failed:', err);
-  process.exitCode = 1;
-});
+main()
+  .catch((err) => {
+    console.error('[kuaishou-smoke] failed:', err);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await redis.disconnect().catch(() => {});
+  });
