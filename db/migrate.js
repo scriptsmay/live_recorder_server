@@ -121,6 +121,14 @@ async function runMigration() {
     `);
 
     await client.query(`
+      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS cover_url VARCHAR(1024) DEFAULT ''
+    `);
+
+    await client.query(`
+      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS cover_path VARCHAR(1024) DEFAULT ''
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS upload_templates (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL DEFAULT '',

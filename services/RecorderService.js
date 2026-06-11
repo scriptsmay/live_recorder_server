@@ -1,5 +1,7 @@
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 
@@ -16,6 +18,40 @@ const { SUPPORTED_EXT_REGEX, isDanmakuBurnFile } = require('../config/config');
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
 const ACTIVE_TASK_TTL = 86400;
+
+const COVER_CONTENT_TYPE_MAP = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
+function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(url, { timeout: 10000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadFile(res.headers.location, destPath).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      const contentType = res.headers['content-type'] || '';
+      const ext = COVER_CONTENT_TYPE_MAP[contentType.split(';')[0].trim()] || 'jpg';
+      const finalPath = destPath.replace(/\.[^.]+$/, `.${ext}`);
+      const ws = fs.createWriteStream(finalPath);
+      res.pipe(ws);
+      ws.on('finish', () => resolve(finalPath));
+      ws.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('timeout'));
+    });
+  });
+}
 
 /**
  * 录制服务 - 负责直播间录制的业务逻辑协调
@@ -538,12 +574,13 @@ class RecorderService {
    * @param {string} params.room_url - 房间URL
    * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
    */
-  static async startRecording({ url, title, caption, room_url }) {
+  static async startRecording({ url, title, caption, room_url, roomCover }) {
     console.log('[RecorderService] 收到录制请求:', {
       title,
       room_url,
       url: url?.slice(0, 60),
       caption,
+      roomCover: roomCover ? 'yes' : 'no',
     });
 
     if (!url || !title || !room_url) {
@@ -618,7 +655,7 @@ class RecorderService {
       [room.room_url]
     );
 
-    return await this.startRoomRecording({ roomId: room.id, caption, url });
+    return await this.startRoomRecording({ roomId: room.id, caption, url, roomCover });
   }
 
   /**
@@ -630,7 +667,7 @@ class RecorderService {
    * @param {string} params.resumeSessionId - 恢复会话ID
    * @returns
    */
-  static async startRoomRecording({ roomId, caption, url, resumeSessionId = null }) {
+  static async startRoomRecording({ roomId, caption, url, resumeSessionId = null, roomCover = '' }) {
     const room = await DataService.getRoomById(roomId);
     const roomKey = room.room_url;
     console.log(`[任务启动] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
@@ -664,6 +701,7 @@ class RecorderService {
           resumeCount,
           caption,
           streamUrl: url,
+          coverUrl: roomCover,
         });
         // console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
@@ -685,6 +723,17 @@ class RecorderService {
       if (!require('fs').existsSync(sessionDir)) {
         require('fs').mkdirSync(sessionDir, { recursive: true });
         console.log(`[任务启动] 创建会话目录: ${sessionDir}`);
+      }
+
+      // 下载直播间封面
+      if (roomCover) {
+        try {
+          const coverPath = await downloadFile(roomCover, path.join(sessionDir, 'cover.ext'));
+          await recordingManager.updateSessionCover(sessionId, coverPath);
+          console.log(`[任务启动] 封面已下载: ${coverPath}`);
+        } catch (coverErr) {
+          console.warn(`[任务启动] 封面下载失败（不影响录制）: ${coverErr.message}`);
+        }
       }
 
       // 三、更新会话的输出路径

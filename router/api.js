@@ -193,8 +193,8 @@ router.get('/notify/status', async (req, res) => {
 });
 
 router.post('/notify/live_download', async (req, res) => {
-  const { url, title, caption, room_url } = req.body;
-  const result = await RecorderService.startRecording({ url, title, caption, room_url });
+  const { url, title, caption, room_url, cover_url } = req.body;
+  const result = await RecorderService.startRecording({ url, title, caption, room_url, roomCover: cover_url });
 
   if (result.error) {
     return res.status(result.status || 200).json({
