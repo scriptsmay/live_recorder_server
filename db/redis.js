@@ -11,6 +11,7 @@ const client = {
   incr: (key) => redisService.incr(key),
   decr: (key) => redisService.decr(key),
   expire: (key, seconds) => redisService.expire(key, seconds),
+  ttl: (key) => redisService.ttl(key),
   ping: () => redisService.ping(),
   disconnect: () => redisService.disconnect(),
   // 列表操作

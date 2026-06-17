@@ -23,6 +23,12 @@ export class ApiError extends Error {
   }
 }
 
+let unauthorizedHandler: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler
+}
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -30,6 +36,9 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<ApiRe
   }
 
   const res = await fetch(url, { ...options, headers })
+  if (res.status === 401 && unauthorizedHandler) {
+    unauthorizedHandler()
+  }
 
   // 非 JSON 响应直接返回文本
   const contentType = res.headers.get('content-type') ?? ''

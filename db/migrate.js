@@ -38,6 +38,37 @@ async function runMigration() {
     await client.query('BEGIN');
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE OR REPLACE FUNCTION admin_users_set_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+
+    await client.query(`
+      DROP TRIGGER IF EXISTS trg_admin_users_updated_at ON admin_users
+    `);
+
+    await client.query(`
+      CREATE TRIGGER trg_admin_users_updated_at
+      BEFORE UPDATE ON admin_users
+      FOR EACH ROW
+      EXECUTE FUNCTION admin_users_set_updated_at()
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS rooms (
         id SERIAL PRIMARY KEY,
         room_url VARCHAR(512) UNIQUE NOT NULL,

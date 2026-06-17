@@ -1,10 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     redirect: '/dashboard',
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { title: '登录', public: true },
   },
   {
     path: '/dashboard',
@@ -132,9 +139,25 @@ const router = createRouter({
 })
 
 // 路由守卫：自动设置页面标题
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const title = to.meta.title as string | undefined
   document.title = title ? `${title} - K-Recorder` : 'K-Recorder'
+
+  const auth = useAuthStore()
+  if (!auth.ready) {
+    await auth.fetchMe()
+  }
+
+  if (to.meta.public) {
+    if (auth.user) return { path: '/dashboard' }
+    return true
+  }
+
+  if (!auth.user) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  return true
 })
 
 export default router

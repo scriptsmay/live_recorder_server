@@ -36,6 +36,52 @@ curl http://127.0.0.1:1123/api/health
 
 ---
 
+## 登录鉴权
+
+### POST /api/auth/login
+
+使用用户名和密码登录。成功后返回当前用户名，并写入 `HttpOnly` Cookie。
+
+**请求体：**
+
+```json
+{
+  "username": "admin",
+  "password": "******"
+}
+```
+
+### POST /api/auth/logout
+
+退出登录并清理服务端 session。
+
+### GET /api/auth/me
+
+获取当前登录用户信息。
+
+**响应示例：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "username": "admin"
+  }
+}
+```
+
+### 限流
+
+- 同 IP 5 次失败 / 分钟
+- 超过后返回 `429`
+
+## 匿名访问说明
+
+- `/api/health` 仍可匿名访问
+- `/hls/*` 仍可匿名播放
+
+---
+
 ## 仪表盘
 
 ### GET /api/dashboard/status

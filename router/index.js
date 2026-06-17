@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 
 const hlsRouter = require('./hls');
+const authRouter = require('./auth');
 const logsRouter = require('./logs');
 const spaRouter = require('./spa');
 const { router: apiRouter } = require('./api');
@@ -11,6 +12,7 @@ const settingsRouter = require('./settings');
 const transcodeRouter = require('./transcode');
 const danmakuRouter = require('./danmaku');
 const replayRouter = require('./replay');
+const { requireAuth } = require('../middleware/require-auth');
 
 function createRoutes() {
   const router = express.Router();
@@ -19,6 +21,15 @@ function createRoutes() {
   router.use(hlsRouter);
 
   // API 路由
+  router.use('/api/auth', authRouter);
+  const authMiddleware = requireAuth();
+  router.use((req, res, next) => {
+    if (!req.path.startsWith('/api/')) return next();
+    if (req.path === '/api/health' || req.path === '/api/auth/login' || req.path === '/api/auth/logout' || req.path === '/api/auth/me') {
+      return next();
+    }
+    return authMiddleware(req, res, next);
+  });
   router.use('/api', logsRouter);
   router.use('/api', apiRouter);
   router.use('/api', roomsRouter);

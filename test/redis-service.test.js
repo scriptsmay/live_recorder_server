@@ -11,6 +11,7 @@ jest.mock('redis', () => {
     keys: jest.fn().mockResolvedValue(['key1', 'key2']),
     incr: jest.fn().mockResolvedValue(1),
     expire: jest.fn().mockResolvedValue(1),
+    ttl: jest.fn().mockResolvedValue(60),
     disconnect: jest.fn().mockResolvedValue(),
     on: jest.fn(),
   };
@@ -70,6 +71,12 @@ describe('RedisService', () => {
       await redisService.set(testKey, 'exists');
       const exists = await redisService.exists(testKey);
       expect(exists).toBe(1);
+    });
+
+    it('should get ttl', async () => {
+      const ttl = await redisService.ttl(testKey);
+      expect(ttl).toBe(60);
+      expect(redisService.client.ttl).toHaveBeenCalledWith(testKey);
     });
   });
 });

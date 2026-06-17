@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import UserMenu from './UserMenu.vue'
 
 const route = useRoute()
 
@@ -42,7 +43,7 @@ function isActive(item: NavItem) {
         </router-link>
 
         <!-- 桌面导航 -->
-        <div class="hidden lg:flex items-center gap-1 overflow-x-auto">
+        <div class="hidden lg:flex items-center gap-1 overflow-x-auto mx-4">
           <router-link
             v-for="item in navItems"
             :key="item.to"
@@ -56,6 +57,10 @@ function isActive(item: NavItem) {
           >
             {{ item.label }}
           </router-link>
+        </div>
+
+        <div class="hidden lg:block shrink-0">
+          <UserMenu />
         </div>
 
         <!-- 移动端折叠按钮 -->
@@ -86,6 +91,9 @@ function isActive(item: NavItem) {
             >
               {{ item.label }}
             </router-link>
+            <div class="border-t border-gray-700 mt-2 pt-2 px-2">
+              <UserMenu />
+            </div>
           </div>
         </details>
       </div>

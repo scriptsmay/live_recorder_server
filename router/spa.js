@@ -43,20 +43,23 @@ if (spaExists) {
 
     // 已迁移到 Vue 的路由列表
     const spaRoutes = [
+      '/login',
       '/dashboard',
       '/rooms',
       '/sessions',
       '/recordings',
       '/transcode',
       '/danmaku-toolbox',
+      '/replay-toolbox',
       '/templates',
       '/upload-records',
       '/settings',
       '/logs',
+      '/api-doc',
     ];
 
     // 动态路由模式匹配
-    const spaDynamicPatterns = [/^\/sessions\/\d+\/danmaku$/];
+    const spaDynamicPatterns = [/^\/sessions\/\d+\/danmaku$/, /^\/replay-toolbox\/[^/]+(\/.*)?$/];
 
     if (spaRoutes.includes(req.path) || spaDynamicPatterns.some((p) => p.test(req.path))) {
       return res.sendFile(INDEX_HTML);

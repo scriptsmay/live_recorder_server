@@ -18,9 +18,12 @@
 
 7. ~~[仪表盘（Dashboard）改造计划](../finished_plan/DASHBOARD_UPGRADE/DASHBOARD_UPGRADE_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/DASHBOARD_UPGRADE/`
 
+8. ~~[前端登录认证开发计划](AUTH_LOGIN_PLAN.md)~~ → 已完成，新增单管理员登录、HttpOnly Cookie session、首次启动自动生成密码、前端路由守卫与用户菜单
+
 ## 待完成计划
 
 暂无。
+
 
 ## 设计说明待整理
 

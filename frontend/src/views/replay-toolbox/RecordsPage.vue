@@ -83,7 +83,7 @@ async function handlePageChange(delta: number) {
         <button
           class="px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
           :disabled="store.busy"
-          @click="handleSync(false)"
+          @click="handleSync()"
         >
           同步回放
         </button>
@@ -99,7 +99,7 @@ async function handlePageChange(delta: number) {
         <button
           class="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
           :disabled="store.busy"
-          @click="handleEnqueue(false)"
+          @click="handleEnqueue()"
         >
           批量全流程
         </button>
