@@ -44,16 +44,16 @@ async function handleClearDateFilter() {
   await store.fetchRecords({ status: statusFilter.value, page: 1 })
 }
 
-async function handleSync(dryRun = false) {
-  const ok = dryRun || (await confirm(`同步最近 ${syncCount.value} 条回放记录？`))
+async function handleSync() {
+  const ok = await confirm(`同步最近 ${syncCount.value} 条回放记录？`)
   if (!ok) return
-  await store.syncRecords(syncCount.value, dryRun)
+  await store.syncRecords(syncCount.value)
 }
 
-async function handleEnqueue(dryRun = false) {
-  const ok = dryRun || (await confirm(`将最近 ${enqueueCount.value} 条未完成回放加入处理队列？`))
+async function handleEnqueue() {
+  const ok = await confirm(`将最近 ${enqueueCount.value} 条未完成回放加入处理队列？`)
   if (!ok) return
-  await store.enqueuePrincipal(enqueueCount.value, dryRun)
+  await store.enqueuePrincipal(enqueueCount.value)
 }
 
 async function handleAction(recordId: number, action: string) {
@@ -81,13 +81,6 @@ async function handlePageChange(delta: number) {
           class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
         />
         <button
-          class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          :disabled="store.busy"
-          @click="handleSync(true)"
-        >
-          dry-run
-        </button>
-        <button
           class="px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
           :disabled="store.busy"
           @click="handleSync(false)"
@@ -103,13 +96,6 @@ async function handlePageChange(delta: number) {
           max="20"
           class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
         />
-        <button
-          class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          :disabled="store.busy"
-          @click="handleEnqueue(true)"
-        >
-          预览批量
-        </button>
         <button
           class="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
           :disabled="store.busy"
