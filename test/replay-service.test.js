@@ -5,11 +5,10 @@ jest.mock('../db/index', () => ({
 const pool = require('../db/index');
 const ReplayService = require('../services/ReplayService');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('ReplayService', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
   test('extractPrincipalId 支持快手 u 路径', () => {
     expect(ReplayService.extractPrincipalId('https://live.kuaishou.com/u/3xhpa8nk4a7xdg6')).toBe('3xhpa8nk4a7xdg6');
   });
@@ -81,9 +80,7 @@ describe('ReplayService', () => {
   });
 
   test('getPrincipals 限定 live.kuaishou.com 子域(避免非 live 房间产生空 principal_id)', async () => {
-    pool.query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
 
     await ReplayService.getPrincipals();
 
@@ -169,7 +166,6 @@ describe('ReplayService', () => {
     const settings = await ReplayService.getSettings('abc');
 
     expect(settings.auto_upload).toBe('true');
-    expect(settings.auto_backup).toBe('true'); // default
   });
 
   test('updateSettings 过滤非法字段', async () => {

@@ -125,11 +125,11 @@ describe('ReplayProcessQueue', () => {
     await expect(replayQueue.runAction(record, 'unknown_action')).rejects.toThrow('未知回放动作');
   });
 
-  test('runAction backup 步骤跳过不报错', async () => {
+  test('runAction backup 步骤已移除，抛出未知动作错误', async () => {
     const record = { id: 10, principal_id: 'abc' };
 
-    // backup 是 continue，不应抛错
-    await expect(replayQueue.runAction(record, 'backup')).resolves.toBeUndefined();
+    // backup 已移除，应抛出未知动作错误
+    await expect(replayQueue.runAction(record, 'backup')).rejects.toThrow('未知回放动作');
   });
 
   test('runAction all 执行完整 pipeline', async () => {

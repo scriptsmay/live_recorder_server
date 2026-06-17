@@ -23,7 +23,6 @@ const actions: ActionDef[] = [
   { action: 'cut', label: '剪切', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
   { action: 'fix', label: '修复', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
   { action: 'upload', label: '投稿', borderClass: 'border-sky-300', textClass: 'text-sky-600', hoverClass: 'hover:bg-sky-50' },
-  { action: 'backup', label: '备份', borderClass: 'border-teal-300', textClass: 'text-teal-600', hoverClass: 'hover:bg-teal-50' },
   { action: 'all', label: '全流程', borderClass: '', textClass: '', hoverClass: 'hover:bg-brand-700', primary: true },
 ]
 

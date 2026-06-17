@@ -413,9 +413,7 @@ onMounted(loadData)
                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none bg-white"
                 >
                   <option value="none">无操作</option>
-                  <option value="backup">备份到NAS</option>
                   <option value="delete">删除本地文件</option>
-                  <option value="backup_and_delete">备份到NAS并删除本地文件</option>
                 </select>
                 <p class="text-xs text-gray-400 mt-1">投稿成功后对视频文件的处理方式</p>
               </div>

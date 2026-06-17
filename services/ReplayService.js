@@ -205,6 +205,7 @@ class ReplayService {
       bv_id: fields.bv_id,
       uploaded_at: fields.uploaded_at,
       backed_up_at: fields.backed_up_at,
+      completed_at: fields.completed_at,
       error_message: fields.error_message,
     };
     const sets = ['status = $1', 'updated_at = NOW()'];
@@ -240,7 +241,6 @@ class ReplayService {
     const defaults = {
       upload_template_id: '',
       auto_upload: await DataService.getSetting('replay_auto_upload', 'false'),
-      auto_backup: await DataService.getSetting('replay_auto_backup', 'true'),
       max_count_per_run: await DataService.getSetting('replay_max_count_per_run', '1'),
     };
     const result = await pool.query('SELECT key, value FROM replay_settings WHERE principal_id = $1', [principalId]);
@@ -252,7 +252,7 @@ class ReplayService {
   }
 
   static async updateSettings(principalId, updates) {
-    const allowed = new Set(['upload_template_id', 'auto_upload', 'auto_backup', 'max_count_per_run']);
+    const allowed = new Set(['upload_template_id', 'auto_upload', 'max_count_per_run']);
     const entries = Object.entries(updates || {}).filter(([key]) => allowed.has(key));
     const rows = [];
     for (const [key, value] of entries) {

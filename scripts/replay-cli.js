@@ -71,9 +71,7 @@ function safeParseJson(value, fallback) {
 
 async function cmdStatus(options) {
   const principals = await ReplayService.getPrincipals();
-  const filtered = options.principal
-    ? principals.filter((p) => p.principal_id === options.principal)
-    : principals;
+  const filtered = options.principal ? principals.filter((p) => p.principal_id === options.principal) : principals;
 
   if (filtered.length === 0) {
     log('未找到主播');
@@ -115,16 +113,14 @@ async function cmdSync(options) {
     log('[dry-run] 仅预览，不写入数据库');
   }
 
-  const result = await KuaishouReplayClient.syncReplays(
-    principal.principal_id,
-    options.count,
-    principal.room_name
-  );
+  const result = await KuaishouReplayClient.syncReplays(principal.principal_id, options.count, principal.room_name);
 
   if (options.dryRun) {
     log(`[dry-run] API 返回 ${result.records?.length ?? 0} 条记录`);
     for (const r of result.records ?? []) {
-      console.log(`  ${r.replay_id}  ${r.start_time || '-'}  ${r.duration ? Math.round(r.duration / 60) + 'min' : '-'}`);
+      console.log(
+        `  ${r.replay_id}  ${r.start_time || '-'}  ${r.duration ? Math.round(r.duration / 60) + 'min' : '-'}`
+      );
     }
     return;
   }
@@ -166,7 +162,7 @@ async function cmdAll(options) {
 
   let candidates = records.rows;
   if (options.skipCompleted) {
-    candidates = candidates.filter((r) => !['uploaded', 'backed_up'].includes(r.status));
+    candidates = candidates.filter((r) => !['completed', 'backed_up'].includes(r.status));
   }
 
   if (candidates.length === 0) {
@@ -183,12 +179,15 @@ async function cmdAll(options) {
     return;
   }
 
+  // 'fix' 默认不处理
+  const allTasks = ['extract', 'download', 'cut', 'upload'];
+
   let success = 0;
   let failed = 0;
   for (const record of candidates) {
     log(`处理 #${record.id} (${record.replay_id || '-'})...`);
     try {
-      await runPipeline(record, ['extract', 'download', 'cut', 'fix', 'upload']);
+      await runPipeline(record, allTasks);
       success++;
       log(`  #${record.id} 完成`);
     } catch (err) {
@@ -267,9 +266,6 @@ async function runPipeline(record, actions) {
     } else if (step === 'upload') {
       const result = await ReplayUploadService.executeUpload(current.id);
       if (result.error) throw new Error(result.message);
-    } else if (step === 'backup') {
-      // 备份通过上传模板 after_upload 策略执行
-      log('  backup 通过上传后策略自动执行，跳过');
     } else {
       throw new Error(`未知动作: ${step}`);
     }
@@ -292,7 +288,6 @@ async function main() {
     cut: cmdSingleAction,
     fix: cmdSingleAction,
     upload: cmdSingleAction,
-    backup: cmdSingleAction,
   };
 
   if (!options.command || options.command === '--help' || options.command === '-h') {
@@ -311,7 +306,6 @@ async function main() {
   cut       --record <id>                   切片
   fix       --record <id>                   修复分辨率
   upload    --record <id>                   投稿
-  backup    --record <id>                   备份
 
 选项:
   --principal <id>     指定主播 ID

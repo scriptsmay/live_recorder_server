@@ -15,7 +15,6 @@ const principalId = computed(() => route.params.principalId as string)
 const settingsDraft = ref<ReplaySettings>({
   upload_template_id: '',
   auto_upload: 'false',
-  auto_backup: 'true',
   max_count_per_run: '1',
 })
 const templates = ref<UploadTemplate[]>([])
@@ -83,16 +82,6 @@ async function handleSave() {
           <span>自动投稿</span>
           <input
             v-model="settingsDraft.auto_upload"
-            true-value="true"
-            false-value="false"
-            type="checkbox"
-            class="w-4 h-4 accent-brand-600"
-          />
-        </label>
-        <label class="flex items-center justify-between text-sm text-gray-700">
-          <span>投稿后备份</span>
-          <input
-            v-model="settingsDraft.auto_backup"
             true-value="true"
             false-value="false"
             type="checkbox"

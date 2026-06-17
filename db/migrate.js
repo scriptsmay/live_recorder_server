@@ -196,6 +196,7 @@ async function runMigration() {
         duration INTEGER DEFAULT 0,
         uploaded_at TIMESTAMP,
         backed_up_at TIMESTAMP,
+        completed_at TIMESTAMP,
         error_message TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -479,7 +480,6 @@ async function runMigration() {
       ['replay_cron_enabled', 'false'],
       ['replay_cron_expr', '0 3 * * *'],
       ['replay_auto_upload', 'false'],
-      ['replay_auto_backup', 'true'],
       ['replay_max_count_per_run', '1'],
       ['kuaishou_cookie', ''],
       ['kuaishou_kww', ''],

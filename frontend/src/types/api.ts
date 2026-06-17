@@ -186,6 +186,7 @@ export type ReplayRecordStatus =
   | 'cut'
   | 'fixed'
   | 'uploaded'
+  | 'completed'
   | 'backed_up'
   | 'failed'
 
@@ -218,6 +219,7 @@ export interface ReplayRecord {
   duration: number | null
   uploaded_at: string | null
   backed_up_at: string | null
+  completed_at: string | null
   error_message: string | null
   created_at: string
   updated_at: string
@@ -252,7 +254,6 @@ export interface ReplayTaskStatus {
 export interface ReplaySettings {
   upload_template_id: string
   auto_upload: string
-  auto_backup: string
   max_count_per_run: string
 }
 
