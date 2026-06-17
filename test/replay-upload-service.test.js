@@ -10,8 +10,10 @@ jest.mock('../lib/core/notify', () => ({
 }));
 jest.mock('../lib/core/backup', () => ({ afterUpload: jest.fn() }));
 jest.mock('../services/UploadService', () => ({
-  getTemplateVars: jest.fn(() => ({ room_name: 'test', streamer_name: 'test' })),
-  renderTemplate: jest.fn((tpl) => tpl),
+  getTemplateVars: jest.fn((room) => ({ room_name: room.room_name, streamer_name: room.room_name })),
+  renderTemplate: jest.fn((tpl, vars = {}) =>
+    tpl.replace(/\{room_name\}/g, vars.room_name || '').replace(/\{principal_name\}/g, vars.principal_name || '')
+  ),
 }));
 
 const pool = require('../db/index');
@@ -23,6 +25,9 @@ const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
 
 beforeEach(() => {
   jest.clearAllMocks();
+  UploadService.renderTemplate.mockImplementation((tpl, vars = {}) =>
+    tpl.replace(/\{room_name\}/g, vars.room_name || '').replace(/\{principal_name\}/g, vars.principal_name || '')
+  );
   // Default: statSync returns valid for any path
   jest.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true, size: 1024 * 1024 });
 });
@@ -80,6 +85,8 @@ describe('ReplayUploadService', () => {
       .mockResolvedValueOnce({
         rows: [{
           id: 1, principal_id: 'abc', principal_name: '主播',
+          config_principal_name: '配置主播',
+          room_name: '直播间主播',
           play_url: 'http://test', final_file_paths: '["/tmp/a.mp4"]',
         }],
       })
@@ -94,7 +101,7 @@ describe('ReplayUploadService', () => {
     const result = await ReplayUploadService.executeUpload(1);
     expect(result.error).toBe(false);
     expect(result.upload_record_id).toBe(10);
-    expect(notify.uploadStart).toHaveBeenCalled();
+    expect(notify.uploadStart).toHaveBeenCalledWith('配置主播', '模板A', 1, 'http://test');
   });
 
   test('getUploadPreview 返回渲染后的投稿预览并截断简介', async () => {
@@ -107,6 +114,8 @@ describe('ReplayUploadService', () => {
       .mockResolvedValueOnce({
         rows: [{
           id: 1, principal_id: 'abc', principal_name: '主播',
+          config_principal_name: '',
+          room_name: '直播间主播',
           play_url: 'http://test', start_time: '2026-06-16T20:00:00+08:00',
         }],
       })
@@ -129,6 +138,39 @@ describe('ReplayUploadService', () => {
     expect(result.preview.desc).toHaveLength(103);
     expect(result.preview.desc_full).toHaveLength(120);
     expect(result.preview.template_name).toBe('模板A');
+  });
+
+  test('回放投稿变量优先配置名，否则回退 room_name 以复用直播模板', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          principal_id: 'abc',
+          principal_name: '记录主播',
+          config_principal_name: '',
+          room_name: '直播间主播',
+          play_url: 'http://test',
+          start_time: '2026-06-16T20:00:00+08:00',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [{ value: '1' }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          name: '模板A',
+          title_template: '{room_name}-{principal_name}',
+          desc_template: '',
+          tags: '',
+        }],
+      });
+
+    const result = await ReplayUploadService.getUploadPreview(1);
+
+    expect(result.preview.title).toBe('直播间主播-直播间主播');
+    expect(UploadService.getTemplateVars).toHaveBeenCalledWith(
+      { room_name: '直播间主播', room_url: 'http://test' },
+      expect.any(Object)
+    );
   });
 
   test('_runUpload 成功时更新状态为 success 并回填 bv_id', async () => {

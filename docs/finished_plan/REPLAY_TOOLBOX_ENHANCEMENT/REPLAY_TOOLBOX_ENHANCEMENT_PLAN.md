@@ -15,6 +15,7 @@
 - 已补充 Jest 覆盖 `principal_name` 设置、文件名时区格式和投稿预览。
 - 修复迁移版 m3u8 浏览器提取器与 wuyan-replay 原实现的差异：补回播放器清晰度 UI 切换兜底，并修正 `selectBestStreamFromV3()` 返回 URL 字符串但调用方按对象读取导致的提取失败。
 - 回放队列任务接入 `logs/replay_{recordId}.log` 持久化日志，extract/download/cut/fix 阶段的诊断和子进程输出可在日志页查看。
+- 回放投稿变量动态解析显示名：优先使用回放配置 `principal_name`，其次使用快手直播间 `room_name`，并让 `{room_name}` 与 `{principal_name}` 同值，便于和直播录制共用投稿模板。
 
 ---
 
