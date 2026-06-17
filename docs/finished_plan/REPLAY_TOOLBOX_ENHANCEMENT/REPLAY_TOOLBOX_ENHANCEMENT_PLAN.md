@@ -13,6 +13,8 @@
 - 新增 `GET /api/replay/records/:id/upload-preview`，返回模板渲染后的标题、标签、简介预览。
 - 回放记录页在执行 `upload` / `all` 前展示投稿预览，确认框支持多行展示。
 - 已补充 Jest 覆盖 `principal_name` 设置、文件名时区格式和投稿预览。
+- 修复迁移版 m3u8 浏览器提取器与 wuyan-replay 原实现的差异：补回播放器清晰度 UI 切换兜底，并修正 `selectBestStreamFromV3()` 返回 URL 字符串但调用方按对象读取导致的提取失败。
+- 回放队列任务接入 `logs/replay_{recordId}.log` 持久化日志，extract/download/cut/fix 阶段的诊断和子进程输出可在日志页查看。
 
 ---
 

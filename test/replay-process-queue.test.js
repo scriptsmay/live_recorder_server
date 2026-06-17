@@ -92,6 +92,7 @@ describe('ReplayProcessQueue', () => {
 
     expect(ReplayService.updateRecordStatus).toHaveBeenCalledWith(10, 'extracted', {
       m3u8_url: record.m3u8_url,
+      error_message: '',
     });
   });
 
@@ -109,6 +110,7 @@ describe('ReplayProcessQueue', () => {
     expect(ReplayService.updateRecordStatus).toHaveBeenCalledWith(10, 'downloaded', {
       raw_file_path: '/tmp/a.mp4',
       file_size: 2048,
+      error_message: '',
     });
   });
 

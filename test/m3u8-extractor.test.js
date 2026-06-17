@@ -1,6 +1,16 @@
 'use strict';
 
-const { parseM3u8, parseCookies, selectBestStreamFromV3 } = require('../lib/core/replay/m3u8-extractor');
+jest.mock('../lib/core/browser/RemoteBrowserClient', () => ({
+  RemoteBrowserClient: jest.fn(),
+}));
+
+const { RemoteBrowserClient } = require('../lib/core/browser/RemoteBrowserClient');
+const {
+  extractM3u8WithBrowser,
+  parseM3u8,
+  parseCookies,
+  selectBestStreamFromV3,
+} = require('../lib/core/replay/m3u8-extractor');
 
 describe('m3u8-extractor', () => {
   describe('parseM3u8', () => {
@@ -127,6 +137,59 @@ segment001.ts`;
 
       const result = selectBestStreamFromV3(playUrlV3);
       expect(result).toBe('h264_720p.m3u8');
+    });
+  });
+
+  describe('extractM3u8WithBrowser', () => {
+    test('从 playback/detail 的 playUrlV3 返回 API 最佳流 URL', async () => {
+      const handlers = {};
+      const page = {
+        on: jest.fn((event, handler) => {
+          handlers[event] = handler;
+        }),
+        goto: jest.fn(async () => {
+          await handlers.response({
+            url: () => 'https://live.kuaishou.com/live_api/playback/detail',
+            text: async () =>
+              JSON.stringify({
+                data: {
+                  currentWork: {
+                    playUrlV3: {
+                      h264: {
+                        adaptationSet: [
+                          {
+                            representation: [
+                              {
+                                url: 'https://example.com/high.m3u8',
+                                width: 1920,
+                                height: 1080,
+                                maxBitrate: 3000,
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              }),
+            status: () => 200,
+          });
+        }),
+        waitForTimeout: jest.fn(),
+        title: jest.fn(async () => 'title'),
+        evaluate: jest.fn(async () => ({ duration: 60, videoWidth: 1920, videoHeight: 1080 })),
+        url: jest.fn(() => 'https://live.kuaishou.com/playback/r1'),
+      };
+      const context = { addCookies: jest.fn() };
+      RemoteBrowserClient.mockImplementation(() => ({
+        withPage: jest.fn(async (task) => task(page, context)),
+        close: jest.fn(),
+      }));
+
+      const result = await extractM3u8WithBrowser('https://live.kuaishou.com/playback/r1', '');
+
+      expect(result.m3u8Url).toBe('https://example.com/high.m3u8');
     });
   });
 });
