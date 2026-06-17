@@ -55,6 +55,41 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '回放工具箱' },
   },
   {
+    path: '/replay-toolbox/:principalId',
+    component: () => import('@/views/replay-toolbox/PrincipalSpace.vue'),
+    meta: { title: '回放工具箱' },
+    children: [
+      {
+        path: '',
+        redirect: (to) => `${to.path}/records`,
+      },
+      {
+        path: 'records',
+        name: 'replay-records',
+        component: () => import('@/views/replay-toolbox/RecordsPage.vue'),
+        meta: { title: '回放记录' },
+      },
+      {
+        path: 'uploads',
+        name: 'replay-uploads',
+        component: () => import('@/views/replay-toolbox/UploadsPage.vue'),
+        meta: { title: '投稿记录' },
+      },
+      {
+        path: 'tasks',
+        name: 'replay-tasks',
+        component: () => import('@/views/replay-toolbox/TasksPage.vue'),
+        meta: { title: '任务队列' },
+      },
+      {
+        path: 'settings',
+        name: 'replay-settings',
+        component: () => import('@/views/replay-toolbox/SettingsPage.vue'),
+        meta: { title: '配置' },
+      },
+    ],
+  },
+  {
     path: '/templates',
     name: 'Templates',
     component: () => import('@/views/Templates.vue'),

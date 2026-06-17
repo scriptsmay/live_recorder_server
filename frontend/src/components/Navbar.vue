@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -24,7 +23,9 @@ const navItems: NavItem[] = [
   { label: 'API 文档', to: '/api-doc' },
 ]
 
-const activePath = computed(() => route.path)
+function isActive(item: NavItem) {
+  return route.path === item.to || route.path.startsWith(item.to + '/')
+}
 </script>
 
 <template>
@@ -48,7 +49,7 @@ const activePath = computed(() => route.path)
             :to="item.to"
             class="px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors"
             :class="
-              activePath === item.to
+              isActive(item)
                 ? 'text-white bg-brand-600'
                 : 'text-gray-300 hover:text-white hover:bg-gray-700'
             "
@@ -78,7 +79,7 @@ const activePath = computed(() => route.path)
               :to="item.to"
               class="block px-4 py-2 text-sm transition-colors"
               :class="
-                activePath === item.to
+                isActive(item)
                   ? 'text-white bg-brand-600'
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               "
