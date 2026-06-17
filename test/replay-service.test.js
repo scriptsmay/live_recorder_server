@@ -80,6 +80,18 @@ describe('ReplayService', () => {
     expect(ReplayService.extractPrincipalId('https://live.kuaishou.com/')).toBeNull();
   });
 
+  test('getPrincipals 限定 live.kuaishou.com 子域(避免非 live 房间产生空 principal_id)', async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await ReplayService.getPrincipals();
+
+    const sql = pool.query.mock.calls[0][0];
+    expect(sql).toMatch(/live\.kuaishou\.com/);
+    expect(sql).not.toMatch(/%kuaishou\.com%/);
+  });
+
   test('getRecord 返回单条记录', async () => {
     pool.query.mockResolvedValueOnce({ rows: [{ id: 5, principal_id: 'abc', status: 'pending' }] });
 

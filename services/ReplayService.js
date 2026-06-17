@@ -47,7 +47,7 @@ class ReplayService {
     const rooms = await pool.query(
       `SELECT id, room_url, room_name
        FROM rooms
-       WHERE room_url ILIKE '%kuaishou.com%'
+       WHERE room_url ILIKE '%live.kuaishou.com%'
        ORDER BY id DESC`
     );
 
