@@ -34,7 +34,7 @@ public/frontend/
 dev_downloads/
 dev_biliup/
 danmaku_output/
-replay/
+/replay/
 
 test_downloads/
 test/tmp_*
