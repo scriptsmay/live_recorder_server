@@ -11,12 +11,13 @@
 
 `npm run dev` 会自动加载 `.env.dev`，覆盖 `.env` 中的以下配置，表中值为举例内容，具体值以项目实际配置为准：
 
-| 配置     | 生产 (.env)          | 开发 (.env.dev)        |
-| -------- | -------------------- | ---------------------- |
-| 端口     | `1123`               | `3001`（命令行指定）   |
-| 数据库   | `ks_live_recorder`   | `ks_live_recorder_dev` |
-| Redis DB | `1`                  | `2`                    |
-| 下载目录 | `VIDEO_DOWNLOAD_DIR` | `./dev_downloads`      |
+| 配置         | 生产 (.env)          | 开发 (.env.dev)        |
+| ------------ | -------------------- | ---------------------- |
+| 端口         | `1123`               | `3001`（命令行指定）   |
+| 数据库       | `ks_live_recorder`   | `ks_live_recorder_dev` |
+| Redis DB     | `1`                  | `2`                    |
+| 录制下载目录 | `VIDEO_DOWNLOAD_DIR` | `./dev_downloads`      |
+| 回放工作目录 | `REPLAY_WORK_DIR`    | `./replay`             |
 
 **首次使用前需创建开发数据库：**
 
@@ -26,7 +27,7 @@ CREATE DATABASE ks_live_recorder_dev;
 
 （表结构会在启动时自动迁移创建）
 
-`dev_downloads/` 和 `dev_biliup/` 目录在项目根目录下自动创建，已加入 `.gitignore`。
+`dev_downloads/`、`dev_biliup/` 和 `replay/` 目录在项目根目录下自动创建，已加入 `.gitignore`。
 
 ## 开发环境管理命令
 

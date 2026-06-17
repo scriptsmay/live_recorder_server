@@ -17,6 +17,7 @@
 - 回放队列任务接入 `logs/replay_{recordId}.log` 持久化日志，extract/download/cut/fix 阶段的诊断和子进程输出可在日志页查看。
 - 回放投稿变量动态解析显示名：优先使用回放配置 `principal_name`，其次使用快手直播间 `room_name`，并让 `{room_name}` 与 `{principal_name}` 同值，便于和直播录制共用投稿模板。
 - 回放处理队列支持取消正在运行的任务：`POST /api/replay/records/:id/cancel` 会终止当前子进程，记录状态更新为 `cancelled`，前端回放记录行显示取消按钮。
+- 回放下载、剪切和修复工作目录通过 `REPLAY_WORK_DIR` 配置；未配置时默认派生为 `VIDEO_DOWNLOAD_DIR` 同级的 `replay` 目录，Docker 示例挂载到 `/data/replay`。
 
 ---
 

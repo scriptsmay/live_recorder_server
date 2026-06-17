@@ -61,7 +61,7 @@ COPY . .
 # 复制前端构建产物到 public/frontend/
 COPY --from=frontend-builder /app/public/frontend ./public/frontend
 
-RUN mkdir -p /data/video_downloads /data/biliup /app/logs \
+RUN mkdir -p /data/video_downloads /data/danmaku_output /data/replay /data/biliup /app/logs \
     && chmod +x scripts/docker-entrypoint.sh
 
 EXPOSE 1123

@@ -251,7 +251,7 @@ KV 结构的全局配置表。
 | `danmaku_font_size`          | `32`               | ASS 字体大小                                               |
 | `danmaku_opacity`            | `0.75`             | ASS 弹幕不透明度                                           |
 | `replay_enabled`             | `true`             | 是否启用回放工具箱                                         |
-| `replay_work_dir`            | `/data/replay`     | 回放处理工作目录                                           |
+| `replay_work_dir`            | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR` |
 | `replay_queue_concurrency`   | `1`                | 回放队列并发数（当前强制最大 1）                           |
 | `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                       |
 | `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                         |

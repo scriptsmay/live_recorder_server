@@ -28,6 +28,10 @@ function applyDockerDefaults() {
   if (!process.env.BILIUP_WORK_DIR) {
     process.env.BILIUP_WORK_DIR = path.join(appDataDir, 'biliup');
   }
+
+  if (!process.env.REPLAY_WORK_DIR) {
+    process.env.REPLAY_WORK_DIR = path.join(path.dirname(process.env.VIDEO_DOWNLOAD_DIR), 'replay');
+  }
 }
 
 function applyDatabaseUrl() {

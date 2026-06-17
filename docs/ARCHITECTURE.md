@@ -24,7 +24,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 ```
 
 - Docker 推荐使用 `DATABASE_URL` 与 `REDIS_URL`，同时保留旧的拆分变量。
-- `APP_DATA_DIR` 默认 `/data`，录制文件默认 `/data/video_downloads`。
+- `APP_DATA_DIR` 默认 `/data`，录制文件默认 `/data/video_downloads`，回放工作目录默认 `/data/replay`。
 - `BILIUP_WORK_DIR` 默认 `/data/biliup`，cookie 可放在
   `/data/biliup/cookies.json`。
 - `/api/health` 用于 Docker healthcheck 和外部监控。
@@ -36,7 +36,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 1. 先静默加载项目根目录 `.env`。
 2. `NODE_ENV=development` 时再加载 `.env.dev`，并覆盖 `.env` 中同名配置。
 3. 最后应用派生默认值：`APP_DATA_DIR`、`VIDEO_DOWNLOAD_DIR`、
-   `BILIUP_WORK_DIR`，以及从 `DATABASE_URL` / `REDIS_URL` 拆分出的兼容变量。
+   `REPLAY_WORK_DIR`、`BILIUP_WORK_DIR`，以及从 `DATABASE_URL` / `REDIS_URL` 拆分出的兼容变量。
 
 应用入口、数据库连接、Redis 工具和维护脚本都应调用
 `require('./config/env').initEnv()` 或按相对路径引入同一方法；不要在业务模块中直接

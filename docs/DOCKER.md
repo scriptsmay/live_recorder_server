@@ -41,6 +41,8 @@ DATABASE_URL=postgresql://postgres:password@postgres:5432/live_recorder
 REDIS_URL=redis://default:password@redis:6379/1
 APP_DATA_DIR=/data
 VIDEO_DOWNLOAD_DIR=/data/video_downloads
+DANMAKU_OUTPUT_DIR=/data/danmaku_output
+REPLAY_WORK_DIR=/data/replay
 BILIUP_WORK_DIR=/data/biliup
 ```
 
@@ -51,13 +53,15 @@ BILIUP_WORK_DIR=/data/biliup
 
 ## 持久化目录
 
-| 宿主机路径               | 容器路径                   | 说明                      |
-| ------------------------ | -------------------------- | ------------------------- |
-| `./data/video_downloads` | `/data/video_downloads`    | 录制文件                  |
-| `./data/biliup`          | `/data/biliup`             | biliup 登录态、配置、缓存 |
-| `./logs`                 | `/app/logs`                | ffmpeg / biliup 日志      |
-| `postgres_data`          | `/var/lib/postgresql/data` | PostgreSQL 数据           |
-| `redis_data`             | `/data`                    | Redis AOF 数据            |
+| 宿主机路径               | 容器路径                   | 说明                        |
+| ------------------------ | -------------------------- | --------------------------- |
+| `./data/video_downloads` | `/data/video_downloads`    | 直播录制文件                |
+| `./data/danmaku_output`  | `/data/danmaku_output`     | 弹幕压制产物                |
+| `./data/replay`          | `/data/replay`             | 回放下载、剪切、修复工作目录 |
+| `./data/biliup`          | `/data/biliup`             | biliup 登录态、配置、缓存   |
+| `./logs`                 | `/app/logs`                | ffmpeg / biliup 日志        |
+| `postgres_data`          | `/var/lib/postgresql/data` | PostgreSQL 数据             |
+| `redis_data`             | `/data`                    | Redis AOF 数据              |
 
 NAS 上建议创建独立目录，例如：
 
@@ -66,6 +70,8 @@ NAS 上建议创建独立目录，例如：
 ├── .env.docker
 ├── data/
 │   ├── biliup/
+│   ├── danmaku_output/
+│   ├── replay/
 │   └── video_downloads/
 └── logs/
 ```
@@ -177,7 +183,8 @@ docker compose \
 
 ## NAS 备份
 
-Docker 部署通常通过 `./data/video_downloads:/data/video_downloads` 持久化录制文件，
+Docker 部署通常通过 `./data/video_downloads:/data/video_downloads` 持久化直播录制文件，
+并通过 `./data/replay:/data/replay` 持久化回放下载、剪切和修复产物，
 不一定需要额外 NAS 备份。
 
 如果投稿模板选择了 `after_upload=backup` 或 `backup_and_delete`，但未配置
@@ -198,7 +205,7 @@ NAS_BACKUP_DIR=/volume1/video_backups
 2. 创建宿主机目录：
 
 ```bash
-mkdir -p data/video_downloads data/biliup logs
+mkdir -p data/video_downloads data/danmaku_output data/replay data/biliup logs
 ```
 
 3. 构建并启动：
