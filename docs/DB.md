@@ -258,6 +258,14 @@ KV 结构的全局配置表。
 | `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                 |
 | `replay_auto_backup`         | `true`             | 回放投稿后是否自动备份                                     |
 | `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                 |
+| `kuaishou_cookie`            | ``                 | 快手 cookie（主 cookie 字符串）                            |
+| `kuaishou_kww`               | ``                 | 快手 kww 请求头                                            |
+| `kuaishou_kwfv1`             | ``                 | 快手 kwfv1 请求头                                          |
+| `kuaishou_kwssectoken`       | ``                 | 快手 kwssectoken cookie                                    |
+| `kuaishou_kwscode`           | ``                 | 快手 kwscode cookie                                        |
+| `kuaishou_bfb1s`             | ``                 | 快手 bfb1s cookie                                          |
+| `kuaishou_web_st`            | ``                 | 快手 web_st cookie                                         |
+| `kuaishou_web_ph`            | ``                 | 快手 web_ph cookie                                         |
 
 ---
 
@@ -370,7 +378,7 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> backed_up
                                       └──────────────────────────────> failed
 ```
 
-当前 `extract` 实现仅在记录已有 `m3u8_url` 时通过；真实快手客户端接入后再补齐 m3u8 提取能力。
+`extract` 步骤通过 `KuaishouReplayClient.extractM3u8()` 调用快手 `playback/detail` API 获取 playUrlV3 流，自动选择最佳清晰度（按分辨率 → H264 优先 → 码位排序）。若记录已有 `m3u8_url` 则直接跳过提取。
 
 ### replay_settings — 主播级回放配置
 

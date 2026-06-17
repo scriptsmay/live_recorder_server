@@ -130,6 +130,14 @@ class ReplayService {
     return result.rows[0] || null;
   }
 
+  static async getRecordByReplayId(principalId, replayId) {
+    const result = await pool.query('SELECT * FROM replay_records WHERE principal_id = $1 AND replay_id = $2 LIMIT 1', [
+      principalId,
+      replayId,
+    ]);
+    return result.rows[0] || null;
+  }
+
   static async upsertRecord(record) {
     const principalId = record.principal_id;
     if (!principalId) throw new Error('缺少 principal_id');
@@ -176,12 +184,13 @@ class ReplayService {
         updated: 0,
       };
     }
+    const { syncReplays } = require('../lib/core/replay/KuaishouReplayClient');
+    const result = await syncReplays(principalId, limit);
     return {
       principal_id: principalId,
       requested_count: limit,
-      created: 0,
-      updated: 0,
-      message: '回放列表拉取客户端将在后续任务接入；当前接口仅完成 API 契约和 dry-run 验证',
+      created: result.created,
+      updated: result.updated,
     };
   }
 

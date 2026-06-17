@@ -22,8 +22,11 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
   const total = ref(0)
   const page = ref(1)
   const pageSize = ref(20)
+  const dateFrom = ref('')
+  const dateTo = ref('')
   const loadingPrincipals = ref(false)
   const loadingRecords = ref(false)
+  const loadingUploads = ref(false)
   const busy = ref(false)
 
   const selectedPrincipal = computed(
@@ -65,11 +68,14 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
       if (options.status && options.status !== 'all') {
         params.set('status', options.status)
       }
+      if (dateFrom.value) params.set('date_from', dateFrom.value)
+      if (dateTo.value) params.set('date_to', dateTo.value)
       const res = await apiGet<ReplayRecord[]>(
         `/api/replay/principals/${encodeURIComponent(selectedPrincipalId.value)}/records?${params}`,
       )
-      records.value = res.data ?? []
-      total.value = (res as unknown as { total?: number }).total ?? records.value.length
+      const body = res as unknown as { data?: ReplayRecord[]; total?: number; page?: number; page_size?: number }
+      records.value = body.data ?? []
+      total.value = body.total ?? records.value.length
       page.value = nextPage
     } catch (err) {
       toast.error('加载回放记录失败: ' + getErrorMessage(err))
@@ -83,13 +89,17 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
       uploads.value = []
       return
     }
+    loadingUploads.value = true
     try {
       const res = await apiGet<ReplayUploadRecord[]>(
         `/api/replay/principals/${encodeURIComponent(selectedPrincipalId.value)}/uploads`,
       )
       uploads.value = res.data ?? []
-    } catch {
+    } catch (err) {
       uploads.value = []
+      toast.error('加载投稿记录失败: ' + getErrorMessage(err))
+    } finally {
+      loadingUploads.value = false
     }
   }
 
@@ -217,6 +227,9 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     pageSize,
     loadingPrincipals,
     loadingRecords,
+    loadingUploads,
+    dateFrom,
+    dateTo,
     busy,
     fetchPrincipals,
     fetchRecords,

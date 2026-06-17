@@ -1121,7 +1121,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ## 回放工具箱
 
-> 当前版本已接通数据库、API、队列和前端工作台；真实快手回放列表拉取与 m3u8 客户端仍是后续接入点。`POST /api/replay/records/sync` 非 dry-run 时会返回占位提示。
+> 回放工具箱已接通数据库、API、队列、前端工作台和快手回放客户端（`KuaishouReplayClient`）。`POST /api/replay/records/sync` 通过快手 `playback/list` API 拉取回放列表并自动 upsert；`extract` 步骤通过 `playback/detail` API 获取 m3u8 流地址。使用前需在设置页配置快手 cookie 相关字段（`kuaishou_cookie`、`kuaishou_kww` 等）。
 
 ### GET /api/replay/principals
 

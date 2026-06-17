@@ -4,7 +4,8 @@ import { useReplayToolboxStore } from '@/stores/replay-toolbox'
 import { useConfirm } from '@/utils/confirm'
 import { useToast } from '@/utils/toast'
 import { formatTime } from '@/utils/lib'
-import type { ReplayRecordStatus, ReplaySettings } from '@/types/api'
+import { apiGet, ApiError } from '@/utils/api'
+import type { ReplayRecordStatus, ReplaySettings, UploadTemplate } from '@/types/api'
 
 const store = useReplayToolboxStore()
 const { confirm } = useConfirm()
@@ -19,6 +20,8 @@ const settingsDraft = ref<ReplaySettings>({
   auto_backup: 'true',
   max_count_per_run: '1',
 })
+const localTemplates = ref<UploadTemplate[]>([])
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const statusOptions = [
@@ -63,6 +66,7 @@ watch(
   (settings) => {
     if (!settings) return
     settingsDraft.value = { ...settings }
+    fetchTemplates()
   },
   { immediate: true },
 )
@@ -83,6 +87,15 @@ onMounted(async () => {
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })
+
+async function fetchTemplates() {
+  try {
+    const res = await apiGet<UploadTemplate[]>('/api/upload_templates')
+    localTemplates.value = res.data || []
+  } catch (err) {
+    toast.error('加载模板失败: ' + (err instanceof ApiError ? err.message : String(err)))
+  }
+}
 
 function displayTime(value: string | null | undefined) {
   return value ? formatTime(value) : '-'
@@ -123,6 +136,12 @@ async function handleFilterChange(value: string) {
   await store.fetchRecords({ status: value, page: 1 })
 }
 
+async function handleClearDateFilter() {
+  store.dateFrom = ''
+  store.dateTo = ''
+  await store.fetchRecords({ status: statusFilter.value, page: 1 })
+}
+
 async function handleRefresh() {
   await Promise.all([
     store.fetchPrincipals(),
@@ -161,6 +180,26 @@ async function handlePage(delta: number) {
   const next = Math.min(totalPages.value, Math.max(1, store.page + delta))
   if (next === store.page) return
   await store.fetchRecords({ status: statusFilter.value, page: next })
+}
+
+const selectedRecord = ref<import('@/types/api').ReplayRecord | null>(null)
+
+function handleShowDetail(record: import('@/types/api').ReplayRecord) {
+  selectedRecord.value = record
+}
+
+function handleCloseDetail() {
+  selectedRecord.value = null
+}
+
+function parseJsonField(value: string | null): string[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 </script>
 
@@ -246,12 +285,22 @@ async function handlePage(delta: number) {
           <div class="space-y-3">
             <label class="block">
               <span class="text-xs text-gray-500">投稿模板 ID</span>
-              <input
+              <!-- <input
                 v-model="settingsDraft.upload_template_id"
                 type="text"
                 class="mt-1 w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
                 :disabled="!hasPrincipal"
-              />
+              /> -->
+              <select
+                v-model="settingsDraft.upload_template_id"
+                class="mt-1 w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                :disabled="!hasPrincipal"
+              >
+                <option value="" disabled>选择模板投稿</option>
+                <option v-for="t in localTemplates" :key="t.id" :value="String(t.id)">
+                  {{ t.name }}
+                </option>
+              </select>
             </label>
             <label class="block">
               <span class="text-xs text-gray-500">单次最大处理数</span>
@@ -313,6 +362,31 @@ async function handlePage(delta: number) {
                 @click="handleFilterChange(option.value)"
               >
                 {{ option.label }}
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-500 shrink-0">时间：</span>
+              <input
+                v-model="store.dateFrom"
+                type="date"
+                class="px-2 py-1 text-xs border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                :disabled="!hasPrincipal"
+                @change="handleFilterChange(statusFilter)"
+              />
+              <span class="text-xs text-gray-400">-</span>
+              <input
+                v-model="store.dateTo"
+                type="date"
+                class="px-2 py-1 text-xs border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                :disabled="!hasPrincipal"
+                @change="handleFilterChange(statusFilter)"
+              />
+              <button
+                v-if="store.dateFrom || store.dateTo"
+                class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                @click="handleClearDateFilter"
+              >
+                清除
               </button>
             </div>
             <div class="flex items-center gap-2 ml-auto">
@@ -403,8 +477,8 @@ async function handlePage(delta: number) {
                   <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                     {{ displayTime(record.start_time) }}
                   </td>
-                  <td class="px-4 py-3">
-                    <div class="text-sm font-medium text-gray-900 truncate max-w-[260px]">
+                  <td class="px-4 py-3 cursor-pointer" @click="handleShowDetail(record)">
+                    <div class="text-sm font-medium text-gray-900 truncate max-w-[260px] hover:text-brand-600">
                       {{ record.video_file_name || record.replay_id || `#${record.id}` }}
                     </div>
                     <div class="text-xs text-gray-400 truncate max-w-[260px]">
@@ -458,6 +532,18 @@ async function handlePage(delta: number) {
                         修复
                       </button>
                       <button
+                        class="px-2 py-1 text-xs rounded border border-sky-300 text-sky-600 hover:bg-sky-50"
+                        @click="handleAction(record.id, 'upload')"
+                      >
+                        投稿
+                      </button>
+                      <button
+                        class="px-2 py-1 text-xs rounded border border-teal-300 text-teal-600 hover:bg-teal-50"
+                        @click="handleAction(record.id, 'backup')"
+                      >
+                        备份
+                      </button>
+                      <button
                         class="px-2 py-1 text-xs rounded bg-brand-600 text-white hover:bg-brand-700"
                         @click="handleAction(record.id, 'all')"
                       >
@@ -508,7 +594,12 @@ async function handlePage(delta: number) {
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                <tr v-if="store.uploads.length === 0">
+                <tr v-if="store.loadingUploads">
+                  <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400">
+                    加载中...
+                  </td>
+                </tr>
+                <tr v-else-if="store.uploads.length === 0">
                   <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400">
                     暂无投稿记录
                   </td>
@@ -532,6 +623,104 @@ async function handlePage(delta: number) {
           </div>
         </div>
       </main>
+    </div>
+
+    <div
+      v-if="selectedRecord"
+      class="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+      @click.self="handleCloseDetail"
+    >
+      <div class="bg-white rounded-xl shadow-lg p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">回放详情 #{{ selectedRecord.id }}</h3>
+          <button class="text-gray-400 hover:text-gray-600 text-xl" @click="handleCloseDetail">×</button>
+        </div>
+        <dl class="space-y-2 text-sm">
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">主播</dt>
+            <dd class="text-gray-900">{{ selectedRecord.principal_name }} ({{ selectedRecord.principal_id }})</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">回放 ID</dt>
+            <dd class="text-gray-900 break-all">{{ selectedRecord.replay_id || '-' }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">状态</dt>
+            <dd>
+              <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full" :class="statusClass(selectedRecord.status)">
+                {{ statusLabel(selectedRecord.status) }}
+              </span>
+            </dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">时间</dt>
+            <dd class="text-gray-900">{{ displayTime(selectedRecord.start_time) }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">时长</dt>
+            <dd class="text-gray-900">{{ displayDuration(selectedRecord.duration) }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">大小</dt>
+            <dd class="text-gray-900">{{ displaySize(selectedRecord.file_size) }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">播放页</dt>
+            <dd class="text-gray-900 break-all">{{ selectedRecord.play_url || '-' }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">m3u8</dt>
+            <dd class="text-gray-900 break-all">{{ selectedRecord.m3u8_url || '-' }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">原始文件</dt>
+            <dd class="text-gray-900 break-all">{{ selectedRecord.raw_file_path || '-' }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">剪切产物</dt>
+            <dd class="text-gray-900 break-all">
+              <template v-if="parseJsonField(selectedRecord.cut_file_paths).length > 0">
+                <div v-for="(f, i) in parseJsonField(selectedRecord.cut_file_paths)" :key="i" class="text-xs">{{ f }}</div>
+              </template>
+              <template v-else>-</template>
+            </dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">修复产物</dt>
+            <dd class="text-gray-900 break-all">
+              <template v-if="parseJsonField(selectedRecord.fixed_file_paths).length > 0">
+                <div v-for="(f, i) in parseJsonField(selectedRecord.fixed_file_paths)" :key="i" class="text-xs">{{ f }}</div>
+              </template>
+              <template v-else>-</template>
+            </dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">最终文件</dt>
+            <dd class="text-gray-900 break-all">
+              <template v-if="parseJsonField(selectedRecord.final_file_paths).length > 0">
+                <div v-for="(f, i) in parseJsonField(selectedRecord.final_file_paths)" :key="i" class="text-xs">{{ f }}</div>
+              </template>
+              <template v-else>-</template>
+            </dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">BV 号</dt>
+            <dd class="text-gray-900">{{ selectedRecord.bv_id || '-' }}</dd>
+          </div>
+          <div v-if="selectedRecord.error_message" class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">错误</dt>
+            <dd class="text-red-600 break-all">{{ selectedRecord.error_message }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">创建时间</dt>
+            <dd class="text-gray-900">{{ displayTime(selectedRecord.created_at) }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="text-gray-500 w-28 shrink-0">更新时间</dt>
+            <dd class="text-gray-900">{{ displayTime(selectedRecord.updated_at) }}</dd>
+          </div>
+        </dl>
+      </div>
     </div>
   </div>
 </template>

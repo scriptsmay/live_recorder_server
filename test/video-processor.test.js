@@ -1,0 +1,118 @@
+'use strict';
+
+jest.mock('../db/index', () => ({ query: jest.fn() }));
+jest.mock('../db/redis', () => ({ get: jest.fn(), set: jest.fn(), del: jest.fn() }));
+jest.mock('../services/ReplayService', () => ({
+  getRecordWorkDir: jest.fn(() => '/tmp/replay/work'),
+}));
+
+const path = require('path');
+
+describe('video-processor', () => {
+  let videoProcessor;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetModules();
+    // Mock child_process and fs before requiring the module
+    jest.mock('child_process', () => ({
+      spawn: jest.fn(),
+    }));
+    jest.mock('fs', () => {
+      const actual = jest.requireActual('fs');
+      return {
+        ...actual,
+        existsSync: jest.fn(() => true),
+        statSync: jest.fn(() => ({ size: 1024 })),
+        readdirSync: jest.fn(() => []),
+        mkdirSync: jest.fn(),
+      };
+    });
+    videoProcessor = require('../lib/core/replay/video-processor');
+  });
+
+  describe('ensureInside', () => {
+    test('允许合法路径', () => {
+      const base = '/tmp/replay/work';
+      const target = '/tmp/replay/work/output.mp4';
+      expect(videoProcessor.ensureInside(base, target)).toBe(target);
+    });
+
+    test('拒绝路径穿越攻击', () => {
+      const base = '/tmp/replay/work';
+      const target = '/etc/passwd';
+      expect(() => videoProcessor.ensureInside(base, target)).toThrow('非法输出路径');
+    });
+
+    test('允许 base 目录本身', () => {
+      const base = '/tmp/replay/work';
+      expect(videoProcessor.ensureInside(base, base)).toBe(path.resolve(base));
+    });
+  });
+
+  describe('extract', () => {
+    test('已有 m3u8_url 时直接返回', async () => {
+      const record = { id: 1, m3u8_url: 'https://example.com/a.m3u8' };
+      const result = await videoProcessor.extract(record);
+      expect(result.success).toBe(true);
+      expect(result.m3u8Url).toBe('https://example.com/a.m3u8');
+    });
+
+    test('缺少 replay_id 和 play_url 时失败', async () => {
+      const record = { id: 1 };
+      const result = await videoProcessor.extract(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('缺少');
+    });
+  });
+
+  describe('fix', () => {
+    test('cut_file_paths JSON 解析失败时安全返回错误', async () => {
+      const record = { id: 1, cut_file_paths: 'invalid json{' };
+      const result = await videoProcessor.fix(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('JSON 解析失败');
+    });
+
+    test('空 cut_file_paths 时返回错误', async () => {
+      const record = { id: 1, cut_file_paths: '[]' };
+      const result = await videoProcessor.fix(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('缺少切割产物');
+    });
+
+    test('null cut_file_paths 时返回错误', async () => {
+      const record = { id: 1, cut_file_paths: null };
+      const result = await videoProcessor.fix(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('缺少切割产物');
+    });
+  });
+
+  describe('download', () => {
+    test('缺少 m3u8_url 时失败', async () => {
+      const record = { id: 1 };
+      const result = await videoProcessor.download(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('缺少 m3u8_url');
+    });
+  });
+
+  describe('cut', () => {
+    test('原始文件不存在时失败', async () => {
+      const fs = require('fs');
+      fs.existsSync.mockReturnValue(false);
+      const record = { id: 1, raw_file_path: '/tmp/nonexistent.mp4' };
+      const result = await videoProcessor.cut(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('不存在');
+    });
+
+    test('raw_file_path 为空时失败', async () => {
+      const record = { id: 1, raw_file_path: '' };
+      const result = await videoProcessor.cut(record);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('不存在');
+    });
+  });
+});
