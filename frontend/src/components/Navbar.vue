@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { label: '录制文件', to: '/recordings' },
   { label: '转码记录', to: '/transcode' },
   { label: '弹幕工具箱', to: '/danmaku-toolbox' },
+  { label: '回放工具箱', to: '/replay-toolbox' },
   { label: '投稿管理', to: '/templates' },
   { label: '投稿记录', to: '/upload-records' },
   { label: '设置', to: '/settings' },

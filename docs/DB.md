@@ -250,6 +250,14 @@ KV 结构的全局配置表。
 | `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                   |
 | `danmaku_font_size`          | `32`               | ASS 字体大小                                               |
 | `danmaku_opacity`            | `0.75`             | ASS 弹幕不透明度                                           |
+| `replay_enabled`             | `true`             | 是否启用回放工具箱                                         |
+| `replay_work_dir`            | `/data/replay`     | 回放处理工作目录                                           |
+| `replay_queue_concurrency`   | `1`                | 回放队列并发数（当前强制最大 1）                           |
+| `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                       |
+| `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                         |
+| `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                 |
+| `replay_auto_backup`         | `true`             | 回放投稿后是否自动备份                                     |
+| `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                 |
 
 ---
 
@@ -324,6 +332,81 @@ queued ──→ processing ──→ completed
 | FFmpeg 压制成功       | UPDATE status = `completed`          |
 | FFmpeg 压制失败       | UPDATE status = `failed`，写入 error |
 | 输入/ASS 文件不存在   | UPDATE status = `skipped`            |
+
+---
+
+### replay_records — 回放记录
+
+记录快手主播回放的抓取、下载、剪切、修复、投稿和备份状态。`principal_id + replay_id` 在 `replay_id` 非空时保持唯一。
+
+| 字段             | 类型          | 约束          | 说明                                                                                           |
+| ---------------- | ------------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| id               | SERIAL        | PRIMARY KEY   | 自增主键                                                                                       |
+| principal_id     | VARCHAR(128)  | NOT NULL      | 快手主播 ID                                                                                    |
+| principal_name   | VARCHAR(255)  |               | 主播名称                                                                                       |
+| replay_id        | VARCHAR(128)  |               | 平台回放 ID                                                                                    |
+| play_url         | TEXT          |               | 回放播放页地址                                                                                 |
+| m3u8_url         | TEXT          |               | 已提取的 m3u8 地址                                                                             |
+| video_file_name  | VARCHAR(512)  |               | 原始视频文件名                                                                                 |
+| raw_file_path    | VARCHAR(1024) |               | 下载后的原始文件路径                                                                           |
+| cut_file_paths   | TEXT          | JSON 字符串   | 剪切后的文件路径数组                                                                           |
+| fixed_file_paths | TEXT          | JSON 字符串   | 修复后的文件路径数组                                                                           |
+| final_file_paths | TEXT          | JSON 字符串   | 最终可投稿文件路径数组                                                                         |
+| file_size        | BIGINT        | DEFAULT 0     | 原始文件大小                                                                                   |
+| bv_id            | VARCHAR(50)   |               | 投稿成功后的 BV 号                                                                             |
+| status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `backed_up` / `failed` |
+| start_time       | TIMESTAMP     |               | 回放开始时间                                                                                   |
+| duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                 |
+| uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                   |
+| backed_up_at     | TIMESTAMP     |               | 备份完成时间                                                                                   |
+| error_message    | TEXT          |               | 失败原因                                                                                       |
+| created_at       | TIMESTAMP     | DEFAULT NOW() | 创建时间                                                                                       |
+| updated_at       | TIMESTAMP     | DEFAULT NOW() | 更新时间                                                                                       |
+
+**状态流转：**
+
+```
+pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> backed_up
+                                      └──────────────────────────────> failed
+```
+
+当前 `extract` 实现仅在记录已有 `m3u8_url` 时通过；真实快手客户端接入后再补齐 m3u8 提取能力。
+
+### replay_settings — 主播级回放配置
+
+覆盖全局回放默认配置。
+
+| 字段         | 类型         | 约束                           | 说明     |
+| ------------ | ------------ | ------------------------------ | -------- |
+| key          | VARCHAR(255) | PRIMARY KEY(key, principal_id) | 配置键   |
+| principal_id | VARCHAR(128) | PRIMARY KEY(key, principal_id) | 主播 ID  |
+| value        | TEXT         | DEFAULT ''                     | 配置值   |
+| updated_at   | TIMESTAMP    | DEFAULT NOW()                  | 更新时间 |
+
+允许的主播级配置：`upload_template_id`、`auto_upload`、`auto_backup`、`max_count_per_run`。
+
+### replay_upload_records — 回放投稿记录
+
+记录回放工具箱调用 biliup 投稿的执行结果，与普通录制投稿记录隔离。
+
+| 字段             | 类型         | 约束                                         | 说明                                           |
+| ---------------- | ------------ | -------------------------------------------- | ---------------------------------------------- |
+| id               | SERIAL       | PRIMARY KEY                                  | 自增主键                                       |
+| replay_record_id | INTEGER      | FK → replay_records(id) ON DELETE SET NULL   | 对应回放记录                                   |
+| template_id      | INTEGER      | FK → upload_templates(id) ON DELETE SET NULL | 使用的投稿模板                                 |
+| template_name    | VARCHAR(255) |                                              | 模板名称                                       |
+| title            | VARCHAR(512) |                                              | 实际投稿标题                                   |
+| status           | VARCHAR(20)  | DEFAULT 'pending'                            | `pending` / `uploading` / `success` / `failed` |
+| command          | TEXT         |                                              | biliup 命令                                    |
+| output           | TEXT         |                                              | 命令输出                                       |
+| error_message    | TEXT         |                                              | 失败原因                                       |
+| file_count       | INTEGER      | DEFAULT 0                                    | 投稿文件数量                                   |
+| total_size       | BIGINT       | DEFAULT 0                                    | 投稿文件总大小                                 |
+| bv_id            | VARCHAR(50)  |                                              | BV 号                                          |
+| upload_files     | TEXT         | JSON 字符串                                  | 投稿文件路径数组                               |
+| started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
+| completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
+| created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
 
 ---
 

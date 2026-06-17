@@ -19,6 +19,10 @@ function getDanmakuOutputDir() {
   return envs.DANMAKU_OUTPUT_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'danmaku_output');
 }
 
+function getReplayWorkDir() {
+  return envs.REPLAY_WORK_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'replay');
+}
+
 module.exports = {
   envs,
   SITE_URL,
@@ -32,4 +36,5 @@ module.exports = {
   DANMAKU_BURN_SUFFIX,
   isDanmakuBurnFile,
   getDanmakuOutputDir,
+  getReplayWorkDir,
 };

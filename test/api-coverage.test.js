@@ -45,6 +45,18 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/upload_records' },
   { method: 'DELETE', path: '/upload_records/:id' },
 
+  // 回放工具箱
+  { method: 'GET', path: '/replay/principals' },
+  { method: 'GET', path: '/replay/principals/:principalId/records' },
+  { method: 'GET', path: '/replay/records/:id' },
+  { method: 'POST', path: '/replay/records/sync' },
+  { method: 'POST', path: '/replay/records/:id/actions/:action' },
+  { method: 'GET', path: '/replay/principals/:principalId/uploads' },
+  { method: 'GET', path: '/replay/tasks' },
+  { method: 'POST', path: '/replay/tasks/enqueue' },
+  { method: 'GET', path: '/replay/principals/:principalId/settings' },
+  { method: 'PUT', path: '/replay/principals/:principalId/settings' },
+
   // 额外的现有接口
   { method: 'GET', path: '/health' },
   { method: 'POST', path: '/scan_files' },
@@ -101,6 +113,7 @@ describe('API接口完整性检查', () => {
       path.join(__dirname, '../router/rooms.js'),
       path.join(__dirname, '../router/settings.js'),
       path.join(__dirname, '../router/upload.js'),
+      path.join(__dirname, '../router/replay.js'),
     ];
 
     for (const file of routerFiles) {

@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '弹幕工具箱' },
   },
   {
+    path: '/replay-toolbox',
+    name: 'ReplayToolbox',
+    component: () => import('@/views/ReplayToolbox.vue'),
+    meta: { title: '回放工具箱' },
+  },
+  {
     path: '/templates',
     name: 'Templates',
     component: () => import('@/views/Templates.vue'),

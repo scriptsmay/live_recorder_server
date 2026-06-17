@@ -1116,3 +1116,91 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
   ]
 }
 ```
+
+---
+
+## 回放工具箱
+
+> 当前版本已接通数据库、API、队列和前端工作台；真实快手回放列表拉取与 m3u8 客户端仍是后续接入点。`POST /api/replay/records/sync` 非 dry-run 时会返回占位提示。
+
+### GET /api/replay/principals
+
+列出可处理回放的快手主播。后端从 `rooms.room_url` 中识别 `kuaishou.com` 主播 ID，并聚合 `replay_records` 最新状态。
+
+### GET /api/replay/principals/:principalId/records
+
+查询主播回放记录。
+
+**查询参数：**
+
+| 参数        | 类型   | 说明                                                |
+| ----------- | ------ | --------------------------------------------------- |
+| `page`      | number | 页码，默认 1                                        |
+| `page_size` | number | 每页条数，默认 20，最大 100                         |
+| `status`    | string | 状态筛选：`pending` / `extracted` / `downloaded` 等 |
+| `date_from` | string | 按 `start_time` 起始时间筛选                        |
+| `date_to`   | string | 按 `start_time` 结束时间筛选                        |
+
+### GET /api/replay/records/:id
+
+查询单条回放记录详情。
+
+### POST /api/replay/records/sync
+
+同步主播回放列表。
+
+**请求体：**
+
+| 参数           | 类型    | 必填 | 说明                     |
+| -------------- | ------- | ---- | ------------------------ |
+| `principal_id` | string  | 是   | 主播 ID                  |
+| `count`        | number  | 否   | 拉取条数，默认 1         |
+| `dry_run`      | boolean | 否   | 只验证参数，不写入数据库 |
+
+### POST /api/replay/records/:id/actions/:action
+
+将单条回放加入处理队列。
+
+**动作：** `extract`、`download`、`cut`、`fix`、`upload`、`backup`、`all`。
+
+### GET /api/replay/tasks
+
+查询回放处理队列状态。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "queue_length": 0,
+    "processing": 0,
+    "concurrency": 1
+  }
+}
+```
+
+### POST /api/replay/tasks/enqueue
+
+按主播批量加入最近的未完成回放处理任务。
+
+**请求体：**
+
+| 参数             | 类型    | 必填 | 说明                   |
+| ---------------- | ------- | ---- | ---------------------- |
+| `principal_id`   | string  | 是   | 主播 ID                |
+| `count`          | number  | 否   | 入队数量，默认 1       |
+| `skip_completed` | boolean | 否   | 跳过已投稿/已备份记录  |
+| `dry_run`        | boolean | 否   | 只返回候选记录，不入队 |
+
+### GET /api/replay/principals/:principalId/uploads
+
+查询主播最近回放投稿记录。
+
+### GET /api/replay/principals/:principalId/settings
+
+查询主播级回放配置。默认值来自全局 `settings` 表。
+
+### PUT /api/replay/principals/:principalId/settings
+
+更新主播级配置。允许字段：`upload_template_id`、`auto_upload`、`auto_backup`、`max_count_per_run`。

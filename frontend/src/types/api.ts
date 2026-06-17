@@ -177,6 +177,85 @@ export interface BurnRecord {
   completed_at: string | null
 }
 
+// ====== 回放工具箱 ======
+
+export type ReplayRecordStatus =
+  | 'pending'
+  | 'extracted'
+  | 'downloaded'
+  | 'cut'
+  | 'fixed'
+  | 'uploaded'
+  | 'backed_up'
+  | 'failed'
+
+export interface ReplayPrincipal {
+  principal_id: string
+  room_id: number
+  room_url: string
+  room_name: string
+  replay_count: number
+  latest_replay_time: string | null
+  latest_status: ReplayRecordStatus | null
+}
+
+export interface ReplayRecord {
+  id: number
+  principal_id: string
+  principal_name: string
+  replay_id: string
+  play_url: string
+  m3u8_url: string
+  video_file_name: string
+  status: ReplayRecordStatus
+  raw_file_path: string | null
+  cut_file_paths: string | null
+  fixed_file_paths: string | null
+  final_file_paths: string | null
+  file_size: number | null
+  bv_id: string | null
+  start_time: string | null
+  duration: number | null
+  uploaded_at: string | null
+  backed_up_at: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReplayUploadRecord {
+  id: number
+  replay_record_id: number
+  template_id: number | null
+  title: string
+  status: string
+  message: string | null
+  output: string | null
+  error_message: string | null
+  file_count: number
+  total_size: number
+  bv_id: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  principal_id: string
+  principal_name: string
+  replay_id: string
+}
+
+export interface ReplayTaskStatus {
+  queue_length: number
+  processing: number
+  concurrency: number
+}
+
+export interface ReplaySettings {
+  upload_template_id: string
+  auto_upload: string
+  auto_backup: string
+  max_count_per_run: string
+}
+
 // ====== 仪表盘 ======
 
 export interface DashboardStatus {

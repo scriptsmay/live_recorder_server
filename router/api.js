@@ -13,6 +13,7 @@ const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFacto
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
+const replayProcessQueue = require('../lib/core/ReplayProcessQueue');
 const pollingManager = require('../lib/core/polling/PollingManager');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
@@ -260,6 +261,7 @@ router.get('/dashboard/status', async (req, res) => {
     const danmakuActiveStats = danmakuRecorder.getActiveStats();
     const danmakuBurnQueueLength = await danmakuBurnQueue.getQueueLength();
     const danmakuBurnProcessing = await danmakuBurnQueue.getCurrentProcessingCount();
+    const replayQueueStatus = await replayProcessQueue.getStatus();
 
     const todayStart = dayjs().startOf('day').toISOString();
     const [summary, recentActivity, roomTotal] = await Promise.all([
@@ -298,6 +300,7 @@ router.get('/dashboard/status', async (req, res) => {
             concurrency: danmakuBurnQueue.concurrency,
           },
         },
+        replay: replayQueueStatus,
         polling: {
           ...pollingSnapshot,
           total_rooms: roomTotal,

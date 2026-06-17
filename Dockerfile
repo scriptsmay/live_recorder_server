@@ -48,7 +48,7 @@ COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 
 # 这里去掉了 ffmpeg 安装
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl python3 python3-pip \
+    ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && ln -sf /root/.local/share/uv/tools/biliup/bin/biliup /usr/local/bin/biliup \

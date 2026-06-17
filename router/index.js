@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 
 const hlsRouter = require('./hls');
 const logsRouter = require('./logs');
@@ -9,6 +10,7 @@ const uploadRouter = require('./upload');
 const settingsRouter = require('./settings');
 const transcodeRouter = require('./transcode');
 const danmakuRouter = require('./danmaku');
+const replayRouter = require('./replay');
 
 function createRoutes() {
   const router = express.Router();
@@ -24,6 +26,7 @@ function createRoutes() {
   router.use('/api', settingsRouter);
   router.use('/api', transcodeRouter);
   router.use('/api', danmakuRouter);
+  router.use('/api', replayRouter);
   // Vue SPA 路由（静态资源 + history 模式回退）
   router.use(spaRouter);
 

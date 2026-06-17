@@ -177,6 +177,82 @@ async function runMigration() {
     await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS upload_files TEXT DEFAULT '[]'`);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS replay_records (
+        id SERIAL PRIMARY KEY,
+        principal_id VARCHAR(128) NOT NULL,
+        principal_name VARCHAR(255) DEFAULT '',
+        replay_id VARCHAR(128) DEFAULT '',
+        play_url TEXT DEFAULT '',
+        m3u8_url TEXT DEFAULT '',
+        video_file_name VARCHAR(512) DEFAULT '',
+        raw_file_path VARCHAR(1024) DEFAULT '',
+        cut_file_paths TEXT DEFAULT '[]',
+        fixed_file_paths TEXT DEFAULT '[]',
+        final_file_paths TEXT DEFAULT '[]',
+        file_size BIGINT DEFAULT 0,
+        bv_id VARCHAR(50) DEFAULT '',
+        status VARCHAR(50) DEFAULT 'pending',
+        start_time TIMESTAMP,
+        duration INTEGER DEFAULT 0,
+        uploaded_at TIMESTAMP,
+        backed_up_at TIMESTAMP,
+        error_message TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_replay_records_principal_replay_id
+      ON replay_records(principal_id, replay_id)
+      WHERE replay_id IS NOT NULL AND replay_id <> ''
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_replay_records_principal ON replay_records(principal_id, status)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_replay_records_replay_id ON replay_records(replay_id)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_replay_records_start_time ON replay_records(principal_id, start_time DESC)
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS replay_settings (
+        key VARCHAR(255) NOT NULL,
+        principal_id VARCHAR(128) NOT NULL DEFAULT '',
+        value TEXT DEFAULT '',
+        updated_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (key, principal_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS replay_upload_records (
+        id SERIAL PRIMARY KEY,
+        replay_record_id INTEGER REFERENCES replay_records(id) ON DELETE SET NULL,
+        template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL,
+        template_name VARCHAR(255) DEFAULT '',
+        title VARCHAR(512) DEFAULT '',
+        status VARCHAR(20) DEFAULT 'pending',
+        command TEXT DEFAULT '',
+        output TEXT DEFAULT '',
+        error_message TEXT DEFAULT '',
+        file_count INTEGER DEFAULT 0,
+        total_size BIGINT DEFAULT 0,
+        bv_id VARCHAR(50) DEFAULT '',
+        upload_files TEXT DEFAULT '[]',
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_replay_upload_record ON replay_upload_records(replay_record_id, status)
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS recording_files (
         id            SERIAL PRIMARY KEY,
         session_id    INTEGER REFERENCES recording_sessions(id) ON DELETE SET NULL,
@@ -397,6 +473,14 @@ async function runMigration() {
       ['danmaku_opacity', '1.0'],
       ['danmaku_outline_colour', '000000'],
       ['danmaku_outline_width', '2'],
+      ['replay_enabled', 'true'],
+      ['replay_work_dir', '/data/replay'],
+      ['replay_queue_concurrency', '1'],
+      ['replay_cron_enabled', 'false'],
+      ['replay_cron_expr', '0 3 * * *'],
+      ['replay_auto_upload', 'false'],
+      ['replay_auto_backup', 'true'],
+      ['replay_max_count_per_run', '1'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(
