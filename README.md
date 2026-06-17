@@ -11,13 +11,13 @@
 - **直播录制**：使用 FFmpeg 作为下载引擎，支持分段录制（可配置时长）
 - **弹幕采集与压制**：通过 Chrome 扩展采集弹幕（JSONL），生成 ASS 字幕，FFmpeg 渲染弹幕到视频
 - **弹幕工具箱**：独立的 Web 界面，管理弹幕采集状态、批量压制、产物播放和下载
+- **回放工具箱**：快手直播回放全自动处理（同步 → 提取 m3u8 → 下载 → 切片 → 修复 → 投稿），Web 界面管理
 - **自动转码**：边下边转码（TS → MP4），转码队列 + 并发控制
 - **HLS 生成**：自动为转码后的 MP4 生成 HLS 分片，支持在线播放
 - **直播轮询**：策略模式支持虎牙、B 站、抖音、快手等平台，检测到开播自动触发录制
 - **自动投稿**：录制完成自动调用 biliup 投稿到 Bilibili，支持模板化投稿
 - **看门狗**：自动扫描录制目录，跟踪文件状态，清理孤立文件
 - **通知系统**：录制开始/结束/投稿等事件推送通知（飞书 Webhook / Gotify）
-- **NAS 备份**：支持将录制文件自动备份到 NAS 目录
 - **Docker 部署**：提供 Dockerfile，支持容器化部署
 
 ## 快速开始
@@ -101,6 +101,18 @@ docker compose --env-file .env.docker \
 快手轮询内部的超时、等待、backoff、UA、cookie session 和行为模拟参数使用系统常量，不作为用户配置暴露。
 `POLLING_KUAISHOU_COOKIE` 仅作为 Redis 中还没有快手 session 时的初始访问态种子，后续会由系统自动持久化并刷新快手 cookie。
 
+### 回放工具箱配置
+
+回放工具箱依赖快手 cookie 和远程浏览器（m3u8 提取 Playwright 兜底方案）：
+
+| 配置项                       | 说明                                              | 默认值 |
+| ---------------------------- | ------------------------------------------------- | ------ |
+| `kuaishou_cookie`            | 快手主 cookie 字符串（settings 表配置）            | -      |
+| `kuaishou_kww`               | 快手 kww 请求头                                   | -      |
+| `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（Playwright m3u8 提取） | -      |
+
+更多 cookie 配置项（`kuaishou_kwfv1`、`kuaishou_kwssectoken` 等）通过前端回放工具箱设置页配置。
+
 ## 项目结构
 
 ```text
@@ -124,6 +136,12 @@ docker compose --env-file .env.docker \
 │   │   └── DanmakuAssGenerator.js # ASS 字幕生成器（会话级 + 分段级）
 │   ├── DanmakuBurnQueue.js     # 弹幕压制队列（Redis 队列，独立于转码）
 │   ├── danmaku-burner.js       # FFmpeg 弹幕压制（ASS 滤镜渲染）
+│   ├── replay/                 # 回放工具箱
+│   │   ├── KuaishouReplayClient.js # 快手回放 API 客户端（列表同步 + m3u8 提取）
+│   │   ├── m3u8-extractor.js       # Playwright 浏览器 m3u8 提取器（API 失败时兜底）
+│   │   ├── video-processor.js      # 回放视频处理（下载/切片/修复）
+│   │   └── ReplayUploadService.js  # 回放投稿服务
+│   ├── ReplayProcessQueue.js   # 回放处理队列（全流程：extract→download→cut→fix→upload）
 │   ├── polling/                # 直播轮询检测
 │   │   ├── PlatformChecker.js     # 平台检查器基类（策略模式）
 │   │   ├── HuyaChecker.js         # 虎牙平台检查器
@@ -146,7 +164,8 @@ docker compose --env-file .env.docker \
 ├── router/                     # 路由层（API + 页面渲染）
 │   ├── index.js                # 统一路由挂载
 │   ├── html.js                 # 页面路由（EJS 渲染）
-│   └── danmaku.js              # 弹幕相关 API
+│   ├── danmaku.js              # 弹幕相关 API
+│   └── replay.js               # 回放工具箱 API
 ├── db/                         # 数据库
 │   ├── index.js                # PostgreSQL 连接池
 │   ├── migrate.js              # 数据库迁移（自动建表/加列）
@@ -167,7 +186,7 @@ docker compose --env-file .env.docker \
 │   ├── DEV.md                  # 开发指南
 │   ├── TEST.md                 # 测试文档
 │   └── todo/                   # 开发计划文档
-└── test/                       # Jest 测试（297 个用例）
+└── test/                       # Jest 测试（400+ 个用例）
 ```
 
 ## 弹幕功能架构
@@ -194,10 +213,38 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 
 **操作入口**：所有弹幕操作（生成 ASS、批量压制、产物管理）统一在「弹幕工具箱」页面（`/danmaku-toolbox`）完成，录制会话页面仅提供只读状态展示。
 
+## 回放工具箱功能架构
+
+回放工具箱将快手直播回放的全流程自动化：同步 → 提取 m3u8 → 下载 → 切片 → 修复 → 投稿。
+
+```text
+[快手 API / 前端操作]                    [后端处理]
+     │                                        │
+     │  同步回放（POST /api/replay/records/sync）│
+     │  ──────────────────────────────────────>│  playback/list API → replay_records
+     │                                        │
+     │  批量全流程（POST /api/replay/tasks/enqueue）│
+     │  ──────────────────────────────────────>│  ReplayProcessQueue
+     │                                        │  ├─ extract: m3u8 提取
+     │                                        │  │   ├─ HTTP API (playback/detail)
+     │                                        │  │   └─ Playwright 浏览器兜底
+     │                                        │  ├─ download: yt-dlp 下载
+     │                                        │  ├─ cut: mkvmerge/ffmpeg 切片
+     │                                        │  ├─ fix: ffmpeg 分辨率修复
+     │                                        │  └─ upload: biliup 投稿
+     │                                        │
+     │  查询状态（GET /api/replay/tasks）       │
+     │  <─────────────────────────────────────│
+```
+
+**前端路由**：`/replay-toolbox`（主播列表）→ `/replay-toolbox/:principalId/{records,uploads,tasks,settings}`
+
+**状态机**：`pending → extracted → downloaded → cut → fixed → uploaded → completed`
+
 ## 测试
 
 ```bash
-# 运行所有测试（297 个用例）
+# 运行所有测试（400+ 个用例）
 npm test
 
 # 监听模式

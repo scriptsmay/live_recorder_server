@@ -564,8 +564,8 @@ PollingManager (单例)
 
 - 依赖 `playwright-core` 连接远程 Browserless/Chromium，不下载本地浏览器。
 - 每次检查通过 `RemoteBrowserClient.withPage()` 创建 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
-- 支持 Redis 持久化快手 cookie session，按平台共享，key 为 `kuaishou:checker:session:platform`。
-- 支持 `POLLING_KUAISHOU_COOKIE` 作为初始访问态种子；当 Redis 中已有持久 session 时优先使用 Redis。
+- `POLLING_KUAISHOU_COOKIE` 作为快手直播轮询和回放工具箱共享的访问态 cookie。
+- 旧的回放专属 `settings.kuaishou_*` 和 `KW_*` 变量仅保留兼容 fallback。
 - 默认启用轻量人类行为模拟：页面状态 ready 后、数据提取前随机等待并滚动。超时、等待、backoff、UA、session TTL 和行为模拟参数均使用系统常量，不暴露为用户配置。
 - 读取快手直播页 `window.__INITIAL_STATE__.liveroom.playList[activeIndex]` 判断主播名、开播状态和 FLV 地址。
 - 风控、验证码、`请求过快`、`400002` 均视为未知状态并抛错，不写成 `isLive=false`。
@@ -686,3 +686,71 @@ router/rooms.js (新增/修改房间)
 | 轮询检测到开播但 ffmpeg 断连         | 去掉 `-imgplus` 绕过移动端平台检测；reconnect 自动重连 |
 | 重启时轮询状态与直播一致无法触发录制 | 启动时从 Redis/DB 加载 last_live_status 做状态对比     |
 | 手动停止后被轮询二次触发录制         | stop 自动将 monitoring_enabled 设为 false              |
+
+---
+
+## 10. 回放工具箱
+
+`lib/core/replay/` 模块，将快手直播回放的全流程自动化。
+
+### 架构
+
+```text
+前端 (Vue 3 SPA)                          后端
+─────────────────                         ─────
+/replay-toolbox                           router/replay.js
+  └── /:principalId                       ├── ReplayService (CRUD)
+        ├── /records                      ├── KuaishouReplayClient (API)
+        ├── /uploads                      ├── m3u8-extractor.js (Playwright)
+        ├── /tasks                        ├── video-processor.js (yt-dlp/ffmpeg)
+        └── /settings                     ├── ReplayUploadService (biliup)
+                                          └── ReplayProcessQueue (Redis)
+```
+
+### 处理流水线
+
+```text
+[同步] playback/list API → replay_records (pending)
+         │
+         ▼
+[提取] KuaishouReplayClient.extractM3u8()
+         ├─ 方案1: HTTP API (playback/detail → playUrlV3)
+         └─ 方案2: Playwright 浏览器兜底 (m3u8-extractor.js)
+         │
+         ▼
+[下载] yt-dlp → raw_file_path (.mp4)
+         │
+         ▼
+[切片] mkvmerge --split (优先) / ffmpeg -f segment (降级)
+         │
+         ▼
+[修复] ffmpeg 分辨率统一 (720p)
+         │
+         ▼
+[投稿] ReplayUploadService → biliup → bv_id
+         │
+         ▼
+[完成] status = 'completed'
+```
+
+### 状态机
+
+```text
+pending → extracted → downloaded → cut → fixed → uploaded → completed
+                                       └──────────────────────────────→ failed
+```
+
+### m3u8 提取两级降级
+
+1. **HTTP API 优先**：直接调用 `playback/detail` 接口，解析 `playUrlV3` 选择最佳清晰度
+2. **Playwright 浏览器兜底**：通过 `RemoteBrowserClient` 打开回放页面，拦截 API 响应或网络 m3u8 流
+
+浏览器方案复用直播轮询的 `REMOTE_BROWSER_WS_ENDPOINT` 配置。
+
+### 关键设计
+
+- **数据隔离**：`replay_records` / `replay_settings` / `replay_upload_records` 三张独立表，与录制模块仅共享 `upload_templates`
+- **目录隔离**：回放产物写入 `REPLAY_WORK_DIR`（默认 `/data/replay`），与录制文件完全分离
+- **队列单并发**：`ReplayProcessQueue` 强制最大 1 并发，N100 NAS 磁盘 IO 保护
+- **中间态清理**：状态跃迁成功后异步清理上一步临时文件（`cleanup.js`）
+- **主播自动发现**：从 `rooms.room_url` 识别快手主播，零配置联动

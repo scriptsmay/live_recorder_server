@@ -13,11 +13,22 @@ npm run test:api       # 运行 API 集成测试（test/api-coverage.test.js）
 
 ```
 test/
-├── huya-downloader.test.js      # 虎牙下载器测试
-├── notify-backup.test.js         # 通知备份测试
-├── api-coverage.test.js          # API 覆盖率测试
-├── redis-service.test.js         # Redis 服务测试
-└── response.test.js              # 响应测试
+├── huya-downloader.test.js          # 虎牙下载器测试
+├── notify-backup.test.js            # 通知备份测试
+├── api-coverage.test.js             # API 覆盖率测试
+├── redis-service.test.js            # Redis 服务测试
+├── response.test.js                 # 响应测试
+├── kuaishou-replay-client.test.js   # 快手回放客户端测试
+├── m3u8-extractor.test.js           # Playwright m3u8 提取器测试
+├── replay-service.test.js           # 回放服务测试
+├── replay-upload-service.test.js    # 回放投稿服务测试
+├── replay-integration.test.js       # 回放模块集成测试
+├── replay-process-queue.test.js     # 回放处理队列测试
+├── replay-cleanup.test.js           # 回放清理测试
+├── danmaku-burner.test.js           # 弹幕压制测试
+├── danmaku-burn-queue.test.js       # 弹幕压制队列测试
+├── polling-kuaishou.test.js         # 快手轮询测试
+└── ...
 ```
 
 #### 测试覆盖率要求
@@ -39,6 +50,7 @@ test/
    - 下载器参数构建（`FFmpegDownloader.buildArgs`）
    - 看门狗扫描逻辑（`scanActiveSegments`、`cleanupFragmentFiles`）
    - 转码队列（`TranscodeQueue` 入队/出队）
+   - 回放模块（`KuaishouReplayClient`、`m3u8-extractor`、`ReplayProcessQueue`、`ReplayUploadService`）
 
 3. **API 端点**：所有 `router/` 下的 API 端点必须编写集成测试
    - 使用 `api-coverage.test.js` 结构

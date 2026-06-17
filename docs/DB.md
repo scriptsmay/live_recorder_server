@@ -256,16 +256,16 @@ KV 结构的全局配置表。
 | `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                       |
 | `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                         |
 | `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                 |
-| `replay_auto_backup`         | `true`             | 回放投稿后是否自动备份                                     |
+| `replay_auto_backup`         | `true`             | （已废弃，保留兼容）回放投稿后是否自动备份                 |
 | `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                 |
-| `kuaishou_cookie`            | ``                 | 快手 cookie（主 cookie 字符串）                            |
-| `kuaishou_kww`               | ``                 | 快手 kww 请求头                                            |
-| `kuaishou_kwfv1`             | ``                 | 快手 kwfv1 请求头                                          |
-| `kuaishou_kwssectoken`       | ``                 | 快手 kwssectoken cookie                                    |
-| `kuaishou_kwscode`           | ``                 | 快手 kwscode cookie                                        |
-| `kuaishou_bfb1s`             | ``                 | 快手 bfb1s cookie                                          |
-| `kuaishou_web_st`            | ``                 | 快手 web_st cookie                                         |
-| `kuaishou_web_ph`            | ``                 | 快手 web_ph cookie                                         |
+| `kuaishou_cookie`            | ``                 | （兼容旧回放配置）快手 cookie；新部署优先使用 `POLLING_KUAISHOU_COOKIE` |
+| `kuaishou_kww`               | ``                 | （兼容旧回放配置）快手 kww 请求头                          |
+| `kuaishou_kwfv1`             | ``                 | （兼容旧回放配置）快手 kwfv1 请求头                        |
+| `kuaishou_kwssectoken`       | ``                 | （兼容旧回放配置）快手 kwssectoken cookie                  |
+| `kuaishou_kwscode`           | ``                 | （兼容旧回放配置）快手 kwscode cookie                      |
+| `kuaishou_bfb1s`             | ``                 | （兼容旧回放配置）快手 bfb1s cookie                        |
+| `kuaishou_web_st`            | ``                 | （兼容旧回放配置）快手 web_st cookie                       |
+| `kuaishou_web_ph`            | ``                 | （兼容旧回放配置）快手 web_ph cookie                       |
 
 ---
 
@@ -362,7 +362,7 @@ queued ──→ processing ──→ completed
 | final_file_paths | TEXT          | JSON 字符串   | 最终可投稿文件路径数组                                                                         |
 | file_size        | BIGINT        | DEFAULT 0     | 原始文件大小                                                                                   |
 | bv_id            | VARCHAR(50)   |               | 投稿成功后的 BV 号                                                                             |
-| status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `backed_up` / `cancelled` / `failed` |
+| status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `completed` / `backed_up`（历史） / `cancelled` / `failed` |
 | start_time       | TIMESTAMP     |               | 回放开始时间                                                                                   |
 | duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                 |
 | uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                   |
@@ -374,11 +374,17 @@ queued ──→ processing ──→ completed
 **状态流转：**
 
 ```
-pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> backed_up
-                                      └──────────────────────────────> failed
+pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
+                                       └──────────────────────────────> failed
 ```
 
-`extract` 步骤通过 `KuaishouReplayClient.extractM3u8()` 调用快手 `playback/detail` API 获取 playUrlV3 流，自动选择最佳清晰度（按分辨率 → H264 优先 → 码位排序）。若记录已有 `m3u8_url` 则直接跳过提取。
+`backed_up` 为历史状态保留，新流程终态为 `completed`。
+
+`extract` 步骤通过 `KuaishouReplayClient.extractM3u8()` 提取 m3u8 流地址，采用两级降级策略：
+1. **HTTP API 优先**：调用快手 `playback/detail` API 获取 playUrlV3，自动选择最佳清晰度（按分辨率 → H264 优先 → 码率排序）
+2. **Playwright 浏览器兜底**：API 失败时自动降级到浏览器方案（`m3u8-extractor.js`），打开回放页面拦截 playback/detail API 响应或网络 m3u8 流
+
+若记录已有 `m3u8_url` 则直接跳过提取。浏览器方案会顺带回填 `duration` 字段。
 
 ### replay_settings — 主播级回放配置
 
