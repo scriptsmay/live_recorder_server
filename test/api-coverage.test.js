@@ -51,6 +51,7 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/replay/records/:id' },
   { method: 'POST', path: '/replay/records/sync' },
   { method: 'POST', path: '/replay/records/:id/actions/:action' },
+  { method: 'POST', path: '/replay/records/:id/cancel' },
   { method: 'GET', path: '/replay/principals/:principalId/uploads' },
   { method: 'GET', path: '/replay/tasks' },
   { method: 'POST', path: '/replay/tasks/enqueue' },

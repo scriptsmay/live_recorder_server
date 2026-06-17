@@ -188,6 +188,7 @@ export type ReplayRecordStatus =
   | 'uploaded'
   | 'completed'
   | 'backed_up'
+  | 'cancelled'
   | 'failed'
 
 export interface ReplayPrincipal {
@@ -250,6 +251,15 @@ export interface ReplayTaskStatus {
   queue_length: number
   processing: number
   concurrency: number
+  active?: Array<{
+    record_id: number
+    principal_id: string
+    action: string
+    step: string
+    pid: number | null
+    command: string
+    started_at: string
+  }>
 }
 
 export interface ReplaySettings {

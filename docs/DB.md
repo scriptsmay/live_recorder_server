@@ -362,7 +362,7 @@ queued ──→ processing ──→ completed
 | final_file_paths | TEXT          | JSON 字符串   | 最终可投稿文件路径数组                                                                         |
 | file_size        | BIGINT        | DEFAULT 0     | 原始文件大小                                                                                   |
 | bv_id            | VARCHAR(50)   |               | 投稿成功后的 BV 号                                                                             |
-| status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `backed_up` / `failed` |
+| status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `backed_up` / `cancelled` / `failed` |
 | start_time       | TIMESTAMP     |               | 回放开始时间                                                                                   |
 | duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                 |
 | uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                   |

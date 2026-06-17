@@ -174,6 +174,21 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     }
   }
 
+  async function cancelRecord(recordId: number) {
+    busy.value = true
+    try {
+      const res = await apiPost(`/api/replay/records/${recordId}/cancel`)
+      toast.success(res.message ?? '任务已取消')
+      await Promise.all([fetchTaskStatus(), fetchRecords({ page: page.value })])
+      return true
+    } catch (err) {
+      toast.error('取消失败: ' + getErrorMessage(err))
+      return false
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function fetchUploadPreview(recordId: number) {
     const res = await apiGet<ReplayUploadPreview>(`/api/replay/records/${recordId}/upload-preview`)
     return res.data ?? null
@@ -250,6 +265,7 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     selectPrincipal,
     syncRecords,
     enqueueRecord,
+    cancelRecord,
     fetchUploadPreview,
     enqueuePrincipal,
     updateSettings,

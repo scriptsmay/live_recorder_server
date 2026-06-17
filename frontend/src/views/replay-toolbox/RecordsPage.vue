@@ -19,12 +19,16 @@ const batchCount = ref(1)
 const selectedRecord = ref<ReplayRecord | null>(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.pageSize)))
+const activeRecordIds = computed(
+  () => new Set((store.taskStatus?.active ?? []).map((task) => task.record_id)),
+)
 
 onMounted(async () => {
   store.selectedPrincipalId = principalId.value
   await Promise.all([
     store.fetchRecords({ status: statusFilter.value, page: 1 }),
     store.fetchUploads(),
+    store.fetchTaskStatus(),
   ])
 })
 
@@ -88,6 +92,12 @@ async function handleAction(recordId: number, action: string) {
   await store.enqueueRecord(recordId, action)
 }
 
+async function handleCancel(recordId: number) {
+  const ok = await confirm('确定取消当前回放任务？', { title: `回放 #${recordId}` })
+  if (!ok) return
+  await store.cancelRecord(recordId)
+}
+
 async function handlePageChange(delta: number) {
   const next = Math.min(totalPages.value, Math.max(1, store.page + delta))
   if (next === store.page) return
@@ -132,8 +142,10 @@ async function handlePageChange(delta: number) {
       :total-pages="totalPages"
       :total="store.total"
       :busy="store.busy"
+      :active-record-ids="activeRecordIds"
       @show-detail="selectedRecord = $event"
       @action="handleAction"
+      @cancel="handleCancel"
       @page-change="handlePageChange"
     />
 

@@ -71,6 +71,19 @@ router.post('/replay/records/:id/actions/:action', async (req, res) => {
   }
 });
 
+router.post('/replay/records/:id/cancel', async (req, res) => {
+  try {
+    const result = await replayQueue.cancelRecord(req.params.id);
+    if (!result.cancelled) {
+      return res.status(409).json({ status: 'Error', message: result.message });
+    }
+    res.json({ status: 'ok', data: result, message: '回放任务已取消' });
+  } catch (err) {
+    console.error('[replay] 取消回放任务失败:', err);
+    res.status(500).json({ status: 'Error', message: err.message || '取消回放任务失败' });
+  }
+});
+
 router.get('/replay/records/:id/upload-preview', async (req, res) => {
   try {
     const result = await ReplayUploadService.getUploadPreview(req.params.id);

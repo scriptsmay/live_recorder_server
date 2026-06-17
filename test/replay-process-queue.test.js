@@ -41,6 +41,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   replayQueue.isRunning = false;
   replayQueue.concurrency = 1;
+  replayQueue.activeTasks.clear();
 });
 
 describe('ReplayProcessQueue', () => {
@@ -169,11 +170,74 @@ describe('ReplayProcessQueue', () => {
   test('getStatus 返回队列状态', async () => {
     redis.lLen.mockResolvedValue(3);
     redis.get.mockResolvedValue('1');
+    replayQueue.activeTasks.set(10, {
+      recordId: 10,
+      principalId: 'abc',
+      action: 'download',
+      step: 'download',
+      pid: 1234,
+      command: 'yt-dlp url',
+      startedAt: '2026-06-18T00:00:00.000Z',
+    });
 
     const status = await replayQueue.getStatus();
 
     expect(status.queue_length).toBe(3);
     expect(status.processing).toBe(1);
     expect(status.concurrency).toBe(1);
+    expect(status.active).toEqual([
+      {
+        record_id: 10,
+        principal_id: 'abc',
+        action: 'download',
+        step: 'download',
+        pid: 1234,
+        command: 'yt-dlp url',
+        started_at: '2026-06-18T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  test('cancelRecord 终止运行中的子进程并更新状态', async () => {
+    jest.useFakeTimers();
+    const proc = {
+      pid: 4321,
+      exitCode: null,
+      signalCode: null,
+      killed: false,
+      kill: jest.fn(),
+    };
+    replayQueue.activeTasks.set(10, {
+      recordId: 10,
+      principalId: 'abc',
+      action: 'all',
+      step: 'download',
+      proc,
+      pid: 4321,
+      command: 'yt-dlp url',
+      startedAt: '2026-06-18T00:00:00.000Z',
+      runtime: { cancelled: false },
+      logStream: { write: jest.fn() },
+    });
+    ReplayService.updateRecordStatus.mockResolvedValue({ id: 10, status: 'cancelled' });
+
+    const result = await replayQueue.cancelRecord(10);
+
+    expect(result.cancelled).toBe(true);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+    jest.advanceTimersByTime(5000);
+    expect(proc.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(ReplayService.updateRecordStatus).toHaveBeenCalledWith(10, 'cancelled', {
+      error_message: '用户取消任务',
+    });
+    expect(replayQueue.activeTasks.get(10).runtime.cancelled).toBe(true);
+    jest.useRealTimers();
+  });
+
+  test('cancelRecord 非运行任务返回未取消', async () => {
+    const result = await replayQueue.cancelRecord(999);
+
+    expect(result.cancelled).toBe(false);
+    expect(result.message).toBe('回放任务未在运行中');
   });
 });

@@ -10,11 +10,13 @@ defineProps<{
   totalPages: number
   total: number
   busy?: boolean
+  activeRecordIds?: Set<number>
 }>()
 
 const emit = defineEmits<{
   showDetail: [record: ReplayRecord]
   action: [recordId: number, action: string]
+  cancel: [recordId: number]
   pageChange: [delta: number]
 }>()
 
@@ -75,7 +77,9 @@ function displayDuration(seconds: number | null | undefined) {
               <ReplayActionButton
                 :record-id="record.id"
                 :busy="busy"
+                :running="activeRecordIds?.has(record.id)"
                 @action="(id, a) => emit('action', id, a)"
+                @cancel="(id) => emit('cancel', id)"
               />
             </td>
           </tr>

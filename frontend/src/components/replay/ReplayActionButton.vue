@@ -2,10 +2,12 @@
 const props = defineProps<{
   recordId: number
   busy?: boolean
+  running?: boolean
 }>()
 
 const emit = defineEmits<{
   action: [recordId: number, action: string]
+  cancel: [recordId: number]
 }>()
 
 interface ActionDef {
@@ -66,10 +68,22 @@ const actions: ActionDef[] = [
 function handleClick(action: string) {
   emit('action', props.recordId, action)
 }
+
+function handleCancel() {
+  emit('cancel', props.recordId)
+}
 </script>
 
 <template>
   <div class="inline-flex flex-wrap justify-end gap-1.5">
+    <button
+      v-if="running"
+      class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+      :disabled="busy"
+      @click="handleCancel"
+    >
+      取消
+    </button>
     <button
       v-for="a in actions"
       :key="a.action"
@@ -79,7 +93,7 @@ function handleClick(action: string) {
           ? 'bg-brand-600 text-white'
           : `border ${a.borderClass} ${a.textClass} ${a.hoverClass}`
       "
-      :disabled="busy"
+      :disabled="busy || running"
       @click="handleClick(a.action)"
     >
       {{ a.label }}

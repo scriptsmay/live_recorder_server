@@ -1207,7 +1207,11 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 将单条回放加入处理队列。
 
-**动作：** `extract`、`download`、`cut`、`fix`、`upload`、`backup`、`all`。
+**动作：** `extract`、`download`、`cut`、`fix`、`upload`、`all`。
+
+### POST /api/replay/records/:id/cancel
+
+取消正在运行的回放处理任务。后端会向当前子进程发送 `SIGTERM`，必要时升级为 `SIGKILL`，并将记录状态更新为 `cancelled`。
 
 ### GET /api/replay/tasks
 
@@ -1221,7 +1225,8 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
   "data": {
     "queue_length": 0,
     "processing": 0,
-    "concurrency": 1
+    "concurrency": 1,
+    "active": []
   }
 }
 ```
