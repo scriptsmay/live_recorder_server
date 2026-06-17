@@ -18,10 +18,8 @@ const statusOptions = [
   { value: 'extracted', label: '已提取' },
   { value: 'downloaded', label: '已下载' },
   { value: 'cut', label: '已剪切' },
-  { value: 'fixed', label: '已修复' },
   { value: 'uploaded', label: '已投稿' },
   { value: 'completed', label: '已完成' },
-  { value: 'backed_up', label: '已备份' },
   { value: 'failed', label: '失败' },
 ]
 

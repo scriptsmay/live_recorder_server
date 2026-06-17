@@ -35,11 +35,31 @@ function asShanghaiTimestamp(value) {
   return `${text.replace('T', ' ')}+08:00`;
 }
 
+function timestampFromEpoch(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const millis = numeric < 10000000000 ? numeric * 1000 : numeric;
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date);
+  return `${parts}+08:00`;
+}
+
 function mapRecord(row) {
   return {
     principal_id: row.principal_id,
     principal_name: row.principal_name || row.name || '',
-    replay_id: row.replay_id || row.id || '',
+    replay_id: row.replay_id || row.external_id || row.id || '',
     play_url: row.play_url || row.url || '',
     m3u8_url: row.m3u8_url || '',
     video_file_name: row.video_file_name || row.filename || '',
@@ -47,8 +67,11 @@ function mapRecord(row) {
     final_file_paths: row.final_file_paths || (row.file_path ? JSON.stringify([row.file_path]) : '[]'),
     file_size: parseInt(row.file_size, 10) || 0,
     bv_id: row.bv_id || '',
-    status: row.status || 'pending',
-    start_time: asShanghaiTimestamp(row.start_time),
+    status: 'backed_up',
+    start_time:
+      asShanghaiTimestamp(row.start_time) ||
+      timestampFromEpoch(row.start_live_time) ||
+      timestampFromEpoch(row.replay_time),
     duration: parseInt(row.duration, 10) || 0,
     uploaded_at: asShanghaiTimestamp(row.upload_time || row.uploaded_at),
     backed_up_at: asShanghaiTimestamp(row.backup_time || row.backed_up_at),
@@ -57,7 +80,18 @@ function mapRecord(row) {
   };
 }
 
+async function getSourceColumns(sourcePool) {
+  const result = await sourcePool.query(
+    `SELECT column_name, data_type
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'records'`
+  );
+  return new Map(result.rows.map((row) => [row.column_name, row.data_type]));
+}
+
 async function fetchSourceRecords(sourcePool, options) {
+  const columns = await getSourceColumns(sourcePool);
   const conditions = [];
   const params = [];
   if (options.principal) {
@@ -66,7 +100,22 @@ async function fetchSourceRecords(sourcePool, options) {
   }
   let sql = 'SELECT * FROM records';
   if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
-  sql += ' ORDER BY COALESCE(start_time, created_at) DESC NULLS LAST';
+  const orderExpressions = [
+    ['start_time', 'timestamp'],
+    ['start_live_time', 'epoch'],
+    ['replay_time', 'epoch'],
+    ['created_at', 'timestamp'],
+  ]
+    .filter(([column]) => columns.has(column))
+    .map(([column, kind]) => {
+      if (kind === 'epoch' || ['bigint', 'integer', 'numeric'].includes(columns.get(column))) {
+        return `to_timestamp(CASE WHEN ${column} > 10000000000 THEN ${column} / 1000.0 ELSE ${column} END)`;
+      }
+      return column;
+    });
+  if (orderExpressions.length) {
+    sql += ` ORDER BY COALESCE(${orderExpressions.join(', ')}) DESC NULLS LAST`;
+  }
   if (options.limit) {
     params.push(options.limit);
     sql += ` LIMIT $${params.length}`;

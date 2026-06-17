@@ -5,16 +5,6 @@ defineProps<{
   uploads: ReplayUploadRecord[]
   loading: boolean
 }>()
-
-function displayTime(value: string | null | undefined) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>
@@ -41,7 +31,7 @@ function displayTime(value: string | null | undefined) {
           </tr>
           <tr v-for="upload in uploads" v-else :key="upload.id">
             <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-              {{ displayTime(upload.created_at) }}
+              {{ $formatTime(upload.created_at) }}
             </td>
             <td class="px-4 py-3 text-sm text-gray-900 max-w-[420px] truncate">
               {{ upload.title || `回放 #${upload.replay_record_id}` }}

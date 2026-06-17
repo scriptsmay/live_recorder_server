@@ -184,7 +184,7 @@ const settingGroups: SettingGroup[] = [
       {
         key: 'danmaku_burn_concurrency',
         label: '弹幕压制并发',
-        desc: '弹幕压制队列最大并发数，N100 建议固定为 1',
+        desc: '弹幕压制队列最大并发数，8G内存NAS建议固定为 1',
         type: 'number',
         attrs: { min: 1, max: 1 },
       },

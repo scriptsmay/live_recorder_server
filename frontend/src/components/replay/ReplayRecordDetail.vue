@@ -10,11 +10,6 @@ const emit = defineEmits<{
   close: []
 }>()
 
-function displayTime(value: string | null | undefined) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN')
-}
-
 function displayDuration(seconds: number | null | undefined) {
   if (!seconds) return '-'
   const minutes = Math.floor(seconds / 60)
@@ -45,8 +40,13 @@ function parseJsonField(value: string | null): string[] {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/30 flex items-center justify-center z-50" @click.self="emit('close')">
-    <div class="bg-white rounded-xl shadow-lg p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+  <div
+    class="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+    @click.self="emit('close')"
+  >
+    <div
+      class="bg-white rounded-xl shadow-lg p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto"
+    >
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold text-gray-900">回放详情 #{{ record.id }}</h3>
         <button class="text-gray-400 hover:text-gray-600 text-xl" @click="emit('close')">×</button>
@@ -66,7 +66,7 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">时间</dt>
-          <dd class="text-gray-900">{{ displayTime(record.start_time) }}</dd>
+          <dd class="text-gray-900">{{ $formatTime(record.start_time) }}</dd>
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">时长</dt>
@@ -92,7 +92,13 @@ function parseJsonField(value: string | null): string[] {
           <dt class="text-gray-500 w-28 shrink-0">最终文件</dt>
           <dd class="text-gray-900 break-all">
             <template v-if="parseJsonField(record.final_file_paths).length > 0">
-              <div v-for="(f, i) in parseJsonField(record.final_file_paths)" :key="i" class="text-xs">{{ f }}</div>
+              <div
+                v-for="(f, i) in parseJsonField(record.final_file_paths)"
+                :key="i"
+                class="text-xs"
+              >
+                {{ f }}
+              </div>
             </template>
             <template v-else>-</template>
           </dd>
@@ -107,11 +113,11 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">创建时间</dt>
-          <dd class="text-gray-900">{{ displayTime(record.created_at) }}</dd>
+          <dd class="text-gray-900">{{ $formatTime(record.created_at) }}</dd>
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">更新时间</dt>
-          <dd class="text-gray-900">{{ displayTime(record.updated_at) }}</dd>
+          <dd class="text-gray-900">{{ $formatTime(record.updated_at) }}</dd>
         </div>
       </dl>
     </div>

@@ -44,7 +44,7 @@ function navigateToTab(tab: string) {
 
 <template>
   <div>
-    <div class="flex items-center gap-3 mb-6">
+    <div class="flex items-center gap-3 mb-3">
       <router-link
         to="/replay-toolbox"
         class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
@@ -53,29 +53,30 @@ function navigateToTab(tab: string) {
       </router-link>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center gap-8 mb-3 bg-white p-4 rounded-lg shadow-sm"
+    >
       <div>
         <h1 class="text-2xl font-bold text-gray-900">
           {{ principal?.room_name || principalId }}
         </h1>
         <p class="text-sm text-gray-500 mt-1">{{ principalId }}</p>
       </div>
-    </div>
-
-    <div class="flex gap-1 mb-6 border-b border-gray-200">
-      <button
-        v-for="tab in tabs"
-        :key="tab.name"
-        class="px-4 py-2 text-sm font-medium transition-colors -mb-px"
-        :class="
-          activeTab === tab.name
-            ? 'text-brand-600 border-b-2 border-brand-600'
-            : 'text-gray-500 hover:text-gray-700'
-        "
-        @click="navigateToTab(tab.to)"
-      >
-        {{ tab.label }}
-      </button>
+      <div class="flex gap-1 border-b border-gray-200">
+        <button
+          v-for="tab in tabs"
+          :key="tab.name"
+          class="px-4 py-2 text-sm font-medium transition-colors -mb-px"
+          :class="
+            activeTab === tab.name
+              ? 'text-brand-600 border-b-2 border-brand-600'
+              : 'text-gray-500 hover:text-gray-700'
+          "
+          @click="navigateToTab(tab.to)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
 
     <router-view />

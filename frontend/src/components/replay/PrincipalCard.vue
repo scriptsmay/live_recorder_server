@@ -5,16 +5,6 @@ import ReplayStatusBadge from './ReplayStatusBadge.vue'
 defineProps<{
   principal: ReplayPrincipal
 }>()
-
-function displayTime(value: string | null | undefined) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>
@@ -40,7 +30,7 @@ function displayTime(value: string | null | undefined) {
       <ReplayStatusBadge v-if="principal.latest_status" :status="principal.latest_status" />
     </div>
     <div class="text-xs text-gray-400 mt-1">
-      最近: {{ displayTime(principal.latest_replay_time) }}
+      最近: {{ $formatTime(principal.latest_replay_time) }}
     </div>
   </router-link>
 </template>
