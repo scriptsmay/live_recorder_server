@@ -15,8 +15,7 @@ const { confirm } = useConfirm()
 const principalId = computed(() => route.params.principalId as string)
 
 const statusFilter = ref('all')
-const syncCount = ref(1)
-const enqueueCount = ref(1)
+const batchCount = ref(1)
 const selectedRecord = ref<ReplayRecord | null>(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.pageSize)))
@@ -44,21 +43,48 @@ async function handleClearDateFilter() {
   await store.fetchRecords({ status: statusFilter.value, page: 1 })
 }
 
-async function handleSync() {
-  const ok = await confirm(`同步最近 ${syncCount.value} 条回放记录？`)
+async function handleBatchAll() {
+  const ok = await confirm(`同步最近 ${batchCount.value} 条回放记录并加入全流程处理？`)
   if (!ok) return
-  await store.syncRecords(syncCount.value)
-}
-
-async function handleEnqueue() {
-  const ok = await confirm(`将最近 ${enqueueCount.value} 条未完成回放加入处理队列？`)
-  if (!ok) return
-  await store.enqueuePrincipal(enqueueCount.value)
+  await store.syncRecords(batchCount.value)
+  await store.enqueuePrincipal(batchCount.value)
 }
 
 async function handleAction(recordId: number, action: string) {
-  const ok = await confirm(`确认执行 ${action} 任务？`, { title: `回放 #${recordId}` })
-  if (!ok) return
+  if (action === 'upload' || action === 'all') {
+    try {
+      const preview = await store.fetchUploadPreview(recordId)
+      if (!preview) {
+        const ok = await confirm('无法获取投稿预览，仍要继续？', { title: `回放 #${recordId}` })
+        if (!ok) return
+      } else {
+        const descText =
+          preview.desc_full && preview.desc_full.length > 100
+            ? `【简介】${preview.desc}（完整简介见投稿模板）`
+            : `【简介】${preview.desc || '（无）'}`
+        const message = [
+          '【投稿标题】',
+          `  ${preview.title || '（无）'}`,
+          '',
+          `【标签】 ${preview.tags || '（无）'}`,
+          '',
+          descText,
+          '',
+          `模板：${preview.template_name || '（无）'}`,
+          '',
+          `确认执行 ${action}？`,
+        ].join('\n')
+        const ok = await confirm(message, { title: `回放 #${recordId} 投稿预览` })
+        if (!ok) return
+      }
+    } catch {
+      const ok = await confirm('投稿预览获取失败，仍要继续？', { title: `回放 #${recordId}` })
+      if (!ok) return
+    }
+  } else {
+    const ok = await confirm(`确认执行 ${action} 任务？`, { title: `回放 #${recordId}` })
+    if (!ok) return
+  }
   await store.enqueueRecord(recordId, action)
 }
 
@@ -74,23 +100,7 @@ async function handlePageChange(delta: number) {
     <div class="flex flex-wrap items-center gap-3">
       <div class="flex items-center gap-2 ml-auto">
         <input
-          v-model.number="syncCount"
-          type="number"
-          min="1"
-          max="20"
-          class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-        />
-        <button
-          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
-          :disabled="store.busy"
-          @click="handleSync()"
-        >
-          同步回放
-        </button>
-      </div>
-      <div class="flex items-center gap-2">
-        <input
-          v-model.number="enqueueCount"
+          v-model.number="batchCount"
           type="number"
           min="1"
           max="20"
@@ -99,7 +109,7 @@ async function handlePageChange(delta: number) {
         <button
           class="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
           :disabled="store.busy"
-          @click="handleEnqueue()"
+          @click="handleBatchAll()"
         >
           批量全流程
         </button>

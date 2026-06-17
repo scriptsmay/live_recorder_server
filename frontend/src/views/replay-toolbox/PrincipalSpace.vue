@@ -56,7 +56,7 @@ function navigateToTab(tab: string) {
     <div
       class="flex flex-col sm:flex-row sm:items-center gap-8 mb-3 bg-white p-4 rounded-lg shadow-sm"
     >
-      <div>
+      <div class="border-r border-gray-200 px-8">
         <h1 class="text-2xl font-bold text-gray-900">
           {{ principal?.room_name || principalId }}
         </h1>

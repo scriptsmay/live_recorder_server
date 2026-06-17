@@ -13,6 +13,7 @@ const toast = useToast()
 const principalId = computed(() => route.params.principalId as string)
 
 const settingsDraft = ref<ReplaySettings>({
+  principal_name: '',
   upload_template_id: '',
   auto_upload: 'false',
   max_count_per_run: '1',
@@ -57,6 +58,14 @@ async function handleSave() {
     <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
       <h2 class="text-sm font-semibold text-gray-900 mb-4">主播回放配置</h2>
       <div class="space-y-4">
+        <label class="block">
+          <span class="text-xs text-gray-500">主播名称</span>
+          <input
+            v-model.trim="settingsDraft.principal_name"
+            type="text"
+            class="mt-1 w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+          />
+        </label>
         <label class="block">
           <span class="text-xs text-gray-500">投稿模板</span>
           <select

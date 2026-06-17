@@ -37,6 +37,14 @@ describe('ReplayService', () => {
             latest_status: 'fixed',
           },
         ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            principal_id: 'abc',
+            value: '自定义主播',
+          },
+        ],
       });
 
     const data = await ReplayService.getPrincipals();
@@ -44,6 +52,7 @@ describe('ReplayService', () => {
     expect(data).toEqual([
       {
         principal_id: 'abc',
+        principal_name: '自定义主播',
         room_id: 1,
         room_url: 'https://live.kuaishou.com/u/abc',
         room_name: '主播A',
@@ -80,7 +89,7 @@ describe('ReplayService', () => {
   });
 
   test('getPrincipals 限定 live.kuaishou.com 子域(避免非 live 房间产生空 principal_id)', async () => {
-    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     await ReplayService.getPrincipals();
 
@@ -166,15 +175,21 @@ describe('ReplayService', () => {
     const settings = await ReplayService.getSettings('abc');
 
     expect(settings.auto_upload).toBe('true');
+    expect(settings.principal_name).toBe('');
   });
 
   test('updateSettings 过滤非法字段', async () => {
-    pool.query.mockResolvedValueOnce({ rows: [{ key: 'auto_upload', principal_id: 'abc', value: 'true' }] });
-    await ReplayService.updateSettings('abc', { illegal_key: 'hack', auto_upload: 'true' });
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ key: 'principal_name', principal_id: 'abc', value: '主播A' }] })
+      .mockResolvedValueOnce({ rows: [{ key: 'auto_upload', principal_id: 'abc', value: 'true' }] });
+    await ReplayService.updateSettings('abc', {
+      illegal_key: 'hack',
+      principal_name: '主播A',
+      auto_upload: 'true',
+    });
 
-    // 只应插入 auto_upload
-    expect(pool.query).toHaveBeenCalledTimes(1);
-    const params = pool.query.mock.calls[0][1];
-    expect(params[0]).toBe('auto_upload');
+    // 只应插入允许字段
+    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(pool.query.mock.calls.map((call) => call[1][0])).toEqual(['principal_name', 'auto_upload']);
   });
 });

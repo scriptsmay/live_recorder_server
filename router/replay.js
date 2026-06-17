@@ -1,5 +1,6 @@
 const express = require('express');
 const ReplayService = require('../services/ReplayService');
+const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
 const replayQueue = require('../lib/core/ReplayProcessQueue');
 
 const router = express.Router();
@@ -67,6 +68,19 @@ router.post('/replay/records/:id/actions/:action', async (req, res) => {
   } catch (err) {
     console.error('[replay] 回放任务入队失败:', err);
     res.status(500).json({ status: 'Error', message: '回放任务入队失败' });
+  }
+});
+
+router.get('/replay/records/:id/upload-preview', async (req, res) => {
+  try {
+    const result = await ReplayUploadService.getUploadPreview(req.params.id);
+    if (result.error) {
+      return res.status(400).json({ status: 'Error', message: result.message });
+    }
+    res.json({ status: 'ok', data: result.preview });
+  } catch (err) {
+    console.error('[replay] 投稿预览失败:', err);
+    res.status(500).json({ status: 'Error', message: '获取投稿预览失败' });
   }
 });
 

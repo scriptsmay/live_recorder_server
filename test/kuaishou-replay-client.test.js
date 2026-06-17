@@ -8,9 +8,17 @@ jest.mock('../services/DataService', () => ({
 jest.mock('../services/ReplayService', () => ({
   upsertRecord: jest.fn(async () => ({ id: 1 })),
   getRecordByReplayId: jest.fn(async () => null),
+  getSettings: jest.fn(async () => ({ principal_name: '' })),
 }));
 
-const { generateHxfalcon, buildHeaders, selectBestStreamFromV3 } = require('../lib/core/replay/KuaishouReplayClient');
+const ReplayService = require('../services/ReplayService');
+const {
+  generateHxfalcon,
+  buildHeaders,
+  formatTimestamp,
+  selectBestStreamFromV3,
+  syncReplays,
+} = require('../lib/core/replay/KuaishouReplayClient');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -33,6 +41,43 @@ describe('KuaishouReplayClient', () => {
       const a = generateHxfalcon('test');
       const b = generateHxfalcon('test');
       expect(a).not.toBe(b);
+    });
+  });
+
+  describe('formatTimestamp', () => {
+    test('固定使用 Asia/Shanghai 时区', () => {
+      expect(formatTimestamp('2026-06-17T11:30:05.000Z')).toBe('2026-06-17_19_30_05');
+    });
+  });
+
+  describe('syncReplays', () => {
+    test('使用 principal_name 设置生成可读文件名', async () => {
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            list: [
+              {
+                id: 'r1',
+                playUrl: 'https://live.kuaishou.com/playback/r1',
+                createTime: '2026-06-17T11:30:05.000Z',
+                duration: 60,
+              },
+            ],
+          },
+        }),
+      }));
+      ReplayService.getSettings.mockResolvedValueOnce({ principal_name: '主播名' });
+
+      await syncReplays('abc', 1);
+
+      expect(ReplayService.getSettings).toHaveBeenCalledWith('abc');
+      expect(ReplayService.upsertRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          principal_name: '主播名',
+          video_file_name: '主播名_2026-06-17_19_30_05',
+        })
+      );
     });
   });
 

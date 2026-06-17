@@ -18,12 +18,49 @@ interface ActionDef {
 }
 
 const actions: ActionDef[] = [
-  { action: 'extract', label: '提取', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
-  { action: 'download', label: '下载', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
-  { action: 'cut', label: '剪切', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
-  { action: 'fix', label: '修复', borderClass: 'border-gray-300', textClass: 'text-gray-600', hoverClass: 'hover:bg-gray-50' },
-  { action: 'upload', label: '投稿', borderClass: 'border-sky-300', textClass: 'text-sky-600', hoverClass: 'hover:bg-sky-50' },
-  { action: 'all', label: '全流程', borderClass: '', textClass: '', hoverClass: 'hover:bg-brand-700', primary: true },
+  {
+    action: 'extract',
+    label: '提取',
+    borderClass: 'border-gray-300',
+    textClass: 'text-gray-600',
+    hoverClass: 'hover:bg-gray-50',
+  },
+  {
+    action: 'download',
+    label: '下载',
+    borderClass: 'border-gray-300',
+    textClass: 'text-gray-600',
+    hoverClass: 'hover:bg-gray-50',
+  },
+  {
+    action: 'cut',
+    label: '剪切',
+    borderClass: 'border-gray-300',
+    textClass: 'text-gray-600',
+    hoverClass: 'hover:bg-gray-50',
+  },
+  {
+    action: 'fix',
+    label: '修复',
+    borderClass: 'border-gray-300',
+    textClass: 'text-gray-600',
+    hoverClass: 'hover:bg-gray-50',
+  },
+  {
+    action: 'upload',
+    label: '投稿',
+    borderClass: 'border-sky-300',
+    textClass: 'text-sky-600',
+    hoverClass: 'hover:bg-sky-50',
+  },
+  {
+    action: 'all',
+    label: '全流程',
+    borderClass: '',
+    textClass: '',
+    hoverClass: 'hover:bg-brand-700',
+    primary: true,
+  },
 ]
 
 function handleClick(action: string) {

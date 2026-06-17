@@ -26,7 +26,7 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
 
           <!-- 内容 -->
           <div class="px-6 pb-4">
-            <p class="text-sm text-gray-600 leading-relaxed">
+            <p class="confirm-message text-sm text-gray-600 leading-relaxed">
               {{ confirmState.message }}
             </p>
           </div>
@@ -65,5 +65,9 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
 }
 .modal-enter-from > div:last-child {
   transform: scale(0.95);
+}
+.confirm-message {
+  white-space: pre-line;
+  word-break: break-word;
 }
 </style>

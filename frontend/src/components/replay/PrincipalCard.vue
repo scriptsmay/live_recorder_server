@@ -16,11 +16,11 @@ defineProps<{
       <div
         class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold shrink-0"
       >
-        {{ (principal.room_name || principal.principal_id).charAt(0) }}
+        {{ (principal.principal_name || principal.room_name || principal.principal_id).charAt(0) }}
       </div>
       <div class="min-w-0">
         <div class="text-sm font-semibold text-gray-900 truncate">
-          {{ principal.room_name || principal.principal_id }}
+          {{ principal.principal_name || principal.room_name || principal.principal_id }}
         </div>
         <div class="text-xs text-gray-400 truncate">{{ principal.principal_id }}</div>
       </div>

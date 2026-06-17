@@ -3,9 +3,6 @@
  * 验证两个模块的路由、服务、队列互不干扰
  */
 
-const path = require('path');
-const fs = require('fs');
-
 // 检查模块加载不冲突
 describe('录制 + 回放模块共存', () => {
   test('ReplayService 可独立加载', () => {
@@ -57,6 +54,7 @@ describe('录制 + 回放模块共存', () => {
     const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
     expect(ReplayUploadService).toBeDefined();
     expect(typeof ReplayUploadService.executeUpload).toBe('function');
+    expect(typeof ReplayUploadService.getUploadPreview).toBe('function');
   });
 
   test('video-processor 可独立加载', () => {
@@ -115,13 +113,6 @@ describe('数据库表结构兼容', () => {
   test('回放表 DDL 字段与 ReplayService 一致', () => {
     // 验证关键字段在服务层被引用
     const ReplayService = require('../services/ReplayService');
-
-    // 这些字段必须在 replay_records 表中存在
-    const requiredFields = [
-      'id', 'principal_id', 'principal_name', 'replay_id', 'play_url',
-      'm3u8_url', 'video_file_name', 'raw_file_path', 'status',
-      'start_time', 'duration', 'bv_id', 'error_message',
-    ];
 
     // 通过检查 SQL 引用来验证（间接测试）
     // 实际字段验证需要连接数据库，这里只验证模块可加载

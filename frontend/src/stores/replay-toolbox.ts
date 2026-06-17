@@ -7,6 +7,7 @@ import type {
   ReplayRecord,
   ReplaySettings,
   ReplayTaskStatus,
+  ReplayUploadPreview,
   ReplayUploadRecord,
 } from '@/types/api'
 
@@ -73,7 +74,12 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
       const res = await apiGet<ReplayRecord[]>(
         `/api/replay/principals/${encodeURIComponent(selectedPrincipalId.value)}/records?${params}`,
       )
-      const body = res as unknown as { data?: ReplayRecord[]; total?: number; page?: number; page_size?: number }
+      const body = res as unknown as {
+        data?: ReplayRecord[]
+        total?: number
+        page?: number
+        page_size?: number
+      }
       records.value = body.data ?? []
       total.value = body.total ?? records.value.length
       page.value = nextPage
@@ -168,6 +174,11 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     }
   }
 
+  async function fetchUploadPreview(recordId: number) {
+    const res = await apiGet<ReplayUploadPreview>(`/api/replay/records/${recordId}/upload-preview`)
+    return res.data ?? null
+  }
+
   async function enqueuePrincipal(count: number, dryRun = false) {
     if (!selectedPrincipalId.value) return false
     busy.value = true
@@ -239,6 +250,7 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     selectPrincipal,
     syncRecords,
     enqueueRecord,
+    fetchUploadPreview,
     enqueuePrincipal,
     updateSettings,
   }

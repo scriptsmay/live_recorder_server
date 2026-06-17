@@ -192,6 +192,7 @@ export type ReplayRecordStatus =
 
 export interface ReplayPrincipal {
   principal_id: string
+  principal_name: string
   room_id: number
   room_url: string
   room_name: string
@@ -252,9 +253,18 @@ export interface ReplayTaskStatus {
 }
 
 export interface ReplaySettings {
+  principal_name: string
   upload_template_id: string
   auto_upload: string
   max_count_per_run: string
+}
+
+export interface ReplayUploadPreview {
+  title: string
+  desc: string
+  desc_full: string
+  tags: string
+  template_name: string
 }
 
 // ====== 仪表盘 ======

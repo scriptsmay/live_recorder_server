@@ -77,9 +77,17 @@ class ReplayService {
       [ids]
     );
     const statsMap = new Map(stats.rows.map((row) => [row.principal_id, row]));
+    const nameResult = await pool.query(
+      `SELECT principal_id, value
+       FROM replay_settings
+       WHERE key = 'principal_name' AND principal_id = ANY($1)`,
+      [ids]
+    );
+    const nameMap = new Map(nameResult.rows.map((row) => [row.principal_id, row.value]));
 
     return principals.map((principal) => ({
       ...principal,
+      principal_name: nameMap.get(principal.principal_id) || principal.room_name || principal.principal_id,
       replay_count: statsMap.get(principal.principal_id)?.replay_count || 0,
       latest_replay_time: statsMap.get(principal.principal_id)?.latest_replay_time || null,
       latest_status: statsMap.get(principal.principal_id)?.latest_status || null,
@@ -239,6 +247,7 @@ class ReplayService {
 
   static async getSettings(principalId) {
     const defaults = {
+      principal_name: '',
       upload_template_id: '',
       auto_upload: await DataService.getSetting('replay_auto_upload', 'false'),
       max_count_per_run: await DataService.getSetting('replay_max_count_per_run', '1'),
@@ -252,7 +261,7 @@ class ReplayService {
   }
 
   static async updateSettings(principalId, updates) {
-    const allowed = new Set(['upload_template_id', 'auto_upload', 'max_count_per_run']);
+    const allowed = new Set(['principal_name', 'upload_template_id', 'auto_upload', 'max_count_per_run']);
     const entries = Object.entries(updates || {}).filter(([key]) => allowed.has(key));
     const rows = [];
     for (const [key, value] of entries) {

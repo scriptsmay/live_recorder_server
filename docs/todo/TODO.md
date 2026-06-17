@@ -18,7 +18,9 @@
 
 7. ~~[仪表盘（Dashboard）改造计划](../finished_plan/DASHBOARD_UPGRADE/DASHBOARD_UPGRADE_PLAN.md)~~ → 已完成，已移至 `docs/finished_plan/DASHBOARD_UPGRADE/`
 
-8. ~~[前端登录认证开发计划](AUTH_LOGIN_PLAN.md)~~ → 已完成，新增单管理员登录、HttpOnly Cookie session、首次启动自动生成密码、前端路由守卫与用户菜单
+8. ~~[前端登录认证开发计划](../finished_plan/AUTH_LOGIN/AUTH_LOGIN_PLAN.md)~~ → 已完成，新增单管理员登录、HttpOnly Cookie session、首次启动自动生成密码、前端路由守卫与用户菜单
+
+9. ~~[回放工具箱补全开发方案](../finished_plan/REPLAY_TOOLBOX_ENHANCEMENT/REPLAY_TOOLBOX_ENHANCEMENT_PLAN.md)~~ → 已完成，新增主播显示名配置、北京时间文件名、投稿预览 API 与确认框
 
 ## 待完成计划
 

@@ -78,7 +78,17 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">播放页</dt>
-          <dd class="text-gray-900 break-all">{{ record.play_url || '-' }}</dd>
+          <dd class="text-gray-900 break-all">
+            <a
+              v-if="record.play_url"
+              :href="record.play_url"
+              target="_blank"
+              class="text-blue-500 hover:text-blue-700"
+            >
+              {{ record.play_url }}
+            </a>
+            <span v-else>-</span>
+          </dd>
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">m3u8</dt>

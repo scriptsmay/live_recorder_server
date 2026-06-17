@@ -97,6 +97,40 @@ describe('ReplayUploadService', () => {
     expect(notify.uploadStart).toHaveBeenCalled();
   });
 
+  test('getUploadPreview 返回渲染后的投稿预览并截断简介', async () => {
+    const longDesc = 'a'.repeat(120);
+    UploadService.renderTemplate.mockImplementation((tpl) => {
+      if (tpl === 'desc') return longDesc;
+      return tpl;
+    });
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1, principal_id: 'abc', principal_name: '主播',
+          play_url: 'http://test', start_time: '2026-06-16T20:00:00+08:00',
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [{ value: '1' }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          name: '模板A',
+          title_template: 'title',
+          desc_template: 'desc',
+          tags: 'tag1,tag2',
+        }],
+      });
+
+    const result = await ReplayUploadService.getUploadPreview(1);
+
+    expect(result.error).toBe(false);
+    expect(result.preview.title).toBe('title');
+    expect(result.preview.tags).toBe('tag1,tag2');
+    expect(result.preview.desc).toHaveLength(103);
+    expect(result.preview.desc_full).toHaveLength(120);
+    expect(result.preview.template_name).toBe('模板A');
+  });
+
   test('_runUpload 成功时更新状态为 success 并回填 bv_id', async () => {
     biliup.upload.mockResolvedValue({ success: true, output: 'done', bvId: 'BV123' });
     afterUpload.mockResolvedValue(null);
