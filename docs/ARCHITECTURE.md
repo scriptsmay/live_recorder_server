@@ -658,6 +658,8 @@ server/router/rooms.js (新增/修改房间)
 - 未配置通知参数时静默跳过对应通道。
 - Gotify 使用 `MESSAGE_GOTIFY_SERVER`、`MESSAGE_GOTIFY_TOKEN`、
   `MESSAGE_GOTIFY_PRIORITY`。
+- 回放队列每个处理步骤完成后发送「直播回放处理完成」通知；通知异常只写入
+  `logs/replay_{recordId}.log`，不阻断后续步骤。
 
 ### 执行
 

@@ -153,7 +153,7 @@ async function replayPipelineComplete(roomName, stepName, recordId, detail = {},
   if (Array.isArray(detail.final_file_paths)) lines.push(`最终文件：${detail.final_file_paths.length} 个`);
   if (detail.upload_record_id) lines.push(`投稿记录ID：${detail.upload_record_id}`);
 
-  send('✅ 回放任务执行完成', lines.join('\n'));
+  send('✅ 直播回放处理完成', lines.join('\n'));
 }
 
 async function replayCliComplete(principalName, total, success, failed) {

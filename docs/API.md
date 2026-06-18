@@ -360,7 +360,7 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 
 ## 通知配置
 
-服务端通知由录制、投稿和投稿后处理流程自动触发，支持以下通道：
+服务端通知由录制、投稿、回放处理队列和投稿后处理流程自动触发，支持以下通道：
 
 | 环境变量                  | 说明                                               |
 | ------------------------- | -------------------------------------------------- |
@@ -368,6 +368,10 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 | `MESSAGE_GOTIFY_SERVER`   | Gotify 服务地址，例如 `https://gotify.example.com` |
 | `MESSAGE_GOTIFY_TOKEN`    | Gotify app token；未配置则跳过 Gotify 通知         |
 | `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级，默认 `5`                            |
+
+回放工具箱在每个处理步骤完成后发送「直播回放处理完成」通知，覆盖
+`extract`、`download`、`cut`、`fix`、`upload`。通知发送失败只写入回放任务日志，
+不会影响队列继续执行。
 
 ### GET /api/notify/status
 

@@ -16,7 +16,7 @@
   "license": "ISC",
   "author": "scriptsmay",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "server/app.js",
   "scripts": {
     "start": "node server/app.js",
     "dev": "PORT=3001 NODE_ENV=development node --watch server/app.js",

@@ -1,5 +1,5 @@
 require('../server/config/env').initEnv({ mode: 'development' });
-const pool = require('../db');
+const pool = require('../server/db/index');
 
 async function main() {
   const client = await pool.connect();

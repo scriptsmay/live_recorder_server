@@ -45,6 +45,33 @@ describe('notification and backup fallbacks', () => {
     );
   });
 
+  test('replayPipelineComplete uses user-facing replay completion copy', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.MESSAGE_FEISHU_WEBHOOK = 'https://feishu.example.com/webhook';
+
+    const axios = require('axios');
+    axios.post.mockResolvedValue({ status: 200 });
+    const notify = require('../server/lib/core/notify');
+
+    await notify.replayPipelineComplete('主播A', 'download', 12, {
+      status: 'downloaded',
+      raw_file_path: '/tmp/replay/a.mp4',
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://feishu.example.com/webhook',
+      {
+        msg_type: 'text',
+        content: {
+          text: expect.stringContaining('✅ 直播回放处理完成'),
+        },
+      },
+      expect.any(Object)
+    );
+    expect(axios.post.mock.calls[0][1].content.text).toContain('主播：主播A');
+    expect(axios.post.mock.calls[0][1].content.text).toContain('步骤：download');
+  });
+
   test('skips backup_and_delete without deleting files when NAS config is absent', async () => {
     process.env.NAS_HOST = '';
     process.env.NAS_USER = '';
