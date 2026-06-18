@@ -62,7 +62,7 @@ COPY . .
 COPY --from=frontend-builder /app/public/frontend ./public/frontend
 
 RUN mkdir -p /data/video_downloads /data/danmaku_output /data/replay /data/biliup /app/logs \
-    && chmod +x scripts/docker-entrypoint.sh
+    && chmod +x scripts/docker-entrypoint.sh scripts/replay-cron.sh
 
 EXPOSE 1123
 
