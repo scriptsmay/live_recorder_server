@@ -256,16 +256,7 @@ KV 结构的全局配置表。
 | `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                       |
 | `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                         |
 | `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                 |
-| `replay_auto_backup`         | `true`             | （已废弃，保留兼容）回放投稿后是否自动备份                 |
 | `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                 |
-| `kuaishou_cookie`            | ``                 | （兼容旧回放配置）快手 cookie；新部署优先使用 `POLLING_KUAISHOU_COOKIE` |
-| `kuaishou_kww`               | ``                 | （兼容旧回放配置）快手 kww 请求头                          |
-| `kuaishou_kwfv1`             | ``                 | （兼容旧回放配置）快手 kwfv1 请求头                        |
-| `kuaishou_kwssectoken`       | ``                 | （兼容旧回放配置）快手 kwssectoken cookie                  |
-| `kuaishou_kwscode`           | ``                 | （兼容旧回放配置）快手 kwscode cookie                      |
-| `kuaishou_bfb1s`             | ``                 | （兼容旧回放配置）快手 bfb1s cookie                        |
-| `kuaishou_web_st`            | ``                 | （兼容旧回放配置）快手 web_st cookie                       |
-| `kuaishou_web_ph`            | ``                 | （兼容旧回放配置）快手 web_ph cookie                       |
 
 ---
 

@@ -565,7 +565,6 @@ PollingManager (单例)
 - 依赖 `playwright-core` 连接远程 Browserless/Chromium，不下载本地浏览器。
 - 每次检查通过 `RemoteBrowserClient.withPage()` 创建 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
 - `POLLING_KUAISHOU_COOKIE` 作为快手直播轮询和回放工具箱共享的访问态 cookie。
-- 旧的回放专属 `settings.kuaishou_*` 和 `KW_*` 变量仅保留兼容 fallback。
 - 默认启用轻量人类行为模拟：页面状态 ready 后、数据提取前随机等待并滚动。超时、等待、backoff、UA、session TTL 和行为模拟参数均使用系统常量，不暴露为用户配置。
 - 读取快手直播页 `window.__INITIAL_STATE__.liveroom.playList[activeIndex]` 判断主播名、开播状态和 FLV 地址。
 - 风控、验证码、`请求过快`、`400002` 均视为未知状态并抛错，不写成 `isLive=false`。

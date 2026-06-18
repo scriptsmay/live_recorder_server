@@ -512,14 +512,6 @@ async function runMigration() {
       ['replay_cron_expr', '0 3 * * *'],
       ['replay_auto_upload', 'false'],
       ['replay_max_count_per_run', '1'],
-      ['kuaishou_cookie', ''],
-      ['kuaishou_kww', ''],
-      ['kuaishou_kwfv1', ''],
-      ['kuaishou_kwssectoken', ''],
-      ['kuaishou_kwscode', ''],
-      ['kuaishou_bfb1s', ''],
-      ['kuaishou_web_st', ''],
-      ['kuaishou_web_ph', ''],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

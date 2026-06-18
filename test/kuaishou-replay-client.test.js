@@ -12,7 +12,6 @@ jest.mock('../services/ReplayService', () => ({
 }));
 
 const ReplayService = require('../services/ReplayService');
-const DataService = require('../services/DataService');
 const {
   generateHxfalcon,
   buildHeaders,
@@ -25,8 +24,6 @@ const {
 beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.POLLING_KUAISHOU_COOKIE;
-  delete process.env.KW_COOKIE;
-  delete process.env.KW_KWW;
 });
 
 describe('KuaishouReplayClient', () => {
@@ -87,27 +84,12 @@ describe('KuaishouReplayClient', () => {
   });
 
   describe('buildHeaders', () => {
-    test('getKuaishouCookies 优先复用 POLLING_KUAISHOU_COOKIE', async () => {
+    test('getKuaishouCookies 复用 POLLING_KUAISHOU_COOKIE', async () => {
       process.env.POLLING_KUAISHOU_COOKIE = 'did=web_x; client_key=abc';
-      DataService.getSetting.mockResolvedValue('');
 
       const cookies = await getKuaishouCookies();
 
       expect(cookies.cookie).toBe('did=web_x; client_key=abc');
-      expect(DataService.getSetting).not.toHaveBeenCalledWith('kuaishou_cookie', '');
-    });
-
-    test('getKuaishouCookies 兼容旧 settings 字段', async () => {
-      DataService.getSetting.mockImplementation(async (key) => {
-        if (key === 'kuaishou_cookie') return 'legacy_cookie=1';
-        if (key === 'kuaishou_kww') return 'legacy-kww';
-        return '';
-      });
-
-      const cookies = await getKuaishouCookies();
-
-      expect(cookies.cookie).toBe('legacy_cookie=1');
-      expect(cookies.kww).toBe('legacy-kww');
     });
 
     test('构建包含所有必需头的对象', () => {

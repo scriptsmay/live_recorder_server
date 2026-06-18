@@ -98,20 +98,17 @@ docker compose --env-file .env.docker \
 `/chromium` CDP endpoint，例如
 `ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
 
-快手轮询内部的超时、等待、backoff、UA、cookie session 和行为模拟参数使用系统常量，不作为用户配置暴露。
-`POLLING_KUAISHOU_COOKIE` 仅作为 Redis 中还没有快手 session 时的初始访问态种子，后续会由系统自动持久化并刷新快手 cookie。
+快手轮询内部的超时、等待、backoff 和 UA 参数使用系统常量，不作为用户配置暴露。
+`POLLING_KUAISHOU_COOKIE` 作为快手直播轮询和回放工具箱共享的访问态 cookie。
 
 ### 回放工具箱配置
 
-回放工具箱依赖快手 cookie 和远程浏览器（m3u8 提取 Playwright 兜底方案）：
+回放工具箱复用快手轮询 cookie，并依赖远程浏览器提供 m3u8 提取 Playwright 兜底方案：
 
-| 配置项                       | 说明                                              | 默认值 |
-| ---------------------------- | ------------------------------------------------- | ------ |
-| `kuaishou_cookie`            | 快手主 cookie 字符串（settings 表配置）            | -      |
-| `kuaishou_kww`               | 快手 kww 请求头                                   | -      |
+| 配置项                       | 说明                                                | 默认值 |
+| ---------------------------- | --------------------------------------------------- | ------ |
+| `POLLING_KUAISHOU_COOKIE`    | 快手访问态 cookie，直播轮询和回放工具箱共用         | -      |
 | `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（Playwright m3u8 提取） | -      |
-
-更多 cookie 配置项（`kuaishou_kwfv1`、`kuaishou_kwssectoken` 等）通过前端回放工具箱设置页配置。
 
 ## 项目结构
 
