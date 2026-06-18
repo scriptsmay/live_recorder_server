@@ -67,7 +67,7 @@ function mapRecord(row) {
     final_file_paths: row.final_file_paths || (row.file_path ? JSON.stringify([row.file_path]) : '[]'),
     file_size: parseInt(row.file_size, 10) || 0,
     bv_id: row.bv_id || '',
-    status: 'backed_up',
+    status: 'completed',
     start_time:
       asShanghaiTimestamp(row.start_time) ||
       timestampFromEpoch(row.start_live_time) ||
@@ -179,9 +179,9 @@ async function migrateRows(target, rows, options) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const sourceUrl = process.env.WUYAN_REPLAY_DATABASE_URL;
+  const sourceUrl = process.env.WUYAN_REPLAY_DATABASE_URL || process.env.SUPABASE_URL;
   if (!sourceUrl) {
-    throw new Error('缺少 WUYAN_REPLAY_DATABASE_URL');
+    throw new Error('缺少 WUYAN_REPLAY_DATABASE_URL 或 SUPABASE_URL');
   }
 
   const sourcePool = new Pool({ connectionString: sourceUrl });
