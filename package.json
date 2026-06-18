@@ -34,8 +34,6 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:api": "jest test/api-coverage.test.js --verbose",
-    "smoke:kuaishou": "node scripts/smoke-kuaishou-checker.js",
-    "smoke:kuaishou:api": "node scripts/smoke-kuaishou-api-checker.js",
     "check-env": "bash scripts/check-env.sh",
     "release:patch": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
