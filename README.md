@@ -75,6 +75,18 @@ npm run stop
 | MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址              | -                                         |
 | MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token              | -                                         |
 
+### 登录鉴权配置
+
+| 配置项               | 说明                                                               | 默认值     |
+| -------------------- | ------------------------------------------------------------------ | ---------- |
+| AUTH_ENABLED         | 登录鉴权总开关；生产环境建议保持开启                               | true       |
+| ADMIN_USERNAME       | 首次启动自动创建管理员时使用的用户名                               | admin      |
+| AUTH_TOKEN_TTL_HOURS | 登录态有效期，单位小时                                             | 24         |
+| AUTH_COOKIE_NAME     | 登录态 Cookie 名称                                                 | auth_token |
+| AUTH_COOKIE_SECURE   | 是否只允许 HTTPS 写入 Cookie；内网 HTTP 部署保持 false             | false      |
+| LOGIN_RATE_LIMIT     | 同一 IP 每分钟允许的登录失败次数                                   | 5          |
+| LOGIN_LOCKOUT_MIN    | 达到失败次数上限后的锁定时长，单位分钟；锁定期间登录接口会直接拒绝 | 5          |
+
 ### 快手轮询配置
 
 快手轮询 Checker 依赖远程 Browserless/Chromium，并通过平台级单并发和全局间隔降低风控概率。

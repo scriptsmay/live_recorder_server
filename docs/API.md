@@ -38,6 +38,18 @@ curl http://127.0.0.1:1123/api/health
 
 ## 登录鉴权
 
+登录鉴权使用单管理员账号和 HttpOnly Cookie session。相关环境变量：
+
+| 环境变量               | 说明                                                               | 默认值       |
+| ---------------------- | ------------------------------------------------------------------ | ------------ |
+| `AUTH_ENABLED`         | 登录鉴权总开关；设为 `false` 时业务路由免登录                      | `true`       |
+| `ADMIN_USERNAME`       | 首次启动自动创建管理员时使用的用户名                               | `admin`      |
+| `AUTH_TOKEN_TTL_HOURS` | 登录态有效期，单位小时                                             | `24`         |
+| `AUTH_COOKIE_NAME`     | 登录态 Cookie 名称                                                 | `auth_token` |
+| `AUTH_COOKIE_SECURE`   | 是否只允许 HTTPS 写入 Cookie                                       | `false`      |
+| `LOGIN_RATE_LIMIT`     | 同一 IP 每分钟允许的登录失败次数                                   | `5`          |
+| `LOGIN_LOCKOUT_MIN`    | 达到失败次数上限后的锁定时长，单位分钟；锁定期间登录接口会直接拒绝 | `5`          |
+
 ### POST /api/auth/login
 
 使用用户名和密码登录。成功后返回当前用户名，并写入 `HttpOnly` Cookie。
