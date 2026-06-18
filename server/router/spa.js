@@ -5,7 +5,7 @@ const fs = require('fs');
 const router = express.Router();
 
 // Vue SPA 前端构建产物目录
-const SPA_DIR = path.join(__dirname, '..', 'public', 'frontend');
+const SPA_DIR = path.join(__dirname, '..', '..', 'public', 'frontend');
 const INDEX_HTML = path.join(SPA_DIR, 'index.html');
 
 /**

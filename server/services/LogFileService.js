@@ -1,12 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const { getLogsDir } = require('../config/config');
 
 const DEFAULT_TAIL_LINES = 2000;
 const MAX_TAIL_LINES = 5000;
 const READ_BLOCK_SIZE = 64 * 1024;
 
 class LogFileService {
-  constructor(logsDir = path.join(process.cwd(), 'logs')) {
+  constructor(logsDir = path.join(getLogsDir(), 'logs')) {
     this.logsDir = path.resolve(logsDir);
   }
 

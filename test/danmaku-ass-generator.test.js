@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const pool = require('../db/index');
+const pool = require('../server/db/index');
 
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
+const danmakuAssGenerator = require('../server/lib/core/danmaku/DanmakuAssGenerator');
 
 // ============================================================
 // 辅助函数：创建临时测试目录和 mock 数据

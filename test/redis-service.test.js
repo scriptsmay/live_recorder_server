@@ -1,4 +1,4 @@
-const redisService = require('../lib/utils/redis-service');
+const redisService = require('../server/lib/utils/redis-service');
 
 jest.mock('redis', () => {
   const mockClient = {

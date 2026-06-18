@@ -1,9 +1,9 @@
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-const pool = require('../db/index');
-const ReplayService = require('../services/ReplayService');
+const pool = require('../server/db/index');
+const ReplayService = require('../server/services/ReplayService');
 
 describe('ReplayService', () => {
   beforeEach(() => {
@@ -167,7 +167,7 @@ describe('ReplayService', () => {
 
   test('getSettings 合并默认值和主播覆盖', async () => {
     // Mock DataService.getSetting
-    const DataService = require('../services/DataService');
+    const DataService = require('../server/services/DataService');
     DataService.getSetting = jest.fn(async (key, def) => def);
 
     pool.query.mockResolvedValueOnce({ rows: [{ key: 'auto_upload', value: 'true' }] });

@@ -23,6 +23,11 @@ function getReplayWorkDir() {
   return envs.REPLAY_WORK_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'replay');
 }
 
+// 项目根目录（logs/ 等运行时目录的基准路径）
+function getLogsDir() {
+  return envs.LOG_DIR || path.join(__dirname, '..', '..');
+}
+
 module.exports = {
   envs,
   SITE_URL,
@@ -37,4 +42,5 @@ module.exports = {
   isDanmakuBurnFile,
   getDanmakuOutputDir,
   getReplayWorkDir,
+  getLogsDir,
 };

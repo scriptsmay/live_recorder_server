@@ -26,7 +26,6 @@
 
 暂无。
 
-
 ## 设计说明待整理
 
 为什么弹幕工具箱页面（danmaku-toolbox）点击展开文件（组件： SegmentsPanel.vue ）时要同时请求2个API： `api/recording_files?session_id=51` 和 `api/danmaku_burn_records?session_id=51` 是出于什么设计这么做的？

@@ -1,8 +1,8 @@
 'use strict';
 
-jest.mock('../db/index', () => ({ query: jest.fn() }));
-jest.mock('../db/redis', () => ({ get: jest.fn(), set: jest.fn(), del: jest.fn() }));
-jest.mock('../services/ReplayService', () => ({
+jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+jest.mock('../server/db/redis', () => ({ get: jest.fn(), set: jest.fn(), del: jest.fn() }));
+jest.mock('../server/services/ReplayService', () => ({
   getRecordWorkDir: jest.fn(() => '/tmp/replay/work'),
 }));
 
@@ -28,7 +28,7 @@ describe('video-processor', () => {
         mkdirSync: jest.fn(),
       };
     });
-    videoProcessor = require('../lib/core/replay/video-processor');
+    videoProcessor = require('../server/lib/core/replay/video-processor');
   });
 
   describe('ensureInside', () => {

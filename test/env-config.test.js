@@ -16,7 +16,7 @@ describe('env config', () => {
   test('initEnv derives REPLAY_WORK_DIR next to VIDEO_DOWNLOAD_DIR', () => {
     withEnv({ APP_DATA_DIR: '/data', VIDEO_DOWNLOAD_DIR: '/tmp/live/video_downloads' }, () => {
       jest.isolateModules(() => {
-        const { initEnv } = require('../config/env');
+        const { initEnv } = require('../server/config/env');
         initEnv();
 
         expect(process.env.REPLAY_WORK_DIR).toBe(path.join('/tmp/live', 'replay'));
@@ -33,7 +33,7 @@ describe('env config', () => {
     };
     try {
       jest.isolateModules(() => {
-        const { initEnv } = require('../config/env');
+        const { initEnv } = require('../server/config/env');
         initEnv();
 
         expect(process.env.REPLAY_WORK_DIR).toBe('/mnt/replay-work');

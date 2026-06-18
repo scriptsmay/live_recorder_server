@@ -1,9 +1,9 @@
-jest.mock('../lib/core/auth-service', () => ({
+jest.mock('../server/lib/core/auth-service', () => ({
   getSession: jest.fn(),
 }));
 
-const { getSession } = require('../lib/core/auth-service');
-const { readToken, requireAuth } = require('../middleware/require-auth');
+const { getSession } = require('../server/lib/core/auth-service');
+const { readToken, requireAuth } = require('../server/middleware/require-auth');
 
 function createResponse() {
   return {

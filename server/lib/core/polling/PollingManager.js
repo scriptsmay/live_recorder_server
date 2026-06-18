@@ -3,7 +3,7 @@ const redis = require('../../../db/redis');
 const CHECKERS = require('./checkers');
 const RecorderService = require('../../../services/RecorderService');
 const notify = require('../notify');
-const { detectPlatform } = require('../../../lib/utils/platform-detector');
+const { detectPlatform } = require('../../utils/platform-detector');
 
 function redactStreamUrl(url) {
   if (!url) return url;

@@ -179,7 +179,10 @@ async function extractM3u8(record, options = {}) {
 
   const cookies = await getKuaishouCookies();
   writeLog(logStream, `开始提取 m3u8 replay_id=${replayId}`);
-  writeLog(logStream, `Cookie 配置: ${cookies.cookie ? 'POLLING_KUAISHOU_COOKIE 已配置' : 'POLLING_KUAISHOU_COOKIE 为空'}`);
+  writeLog(
+    logStream,
+    `Cookie 配置: ${cookies.cookie ? 'POLLING_KUAISHOU_COOKIE 已配置' : 'POLLING_KUAISHOU_COOKIE 为空'}`
+  );
 
   // 方案 1: HTTP API 直接调用 playback/detail 接口
   try {
@@ -198,7 +201,10 @@ async function extractM3u8(record, options = {}) {
     if (response.ok) {
       const data = await response.json();
       const playUrlV3 = data?.data?.currentWork?.playUrlV3;
-      writeLog(logStream, `detail API currentWork=${data?.data?.currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'}`);
+      writeLog(
+        logStream,
+        `detail API currentWork=${data?.data?.currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'}`
+      );
 
       if (playUrlV3) {
         const m3u8Url = selectBestStreamFromV3(playUrlV3);

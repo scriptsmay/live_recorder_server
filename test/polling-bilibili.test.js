@@ -1,5 +1,5 @@
-const PlatformChecker = require('../lib/core/polling/PlatformChecker');
-const BilibiliChecker = require('../lib/core/polling/BilibiliChecker');
+const PlatformChecker = require('../server/lib/core/polling/PlatformChecker');
+const BilibiliChecker = require('../server/lib/core/polling/BilibiliChecker');
 
 jest.spyOn(PlatformChecker, 'fetchJson').mockImplementation(jest.fn());
 jest.spyOn(PlatformChecker, 'extractLastPathSegment').mockImplementation((url) => {

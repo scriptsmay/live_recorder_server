@@ -1,4 +1,4 @@
-require('../config/env').initEnv({ mode: 'development' });
+require('../server/config/env').initEnv({ mode: 'development' });
 const pool = require('../db');
 
 async function main() {

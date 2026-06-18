@@ -6,8 +6,8 @@
 
 | 方式   | 进程管理                   | 数据服务                        | 适用场景            |
 | ------ | -------------------------- | ------------------------------- | ------------------- |
-| PM2    | `pm2` 管理 `app.js`        | 外部 PostgreSQL / Redis         | 现有本地或 NAS 环境 |
-| Docker | 容器直接运行 `node app.js` | Compose 编排 PostgreSQL / Redis | 新部署、迁移和回滚  |
+| PM2    | `pm2` 管理 `server/app.js`        | 外部 PostgreSQL / Redis         | 现有本地或 NAS 环境 |
+| Docker | 容器直接运行 `node server/app.js` | Compose 编排 PostgreSQL / Redis | 新部署、迁移和回滚  |
 
 Docker 架构：
 
@@ -15,7 +15,7 @@ Docker 架构：
                 ┌────────────────────────────┐
                 │        Docker Compose       │
                 │                            │
-Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/video_downloads
+Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /data/video_downloads
                 │      + uv/biliup           │──▶ /data/biliup
                 │             │              │──▶ /app/logs
                 │             ├── postgres   │──▶ postgres_data
@@ -31,7 +31,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
 
 ## 环境变量加载
 
-环境变量统一由 `config/env.js` 初始化：
+环境变量统一由 `server/config/env.js` 初始化：
 
 1. 先静默加载项目根目录 `.env`。
 2. `NODE_ENV=development` 时再加载 `.env.dev`，并覆盖 `.env` 中同名配置。
@@ -39,7 +39,7 @@ Chrome 扩展 ───▶│ app: node app.js + ffmpeg  │──▶ /data/vide
    `REPLAY_WORK_DIR`、`BILIUP_WORK_DIR`，以及从 `DATABASE_URL` / `REDIS_URL` 拆分出的兼容变量。
 
 应用入口、数据库连接、Redis 工具和维护脚本都应调用
-`require('./config/env').initEnv()` 或按相对路径引入同一方法；不要在业务模块中直接
+`require('./server/config/env').initEnv()` 或按相对路径引入同一方法；不要在业务模块中直接
 `require('dotenv').config()`。开发清理脚本固定以 development 模式调用该入口，确保使用
 `.env.dev` 隔离配置。
 
@@ -306,7 +306,7 @@ FFmpeg 写入分段文件(.flv)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
 - 支持网络重连：`-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`
-- 用户代理伪装：通过 `lib/core/config/userAgents.js` 配置化，避免被 CDN 403 拦截
+- 用户代理伪装：通过 `server/lib/core/config/userAgents.js` 配置化，避免被 CDN 403 拦截
 - 协议白名单：`-protocol_whitelist rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy`
 - **流类型自动检测**：支持 FLV 和 HLS/m3u8 两种流格式
   - URL 特征检测（`.m3u8`、`.flv`、`/hls/`、`/flv/` 路径）
@@ -319,7 +319,7 @@ FFmpeg 写入分段文件(.flv)
 
 ## 4. 流式转码架构
 
-### TranscodeQueue (`lib/core/TranscodeQueue.js`)
+### TranscodeQueue (`server/lib/core/TranscodeQueue.js`)
 
 **设计理念**: 将集中式转码改为异步队列处理,结合边下边转码,最大化分散CPU压力,提升用户体验。
 
@@ -393,7 +393,7 @@ await transcodeQueue.getCurrentProcessingCount();
 
 ---
 
-## 5. 看门狗 (`lib/watchdog.js`)
+## 5. 看门狗 (`server/lib/core/watchdog.js`)
 
 看门狗是独立模块，单实例运行。职责边界如下：
 
@@ -403,7 +403,7 @@ await transcodeQueue.getCurrentProcessingCount();
 - 最少 10 秒，防止设置错误
 - 同一时间只有 1 个定时器在跑（模块级 `watchdogTimer` 变量控制）
 
-### 属于看门狗（`lib/watchdog.js`）
+### 属于看门狗（`server/lib/core/watchdog.js`）
 
 | 函数                      | 触发        | 职责                                                                   |
 | ------------------------- | ----------- | ---------------------------------------------------------------------- |
@@ -414,13 +414,13 @@ await transcodeQueue.getCurrentProcessingCount();
 | `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`） |
 | `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件        |
 
-### 不属于看门狗（但在 `app.js` 启动时通过 `lifecycle.js` 运行）
+### 不属于看门狗（但在 `server/app.js` 启动时通过 `lifecycle.js` 运行）
 
 | 函数                       | 所在文件                | 触发       | 职责                                                       |
 | -------------------------- | ----------------------- | ---------- | ---------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `lib/core/lifecycle.js` | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
-| `cleanupStaleRedis()`      | `lib/core/lifecycle.js` | 启动       | 清理 Redis 过期 `active_task:*`                            |
-| `scanRecordingFiles()`     | `lib/scan-files.js`     | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
+| `cleanupStaleRecordings()` | `server/lib/core/lifecycle.js` | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                 |
+| `cleanupStaleRedis()`      | `server/lib/core/lifecycle.js` | 启动       | 清理 Redis 过期 `active_task:*`                            |
+| `scanRecordingFiles()`     | `server/lib/scan-files.js`     | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用 |
 
 ### 周期性执行链
 
@@ -438,7 +438,7 @@ watchdog.start()
 ### 启动时执行链（非周期）
 
 ```text
-app.js
+server/app.js
   └─ bootstrap()
        ├─ migrate()                      ← DB 迁移（死锁自动重试 3 次）
        ├─ cleanupStaleRedis()             ← 清理 Redis 过期 active_task
@@ -487,7 +487,7 @@ app.js
 
 ## 6. 直播轮询（Polling）
 
-`lib/core/polling/`
+`server/lib/core/polling/`
 
 策略模式实现的多平台开播检测与自动录制系统。
 
@@ -575,13 +575,13 @@ PollingManager (单例)
 ### 轮询流程
 
 ```text
-app.js
+server/app.js
   └─ bootstrap()
        └─ pollingManager.start()
             └─ loadPollingRooms()                       # DB: polling_enabled=true
                  └─ pollRoom(room) × N                   # 仅检查1次，无定时器
 
-router/rooms.js (新增/修改房间)
+server/router/rooms.js (新增/修改房间)
   └─ pollingManager.reloadRoom(roomId)
        └─ startRoomPolling(room)
             ├─ pollRoom(room)                       # 首次立即执行（0~5s jitter）
@@ -690,14 +690,14 @@ router/rooms.js (新增/修改房间)
 
 ## 10. 回放工具箱
 
-`lib/core/replay/` 模块，将快手直播回放的全流程自动化。
+`server/lib/core/replay/` 模块，将快手直播回放的全流程自动化。
 
 ### 架构
 
 ```text
 前端 (Vue 3 SPA)                          后端
 ─────────────────                         ─────
-/replay-toolbox                           router/replay.js
+/replay-toolbox                           server/router/replay.js
   └── /:principalId                       ├── ReplayService (CRUD)
         ├── /records                      ├── KuaishouReplayClient (API)
         ├── /uploads                      ├── m3u8-extractor.js (Playwright)

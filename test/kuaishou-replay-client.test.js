@@ -1,17 +1,17 @@
 'use strict';
 
-jest.mock('../db/index', () => ({ query: jest.fn() }));
-jest.mock('../db/redis', () => ({ get: jest.fn(), set: jest.fn(), del: jest.fn() }));
-jest.mock('../services/DataService', () => ({
+jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+jest.mock('../server/db/redis', () => ({ get: jest.fn(), set: jest.fn(), del: jest.fn() }));
+jest.mock('../server/services/DataService', () => ({
   getSetting: jest.fn(async () => ''),
 }));
-jest.mock('../services/ReplayService', () => ({
+jest.mock('../server/services/ReplayService', () => ({
   upsertRecord: jest.fn(async () => ({ id: 1 })),
   getRecordByReplayId: jest.fn(async () => null),
   getSettings: jest.fn(async () => ({ principal_name: '' })),
 }));
 
-const ReplayService = require('../services/ReplayService');
+const ReplayService = require('../server/services/ReplayService');
 const {
   generateHxfalcon,
   buildHeaders,
@@ -19,7 +19,7 @@ const {
   formatTimestamp,
   selectBestStreamFromV3,
   syncReplays,
-} = require('../lib/core/replay/KuaishouReplayClient');
+} = require('../server/lib/core/replay/KuaishouReplayClient');
 
 beforeEach(() => {
   jest.clearAllMocks();

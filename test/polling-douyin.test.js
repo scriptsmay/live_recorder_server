@@ -1,5 +1,5 @@
-const PlatformChecker = require('../lib/core/polling/PlatformChecker');
-const DouyinChecker = require('../lib/core/polling/DouyinChecker');
+const PlatformChecker = require('../server/lib/core/polling/PlatformChecker');
+const DouyinChecker = require('../server/lib/core/polling/DouyinChecker');
 
 jest.spyOn(PlatformChecker, 'fetchJson').mockImplementation(jest.fn());
 jest.spyOn(PlatformChecker, 'fetchText').mockImplementation(jest.fn());
@@ -18,7 +18,7 @@ jest.spyOn(PlatformChecker, 'normalizeResult').mockImplementation((partial) => (
   error: partial.error ?? null,
 }));
 
-jest.mock('../lib/core/polling/signers/douyin', () => ({
+jest.mock('../server/lib/core/polling/signers/douyin', () => ({
   generateABogus: jest.fn((query) => {
     if (!query) return null;
     return 'test_abogus';
@@ -237,14 +237,14 @@ describe('DouyinChecker', () => {
 
 describe('Douyin Signer', () => {
   it('should generate a_bogus signature', () => {
-    const { generateABogus } = jest.requireActual('../lib/core/polling/signers/douyin');
+    const { generateABogus } = jest.requireActual('../server/lib/core/polling/signers/douyin');
     const result = generateABogus('test=123&foo=bar');
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
   });
 
   it('should return null for empty input', () => {
-    const { generateABogus } = jest.requireActual('../lib/core/polling/signers/douyin');
+    const { generateABogus } = jest.requireActual('../server/lib/core/polling/signers/douyin');
     expect(generateABogus('')).toBeNull();
     expect(generateABogus(null)).toBeNull();
   });

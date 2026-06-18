@@ -12,15 +12,15 @@
  *   node scripts/replay-cli.js status [--principal <id>]
  */
 
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
-const pool = require('../db/index');
-const ReplayService = require('../services/ReplayService');
-const KuaishouReplayClient = require('../lib/core/replay/KuaishouReplayClient');
-const videoProcessor = require('../lib/core/replay/video-processor');
-const cleanup = require('../lib/core/replay/cleanup');
-const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
-const notify = require('../lib/core/notify');
+const pool = require('../server/db/index');
+const ReplayService = require('../server/services/ReplayService');
+const KuaishouReplayClient = require('../server/lib/core/replay/KuaishouReplayClient');
+const videoProcessor = require('../server/lib/core/replay/video-processor');
+const cleanup = require('../server/lib/core/replay/cleanup');
+const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
+const notify = require('../server/lib/core/notify');
 
 // ── 参数解析 ──
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
-const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
+const KuaishouChecker = require('../server/lib/core/polling/KuaishouChecker');
 
 const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 20;
 const KUAISHOU_SMOKE_ROUNDS = parseInt(process.env.KUAISHOU_SMOKE_ROUNDS || '2', 10);

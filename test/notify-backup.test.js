@@ -1,5 +1,5 @@
 jest.mock('axios');
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn().mockResolvedValue({ rows: [] }),
 }));
 
@@ -24,7 +24,7 @@ describe('notification and backup fallbacks', () => {
 
     const axios = require('axios');
     axios.post.mockResolvedValue({ status: 200 });
-    const notify = require('../lib/core/notify');
+    const notify = require('../server/lib/core/notify');
 
     await notify.send('标题', '内容');
 
@@ -50,7 +50,7 @@ describe('notification and backup fallbacks', () => {
     process.env.NAS_USER = '';
     process.env.NAS_BACKUP_DIR = '';
 
-    const { afterUpload } = require('../lib/core/backup');
+    const { afterUpload } = require('../server/lib/core/backup');
 
     const result = await afterUpload(
       'backup_and_delete',

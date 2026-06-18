@@ -19,7 +19,7 @@ const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
-const { version } = require('../package.json');
+const { version } = require('../../package.json');
 const { dockerImageVersion, startTime } = require('../config/app-info');
 
 router.get('/', (req, res) => {
@@ -436,7 +436,7 @@ router.delete('/recordings/:id', async (req, res) => {
 });
 
 router.get('/api-doc', (req, res) => {
-  const mdPath = path.join(__dirname, '../docs/API.md');
+  const mdPath = path.join(__dirname, '../../docs/API.md');
 
   fs.readFile(mdPath, 'utf8', (err, data) => {
     if (err) {

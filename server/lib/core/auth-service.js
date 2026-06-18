@@ -74,11 +74,7 @@ async function validateCredentials(username, plainPassword) {
 
 async function createSession(token, username) {
   const { ttlSeconds } = getAuthConfig();
-  await redis.set(
-    `auth:session:${token}`,
-    JSON.stringify({ username, createdAt: Date.now() }),
-    { EX: ttlSeconds },
-  );
+  await redis.set(`auth:session:${token}`, JSON.stringify({ username, createdAt: Date.now() }), { EX: ttlSeconds });
   return ttlSeconds;
 }
 

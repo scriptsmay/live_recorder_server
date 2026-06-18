@@ -92,26 +92,26 @@ REMOTE_TABLE=test_records
 
 ### 持久化目录
 
-| 宿主机路径                                 | 容器路径                   | 说明             |
-| ------------------------------------------ | -------------------------- | ---------------- |
-| `/srv/nas-data/videos/live_records/downloads` | `/data/video_downloads`    | 直播录制文件     |
-| `/srv/nas-data/videos/live_records/danmaku_output` | `/data/danmaku_output`  | 弹幕压制产物     |
-| `/srv/nas-data/videos/live_records/replay`    | `/data/replay`             | 回放工作目录     |
-| `./data/biliup`                            | `/data/biliup`             | biliup 登录态    |
-| `./logs`                                   | `/app/logs`                | 应用日志         |
+| 宿主机路径                                      | 容器路径                | 说明          |
+| ----------------------------------------------- | ----------------------- | ------------- |
+| `/srv/nas-data/videos/live_records/downloads`      | `/data/video_downloads` | 直播录制文件  |
+| `/srv/nas-data/videos/live_records/danmaku_output` | `/data/danmaku_output`  | 弹幕压制产物  |
+| `/srv/nas-data/videos/live_records/replay`         | `/data/replay`          | 回放工作目录  |
+| `./data/biliup`                                 | `/data/biliup`          | biliup 登录态 |
+| `./logs`                                        | `/app/logs`             | 应用日志      |
 
 ## 镜像内置组件
 
 镜像已包含以下依赖，无需额外安装：
 
-| 组件        | 说明                                              |
-| ----------- | ------------------------------------------------- |
-| Node.js 22  | 运行时                                            |
-| FFmpeg      | 录制、转码、弹幕压制                              |
-| mkvmerge    | 视频切片（mkvtoolnix）                            |
-| yt-dlp      | 回放下载                                          |
-| biliup      | B 站投稿（通过 uv tool 安装）                     |
-| playwright  | 回放 m3u8 提取兜底方案（需配置远程浏览器）        |
+| 组件       | 说明                                       |
+| ---------- | ------------------------------------------ |
+| Node.js 22 | 运行时                                     |
+| FFmpeg     | 录制、转码、弹幕压制                       |
+| mkvmerge   | 视频切片（mkvtoolnix）                     |
+| yt-dlp     | 回放下载                                   |
+| biliup     | B 站投稿（通过 uv tool 安装）              |
+| playwright | 回放 m3u8 提取兜底方案（需配置远程浏览器） |
 
 ## biliup 配置
 
@@ -128,12 +128,12 @@ biliup --help
 
 通知通道可选，未配置时静默跳过：
 
-| 环境变量                 | 说明                   |
-| ------------------------ | ---------------------- |
-| `MESSAGE_FEISHU_WEBHOOK` | 飞书机器人 webhook     |
-| `MESSAGE_GOTIFY_SERVER`  | Gotify 服务地址        |
-| `MESSAGE_GOTIFY_TOKEN`   | Gotify app token       |
-| `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级（默认 5）|
+| 环境变量                  | 说明                    |
+| ------------------------- | ----------------------- |
+| `MESSAGE_FEISHU_WEBHOOK`  | 飞书机器人 webhook      |
+| `MESSAGE_GOTIFY_SERVER`   | Gotify 服务地址         |
+| `MESSAGE_GOTIFY_TOKEN`    | Gotify app token        |
+| `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级（默认 5） |
 
 ## 快手轮询 + 回放工具箱
 

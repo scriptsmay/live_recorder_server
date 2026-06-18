@@ -2,10 +2,11 @@ const path = require('path');
 const fs = require('fs');
 const dayjs = require('dayjs');
 const morgan = require('morgan');
+const { getLogsDir } = require('../../config/config');
 
 const ts = () => dayjs().format('YYYY-MM-DD HH:mm:ss');
 
-const LOG_DIR = path.join(__dirname, '../../logs');
+const LOG_DIR = path.join(getLogsDir(), 'logs');
 try {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });

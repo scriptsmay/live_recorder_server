@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
 const packagePath = path.join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));

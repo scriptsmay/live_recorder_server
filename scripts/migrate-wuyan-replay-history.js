@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
 const { Pool } = require('pg');
-const targetPool = require('../db/index');
+const targetPool = require('../server/db/index');
 
 function parseArgs(argv) {
   const options = {

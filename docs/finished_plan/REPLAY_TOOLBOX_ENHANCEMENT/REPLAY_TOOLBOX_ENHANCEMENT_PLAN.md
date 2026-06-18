@@ -68,13 +68,13 @@ function generateTitle(videoFileName, principalName) {
 
 ### 改动清单
 
-| # | 层级 | 文件 | 改动 |
-|---|------|------|------|
-| 1 | 后端 | `services/ReplayService.js` | `updateSettings()` allowed 新增 `'principal_name'`；`getSettings()` defaults 新增 `principal_name: ''`；`getPrincipals()` 批量读 settings 并判空兜底 |
-| 2 | 后端 | `lib/core/replay/KuaishouReplayClient.js` | `syncReplays()` 开头读一次 `settings`（循环外），用 `displayName` 写入 `replay_records` |
-| 3 | 前端类型 | `frontend/src/types/api.ts` | `ReplaySettings` 接口新增 `principal_name?: string` |
-| 4 | 前端页面 | `frontend/src/views/replay-toolbox/SettingsPage.vue` | 表单新增「主播名称」输入框 |
-| 5 | 前端组件 | `frontend/src/components/replay/PrincipalCard.vue` | 显示名优先使用 `principal_name` |
+| #   | 层级     | 文件                                                 | 改动                                                                                                                                                 |
+| --- | -------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 后端     | `services/ReplayService.js`                          | `updateSettings()` allowed 新增 `'principal_name'`；`getSettings()` defaults 新增 `principal_name: ''`；`getPrincipals()` 批量读 settings 并判空兜底 |
+| 2   | 后端     | `lib/core/replay/KuaishouReplayClient.js`            | `syncReplays()` 开头读一次 `settings`（循环外），用 `displayName` 写入 `replay_records`                                                              |
+| 3   | 前端类型 | `frontend/src/types/api.ts`                          | `ReplaySettings` 接口新增 `principal_name?: string`                                                                                                  |
+| 4   | 前端页面 | `frontend/src/views/replay-toolbox/SettingsPage.vue` | 表单新增「主播名称」输入框                                                                                                                           |
+| 5   | 前端组件 | `frontend/src/components/replay/PrincipalCard.vue`   | 显示名优先使用 `principal_name`                                                                                                                      |
 
 ### 关键代码片段
 
@@ -115,7 +115,8 @@ async function syncReplays(principalId, count = 12, principalName) {
   if (result.error) throw new Error(`获取回放列表失败: ${result.error}`);
 
   const items = result.data.list || [];
-  let created = 0, updated = 0;
+  let created = 0,
+    updated = 0;
 
   for (const item of items) {
     const replayId = item.id || item.photoId || '';
@@ -124,7 +125,7 @@ async function syncReplays(principalId, count = 12, principalName) {
     const existing = await ReplayService.getRecordByReplayId(principalId, replayId);
     const recordData = {
       principal_id: principalId,
-      principal_name: displayName,  // ✅ 使用 settings 中的自定义名称
+      principal_name: displayName, // ✅ 使用 settings 中的自定义名称
       replay_id: replayId,
       play_url: item.playUrl || `https://live.kuaishou.com/playback/${replayId}`,
       video_file_name: item.createTime
@@ -135,8 +136,11 @@ async function syncReplays(principalId, count = 12, principalName) {
       duration: item.duration || 0,
     };
 
-    if (existing) { updated++; }
-    else { created++; }
+    if (existing) {
+      updated++;
+    } else {
+      created++;
+    }
     await ReplayService.upsertRecord(recordData);
   }
   return { created, updated, records: items };
@@ -165,12 +169,16 @@ function formatTimestamp(timestamp) {
   const date = new Date(timestamp);
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
     hour12: false,
   });
   const parts = fmt.formatToParts(date);
-  const p = (type) => parts.find(x => x.type === type)?.value;
+  const p = (type) => parts.find((x) => x.type === type)?.value;
   return `${p('year')}-${p('month')}-${p('day')}_${p('hour')}_${p('minute')}_${p('second')}`;
 }
 ```
@@ -261,9 +269,14 @@ if (action === 'upload' || action === 'all') {
 ```
 
 > **⚠️ CSS 配套**（审查意见 3.1）：确认 `confirm` 对话框的内容容器样式包含：
+>
 > ```css
-> .confirm-message { white-space: pre-line; word-break: break-all; }
+> .confirm-message {
+>   white-space: pre-line;
+>   word-break: break-all;
+> }
 > ```
+>
 > 若使用 Element Plus `ElMessageBox`，需通过 `customClass: 'whitespace-pre-line'` 实现。
 
 ---
@@ -283,22 +296,22 @@ if (action === 'upload' || action === 'all') {
 
 ## 测试计划
 
-| 测试项 | 验证点 |
-|--------|--------|
+| 测试项                | 验证点                                                        |
+| --------------------- | ------------------------------------------------------------- |
 | `principal_name` 读写 | Settings 保存/读取正确；`ids` 为空时 `getPrincipals()` 不报错 |
-| `principal_name` 联动 | 主播列表显示自定义名；`syncReplays` 只查一次 settings |
-| 文件名时区 | Docker UTC 模式下 `formatTimestamp` 仍输出北京时间 |
-| 文件名对齐 | 新同步记录格式为 `主播名_2026-06-17_19_30_05` |
-| 投稿预览 API | `desc` 字段截断正确；`desc_full` 保留完整内容 |
-| 投稿确认框 | 标题/标签展示正确；`\n` 换行在正常渲染；其他操作不受影响 |
-| 已有数据兼容 | 已有记录的 `video_file_name` 不被覆盖 |
+| `principal_name` 联动 | 主播列表显示自定义名；`syncReplays` 只查一次 settings         |
+| 文件名时区            | Docker UTC 模式下 `formatTimestamp` 仍输出北京时间            |
+| 文件名对齐            | 新同步记录格式为 `主播名_2026-06-17_19_30_05`                 |
+| 投稿预览 API          | `desc` 字段截断正确；`desc_full` 保留完整内容                 |
+| 投稿确认框            | 标题/标签展示正确；`\n` 换行在正常渲染；其他操作不受影响      |
+| 已有数据兼容          | 已有记录的 `video_file_name` 不被覆盖                         |
 
 ---
 
 ## 部署注意事项
 
-| 项目 | 说明 |
-|------|------|
+| 项目        | 说明                                                                      |
+| ----------- | ------------------------------------------------------------------------- |
 | Docker 时区 | `formatTimestamp` 已硬编码 `Asia/Shanghai`，容器无需设置 `TZ`（双重保险） |
-| `.env` 配置 | 无新增环境变量 |
-| 数据库 | 无迁移脚本（复用 EAV 表） |
+| `.env` 配置 | 无新增环境变量                                                            |
+| 数据库      | 无迁移脚本（复用 EAV 表）                                                 |

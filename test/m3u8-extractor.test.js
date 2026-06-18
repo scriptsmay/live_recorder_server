@@ -1,16 +1,16 @@
 'use strict';
 
-jest.mock('../lib/core/browser/RemoteBrowserClient', () => ({
+jest.mock('../server/lib/core/browser/RemoteBrowserClient', () => ({
   RemoteBrowserClient: jest.fn(),
 }));
 
-const { RemoteBrowserClient } = require('../lib/core/browser/RemoteBrowserClient');
+const { RemoteBrowserClient } = require('../server/lib/core/browser/RemoteBrowserClient');
 const {
   extractM3u8WithBrowser,
   parseM3u8,
   parseCookies,
   selectBestStreamFromV3,
-} = require('../lib/core/replay/m3u8-extractor');
+} = require('../server/lib/core/replay/m3u8-extractor');
 
 describe('m3u8-extractor', () => {
   describe('parseM3u8', () => {

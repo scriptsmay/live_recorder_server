@@ -1,6 +1,6 @@
-const PlatformChecker = require('../lib/core/polling/PlatformChecker');
-const DouyuChecker = require('../lib/core/polling/DouyuChecker');
-const { getSignParams } = require('../lib/core/polling/signers/douyu');
+const PlatformChecker = require('../server/lib/core/polling/PlatformChecker');
+const DouyuChecker = require('../server/lib/core/polling/DouyuChecker');
+const { getSignParams } = require('../server/lib/core/polling/signers/douyu');
 
 jest.spyOn(PlatformChecker, 'fetchJson').mockImplementation(jest.fn());
 jest.spyOn(PlatformChecker, 'fetchText').mockImplementation(jest.fn());
@@ -19,7 +19,7 @@ jest.spyOn(PlatformChecker, 'normalizeResult').mockImplementation((partial) => (
   error: partial.error ?? null,
 }));
 
-jest.mock('../lib/core/polling/signers/douyu', () => ({
+jest.mock('../server/lib/core/polling/signers/douyu', () => ({
   getSignParams: jest.fn(),
 }));
 

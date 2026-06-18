@@ -22,12 +22,12 @@
 
 'use strict';
 
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
-const { detectPlatform } = require('../lib/utils/platform-detector');
-const checkers = require('../lib/core/polling/checkers');
-const PlatformChecker = require('../lib/core/polling/PlatformChecker');
-const KuaishouChecker = require('../lib/core/polling/KuaishouChecker');
+const { detectPlatform } = require('../server/lib/utils/platform-detector');
+const checkers = require('../server/lib/core/polling/checkers');
+const PlatformChecker = require('../server/lib/core/polling/PlatformChecker');
+const KuaishouChecker = require('../server/lib/core/polling/KuaishouChecker');
 
 // ─── ANSI colors ───────────────────────────────────────────────────────────────
 

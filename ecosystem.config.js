@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'live_recorder_server',
-      script: './app.js',
+      script: './server/app.js',
 
       // --- 默认配置 (公共部分) ---
       instances: 1,

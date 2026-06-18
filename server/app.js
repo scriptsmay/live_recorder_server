@@ -1,5 +1,6 @@
 require('./config/env').initEnv();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -11,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(cors({ credentials: true }));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));

@@ -1,8 +1,8 @@
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-const DanmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
+const DanmakuRecorder = require('../server/lib/core/danmaku/DanmakuRecorder');
 
 // ============================================================
 // _normalizeEvent 时间戳处理测试

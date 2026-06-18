@@ -1,24 +1,24 @@
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../db/redis', () => ({
+jest.mock('../server/db/redis', () => ({
   get: jest.fn(),
   setEx: jest.fn(),
 }));
 
-jest.mock('../lib/core/polling/checkers', () => ({}));
-jest.mock('../services/RecorderService', () => ({
+jest.mock('../server/lib/core/polling/checkers', () => ({}));
+jest.mock('../server/services/RecorderService', () => ({
   startRecording: jest.fn(),
 }));
-jest.mock('../lib/core/notify', () => ({
+jest.mock('../server/lib/core/notify', () => ({
   liveStart: jest.fn(),
   liveEnd: jest.fn(),
 }));
 
-const pool = require('../db/index');
-const redis = require('../db/redis');
-const pollingManager = require('../lib/core/polling/PollingManager');
+const pool = require('../server/db/index');
+const redis = require('../server/db/redis');
+const pollingManager = require('../server/lib/core/polling/PollingManager');
 
 describe('PollingManager dashboard snapshot', () => {
   beforeEach(() => {

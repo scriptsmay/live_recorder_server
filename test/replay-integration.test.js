@@ -6,8 +6,8 @@
 // 检查模块加载不冲突
 describe('录制 + 回放模块共存', () => {
   test('ReplayService 可独立加载', () => {
-    jest.mock('../db/index', () => ({ query: jest.fn() }));
-    const ReplayService = require('../services/ReplayService');
+    jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+    const ReplayService = require('../server/services/ReplayService');
     expect(ReplayService).toBeDefined();
     expect(typeof ReplayService.getPrincipals).toBe('function');
     expect(typeof ReplayService.listRecords).toBe('function');
@@ -20,8 +20,8 @@ describe('录制 + 回放模块共存', () => {
   });
 
   test('ReplayProcessQueue 可独立加载', () => {
-    jest.mock('../db/index', () => ({ query: jest.fn() }));
-    jest.mock('../db/redis', () => ({
+    jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+    jest.mock('../server/db/redis', () => ({
       lPush: jest.fn(),
       rPop: jest.fn(),
       lLen: jest.fn(),
@@ -31,7 +31,7 @@ describe('录制 + 回放模块共存', () => {
       decr: jest.fn(),
       del: jest.fn(),
     }));
-    const ReplayProcessQueue = require('../lib/core/ReplayProcessQueue');
+    const ReplayProcessQueue = require('../server/lib/core/ReplayProcessQueue');
     expect(ReplayProcessQueue).toBeDefined();
     expect(typeof ReplayProcessQueue.enqueue).toBe('function');
     expect(typeof ReplayProcessQueue.enqueuePrincipal).toBe('function');
@@ -39,29 +39,29 @@ describe('录制 + 回放模块共存', () => {
   });
 
   test('ReplayUploadService 可独立加载', () => {
-    jest.mock('../db/index', () => ({ query: jest.fn() }));
-    jest.mock('../lib/core/biliup', () => ({ upload: jest.fn() }));
-    jest.mock('../lib/core/notify', () => ({
+    jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+    jest.mock('../server/lib/core/biliup', () => ({ upload: jest.fn() }));
+    jest.mock('../server/lib/core/notify', () => ({
       uploadStart: jest.fn(),
       uploadComplete: jest.fn(),
       uploadFailed: jest.fn(),
     }));
-    jest.mock('../lib/core/backup', () => ({ afterUpload: jest.fn() }));
-    jest.mock('../services/UploadService', () => ({
+    jest.mock('../server/lib/core/backup', () => ({ afterUpload: jest.fn() }));
+    jest.mock('../server/services/UploadService', () => ({
       getTemplateVars: jest.fn(),
       renderTemplate: jest.fn(),
     }));
-    const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
+    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
     expect(ReplayUploadService).toBeDefined();
     expect(typeof ReplayUploadService.executeUpload).toBe('function');
     expect(typeof ReplayUploadService.getUploadPreview).toBe('function');
   });
 
   test('video-processor 可独立加载', () => {
-    jest.mock('../services/ReplayService', () => ({
+    jest.mock('../server/services/ReplayService', () => ({
       getRecordWorkDir: jest.fn(() => '/tmp/test'),
     }));
-    const videoProcessor = require('../lib/core/replay/video-processor');
+    const videoProcessor = require('../server/lib/core/replay/video-processor');
     expect(videoProcessor).toBeDefined();
     expect(typeof videoProcessor.extract).toBe('function');
     expect(typeof videoProcessor.download).toBe('function');
@@ -70,14 +70,14 @@ describe('录制 + 回放模块共存', () => {
   });
 
   test('cleanup 可独立加载', () => {
-    const cleanup = require('../lib/core/replay/cleanup');
+    const cleanup = require('../server/lib/core/replay/cleanup');
     expect(cleanup).toBeDefined();
     expect(typeof cleanup.removeFiles).toBe('function');
   });
 
   test('KuaishouReplayClient 可独立加载', () => {
-    jest.mock('../services/ReplayService', () => ({}));
-    const client = require('../lib/core/replay/KuaishouReplayClient');
+    jest.mock('../server/services/ReplayService', () => ({}));
+    const client = require('../server/lib/core/replay/KuaishouReplayClient');
     expect(client).toBeDefined();
     expect(typeof client.fetchLiveList).toBe('function');
     expect(typeof client.syncReplays).toBe('function');
@@ -88,21 +88,30 @@ describe('录制 + 回放模块共存', () => {
 describe('API 路由覆盖', () => {
   test('回放 API 路由定义存在', () => {
     // 验证路由文件可加载且导出了正确的路由
-    jest.mock('../db/index', () => ({ query: jest.fn() }));
-    jest.mock('../db/redis', () => ({
-      lPush: jest.fn(), rPop: jest.fn(), lLen: jest.fn(),
-      get: jest.fn(), set: jest.fn(), incr: jest.fn(), decr: jest.fn(), del: jest.fn(),
+    jest.mock('../server/db/index', () => ({ query: jest.fn() }));
+    jest.mock('../server/db/redis', () => ({
+      lPush: jest.fn(),
+      rPop: jest.fn(),
+      lLen: jest.fn(),
+      get: jest.fn(),
+      set: jest.fn(),
+      incr: jest.fn(),
+      decr: jest.fn(),
+      del: jest.fn(),
     }));
-    jest.mock('../lib/core/biliup', () => ({ upload: jest.fn() }));
-    jest.mock('../lib/core/notify', () => ({
-      uploadStart: jest.fn(), uploadComplete: jest.fn(), uploadFailed: jest.fn(),
+    jest.mock('../server/lib/core/biliup', () => ({ upload: jest.fn() }));
+    jest.mock('../server/lib/core/notify', () => ({
+      uploadStart: jest.fn(),
+      uploadComplete: jest.fn(),
+      uploadFailed: jest.fn(),
     }));
-    jest.mock('../lib/core/backup', () => ({ afterUpload: jest.fn() }));
-    jest.mock('../services/UploadService', () => ({
-      getTemplateVars: jest.fn(), renderTemplate: jest.fn(),
+    jest.mock('../server/lib/core/backup', () => ({ afterUpload: jest.fn() }));
+    jest.mock('../server/services/UploadService', () => ({
+      getTemplateVars: jest.fn(),
+      renderTemplate: jest.fn(),
     }));
 
-    const replayRouter = require('../router/replay');
+    const replayRouter = require('../server/router/replay');
     expect(replayRouter).toBeDefined();
     // Express Router is a function
     expect(typeof replayRouter).toBe('function');
@@ -112,7 +121,7 @@ describe('API 路由覆盖', () => {
 describe('数据库表结构兼容', () => {
   test('回放表 DDL 字段与 ReplayService 一致', () => {
     // 验证关键字段在服务层被引用
-    const ReplayService = require('../services/ReplayService');
+    const ReplayService = require('../server/services/ReplayService');
 
     // 通过检查 SQL 引用来验证（间接测试）
     // 实际字段验证需要连接数据库，这里只验证模块可加载

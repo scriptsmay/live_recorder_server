@@ -1,7 +1,7 @@
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
-const ensureDatabase = require('../db/ensure-database');
-const migrate = require('../db/migrate');
+const ensureDatabase = require('../server/db/ensure-database');
+const migrate = require('../server/db/migrate');
 
 async function main() {
   const created = await ensureDatabase();

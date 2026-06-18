@@ -1,8 +1,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const LogFileService = require('../services/LogFileService');
-const LogCleanupService = require('../services/LogCleanupService');
+const LogFileService = require('../server/services/LogFileService');
+const LogCleanupService = require('../server/services/LogCleanupService');
 
 describe('LogFileService', () => {
   let tmpDir;

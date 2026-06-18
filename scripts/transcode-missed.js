@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
-const pool = require('../db/index');
-const transcoder = require('../lib/core/transcoder');
+const pool = require('../server/db/index');
+const transcoder = require('../server/lib/core/transcoder');
 
 async function findUntranscodedFlv(downloadDir) {
   const transVideoFiles = [];

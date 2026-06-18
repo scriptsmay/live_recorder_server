@@ -228,35 +228,35 @@ KV 结构的全局配置表。
 
 **默认设置项：**
 
-| 键                           | 默认值             | 说明                                                       |
-| ---------------------------- | ------------------ | ---------------------------------------------------------- |
-| `pool_size`                  | `3`                | 下载线程池大小，限制最大同时录制数                         |
-| `watchdog_interval`          | `30`               | 看门狗检查间隔（秒）                                       |
-| `watchdog_timeout`           | `60`               | 录制状态检查超时（秒），超过则标记为完成                   |
-| `filtering_threshold`        | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤               |
-| `delay`                      | `60`               | 下播延迟检测（秒）                                         |
-| `submit_api`                 | ``                 | biliup --submit 选项，留空为自动                           |
-| `lines`                      | ``                 | 上传线路，留空为自动                                       |
-| `threads`                    | `3`                | 单文件并发上传数                                           |
-| `pool2_size`                 | `3`                | 上传线程池大小                                             |
-| `max_upload_limit`           | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3` |
-| `max_resume_retries`         | `3`                | 会话崩溃后最大恢复重试次数                                 |
-| `auto_transcode`             | `true`             | 是否自动转码 FLV 到 MP4                                    |
-| `transcode_delete_originals` | `true`             | 转码后是否删除原 FLV 文件                                  |
-| `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                   |
-| `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                       |
-| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（强制最大 1）                           |
-| `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                   |
-| `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                   |
-| `danmaku_font_size`          | `32`               | ASS 字体大小                                               |
-| `danmaku_opacity`            | `0.75`             | ASS 弹幕不透明度                                           |
-| `replay_enabled`             | `true`             | 是否启用回放工具箱                                         |
+| 键                           | 默认值             | 说明                                                                   |
+| ---------------------------- | ------------------ | ---------------------------------------------------------------------- |
+| `pool_size`                  | `3`                | 下载线程池大小，限制最大同时录制数                                     |
+| `watchdog_interval`          | `30`               | 看门狗检查间隔（秒）                                                   |
+| `watchdog_timeout`           | `60`               | 录制状态检查超时（秒），超过则标记为完成                               |
+| `filtering_threshold`        | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                           |
+| `delay`                      | `60`               | 下播延迟检测（秒）                                                     |
+| `submit_api`                 | ``                 | biliup --submit 选项，留空为自动                                       |
+| `lines`                      | ``                 | 上传线路，留空为自动                                                   |
+| `threads`                    | `3`                | 单文件并发上传数                                                       |
+| `pool2_size`                 | `3`                | 上传线程池大小                                                         |
+| `max_upload_limit`           | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`             |
+| `max_resume_retries`         | `3`                | 会话崩溃后最大恢复重试次数                                             |
+| `auto_transcode`             | `true`             | 是否自动转码 FLV 到 MP4                                                |
+| `transcode_delete_originals` | `true`             | 转码后是否删除原 FLV 文件                                              |
+| `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                               |
+| `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                                   |
+| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（强制最大 1）                                       |
+| `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                               |
+| `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                               |
+| `danmaku_font_size`          | `32`               | ASS 字体大小                                                           |
+| `danmaku_opacity`            | `0.75`             | ASS 弹幕不透明度                                                       |
+| `replay_enabled`             | `true`             | 是否启用回放工具箱                                                     |
 | `replay_work_dir`            | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR` |
-| `replay_queue_concurrency`   | `1`                | 回放队列并发数（当前强制最大 1）                           |
-| `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                       |
-| `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                         |
-| `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                 |
-| `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                 |
+| `replay_queue_concurrency`   | `1`                | 回放队列并发数（当前强制最大 1）                                       |
+| `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                                   |
+| `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                                     |
+| `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                             |
+| `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                             |
 
 ---
 
@@ -338,29 +338,29 @@ queued ──→ processing ──→ completed
 
 记录快手主播回放的抓取、下载、剪切、修复、投稿和备份状态。`principal_id + replay_id` 在 `replay_id` 非空时保持唯一。
 
-| 字段             | 类型          | 约束          | 说明                                                                                           |
-| ---------------- | ------------- | ------------- | ---------------------------------------------------------------------------------------------- |
-| id               | SERIAL        | PRIMARY KEY   | 自增主键                                                                                       |
-| principal_id     | VARCHAR(128)  | NOT NULL      | 快手主播 ID                                                                                    |
-| principal_name   | VARCHAR(255)  |               | 主播名称                                                                                       |
-| replay_id        | VARCHAR(128)  |               | 平台回放 ID                                                                                    |
-| play_url         | TEXT          |               | 回放播放页地址                                                                                 |
-| m3u8_url         | TEXT          |               | 已提取的 m3u8 地址                                                                             |
-| video_file_name  | VARCHAR(512)  |               | 原始视频文件名                                                                                 |
-| raw_file_path    | VARCHAR(1024) |               | 下载后的原始文件路径                                                                           |
-| cut_file_paths   | TEXT          | JSON 字符串   | 剪切后的文件路径数组                                                                           |
-| fixed_file_paths | TEXT          | JSON 字符串   | 修复后的文件路径数组                                                                           |
-| final_file_paths | TEXT          | JSON 字符串   | 最终可投稿文件路径数组                                                                         |
-| file_size        | BIGINT        | DEFAULT 0     | 原始文件大小                                                                                   |
-| bv_id            | VARCHAR(50)   |               | 投稿成功后的 BV 号                                                                             |
+| 字段             | 类型          | 约束          | 说明                                                                                                                               |
+| ---------------- | ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| id               | SERIAL        | PRIMARY KEY   | 自增主键                                                                                                                           |
+| principal_id     | VARCHAR(128)  | NOT NULL      | 快手主播 ID                                                                                                                        |
+| principal_name   | VARCHAR(255)  |               | 主播名称                                                                                                                           |
+| replay_id        | VARCHAR(128)  |               | 平台回放 ID                                                                                                                        |
+| play_url         | TEXT          |               | 回放播放页地址                                                                                                                     |
+| m3u8_url         | TEXT          |               | 已提取的 m3u8 地址                                                                                                                 |
+| video_file_name  | VARCHAR(512)  |               | 原始视频文件名                                                                                                                     |
+| raw_file_path    | VARCHAR(1024) |               | 下载后的原始文件路径                                                                                                               |
+| cut_file_paths   | TEXT          | JSON 字符串   | 剪切后的文件路径数组                                                                                                               |
+| fixed_file_paths | TEXT          | JSON 字符串   | 修复后的文件路径数组                                                                                                               |
+| final_file_paths | TEXT          | JSON 字符串   | 最终可投稿文件路径数组                                                                                                             |
+| file_size        | BIGINT        | DEFAULT 0     | 原始文件大小                                                                                                                       |
+| bv_id            | VARCHAR(50)   |               | 投稿成功后的 BV 号                                                                                                                 |
 | status           | VARCHAR(50)   |               | `pending` / `extracted` / `downloaded` / `cut` / `fixed` / `uploaded` / `completed` / `backed_up`（历史） / `cancelled` / `failed` |
-| start_time       | TIMESTAMP     |               | 回放开始时间                                                                                   |
-| duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                 |
-| uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                   |
-| backed_up_at     | TIMESTAMP     |               | 备份完成时间                                                                                   |
-| error_message    | TEXT          |               | 失败原因                                                                                       |
-| created_at       | TIMESTAMP     | DEFAULT NOW() | 创建时间                                                                                       |
-| updated_at       | TIMESTAMP     | DEFAULT NOW() | 更新时间                                                                                       |
+| start_time       | TIMESTAMP     |               | 回放开始时间                                                                                                                       |
+| duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                                                     |
+| uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                                                       |
+| backed_up_at     | TIMESTAMP     |               | 备份完成时间                                                                                                                       |
+| error_message    | TEXT          |               | 失败原因                                                                                                                           |
+| created_at       | TIMESTAMP     | DEFAULT NOW() | 创建时间                                                                                                                           |
+| updated_at       | TIMESTAMP     | DEFAULT NOW() | 更新时间                                                                                                                           |
 
 **状态流转：**
 
@@ -372,6 +372,7 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 `backed_up` 为历史状态保留，新流程终态为 `completed`。
 
 `extract` 步骤通过 `KuaishouReplayClient.extractM3u8()` 提取 m3u8 流地址，采用两级降级策略：
+
 1. **HTTP API 优先**：调用快手 `playback/detail` API 获取 playUrlV3，自动选择最佳清晰度（按分辨率 → H264 优先 → 码率排序）
 2. **Playwright 浏览器兜底**：API 失败时自动降级到浏览器方案（`m3u8-extractor.js`），打开回放页面拦截 playback/detail API 响应或网络 m3u8 流
 

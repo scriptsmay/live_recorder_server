@@ -1,4 +1,4 @@
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   connect: jest.fn(),
   end: jest.fn(),
 }));

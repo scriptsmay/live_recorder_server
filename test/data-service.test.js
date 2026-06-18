@@ -1,8 +1,8 @@
 const fs = require('fs');
-const pool = require('../db/index');
-const DataService = require('../services/DataService');
+const pool = require('../server/db/index');
+const DataService = require('../server/services/DataService');
 
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 

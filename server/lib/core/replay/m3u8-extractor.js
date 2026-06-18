@@ -392,7 +392,10 @@ async function extractM3u8WithBrowser(playbackUrl, cookieStr, options = {}) {
 
             const text = await response.text();
             const parsed = parseM3u8(text, url);
-            writeLog(logStream, `[m3u8-extractor] 捕获 m3u8 响应 status=${response.status()} parsed=${parsed.length} url=${url}`);
+            writeLog(
+              logStream,
+              `[m3u8-extractor] 捕获 m3u8 响应 status=${response.status()} parsed=${parsed.length} url=${url}`
+            );
 
             if (parsed.length > 0) {
               parsed.forEach((s) => {
@@ -465,10 +468,7 @@ async function extractM3u8WithBrowser(playbackUrl, cookieStr, options = {}) {
         if (!bestM3u8) {
           const beforeSwitch = m3u8Candidates.length;
           await switchToHighestQuality(page, logStream);
-          writeLog(
-            logStream,
-            `[m3u8-extractor] UI 切换前候选=${beforeSwitch} 切换后候选=${m3u8Candidates.length}`
-          );
+          writeLog(logStream, `[m3u8-extractor] UI 切换前候选=${beforeSwitch} 切换后候选=${m3u8Candidates.length}`);
         }
 
         if (!bestM3u8 && m3u8Candidates.length > 0) {

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-require('../config/env').initEnv();
+require('../server/config/env').initEnv();
 
-const redis = require('../db/redis');
-const KuaishouChecker = require('../lib/core/polling/KuaishouAPIChecker');
+const redis = require('../server/db/redis');
+const KuaishouChecker = require('../server/lib/core/polling/KuaishouAPIChecker');
 
 const KUAISHOU_GLOBAL_INTERVAL_SECONDS = 10;
 

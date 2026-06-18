@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Mocks must be set up BEFORE requiring the module under test
-jest.mock('../db/redis', () => ({
+jest.mock('../server/db/redis', () => ({
   lPush: jest.fn(),
   rPop: jest.fn(),
   lLen: jest.fn(),
@@ -21,23 +21,23 @@ jest.mock('../db/redis', () => ({
   lRange: jest.fn(),
 }));
 
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../lib/core/danmaku-burner', () => ({
+jest.mock('../server/lib/core/danmaku-burner', () => ({
   burn: jest.fn(),
   estimateTimeout: jest.fn(),
   getVideoDurationMs: jest.fn(),
   probeCapabilities: jest.fn(),
 }));
 
-const redis = require('../db/redis');
-const pool = require('../db/index');
-const burner = require('../lib/core/danmaku-burner');
+const redis = require('../server/db/redis');
+const pool = require('../server/db/index');
+const burner = require('../server/lib/core/danmaku-burner');
 
 // Now load the module under test
-const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
+const danmakuBurnQueue = require('../server/lib/core/DanmakuBurnQueue');
 
 // ============================================================
 // 辅助函数

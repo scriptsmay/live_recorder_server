@@ -25,7 +25,12 @@ function createRoutes() {
   const authMiddleware = requireAuth();
   router.use((req, res, next) => {
     if (!req.path.startsWith('/api/')) return next();
-    if (req.path === '/api/health' || req.path === '/api/auth/login' || req.path === '/api/auth/logout' || req.path === '/api/auth/me') {
+    if (
+      req.path === '/api/health' ||
+      req.path === '/api/auth/login' ||
+      req.path === '/api/auth/logout' ||
+      req.path === '/api/auth/me'
+    ) {
       return next();
     }
     return authMiddleware(req, res, next);
@@ -54,7 +59,7 @@ function createRoutes() {
     if (path.extname(req.path)) {
       return next();
     }
-    res.status(404).sendFile(path.join(__dirname, '..', 'public', '404.html'));
+    res.status(404).sendFile(path.join(__dirname, '..', '..', 'public', '404.html'));
   });
 
   return router;

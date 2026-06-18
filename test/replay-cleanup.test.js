@@ -4,7 +4,7 @@ jest.mock('fs/promises', () => ({
   unlink: jest.fn(),
 }));
 
-const { removeFiles } = require('../lib/core/replay/cleanup');
+const { removeFiles } = require('../server/lib/core/replay/cleanup');
 
 beforeEach(() => {
   jest.clearAllMocks();

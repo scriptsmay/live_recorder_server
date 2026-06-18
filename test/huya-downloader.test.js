@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const { Readable } = require('stream');
-const FFmpegDownloader = require('../lib/core/downloaders/FFmpegDownloader');
-const DownloaderFactory = require('../lib/core/downloaders/DownloaderFactory');
+const FFmpegDownloader = require('../server/lib/core/downloaders/FFmpegDownloader');
+const DownloaderFactory = require('../server/lib/core/downloaders/DownloaderFactory');
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),

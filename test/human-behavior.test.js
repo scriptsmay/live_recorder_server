@@ -3,7 +3,7 @@ const {
   simulateHumanBehavior,
   simulateInitialDelay,
   simulateScrolling,
-} = require('../lib/core/browser/humanBehavior');
+} = require('../server/lib/core/browser/humanBehavior');
 
 function createPageMock() {
   return {

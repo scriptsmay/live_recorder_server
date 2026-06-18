@@ -30,9 +30,9 @@ if (env !== 'development') {
   console.error('⚠️  错误：请在开发环境运行此脚本');
   process.exit(1);
 }
-require('../config/env').initEnv({ mode: env });
+require('../server/config/env').initEnv({ mode: env });
 
-const pool = require('../db/index');
+const pool = require('../server/db/index');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createRotatingStream } = require('../lib/core/logger');
+const { createRotatingStream } = require('../server/lib/core/logger');
 
 describe('createRotatingStream', () => {
   let tmpDir;

@@ -1,7 +1,7 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-const rootDir = path.join(__dirname, '..');
+const rootDir = path.join(__dirname, '..', '..');
 
 function loadEnv(options = {}) {
   const mode = options.mode || process.env.NODE_ENV;

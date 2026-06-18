@@ -1,4 +1,4 @@
-jest.mock('../db/redis', () => ({
+jest.mock('../server/db/redis', () => ({
   get: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
@@ -7,12 +7,12 @@ jest.mock('../db/redis', () => ({
   ttl: jest.fn(),
 }));
 
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-const redis = require('../db/redis');
-const authService = require('../lib/core/auth-service');
+const redis = require('../server/db/redis');
+const authService = require('../server/lib/core/auth-service');
 
 describe('auth-service', () => {
   beforeEach(() => {
@@ -39,11 +39,9 @@ describe('auth-service', () => {
     const ttl = await authService.createSession('token-1', 'admin');
 
     expect(ttl).toBe(7200);
-    expect(redis.set).toHaveBeenCalledWith(
-      'auth:session:token-1',
-      expect.stringContaining('"username":"admin"'),
-      { EX: 7200 },
-    );
+    expect(redis.set).toHaveBeenCalledWith('auth:session:token-1', expect.stringContaining('"username":"admin"'), {
+      EX: 7200,
+    });
   });
 
   it('reports lock ttl only for active locks', async () => {

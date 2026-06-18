@@ -1,4 +1,4 @@
-jest.mock('../db/redis', () => ({
+jest.mock('../server/db/redis', () => ({
   lPush: jest.fn(),
   rPop: jest.fn(),
   lLen: jest.fn(),
@@ -10,32 +10,32 @@ jest.mock('../db/redis', () => ({
   decr: jest.fn(),
 }));
 
-jest.mock('../db/index', () => ({
+jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
-jest.mock('../services/ReplayService', () => ({
+jest.mock('../server/services/ReplayService', () => ({
   getRecord: jest.fn(),
   updateRecordStatus: jest.fn(),
   listRecords: jest.fn(),
 }));
 
-jest.mock('../lib/core/replay/video-processor', () => ({
+jest.mock('../server/lib/core/replay/video-processor', () => ({
   extract: jest.fn(),
   download: jest.fn(),
   cut: jest.fn(),
   fix: jest.fn(),
 }));
 
-jest.mock('../lib/core/replay/ReplayUploadService', () => ({
+jest.mock('../server/lib/core/replay/ReplayUploadService', () => ({
   executeUpload: jest.fn(),
 }));
 
-const redis = require('../db/redis');
-const pool = require('../db/index');
-const ReplayService = require('../services/ReplayService');
-const videoProcessor = require('../lib/core/replay/video-processor');
-const replayQueue = require('../lib/core/ReplayProcessQueue');
+const redis = require('../server/db/redis');
+const pool = require('../server/db/index');
+const ReplayService = require('../server/services/ReplayService');
+const videoProcessor = require('../server/lib/core/replay/video-processor');
+const replayQueue = require('../server/lib/core/ReplayProcessQueue');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -146,7 +146,7 @@ describe('ReplayProcessQueue', () => {
       finalFilePaths: ['/tmp/a_fixed.mp4'],
     });
 
-    const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
+    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
     ReplayUploadService.executeUpload.mockResolvedValue({ success: true });
 
     ReplayService.updateRecordStatus.mockImplementation((id, status, fields) => {

@@ -1,7 +1,8 @@
 const path = require('path');
 const fs = require('fs');
+const { getLogsDir } = require('../../config/config');
 
-const LOG_DIR = path.join(__dirname, '../../', 'logs');
+const LOG_DIR = path.join(getLogsDir(), 'logs');
 
 // 确保目录存在（只执行一次）
 if (!fs.existsSync(LOG_DIR)) {

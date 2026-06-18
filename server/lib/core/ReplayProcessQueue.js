@@ -30,7 +30,9 @@ function writeLog(logStream, message) {
 }
 
 function getRecordDisplayName(record) {
-  return record.principal_name || record.room_name || record.video_file_name || record.principal_id || `回放 ${record.id}`;
+  return (
+    record.principal_name || record.room_name || record.video_file_name || record.principal_id || `回放 ${record.id}`
+  );
 }
 
 class ReplayProcessQueue {
@@ -272,10 +274,12 @@ class ReplayProcessQueue {
   }
 
   notifyPipelineComplete(record, step, detail, logStream) {
-    notify.replayPipelineComplete(getRecordDisplayName(record), step, record.id, detail, record.play_url).catch((err) => {
-      writeLog(logStream, `步骤完成通知发送失败 step=${step}: ${err.message}`);
-      console.error('[回放队列] 步骤完成通知发送失败:', err.message);
-    });
+    notify
+      .replayPipelineComplete(getRecordDisplayName(record), step, record.id, detail, record.play_url)
+      .catch((err) => {
+        writeLog(logStream, `步骤完成通知发送失败 step=${step}: ${err.message}`);
+        console.error('[回放队列] 步骤完成通知发送失败:', err.message);
+      });
   }
 
   throwIfCancelled(runtime) {

@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const logsRouter = require('../router/logs');
+const logsRouter = require('../server/router/logs');
 
 describe('logs API routes', () => {
   const logsDir = path.join(process.cwd(), 'logs');

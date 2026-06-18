@@ -55,16 +55,16 @@ Chrome Extension (danmaku)
 
 **Key layers:**
 
-- `router/` — Express route handlers (thin, delegate to services)
-- `services/` — Business logic (RecorderService, RoomService, UploadService, DataService)
-- `lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
-- `lib/core/danmaku/` — Danmaku capture (DanmakuRecorder) and ASS subtitle generation (DanmakuAssGenerator)
-- `lib/core/DanmakuBurnQueue.js` — Redis-based danmaku burn queue (independent from TranscodeQueue)
-- `lib/core/danmaku-burner.js` — FFmpeg danmaku subtitle burning
-- `lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
-- `lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
-- `lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
-- `db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
+- `server/router/` — Express route handlers (thin, delegate to services)
+- `server/services/` — Business logic (RecorderService, RoomService, UploadService, DataService)
+- `server/lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
+- `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder) and ASS subtitle generation (DanmakuAssGenerator)
+- `server/lib/core/DanmakuBurnQueue.js` — Redis-based danmaku burn queue (independent from TranscodeQueue)
+- `server/lib/core/danmaku-burner.js` — FFmpeg danmaku subtitle burning
+- `server/lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
+- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
+- `server/lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
+- `server/db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
 - `public/` — static assets, `frontend/` — Vue SPA source
 
 **Singletons:** `pollingManager`, `recordingManager`, `transcodeQueue`, `danmakuBurnQueue` (imported from their modules)
@@ -78,7 +78,7 @@ Chrome Extension (danmaku)
 - `frontend/src/utils/api.ts` — Unified fetch wrapper (apiGet/apiPost/apiPut/apiDelete)
 - `frontend/src/stores/` — Pinia stores (app, danmaku-toolbox)
 - Dev: `cd frontend && npm run dev` (port 5173, proxies `/api` and `/hls` to backend on 3001)
-- Build: `cd frontend && npm run build` → outputs to `public/frontend/`, served by `router/spa.js` as SPA fallback
+- Build: `cd frontend && npm run build` → outputs to `public/frontend/`, served by `server/router/spa.js` as SPA fallback
 
 **State storage:** Redis for transient state (live status, polling timers, active tasks with TTL). PostgreSQL for persistent data (rooms, sessions, recordings, settings).
 

@@ -19,10 +19,7 @@ async function ensureAdminCredentials() {
   const password = generatePassword();
   const passwordHash = hashPassword(password);
 
-  await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', [
-    username,
-    passwordHash,
-  ]);
+  await pool.query('INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)', [username, passwordHash]);
 
   console.log('\n============================================================');
   console.log(' K-Recorder 首次启动：已自动创建管理员账号');

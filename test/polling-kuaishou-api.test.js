@@ -1,4 +1,4 @@
-const KuaishouAPIChecker = require('../lib/core/polling/KuaishouAPIChecker');
+const KuaishouAPIChecker = require('../server/lib/core/polling/KuaishouAPIChecker');
 
 function createRedisMock(options = {}) {
   const store = new Map(Object.entries(options.initial || {}));

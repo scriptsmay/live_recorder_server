@@ -3,8 +3,8 @@
 ## 技术栈
 
 - Express 5（CommonJS）、Vue 3 SPA（Vite + Tailwind CSS v4 + TypeScript）、morgan、cors
-- PostgreSQL（`pg` 模块）—— 连接池在 `db/index.js`
-- Redis（`redis` 模块）—— 客户端在 `db/redis.js`
+- PostgreSQL（`pg` 模块）—— 连接池在 `server/db/index.js`
+- Redis（`redis` 模块）—— 客户端在 `server/db/redis.js`
 - dotenv 以 `quiet: true` 加载 —— 缺少 .env 时静默失败
 - **Jest**（v30.4.2）—— 单元测试和 API 集成测试框架
 
@@ -18,51 +18,52 @@
 ## 目录结构
 
 ```
-├── app.js              # 主入口文件（仅做启动编排）
-├── config/             # 配置
-│   ├── env.js          # 环境变量加载
-│   └── app-info.js     # 应用版本信息
-├── middleware/         # Express 中间件
-│   ├── access-log.js    # Morgan access log 中间件
-│   └── view-locals.js  # 模板上下文（res.locals）
-├── lib/core/          # 核心功能模块
-│   ├── logger.js       # 日志系统（console 包装、轮转流）
-│   ├── lifecycle.js     # 启动/关闭生命周期
-│   ├── backup.js       # NAS 备份
-│   ├── RecordingManager.js  # 录制进程管理（会话创建/恢复/追踪）
-│   ├── downloaders/    # 下载引擎（仅 FFmpeg）
-│   │   ├── DownloaderFactory.js
-│   │   ├── DownloaderInterface.js
-│   │   └── FFmpegDownloader.js
-│   ├── danmaku/        # 弹幕采集与 ASS 字幕生成
-│   │   ├── DanmakuRecorder.js    # 弹幕采集器（JSONL 写入）
-│   │   └── DanmakuAssGenerator.js # ASS 字幕生成器
-│   ├── DanmakuBurnQueue.js # 弹幕压制队列（Redis 队列，独立于转码）
-│   ├── danmaku-burner.js   # FFmpeg 弹幕压制（ASS 渲染）
-│   ├── notify.js       # 通知服务
-│   ├── polling/       # 直播轮询检测
-│   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
-│   │   ├── HuyaChecker.js       # 虎牙平台检查器
-│   │   ├── PollingManager.js    # 轮询管理器（定时调度）
-│   │   └── index.js
-│   ├── proc-log.js     # 进程日志
-│   ├── scan-files.js   # 文件扫描
-│   ├── transcoder.js   # 视频转码
-│   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
-│   └── watchdog.js     # 看门狗
-├── lib/utils/         # 工具类
-│   └── markdown.js
-├── router/             # 路由层（API + 页面）
-│   └── index.js       # 统一路由挂载
-├── services/           # 业务服务层
-│   ├── DataService.js      # 公共数据查询（rooms/settings/sessions 等）
-│   ├── RecorderService.js  # 录制服务
-│   ├── RoomService.js      # 直播间管理服务
-│   └── UploadService.js    # 投稿服务
-├── db/                 # 数据库
-│   ├── index.js
-│   ├── migrate.js
-│   └── redis.js
+├── server/
+│   ├── app.js              # 主入口文件（仅做启动编排）
+│   ├── config/             # 配置
+│   │   ├── env.js          # 环境变量加载
+│   │   └── app-info.js     # 应用版本信息
+│   ├── middleware/         # Express 中间件
+│   │   ├── access-log.js    # Morgan access log 中间件
+│   │   └── view-locals.js  # 模板上下文（res.locals）
+│   ├── lib/core/          # 核心功能模块
+│   │   ├── logger.js       # 日志系统（console 包装、轮转流）
+│   │   ├── lifecycle.js     # 启动/关闭生命周期
+│   │   ├── backup.js       # NAS 备份
+│   │   ├── RecordingManager.js  # 录制进程管理（会话创建/恢复/追踪）
+│   │   ├── downloaders/    # 下载引擎（仅 FFmpeg）
+│   │   │   ├── DownloaderFactory.js
+│   │   │   ├── DownloaderInterface.js
+│   │   │   └── FFmpegDownloader.js
+│   │   ├── danmaku/        # 弹幕采集与 ASS 字幕生成
+│   │   │   ├── DanmakuRecorder.js    # 弹幕采集器（JSONL 写入）
+│   │   │   └── DanmakuAssGenerator.js # ASS 字幕生成器
+│   │   ├── DanmakuBurnQueue.js # 弹幕压制队列（Redis 队列，独立于转码）
+│   │   ├── danmaku-burner.js   # FFmpeg 弹幕压制（ASS 渲染）
+│   │   ├── notify.js       # 通知服务
+│   │   ├── polling/       # 直播轮询检测
+│   │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
+│   │   │   ├── HuyaChecker.js       # 虎牙平台检查器
+│   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
+│   │   │   └── index.js
+│   │   ├── proc-log.js     # 进程日志
+│   │   ├── scan-files.js   # 文件扫描
+│   │   ├── transcoder.js   # 视频转码
+│   │   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
+│   │   └── watchdog.js     # 看门狗
+│   ├── lib/utils/         # 工具类
+│   │   └── markdown.js
+│   ├── router/             # 路由层（API + 页面）
+│   │   └── index.js       # 统一路由挂载
+│   ├── services/           # 业务服务层
+│   │   ├── DataService.js      # 公共数据查询（rooms/settings/sessions 等）
+│   │   ├── RecorderService.js  # 录制服务
+│   │   ├── RoomService.js      # 直播间管理服务
+│   │   └── UploadService.js    # 投稿服务
+│   └── db/                 # 数据库
+│       ├── index.js
+│       ├── migrate.js
+│       └── redis.js
 ├── frontend/           # Vue 3 SPA 前端（Vite + Tailwind + TypeScript）
 ├── public/             # 静态资源 + Vue 构建产物（public/frontend/）
 ├── scripts/            # 工具脚本
@@ -74,15 +75,15 @@
 
 **目录组织原则：**
 
-- `lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码、日志、生命周期）
-- `lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染、文件路径生成）
-- `services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
-- `services/DataService.js` — 集中封装读库查询，供 API 路由使用，避免重复 `pool.query`
-- `router/` — 路由层，负责接收请求、调用 Service、返回响应
-- `middleware/` — Express 中间件（如模板上下文、access log）
-- `config/` — 配置层（环境变量、应用信息）
+- `server/lib/core/` — 核心功能模块，基本与业务逻辑无关（如下载引擎、看门狗、转码、日志、生命周期）
+- `server/lib/utils/` — 通用工具类（如日志格式化、Markdown 渲染、文件路径生成）
+- `server/services/` — 业务服务层，封装具体业务逻辑（如录制、直播间管理、投稿）
+- `server/services/DataService.js` — 集中封装读库查询，供 API 路由使用，避免重复 `pool.query`
+- `server/router/` — 路由层，负责接收请求、调用 Service、返回响应
+- `server/middleware/` — Express 中间件（如模板上下文、access log）
+- `server/config/` — 配置层（环境变量、应用信息）
 
-**页面渲染**：所有页面已迁移到 Vue SPA（`frontend/src/views/`），由 Vue Router 管理。生产环境下 `router/spa.js` 负责静态资源服务和 history 模式回退。EJS 的 `router/html.js` 已完全注释禁用。
+**页面渲染**：所有页面已迁移到 Vue SPA（`frontend/src/views/`），由 Vue Router 管理。生产环境下 `server/router/spa.js` 负责静态资源服务和 history 模式回退。EJS 的 `server/router/html.js` 已完全注释禁用。
 
 ## 代码规范
 
@@ -108,7 +109,7 @@ npm run lint && npm run format && npm run test
 
 ## 数据库
 
-- 启动时自动迁移建表（`db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
+- 启动时自动迁移建表（`server/db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）、`danmaku_capture_records`（弹幕采集）、`danmaku_burn_records`（弹幕压制）
 - `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
@@ -183,9 +184,9 @@ npm run lint && npm run format && npm run test
 
 ## 直播轮询 (Polling)
 
-- **策略模式**：`lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `PollingManager.CHECKERS`
-- **虎牙检查器**：`lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
-- **轮询管理器**：`lib/core/polling/PollingManager.js` — 单例
+- **策略模式**：`server/lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `PollingManager.CHECKERS`
+- **虎牙检查器**：`server/lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
+- **轮询管理器**：`server/lib/core/polling/PollingManager.js` — 单例
   - 启动时只检查一次所有 `polling_enabled=true` 房间的状态（无定时器）
   - `reloadRoom()` 控制定时轮询：新增/修改房间时启动定时器，按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
   - 检测到 **非开播→开播** 状态转换时，自动调用 `RecorderService.startRecording()` 启动录制
@@ -196,9 +197,9 @@ npm run lint && npm run format && npm run test
 
 ## 下载引擎（Downloader）
 
-- **工厂模式**：`lib/core/downloaders/DownloaderFactory.js` — 统一返回 FFmpeg 实例
-- **接口**：`lib/core/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
-- **FFmpeg**：`lib/core/downloaders/FFmpegDownloader.js` — 唯一下载引擎，需单独安装 ffmpeg
+- **工厂模式**：`server/lib/core/downloaders/DownloaderFactory.js` — 统一返回 FFmpeg 实例
+- **接口**：`server/lib/core/downloaders/DownloaderInterface.js` — `buildArgs()` / `spawn()` / `stop()` / `pause()` / `resume()` / `isRunning()`
+- **FFmpeg**：`server/lib/core/downloaders/FFmpegDownloader.js` — 唯一下载引擎，需单独安装 ffmpeg
   - 输出格式：`.ts`（容错性更强）
   - 支持网络重连（`-reconnect 1`）
   - 用户代理伪装（防止 CDN 403）
@@ -206,9 +207,9 @@ npm run lint && npm run format && npm run test
 
 ## 转码功能
 
-- **边下边转码**：`services/RecorderService.js` — 监听 FFmpeg stderr 输出，新分段打开时自动入队上一个已完成的分段
-- **转码队列**：`lib/core/TranscodeQueue.js` — Redis 队列 + 并发控制（`transcode_concurrency`），异步处理转码任务
-- **转码器**：`lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（TS → MP4）
+- **边下边转码**：`server/services/RecorderService.js` — 监听 FFmpeg stderr 输出，新分段打开时自动入队上一个已完成的分段
+- **转码队列**：`server/lib/core/TranscodeQueue.js` — Redis 队列 + 并发控制（`transcode_concurrency`），异步处理转码任务
+- **转码器**：`server/lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（TS → MP4）
 - **转码配置**：`auto_transcode`（启用/禁用）、`transcode_delete_originals`（删除原文件）
 - **双重保障**：边下边转码为主，`finishSession` 批量处理为兜底，确保无遗漏
 
@@ -218,7 +219,7 @@ npm run lint && npm run format && npm run test
 
 - 每个会话有独立的目录，避免文件名冲突
 - 看门狗按会话目录扫描，提升效率
-- 工具函数：`lib/utils/tool.js` 中的 `generateOutputPath()` / `getSessionDir()` / `getRoomDir()`
+- 工具函数：`server/lib/utils/tool.js` 中的 `generateOutputPath()` / `getSessionDir()` / `getRoomDir()`
 
 ```
 VIDEO_DOWNLOAD_DIR/
@@ -240,7 +241,7 @@ DANMAKU_OUTPUT_DIR/                        # 弹幕压制产物（独立目录�
 
 ## 日志
 
-- 所有外部命令（ffmpeg、biliup）的输出通过 `lib/proc-log.js` 记录到 `logs/` 目录
+- 所有外部命令（ffmpeg、biliup）的输出通过 `server/lib/proc-log.js` 记录到 `logs/` 目录
 - 文件名格式：`{进程名}_{会话ID}.log`
 
 ## 注意事项

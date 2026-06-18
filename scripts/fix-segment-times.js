@@ -7,10 +7,10 @@
  */
 
 const env = process.env.NODE_ENV || 'development';
-require('../config/env').initEnv({ mode: env });
+require('../server/config/env').initEnv({ mode: env });
 
-const pool = require('../db/index');
-const { backfillSegmentTimes } = require('../lib/core/watchdog');
+const pool = require('../server/db/index');
+const { backfillSegmentTimes } = require('../server/lib/core/watchdog');
 
 async function fix(sessionId) {
   console.log(`\n=== 修复 session ${sessionId} 的分段时间 ===\n`);

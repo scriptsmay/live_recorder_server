@@ -7,7 +7,7 @@ jest.mock('child_process', () => ({
   spawn: jest.fn(),
 }));
 
-const DanmakuBurner = require('../lib/core/danmaku-burner');
+const DanmakuBurner = require('../server/lib/core/danmaku-burner');
 
 // ============================================================
 // 辅助函数
@@ -758,7 +758,7 @@ describe('DanmakuBurner — 自定义路径', () => {
 
     jest.resetModules();
     jest.doMock('child_process', () => ({ spawn: jest.fn() }));
-    const FreshBurner = require('../lib/core/danmaku-burner');
+    const FreshBurner = require('../server/lib/core/danmaku-burner');
 
     expect(FreshBurner.ffmpegPath).toBe('/usr/local/bin/ffmpeg');
     expect(FreshBurner.ffprobePath).toBe('/usr/local/bin/ffprobe');

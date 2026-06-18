@@ -110,11 +110,11 @@ describe('API接口完整性检查', () => {
   beforeAll(() => {
     // 从所有路由文件中提取已实现的路由
     const routerFiles = [
-      path.join(__dirname, '../router/api.js'),
-      path.join(__dirname, '../router/rooms.js'),
-      path.join(__dirname, '../router/settings.js'),
-      path.join(__dirname, '../router/upload.js'),
-      path.join(__dirname, '../router/replay.js'),
+      path.join(__dirname, '../server/router/api.js'),
+      path.join(__dirname, '../server/router/rooms.js'),
+      path.join(__dirname, '../server/router/settings.js'),
+      path.join(__dirname, '../server/router/upload.js'),
+      path.join(__dirname, '../server/router/replay.js'),
     ];
 
     for (const file of routerFiles) {

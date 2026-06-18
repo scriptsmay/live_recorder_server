@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const { getLogsDir } = require('../config/config');
 
 class LogCleanupService {
   constructor(options = {}) {
-    this.logsDir = path.resolve(options.logsDir || path.join(process.cwd(), 'logs'));
+    this.logsDir = path.resolve(options.logsDir || path.join(getLogsDir(), 'logs'));
     this.retentionDays = options.retentionDays || 30;
     this.maxTotalSize = options.maxTotalSize || 1024 * 1024 * 1024;
     this.activeWindowMs = options.activeWindowMs || 5 * 60 * 1000;
