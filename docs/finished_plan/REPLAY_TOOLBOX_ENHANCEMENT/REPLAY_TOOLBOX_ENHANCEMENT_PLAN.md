@@ -18,6 +18,7 @@
 - 回放投稿变量动态解析显示名：优先使用回放配置 `principal_name`，其次使用快手直播间 `room_name`，并让 `{room_name}` 与 `{principal_name}` 同值，便于和直播录制共用投稿模板。
 - 回放处理队列支持取消正在运行的任务：`POST /api/replay/records/:id/cancel` 会终止当前子进程，记录状态更新为 `cancelled`，前端回放记录行显示取消按钮。
 - 回放下载、剪切和修复工作目录通过 `REPLAY_WORK_DIR` 配置；未配置时默认派生为 `VIDEO_DOWNLOAD_DIR` 同级的 `replay` 目录，Docker 示例挂载到 `/data/replay`。
+- 回放快手访问态复用直播轮询已有 `POLLING_KUAISHOU_COOKIE`；迁移期保留 `settings.kuaishou_*` 和 `KW_*` 作为兼容 fallback，避免继续维护两套 cookie 配置。
 
 ---
 
