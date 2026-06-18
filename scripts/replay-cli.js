@@ -20,6 +20,7 @@ const KuaishouReplayClient = require('../lib/core/replay/KuaishouReplayClient');
 const videoProcessor = require('../lib/core/replay/video-processor');
 const cleanup = require('../lib/core/replay/cleanup');
 const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
+const notify = require('../lib/core/notify');
 
 // ── 参数解析 ──
 
@@ -155,6 +156,10 @@ async function cmdAll(options) {
     process.exit(1);
   }
 
+  const principals = await ReplayService.getPrincipals();
+  const principal = principals.find((p) => p.principal_id === options.principal);
+  const principalName = principal?.room_name || options.principal;
+
   const records = await ReplayService.listRecords(options.principal, {
     page: 1,
     page_size: options.count,
@@ -198,6 +203,7 @@ async function cmdAll(options) {
   }
 
   log(`全部完成: 成功 ${success}, 失败 ${failed}`);
+  notify.replayCliComplete(principalName, candidates.length, success, failed).catch(() => {});
 }
 
 async function cmdSingleAction(options) {
@@ -223,9 +229,11 @@ async function cmdSingleAction(options) {
   try {
     await runPipeline(record, [action]);
     log(`完成`);
+    notify.replayCliActionComplete(record.principal_name, action, record.id, true).catch(() => {});
   } catch (err) {
     logError(`失败: ${err.message}`);
     await ReplayService.updateRecordStatus(record.id, 'failed', { error_message: err.message });
+    notify.replayCliActionComplete(record.principal_name, action, record.id, false, err.message).catch(() => {});
     process.exit(1);
   }
 }
