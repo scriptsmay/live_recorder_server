@@ -1,6 +1,8 @@
 services:
   app:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.local
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-1123}
@@ -22,11 +24,11 @@ services:
     ports:
       - '${PORT:-1123}:1123'
     volumes:
-      - ./data/video_downloads:/data/video_downloads
-      - ./data/danmaku_output:/data/danmaku_output
-      - ./data/replay:/data/replay
-      - ./data/biliup:/data/biliup
-      - ./logs:/app/logs
+      - ../data/video_downloads:/data/video_downloads
+      - ../data/danmaku_output:/data/danmaku_output
+      - ../data/replay:/data/replay
+      - ../data/biliup:/data/biliup
+      - ../logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy

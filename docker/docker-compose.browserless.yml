@@ -1,5 +1,5 @@
 # Optional overlay for docker-compose.full.yml.
-# Usage: docker compose --env-file .env.docker -f docker-compose.full.yml -f docker-compose.browserless.yml up -d --build
+# Usage: cd docker && docker compose --env-file ../.env -f docker-compose.full.yml -f docker-compose.browserless.yml up -d --build
 services:
   app:
     environment:

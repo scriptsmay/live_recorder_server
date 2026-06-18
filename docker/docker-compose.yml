@@ -1,3 +1,6 @@
+# 生产环境主服务（不含定时任务）
+# 如需回放定时任务和数据同步，请叠加 docker-compose.cron.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
 services:
   live_recorder_server:
     # 镜像发布在github站
@@ -17,11 +20,11 @@ services:
     ports:
       - '11123:1123'
     volumes:
-      - ./data/video_downloads:/data/video_downloads
-      - ./data/danmaku_output:/data/danmaku_output
-      - ./data/biliup:/data/biliup
-      - ./data/replay:/data/replay
-      - ./logs:/app/logs
+      - ../data/video_downloads:/data/video_downloads
+      - ../data/danmaku_output:/data/danmaku_output
+      - ../data/replay:/data/replay
+      - ../data/biliup:/data/biliup
+      - ../logs:/app/logs
     restart: unless-stopped
     healthcheck:
       test:
@@ -35,30 +38,3 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
-
-  replay_cron:
-    image: alpine:3.20
-    container_name: replay_cron
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      API_BASE: http://live_recorder_server:1123
-      REPLAY_CRON_EXPR: ${REPLAY_CRON_EXPR:-0 3 * * *}
-      REPLAY_CRON_ENABLED: ${REPLAY_CRON_ENABLED:-false}
-      REPLAY_PRINCIPAL_ID: ${REPLAY_PRINCIPAL_ID:-}
-      REPLAY_CRON_COUNT: ${REPLAY_CRON_COUNT:-1}
-    volumes:
-      - ./scripts/replay-cron.sh:/replay-cron.sh:ro
-    entrypoint: /bin/sh
-    command:
-      - -c
-      - |
-        if [ "$$REPLAY_CRON_ENABLED" != "true" ]; then
-          echo "[replay-cron] 已禁用，退出"
-          exit 0
-        fi
-        echo "[replay-cron] 启用，表达式: $$REPLAY_CRON_EXPR"
-        echo "$$REPLAY_CRON_EXPR /replay-cron.sh >> /proc/1/fd/1 2>&1" | crontab -
-        crond -f -l 2
-    restart: unless-stopped
-    depends_on:
-      - live_recorder_server

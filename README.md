@@ -85,10 +85,11 @@ npm run stop
 | KUAISHOU_CHECKER_ENABLED   | 是否启用快手 Checker         | true   |
 | POLLING_KUAISHOU_COOKIE    | 快手初始 Cookie              | -      |
 
-Docker 从零部署时可叠加 `docker-compose.browserless.yml` 一起启动 Browserless：
+Docker 从零部署时可叠加 `docker/docker-compose.browserless.yml` 一起启动 Browserless：
 
 ```bash
-docker compose --env-file .env.docker \
+cd docker
+docker compose --env-file ../.env \
   -f docker-compose.full.yml \
   -f docker-compose.browserless.yml \
   up -d --build

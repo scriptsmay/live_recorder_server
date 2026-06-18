@@ -118,6 +118,9 @@ Chrome Extension (danmaku)
 
 ## Docker
 
-- `docker-compose.yml` — pre-built GHCR image deployment
-- `docker-compose.full.yml` — full stack with PostgreSQL 16 + Redis 7
+All Docker config files live in `docker/`:
+
+- `docker/docker-compose.yml` — pre-built GHCR image deployment (main app only)
+- `docker/docker-compose.cron.yml` — replay cron + data sync (optional overlay)
+- `docker/docker-compose.full.yml` — full stack with PostgreSQL 16 + Redis 7
 - CI/CD: GitHub Actions builds Docker image on `v*` tags, pushes to GHCR

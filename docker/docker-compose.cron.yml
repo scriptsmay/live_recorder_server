@@ -1,0 +1,68 @@
+# 回放定时任务 + 数据同步 cron 服务
+# 与主应用 docker-compose.yml 分离，按需启用
+#
+# 使用方式（需要与主应用在同一 Docker 网络下）:
+#   方式一：在同一个 compose 项目中同时启动
+#     docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
+#   方式二：单独启动（需确保网络互通）
+#     docker compose -f docker-compose.cron.yml up -d
+services:
+  replay_cron:
+    image: postgres:17.5-alpine
+    container_name: replay_cron
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      API_BASE: http://live_recorder_server:1123
+      # 回放定时任务
+      REPLAY_CRON_EXPR: ${REPLAY_CRON_EXPR:-0 3 * * *}
+      REPLAY_CRON_ENABLED: ${REPLAY_CRON_ENABLED:-false}
+      REPLAY_PRINCIPAL_ID: ${REPLAY_PRINCIPAL_ID:-}
+      REPLAY_CRON_COUNT: ${REPLAY_CRON_COUNT:-1}
+      # 数据同步
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      REMOTE_TABLE: ${REMOTE_TABLE:-test_records}
+      SYNC_CRON_EXPR: ${SYNC_CRON_EXPR:-0 4 * * *}
+      SYNC_CRON_ENABLED: ${SYNC_CRON_ENABLED:-false}
+    volumes:
+      - ../scripts/replay-cron.sh:/replay-cron.sh:ro
+      - ../scripts/sync-records.sh:/sync-records.sh:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        CRONTAB_FILE=/tmp/crontab
+
+        if [ "$$REPLAY_CRON_ENABLED" = "true" ]; then
+          echo "[replay-cron] 启用，表达式: $$REPLAY_CRON_EXPR"
+          echo "$$REPLAY_CRON_EXPR /replay-cron.sh >> /proc/1/fd/1 2>&1" >> $$CRONTAB_FILE
+        else
+          echo "[replay-cron] 已禁用"
+        fi
+
+        if [ "$$SYNC_CRON_ENABLED" = "true" ] && [ -n "$$SUPABASE_URL" ]; then
+          echo "[sync-cron] 启用，表达式: $$SYNC_CRON_EXPR，目标表: $$REMOTE_TABLE"
+          echo "$$SYNC_CRON_EXPR /sync-records.sh >> /proc/1/fd/1 2>&1" >> $$CRONTAB_FILE
+        else
+          echo "[sync-cron] 已禁用（SYNC_CRON_ENABLED=$$SYNC_CRON_ENABLED）"
+        fi
+
+        if [ ! -f $$CRONTAB_FILE ]; then
+          echo "[cron] 无启用的定时任务，退出"
+          exit 0
+        fi
+
+        crontab $$CRONTAB_FILE
+        echo "[cron] 当前 crontab:"
+        crontab -l
+        crond -f -l 2
+    restart: unless-stopped
+    depends_on:
+      - live_recorder_server
+    networks:
+      - default
+
+networks:
+  default:
+    name: ${COMPOSE_NETWORK_NAME:-live_recorder_default}
+    external: true

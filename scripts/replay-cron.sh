@@ -2,7 +2,7 @@
 
 # 回放定时任务触发器
 # 通过 curl 调用后端 API 触发队列，不直接执行重度任务
-# 由 docker-compose.yml 中的 replay_cron 服务调度
+# 由 docker/docker-compose.cron.yml 中的 replay_cron 服务调度
 
 set -e
 
