@@ -53,8 +53,8 @@ async function send(title, content) {
 }
 
 async function shouldNotify(roomUrl) {
-  // 增加判断条件：如果是开发环境，默认不启用通知（除非数据库里明确开启了）
-  if (process.env.NODE_ENV === 'development') {
+  // 开发和测试环境下不发送通知
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
     return false;
   }
   if (!roomUrl) return true;
@@ -153,7 +153,7 @@ async function replayPipelineComplete(roomName, stepName, recordId, detail = {},
   if (Array.isArray(detail.final_file_paths)) lines.push(`最终文件：${detail.final_file_paths.length} 个`);
   if (detail.upload_record_id) lines.push(`投稿记录ID：${detail.upload_record_id}`);
 
-  send('✅ 回放管道完成', lines.join('\n'));
+  send('✅ 回放任务执行完成', lines.join('\n'));
 }
 
 async function replayCliComplete(principalName, total, success, failed) {
