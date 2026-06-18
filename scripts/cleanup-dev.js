@@ -249,13 +249,14 @@ async function cleanup() {
       console.log('  └─ 无需复位');
     }
 
-    // 清空管理员用户表
-    const admins = await d.query('DELETE FROM admin_users;');
-    if (admins.rowCount > 0) {
-      console.log(`  └─ 清空管理员用户: ${admins.rowCount} 个`);
-    } else {
-      console.log('  └─ 无需清理管理员用户');
-    }
+    // 默认不清空管理员用户了
+    // // 清空管理员用户表
+    // const admins = await d.query('DELETE FROM admin_users;');
+    // if (admins.rowCount > 0) {
+    //   console.log(`  └─ 清空管理员用户: ${admins.rowCount} 个`);
+    // } else {
+    //   console.log('  └─ 无需清理管理员用户');
+    // }
 
     await d.query('COMMIT');
     d.release();
