@@ -53,6 +53,16 @@ cd /srv/nas-data/docker2/auto_recorder/docker
 docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
 ```
 
+如果定时任务服务与主服务分开部署，需要让 cron 容器加入包含
+`live_recorder_server`、`postgresql`、`redis` 的 Docker 网络。生产 NAS 使用：
+
+```env
+COMPOSE_NETWORK_NAME=external-network
+```
+
+`replay_cron` 使用 `postgres:17.5-alpine` 以便 `sync-records.sh` 调用
+`psql`，启动时会安装 `curl` 供 `replay-cron.sh` 调用后端 API 和通知转发接口。
+
 更新版本：
 
 ```bash
@@ -88,6 +98,9 @@ SYNC_CRON_ENABLED=false
 SYNC_CRON_EXPR=0 4 * * *
 SUPABASE_URL=
 REMOTE_TABLE=test_records
+
+# cron 调用后端 API 的内部密钥（主服务和 replay_cron 必须一致）
+CRON_API_TOKEN=<生成一个随机长字符串>
 ```
 
 ### 持久化目录

@@ -14,6 +14,18 @@ const danmakuRouter = require('./danmaku');
 const replayRouter = require('./replay');
 const { requireAuth } = require('../middleware/require-auth');
 
+const CRON_AUTH_PATHS = new Set([
+  '/api/replay/records/sync',
+  '/api/replay/tasks/enqueue',
+  '/api/notify/feishu_webhook',
+]);
+
+function isCronAuthorized(req) {
+  const token = process.env.CRON_API_TOKEN;
+  if (!token || !CRON_AUTH_PATHS.has(req.path)) return false;
+  return req.get('x-cron-token') === token;
+}
+
 function createRoutes() {
   const router = express.Router();
 
@@ -29,7 +41,8 @@ function createRoutes() {
       req.path === '/api/health' ||
       req.path === '/api/auth/login' ||
       req.path === '/api/auth/logout' ||
-      req.path === '/api/auth/me'
+      req.path === '/api/auth/me' ||
+      isCronAuthorized(req)
     ) {
       return next();
     }

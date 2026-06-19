@@ -93,12 +93,12 @@ router.get('/health', async (req, res) => {
 router.post('/notify/feishu_webhook', async (req, res) => {
   try {
     let { title = '', content = '' } = req.query;
-    console.log('[DEBUG]request data:----->', req.body);
-    if (req.body.title) {
-      title = req.body.title;
+    const body = req.body || {};
+    if (body.title) {
+      title = body.title;
     }
-    if (req.body.content) {
-      content = req.body.content;
+    if (body.content) {
+      content = body.content;
     }
     if (!title) {
       return res.status(400).json({
