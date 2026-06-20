@@ -59,6 +59,14 @@ LOCAL_COUNT=$(psql -tA "$DATABASE_URL" \
   -c "SELECT COUNT(*) FROM replay_records" 2>&1) || die "本地数据库连接失败: $LOCAL_COUNT"
 log "本地共 $LOCAL_COUNT 条回放记录"
 
+REMOTE_COUNT=$(psql -tA "$SUPABASE_PSQL_URL" \
+  -c "SELECT COUNT(*) FROM $REMOTE_TABLE WHERE source = 'kuaishou'" 2>&1) || die "远程数据库连接失败: $REMOTE_COUNT"
+log "远端 $REMOTE_TABLE 中 kuaishou 记录 $REMOTE_COUNT 条"
+
+if [ "$REMOTE_COUNT" -gt 0 ] && [ "$LOCAL_COUNT" -lt "$REMOTE_COUNT" ] && [ "$SYNC_ALLOW_SOURCE_SHRINK" != "true" ]; then
+  die "本地记录数少于远端（local=$LOCAL_COUNT remote=$REMOTE_COUNT），已停止同步。若确认要允许源数据减少，请设置 SYNC_ALLOW_SOURCE_SHRINK=true"
+fi
+
 [ "$LOCAL_COUNT" -gt 0 ] || {
   log "无记录需要同步"
   notify_sync "sync-records 跳过" "目标表：$REMOTE_TABLE
@@ -88,7 +96,7 @@ SELECT
        ELSE NULL END                                     AS start_live_time_text,
   NULL::varchar                                          AS resolution,
   created_at,
-  NOW()                                                  AS updated_at,
+  updated_at,
   status,
   bv_id,
   uploaded_at                                            AS upload_time,
@@ -180,7 +188,32 @@ WITH upserted AS (
     upload_time          = EXCLUDED.upload_time,
     backup_time          = EXCLUDED.backup_time,
     error_message        = EXCLUDED.error_message,
-    updated_at           = NOW()
+    updated_at           = EXCLUDED.updated_at
+  WHERE (
+    $REMOTE_TABLE.principal_id,
+    $REMOTE_TABLE.video_file_name,
+    $REMOTE_TABLE.duration,
+    $REMOTE_TABLE.start_live_time,
+    $REMOTE_TABLE.start_live_time_text,
+    $REMOTE_TABLE.status,
+    $REMOTE_TABLE.bv_id,
+    $REMOTE_TABLE.upload_time,
+    $REMOTE_TABLE.backup_time,
+    $REMOTE_TABLE.error_message,
+    $REMOTE_TABLE.updated_at
+  ) IS DISTINCT FROM (
+    EXCLUDED.principal_id,
+    EXCLUDED.video_file_name,
+    EXCLUDED.duration,
+    EXCLUDED.start_live_time,
+    EXCLUDED.start_live_time_text,
+    EXCLUDED.status,
+    EXCLUDED.bv_id,
+    EXCLUDED.upload_time,
+    EXCLUDED.backup_time,
+    EXCLUDED.error_message,
+    EXCLUDED.updated_at
+  )
   RETURNING 1
 )
 SELECT COUNT(*) FROM upserted;
@@ -194,6 +227,7 @@ log "同步完成: $UPSERT_RESULT 条记录已写入 $REMOTE_TABLE"
 notify_sync "sync-records 同步完成" "本地表：replay_records
 目标表：$REMOTE_TABLE
 本地记录：$LOCAL_COUNT
+远端记录：$REMOTE_COUNT
 导出记录：$EXPORT_COUNT
 暂存导入：$STAGING_COUNT
-写入记录：$UPSERT_RESULT"
+变更写入：$UPSERT_RESULT"

@@ -65,6 +65,9 @@ COMPOSE_NETWORK_NAME=external-network
 两个 cron 脚本都会通过 `/api/notify/feishu_webhook` 发送执行结果通知；
 `replay-cron.sh` 通知回放同步与入队统计，`sync-records.sh` 通知本地导出、
 远端暂存导入和 upsert 写入数量。
+Supabase 同步不会删除远端记录；当远端 `kuaishou` 记录数大于本地
+`replay_records` 时会默认停止同步，避免本地源数据异常时继续覆盖远端。
+如确认允许源数据减少，可显式设置 `SYNC_ALLOW_SOURCE_SHRINK=true`。
 
 更新版本：
 
