@@ -62,6 +62,9 @@ COMPOSE_NETWORK_NAME=external-network
 
 `replay_cron` 使用 `postgres:17.5-alpine` 以便 `sync-records.sh` 调用
 `psql`，启动时会安装 `curl` 供 `replay-cron.sh` 调用后端 API 和通知转发接口。
+两个 cron 脚本都会通过 `/api/notify/feishu_webhook` 发送执行结果通知；
+`replay-cron.sh` 通知回放同步与入队统计，`sync-records.sh` 通知本地导出、
+远端暂存导入和 upsert 写入数量。
 
 更新版本：
 

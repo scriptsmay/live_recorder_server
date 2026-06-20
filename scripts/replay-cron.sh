@@ -29,9 +29,17 @@ notify_cron() {
     --data-urlencode "content=$content" >/dev/null 2>&1 || true
 }
 
+json_number() {
+  json="$1"
+  key="$2"
+  value=$(printf '%s' "$json" | sed -n "s/.*\"$key\":\\([0-9][0-9]*\\).*/\\1/p")
+  printf '%s' "${value:-0}"
+}
+
 if [ -z "$PRINCIPAL_ID" ]; then
   log "REPLAY_PRINCIPAL_ID 未设置，跳过"
-  notify_cron "replay-cron 跳过" "REPLAY_PRINCIPAL_ID 未设置，未触发回放同步"
+  notify_cron "replay-cron 跳过" "原因：REPLAY_PRINCIPAL_ID 未设置
+处理结果：未触发回放同步"
   exit 0
 fi
 
@@ -47,6 +55,8 @@ SYNC_RESULT=$(curl -sf -X POST $CRON_HEADER_ARGS "$API_BASE/api/replay/records/s
   exit 1
 }
 log "同步完成: $SYNC_RESULT"
+CREATED_COUNT=$(json_number "$SYNC_RESULT" "created")
+UPDATED_COUNT=$(json_number "$SYNC_RESULT" "updated")
 
 # 将未完成的回放入队
 log "入队主播 $PRINCIPAL_ID 最近 $COUNT 条回放..."
@@ -60,10 +70,14 @@ ENQUEUE_RESULT=$(curl -sf -X POST $CRON_HEADER_ARGS "$API_BASE/api/replay/tasks/
   exit 1
 }
 log "入队完成: $ENQUEUE_RESULT"
+ENQUEUED_COUNT=$(json_number "$ENQUEUE_RESULT" "enqueued")
 
 notify_cron "replay-cron 已触发" "主播：$PRINCIPAL_ID
-条数：$COUNT
-同步结果：$SYNC_RESULT
-入队结果：$ENQUEUE_RESULT"
+拉取条数：$COUNT
+同步状态：成功
+新增记录：$CREATED_COUNT
+更新记录：$UPDATED_COUNT
+入队状态：成功
+入队任务：$ENQUEUED_COUNT"
 
 log "定时任务触发完成"

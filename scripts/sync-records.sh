@@ -10,15 +10,31 @@ set -e
 DATABASE_URL="${DATABASE_URL:?DATABASE_URL 未设置}"
 SUPABASE_URL="${SUPABASE_URL:?SUPABASE_URL 未设置}"
 SUPABASE_PSQL_URL="$(printf '%s' "$SUPABASE_URL" | sed -E 's/([?&])pgbouncer=(true|false)&?/\1/g; s/[?&]$//')"
+API_BASE="${API_BASE:-http://localhost:1123}"
+CRON_HEADER_ARGS=""
 REMOTE_TABLE="${REMOTE_TABLE:-test_records}"
 TMPDIR="${TMPDIR:-/tmp}"
 EXPORT_CSV="$TMPDIR/sync_replay_$$.csv"
 EXPORT_SQL="$TMPDIR/sync_replay_$$.sql"
 STAGING="_staging_sync_$$"
 
+if [ -n "$CRON_API_TOKEN" ]; then
+  CRON_HEADER_ARGS="-H X-Cron-Token:$CRON_API_TOKEN"
+fi
+
 # ── 工具函数 ──────────────────────────────────────────────
 log() {
   echo "[sync-records] $(date '+%Y-%m-%d %H:%M:%S') $1"
+}
+
+notify_sync() {
+  title="$1"
+  content="$2"
+
+  # shellcheck disable=SC2086
+  curl -sf -X POST -G $CRON_HEADER_ARGS "$API_BASE/api/notify/feishu_webhook" \
+    --data-urlencode "title=$title" \
+    --data-urlencode "content=$content" >/dev/null 2>&1 || true
 }
 
 cleanup() {
@@ -31,6 +47,8 @@ trap cleanup EXIT
 
 die() {
   log "错误: $1"
+  notify_sync "sync-records 同步失败" "目标表：$REMOTE_TABLE
+错误：$1"
   exit 1
 }
 
@@ -41,7 +59,13 @@ LOCAL_COUNT=$(psql -tA "$DATABASE_URL" \
   -c "SELECT COUNT(*) FROM replay_records" 2>&1) || die "本地数据库连接失败: $LOCAL_COUNT"
 log "本地共 $LOCAL_COUNT 条回放记录"
 
-[ "$LOCAL_COUNT" -gt 0 ] || { log "无记录需要同步"; exit 0; }
+[ "$LOCAL_COUNT" -gt 0 ] || {
+  log "无记录需要同步"
+  notify_sync "sync-records 跳过" "目标表：$REMOTE_TABLE
+本地记录：0
+处理结果：无记录需要同步"
+  exit 0
+}
 
 # ── 2. 导出本地数据为 CSV ─────────────────────────────────
 # TO_CHAR 中 _ 为字面字符，无需转义
@@ -81,7 +105,14 @@ psql "$DATABASE_URL" -f "$EXPORT_SQL" > "$EXPORT_CSV" || die "导出数据失败
 EXPORT_COUNT=$(wc -l < "$EXPORT_CSV")
 EXPORT_COUNT=$((EXPORT_COUNT - 1))  # 减去 header 行
 log "已导出 $EXPORT_COUNT 条记录（跳过 replay_id 为空的记录）"
-[ "$EXPORT_COUNT" -gt 0 ] || { log "无有效记录需要同步"; exit 0; }
+[ "$EXPORT_COUNT" -gt 0 ] || {
+  log "无有效记录需要同步"
+  notify_sync "sync-records 跳过" "目标表：$REMOTE_TABLE
+本地记录：$LOCAL_COUNT
+导出记录：0
+处理结果：无有效 replay_id 记录"
+  exit 0
+}
 
 # ── 3. 创建远程暂存表 ─────────────────────────────────────
 psql -q "$SUPABASE_PSQL_URL" <<EOF
@@ -160,3 +191,9 @@ EOF
 psql -q "$SUPABASE_PSQL_URL" -c "DROP TABLE IF EXISTS $STAGING" || log "警告: 暂存表清理失败（不影响同步结果）"
 
 log "同步完成: $UPSERT_RESULT 条记录已写入 $REMOTE_TABLE"
+notify_sync "sync-records 同步完成" "本地表：replay_records
+目标表：$REMOTE_TABLE
+本地记录：$LOCAL_COUNT
+导出记录：$EXPORT_COUNT
+暂存导入：$STAGING_COUNT
+写入记录：$UPSERT_RESULT"
