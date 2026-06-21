@@ -809,6 +809,7 @@ class RecorderService {
           roomUrl: room.room_url,
           platform: room.polling_platform || 'kuaishou',
           outputDir: path.join(sessionDir, 'danmaku'),
+          recordingStartedAt: sessionStartMs,
         })
         .catch((err) => {
           console.warn('[弹幕] 启动采集失败:', err.message);

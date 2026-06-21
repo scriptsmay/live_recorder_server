@@ -27,9 +27,10 @@ class DanmakuRecorder {
    * @param {string} params.roomUrl - 房间 URL（直播间地址）
    * @param {string} params.platform - 平台（默认 kuaishou）
    * @param {string} params.outputDir - 会话输出目录
+   * @param {number} [params.recordingStartedAt] - 录制（FFmpeg）启动时间戳（epoch ms），用于对齐视频时间轴
    * @returns {Promise<number|null>} capture_id 或 null（未启用时）
    */
-  async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', outputDir }) {
+  async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', outputDir, recordingStartedAt }) {
     const enabled = await this._getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
       return null;
@@ -60,11 +61,14 @@ class DanmakuRecorder {
       // 打开文件描述符（追加模式）
       const fd = fs.openSync(rawPath, 'a');
 
+      const startedAt = recordingStartedAt || Date.now();
+      // startedAt 优先使用录制（FFmpeg）启动时间，使 ts_ms 对齐视频时间轴
       this.activeSessions.set(roomUrl, {
         sessionId,
         captureId,
         fd,
-        startedAt: Date.now(),
+        recordingStartedAt: startedAt,
+        startedAt,               // sessionStartMs 别名，供 _normalizeEvent 批量处理用
         eventCount: 0,
         outputDir,
         rawPath,
@@ -243,13 +247,17 @@ class DanmakuRecorder {
 
   /**
    * 标准化单条事件
-   * 确保时间戳基于会话开始时间的相对偏移
+   * 确保 ts_ms 基于录制启动时间的相对偏移，同时保留 ts_abs_ms 供下游对齐校验
    *
    * 时间戳优先级：
    * 1. event.ts_abs_ms — Extension 端捕获时记录的绝对时间戳（最优）
    * 2. event.ts_ms     — 相对或绝对时间戳（> 0 时视为合法）
    * 3. event._receivedAt — writeBatch 分配的到达时间戳（兜底）
    * 4. Date.now()       — 最终兜底
+   *
+   * 输出字段：
+   * - ts_ms: 相对于录制启动时间的毫秒偏移（直接对齐视频时间轴）
+   * - ts_abs_ms: 浏览器端原始绝对时间戳（epoch ms），用于跨时钟校验
    */
   _normalizeEvent(event, sessionStartMs) {
     let tsAbs;
@@ -266,6 +274,7 @@ class DanmakuRecorder {
 
     const record = {
       ts_ms: tsRelative,
+      ts_abs_ms: tsAbs,
       type: event.type || 'unknown',
     };
 
