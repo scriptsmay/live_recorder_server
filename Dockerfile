@@ -21,18 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 阶段3：下载并解压最新的 FFmpeg 静态二进制文件
-FROM alpine:latest AS ffmpeg-downloader
-RUN apk add --no-cache curl tar xz
-RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
-    || (echo "[Dockerfile] johnvansickle 下载失败，尝试 BtbN 镜像..." \
-        && curl -fSL -o ffmpeg-git-amd64-static.tar.xz \
-           https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz) \
-    && tar -xJf ffmpeg-git-amd64-static.tar.xz \
-    && mv ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ \
-    && mv ffmpeg-git-*-amd64-static/ffprobe /usr/local/bin/
-
-# 阶段 4: 运行环境
+# 阶段 3: 运行环境
 FROM node:22-bookworm-slim
 
 ENV LANG=C.UTF-8 \
@@ -42,13 +31,8 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# 从阶段 3 复制最新的 ffmpeg 和 ffprobe（直接注入，无需 apt 安装）
-COPY --from=ffmpeg-downloader /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
-
-# 这里去掉了 ffmpeg 安装
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl mkvtoolnix python3 python3-pip \
+    ca-certificates curl ffmpeg mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && ln -sf /root/.local/share/uv/tools/biliup/bin/biliup /usr/local/bin/biliup \

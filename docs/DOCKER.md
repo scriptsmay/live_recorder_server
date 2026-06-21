@@ -69,6 +69,12 @@ Supabase 同步不会删除远端记录；当远端 `kuaishou` 记录数大于�
 `replay_records` 时会默认停止同步，避免本地源数据异常时继续覆盖远端。
 如确认允许源数据减少，可显式设置 `SYNC_ALLOW_SOURCE_SHRINK=true`。
 
+### 运行时依赖
+
+主服务镜像使用 Debian bookworm 仓库提供的 `ffmpeg` / `ffprobe`。
+不要在镜像中注入 nightly 静态 FFmpeg 构建；生产环境曾出现静态构建在
+快手 FLV 直播流输入上启动即 `SIGSEGV`，导致轮询创建录制会话后无有效文件。
+
 更新版本：
 
 ```bash
