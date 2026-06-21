@@ -21,16 +21,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 阶段3：下载并解压最新的 FFmpeg 静态二进制文件
+# 阶段3：下载并解压 FFmpeg 7.1 静态二进制文件
+# 使用 BtbN GitHub Release（GitHub CDN，构建时走内网，稳定可靠）
+# 使用 release/tag/latest 下的 n7.1 自动构建资产，避免 master nightly
 FROM alpine:latest AS ffmpeg-downloader
 RUN apk add --no-cache curl tar xz
-RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz \
-    || (echo "[Dockerfile] johnvansickle 下载失败，尝试 BtbN 镜像..." \
-        && curl -fSL -o ffmpeg-git-amd64-static.tar.xz \
-           https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz) \
-    && tar -xJf ffmpeg-git-amd64-static.tar.xz \
-    && mv ffmpeg-git-*-amd64-static/ffmpeg /usr/local/bin/ \
-    && mv ffmpeg-git-*-amd64-static/ffprobe /usr/local/bin/
+RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
+        -o /tmp/ffmpeg.tar.xz \
+    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
+    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
+    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
+    && rm -rf /tmp/ffmpeg*
 
 # 阶段 4: 运行环境
 FROM node:22-bookworm-slim
@@ -51,7 +52,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
+    && uv tool install yt-dlp --python /usr/bin/python3 \
     && ln -sf /root/.local/share/uv/tools/biliup/bin/biliup /usr/local/bin/biliup \
+    && ln -sf /root/.local/share/uv/tools/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制依赖和源码

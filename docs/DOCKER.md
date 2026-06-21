@@ -107,9 +107,9 @@ REMOTE_TABLE=test_records
 | 组件       | 说明                                       |
 | ---------- | ------------------------------------------ |
 | Node.js 22 | 运行时                                     |
-| FFmpeg     | 录制、转码、弹幕压制                       |
+| FFmpeg     | 录制、转码、弹幕压制（BtbN n7.1 静态构建） |
 | mkvmerge   | 视频切片（mkvtoolnix）                     |
-| yt-dlp     | 回放下载                                   |
+| yt-dlp     | 回放下载（通过 uv tool 安装）              |
 | biliup     | B 站投稿（通过 uv tool 安装）              |
 | playwright | 回放 m3u8 提取兜底方案（需配置远程浏览器） |
 
