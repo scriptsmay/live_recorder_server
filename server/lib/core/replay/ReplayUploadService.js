@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const pool = require('../../../db/index');
+const redis = require('../../../db/redis');
 const notify = require('../notify');
 const biliup = require('../biliup');
 const UploadService = require('../../../services/UploadService');
@@ -210,6 +211,25 @@ class ReplayUploadService {
           `UPDATE replay_records SET status='completed', bv_id=$1, uploaded_at=NOW(), completed_at=NOW(), updated_at=NOW() WHERE id=$2`,
           [result.bvId, record.id]
         );
+
+        // 发布任务完成事件到 Redis，供 replay_cron 实时同步
+        const channel = process.env.REDIS_PUBLISH_CHANNEL;
+        if (channel) {
+          redis
+            .publish(
+              channel,
+              JSON.stringify({
+                type: 'replay_completed',
+                record_id: record.id,
+                replay_id: record.replay_id,
+                principal_id: record.principal_id,
+                status: 'completed',
+                timestamp: Date.now(),
+              })
+            )
+            .catch(() => {});
+        }
+
         const displayName = resolveDisplayName(record);
         notify.uploadComplete(displayName, title, result.bvId, record.play_url);
       } else {

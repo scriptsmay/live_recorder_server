@@ -166,30 +166,6 @@ class ReplayProcessQueue {
         force: Boolean(task.force),
       });
       writeLog(logStream, '任务完成');
-
-      // 发布任务完成事件到 Redis，供 replay_cron 实时同步（仅 completed 状态）
-      const channel = process.env.REDIS_PUBLISH_CHANNEL;
-      if (channel) {
-        try {
-          const updatedRecord = await ReplayService.getRecord(record.id);
-          if (updatedRecord.status === 'completed') {
-            await redis.publish(
-              channel,
-              JSON.stringify({
-                type: 'replay_completed',
-                record_id: updatedRecord.id,
-                replay_id: updatedRecord.replay_id,
-                principal_id: updatedRecord.principal_id,
-                status: updatedRecord.status,
-                timestamp: Date.now(),
-              })
-            );
-            writeLog(logStream, `已发布完成事件到 Redis channel: ${channel}`);
-          }
-        } catch (pubErr) {
-          writeLog(logStream, `Redis 发布失败: ${pubErr.message}`);
-        }
-      }
     } catch (err) {
       console.error(`[回放队列] 任务失败 record=${record.id}:`, err.message);
       writeLog(logStream, `任务失败: ${err.message}`);
