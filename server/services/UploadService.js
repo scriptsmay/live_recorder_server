@@ -380,7 +380,7 @@ class UploadService {
   static async scanPendingAutoUpload() {
     try {
       const { rows } = await pool.query(
-        `SELECT rs.id, rs.room_url, rs.started_at, rs.ended_at, rs.duration_seconds, r.room_name, r.upload_template_id
+        `SELECT rs.id, rs.room_url, rs.started_at, rs.ended_at, r.room_name, r.upload_template_id
          FROM recording_sessions rs
          INNER JOIN rooms r ON r.room_url = rs.room_url
          WHERE rs.status = 'completed'
@@ -416,7 +416,6 @@ class UploadService {
           room_name: row.room_name,
           started_at: row.started_at,
           ended_at: row.ended_at,
-          duration_seconds: row.duration_seconds,
         };
         console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
         await this.executeUpload(session, tmpl);
