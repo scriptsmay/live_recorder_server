@@ -216,6 +216,10 @@ class ReplayProcessQueue {
           console.log(`[回放队列][id=${current.id}] extracted: 设置时长=${result.duration}`);
           updateFields.duration = result.duration;
         }
+        if (result.resolution && (!current.resolution || current.resolution === '')) {
+          console.log(`[回放队列][id=${current.id}] extracted: 设置分辨率=${result.resolution}`);
+          updateFields.resolution = result.resolution;
+        }
         current = await ReplayService.updateRecordStatus(current.id, 'extracted', updateFields);
         writeLog(logStream, `步骤完成: extract m3u8=${result.m3u8Url}`);
         this.notifyPipelineComplete(current, 'extract', { status: 'extracted', m3u8_url: result.m3u8Url }, logStream);

@@ -482,6 +482,7 @@ async function extractM3u8WithBrowser(playbackUrl, cookieStr, options = {}) {
         return {
           m3u8Url: bestM3u8?.url || null,
           duration,
+          resolution: bestM3u8?.resolution || '',
           error: bestM3u8
             ? ''
             : [

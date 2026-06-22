@@ -246,8 +246,8 @@ async function extractM3u8(record, options = {}) {
     const result = await extractM3u8WithBrowser(playbackUrl, cookieStr, { logStream });
 
     if (result.m3u8Url) {
-      writeLog(logStream, `浏览器方案提取成功: ${result.m3u8Url}`);
-      return { success: true, m3u8Url: result.m3u8Url, duration: result.duration };
+      writeLog(logStream, `浏览器方案提取成功: ${result.m3u8Url} resolution=${result.resolution || '-'}`);
+      return { success: true, m3u8Url: result.m3u8Url, duration: result.duration, resolution: result.resolution || '' };
     }
 
     const detail = result.error || '浏览器方案也未能提取到 m3u8 地址';
