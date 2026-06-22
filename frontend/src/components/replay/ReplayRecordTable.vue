@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, provide, ref } from 'vue'
 import type { ReplayRecord } from '@/types/api'
 import ReplayStatusBadge from './ReplayStatusBadge.vue'
 import ReplayActionButton from './ReplayActionButton.vue'
+
+const activeDropdownId = ref<number | null>(null)
+provide('activeDropdownId', activeDropdownId)
 
 const props = defineProps<{
   records: ReplayRecord[]

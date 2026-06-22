@@ -207,7 +207,7 @@ async function handlePageChange(delta: number) {
           class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
         />
         <button
-          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
           :disabled="store.busy"
           @click="handleBatchAll()"
         >
@@ -215,7 +215,7 @@ async function handlePageChange(delta: number) {
         </button>
         <button
           v-if="selectedCount > 0"
-          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          class="px-3 py-1.5 text-sm font-medium text-white rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
           :disabled="store.busy"
           @click="handleMarkSelectedCompleted()"
         >
