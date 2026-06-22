@@ -242,6 +242,18 @@ async function main() {
     if (deletedTags.length) {
       runCommand(`git push origin --delete ${deletedTags.join(' ')}`);
     }
+
+    // dev 分支自动合并到 main 并推送
+    if (branch === 'dev') {
+      console.log('\n--- Merging dev to main ---');
+      runCommand('git checkout main');
+      runCommand('git pull origin main');
+      runCommand('git merge dev --no-edit');
+      runCommand('git push origin main');
+      runCommand('git checkout dev');
+      console.log('✅ dev 已合并到 main 并推送');
+    }
+
     console.log('\n=== Release complete! ===');
   } else {
     console.log('\n=== Release complete! ===');
