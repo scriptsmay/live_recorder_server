@@ -62,7 +62,7 @@ const actionStatusMap: Record<string, ReplayRecordStatus[] | null> = {
   cut: ['downloaded'],
   fix: ['cut', 'fixed'],
   upload: ['cut', 'fixed'],
-  all: ['pending', 'failed', 'cancelled'],
+  all: ['pending', 'extracted', 'downloaded', 'cut', 'fixed', 'failed', 'cancelled'],
   'mark-completed': null, // 所有状态可用（completed 状态单独排除）
 }
 
