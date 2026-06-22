@@ -3,6 +3,7 @@ jest.mock('../server/db/redis', () => ({
   rPop: jest.fn(),
   lLen: jest.fn(),
   lRange: jest.fn(),
+  keys: jest.fn(),
   get: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
@@ -31,6 +32,15 @@ jest.mock('../server/lib/core/replay/ReplayUploadService', () => ({
   executeUpload: jest.fn(),
 }));
 
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    statSync: jest.fn(),
+  };
+});
+
+const fs = require('fs');
 const redis = require('../server/db/redis');
 const pool = require('../server/db/index');
 const ReplayService = require('../server/services/ReplayService');
@@ -39,6 +49,8 @@ const replayQueue = require('../server/lib/core/ReplayProcessQueue');
 
 beforeEach(() => {
   jest.clearAllMocks();
+  fs.statSync.mockImplementation(() => ({ isFile: () => true }));
+  redis.keys.mockResolvedValue([]);
   replayQueue.isRunning = false;
   replayQueue.concurrency = 1;
   replayQueue.activeTasks.clear();
@@ -153,13 +165,69 @@ describe('ReplayProcessQueue', () => {
       return Promise.resolve({ id, status, ...fields, cut_file_paths: JSON.stringify(['/tmp/a_part.mkv']) });
     });
 
-    await replayQueue.runAction(record, 'all');
+    await replayQueue.runAction(record, 'all', { force: true });
 
     expect(videoProcessor.extract).toHaveBeenCalled();
     expect(videoProcessor.download).toHaveBeenCalled();
     expect(videoProcessor.cut).toHaveBeenCalled();
-    expect(videoProcessor.fix).toHaveBeenCalled();
+    expect(videoProcessor.fix).not.toHaveBeenCalled();
     expect(ReplayUploadService.executeUpload).toHaveBeenCalled();
+  });
+
+  test('runAction all 默认复用已有切片产物并直接投稿', async () => {
+    const record = {
+      id: 10,
+      principal_id: 'abc',
+      status: 'failed',
+      m3u8_url: 'https://example.com/a.m3u8',
+      raw_file_path: '/tmp/missing.ts',
+      cut_file_paths: '["/tmp/a_part.mkv"]',
+    };
+    fs.statSync.mockImplementation((filePath) => {
+      if (filePath === '/tmp/a_part.mkv') return { isFile: () => true };
+      throw new Error('ENOENT');
+    });
+
+    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
+    ReplayUploadService.executeUpload.mockResolvedValue({ error: false, upload_record_id: 1 });
+
+    await replayQueue.runAction(record, 'all');
+
+    expect(videoProcessor.extract).not.toHaveBeenCalled();
+    expect(videoProcessor.download).not.toHaveBeenCalled();
+    expect(videoProcessor.cut).not.toHaveBeenCalled();
+    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10);
+  });
+
+  test('runAction all force=true 从头执行并传递 force 给下载步骤', async () => {
+    const record = {
+      id: 10,
+      principal_id: 'abc',
+      status: 'cut',
+      m3u8_url: 'https://example.com/old.m3u8',
+      cut_file_paths: '["/tmp/a_part.mkv"]',
+    };
+    videoProcessor.extract.mockResolvedValue({ success: true, m3u8Url: 'https://example.com/new.m3u8' });
+    videoProcessor.download.mockResolvedValue({ success: true, rawFilePath: '/tmp/a.mp4', fileSize: 1024 });
+    videoProcessor.cut.mockResolvedValue({ success: true, cutFilePaths: ['/tmp/a_part.mkv'] });
+    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
+    ReplayUploadService.executeUpload.mockResolvedValue({ error: false, upload_record_id: 1 });
+    ReplayService.updateRecordStatus.mockImplementation((id, status, fields) =>
+      Promise.resolve({ ...record, id, status, ...fields })
+    );
+
+    await replayQueue.runAction(record, 'all', { force: true });
+
+    expect(videoProcessor.extract).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 10 }),
+      expect.objectContaining({ force: true })
+    );
+    expect(videoProcessor.download).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 10 }),
+      expect.objectContaining({ force: true })
+    );
+    expect(videoProcessor.cut).toHaveBeenCalled();
+    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10);
   });
 
   test('enqueue 缺少 replayRecordId 时抛出错误', async () => {

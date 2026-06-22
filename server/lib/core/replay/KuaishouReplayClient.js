@@ -164,9 +164,12 @@ async function syncReplays(principalId, count = 12, principalName) {
  */
 async function extractM3u8(record, options = {}) {
   const logStream = options.logStream;
-  if (record.m3u8_url) {
+  if (record.m3u8_url && !options.force) {
     writeLog(logStream, `已有 m3u8_url，跳过提取: ${record.m3u8_url}`);
     return { success: true, m3u8Url: record.m3u8_url };
+  }
+  if (record.m3u8_url && options.force) {
+    writeLog(logStream, `force=true，重新提取 m3u8，忽略已有地址: ${record.m3u8_url}`);
   }
 
   const replayId = record.replay_id;

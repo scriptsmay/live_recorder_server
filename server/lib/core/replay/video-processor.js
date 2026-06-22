@@ -57,13 +57,13 @@ function runCommand(command, args, options = {}) {
 }
 
 async function extract(record, options = {}) {
-  if (record.m3u8_url) return { success: true, m3u8Url: record.m3u8_url };
+  if (record.m3u8_url && !options.force) return { success: true, m3u8Url: record.m3u8_url };
   if (!record.replay_id && !record.play_url) {
     return { success: false, error: '缺少 replay_id 和 play_url，无法提取 m3u8' };
   }
   try {
     const { extractM3u8 } = require('./KuaishouReplayClient');
-    return await extractM3u8(record, { logStream: options.logStream });
+    return await extractM3u8(record, { logStream: options.logStream, force: options.force });
   } catch (err) {
     return { success: false, error: `m3u8 提取失败: ${err.message}` };
   }
@@ -81,16 +81,12 @@ async function download(record, options = {}) {
   const args = ['-o', outputPath, '--referer', referer, '--no-progress', '--no-warnings'];
   if (options.force) args.push('--force-overwrites');
   args.push(record.m3u8_url);
-  const result = await runCommand(
-    'yt-dlp',
-    args,
-    {
-      cwd: workDir,
-      logStream: options.logStream,
-      onProcessStart: options.onProcessStart,
-      onProcessEnd: options.onProcessEnd,
-    }
-  );
+  const result = await runCommand('yt-dlp', args, {
+    cwd: workDir,
+    logStream: options.logStream,
+    onProcessStart: options.onProcessStart,
+    onProcessEnd: options.onProcessEnd,
+  });
   if (!result.success) return result;
   // yt-dlp 可能输出不同扩展名，优先查找 .ts，其次扫描目录
   let finalPath = outputPath;

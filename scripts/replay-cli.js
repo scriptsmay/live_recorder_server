@@ -14,6 +14,7 @@
 
 require('../server/config/env').initEnv();
 
+const fs = require('fs');
 const pool = require('../server/db/index');
 const ReplayService = require('../server/services/ReplayService');
 const KuaishouReplayClient = require('../server/lib/core/replay/KuaishouReplayClient');
@@ -34,6 +35,7 @@ function parseArgs(argv) {
     count: 1,
     skipCompleted: true,
     dryRun: false,
+    force: false,
   };
 
   for (let i = 1; i < args.length; i++) {
@@ -44,6 +46,7 @@ function parseArgs(argv) {
     else if (arg === '--skip-completed') options.skipCompleted = true;
     else if (arg === '--no-skip-completed') options.skipCompleted = false;
     else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--force') options.force = true;
   }
   return options;
 }
@@ -66,6 +69,35 @@ function safeParseJson(value, fallback) {
   } catch (_) {
     return fallback;
   }
+}
+
+function hasExistingFile(filePath) {
+  if (!filePath) return false;
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch (_) {
+    return false;
+  }
+}
+
+function hasExistingFiles(value) {
+  const files = Array.isArray(value) ? value : safeParseJson(value, []);
+  return files.length > 0 && files.every(hasExistingFile);
+}
+
+function isStepComplete(record, step) {
+  if (step === 'extract') return Boolean(record.m3u8_url);
+  if (step === 'download') {
+    return (
+      hasExistingFile(record.raw_file_path) ||
+      hasExistingFiles(record.cut_file_paths) ||
+      hasExistingFiles(record.final_file_paths)
+    );
+  }
+  if (step === 'cut') return hasExistingFiles(record.cut_file_paths) || hasExistingFiles(record.final_file_paths);
+  if (step === 'fix') return hasExistingFiles(record.final_file_paths);
+  if (step === 'upload') return Boolean(record.bv_id || record.uploaded_at || record.completed_at);
+  return false;
 }
 
 // ── 子命令实现 ──
@@ -192,7 +224,7 @@ async function cmdAll(options) {
   for (const record of candidates) {
     log(`处理 #${record.id} (${record.replay_id || '-'})...`);
     try {
-      await runPipeline(record, allTasks);
+      await runPipeline(record, allTasks, { force: options.force, resume: true });
       success++;
       log(`  #${record.id} 完成`);
     } catch (err) {
@@ -227,7 +259,7 @@ async function cmdSingleAction(options) {
   }
 
   try {
-    await runPipeline(record, [action]);
+    await runPipeline(record, [action], { force: options.force });
     log(`完成`);
     notify.replayCliActionComplete(record.principal_name, action, record.id, true).catch(() => {});
   } catch (err) {
@@ -240,30 +272,36 @@ async function cmdSingleAction(options) {
 
 // ── 流水线执行 ──
 
-async function runPipeline(record, actions) {
+async function runPipeline(record, actions, options = {}) {
   let current = record;
+  const force = options.force === true;
+  const resume = options.resume === true;
 
   for (const step of actions) {
+    if (resume && !force && isStepComplete(current, step)) {
+      log(`跳过 ${step}: 已有可复用产物`);
+      continue;
+    }
     if (step === 'extract') {
-      const result = await videoProcessor.extract(current);
+      const result = await videoProcessor.extract(current, { force });
       if (!result.success) throw new Error(result.error);
       current = await ReplayService.updateRecordStatus(current.id, 'extracted', { m3u8_url: result.m3u8Url });
     } else if (step === 'download') {
-      const result = await videoProcessor.download(current);
+      const result = await videoProcessor.download(current, { force });
       if (!result.success) throw new Error(result.error);
       current = await ReplayService.updateRecordStatus(current.id, 'downloaded', {
         raw_file_path: result.rawFilePath,
         file_size: result.fileSize,
       });
     } else if (step === 'cut') {
-      const result = await videoProcessor.cut(current);
+      const result = await videoProcessor.cut(current, { force });
       if (!result.success) throw new Error(result.error);
       current = await ReplayService.updateRecordStatus(current.id, 'cut', {
         cut_file_paths: result.cutFilePaths,
       });
       if (current.raw_file_path) cleanup.removeFiles([current.raw_file_path]).catch(() => {});
     } else if (step === 'fix') {
-      const result = await videoProcessor.fix(current);
+      const result = await videoProcessor.fix(current, { force });
       if (!result.success) throw new Error(result.error);
       const previous = safeParseJson(current.cut_file_paths, []);
       current = await ReplayService.updateRecordStatus(current.id, 'fixed', {
@@ -322,6 +360,7 @@ async function main() {
   --skip-completed     跳过已完成记录（默认开启）
   --no-skip-completed  不跳过已完成记录
   --dry-run            预览模式，不执行
+  --force              强制重跑步骤；全流程会从提取和下载开始覆盖执行
 `);
     process.exit(0);
   }

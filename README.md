@@ -225,7 +225,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 
 ## 回放工具箱功能架构
 
-回放工具箱将快手直播回放的全流程自动化：同步 → 提取 m3u8 → 下载 → 切片 → 修复 → 投稿。
+回放工具箱将快手直播回放的全流程自动化：同步 → 提取 m3u8 → 下载 → 切片 → 投稿；分辨率修复可作为单独步骤执行。全流程默认按已有产物续跑，已存在 m3u8、下载文件或切片产物时会跳过对应步骤；API 传 `force=true` 时才从提取/下载开始覆盖执行。
 
 ```text
 [快手 API / 前端操作]                    [后端处理]
@@ -240,7 +240,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
      │                                        │  │   └─ Playwright 浏览器兜底
      │                                        │  ├─ download: yt-dlp 下载
      │                                        │  ├─ cut: mkvmerge/ffmpeg 切片
-     │                                        │  ├─ fix: ffmpeg 分辨率修复
+     │                                        │  ├─ fix: ffmpeg 分辨率修复（单独动作）
      │                                        │  └─ upload: biliup 投稿
      │                                        │
      │  查询状态（GET /api/replay/tasks）       │

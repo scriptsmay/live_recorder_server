@@ -219,12 +219,12 @@ class ReplayProcessQueue {
         active.command = '';
       }
       writeLog(logStream, `步骤开始: ${step}`);
-      if (!force && this.isStepComplete(current, step)) {
+      if (action === 'all' && !force && this.isStepComplete(current, step)) {
         writeLog(logStream, `步骤跳过: ${step} 已有可复用产物`);
         continue;
       }
       if (step === 'extract') {
-        const result = await videoProcessor.extract(current, { logStream });
+        const result = await videoProcessor.extract(current, { logStream, force });
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         const updateFields = { m3u8_url: result.m3u8Url, error_message: '' };
