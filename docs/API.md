@@ -1225,6 +1225,12 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **动作：** `extract`、`download`、`cut`、`fix`、`upload`、`all`。
 
+**请求体：**
+
+| 参数    | 类型    | 必填 | 说明                                                       |
+| ------- | ------- | ---- | ---------------------------------------------------------- |
+| `force` | boolean | 否   | `true` 时 `extract` 会忽略已有 m3u8 地址并重新提取最新地址 |
+
 ### POST /api/replay/records/:id/cancel
 
 取消正在运行的回放处理任务。后端会向当前子进程发送 `SIGTERM`，必要时升级为 `SIGKILL`，并将记录状态更新为 `cancelled`。

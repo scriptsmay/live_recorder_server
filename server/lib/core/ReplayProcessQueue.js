@@ -164,7 +164,11 @@ class ReplayProcessQueue {
         logStream,
       });
 
-      await this.runAction(record, task.action || 'all', { logStream, runtime });
+      await this.runAction(record, task.action || 'all', {
+        logStream,
+        runtime,
+        force: Boolean(task.force),
+      });
       writeLog(logStream, '任务完成');
     } catch (err) {
       console.error(`[回放队列] 任务失败 record=${record.id}:`, err.message);
@@ -201,7 +205,10 @@ class ReplayProcessQueue {
       }
       writeLog(logStream, `步骤开始: ${step}`);
       if (step === 'extract') {
-        const result = await videoProcessor.extract(current, { logStream });
+        const result = await videoProcessor.extract(current, {
+          logStream,
+          force: Boolean(options.force),
+        });
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         const updateFields = { m3u8_url: result.m3u8Url, error_message: '' };

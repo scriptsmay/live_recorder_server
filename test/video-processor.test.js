@@ -28,6 +28,12 @@ describe('video-processor', () => {
         mkdirSync: jest.fn(),
       };
     });
+    jest.doMock('../server/lib/core/replay/KuaishouReplayClient', () => ({
+      extractM3u8: jest.fn().mockResolvedValue({
+        success: true,
+        m3u8Url: 'https://example.com/new.m3u8',
+      }),
+    }));
     videoProcessor = require('../server/lib/core/replay/video-processor');
   });
 
@@ -56,6 +62,26 @@ describe('video-processor', () => {
       const result = await videoProcessor.extract(record);
       expect(result.success).toBe(true);
       expect(result.m3u8Url).toBe('https://example.com/a.m3u8');
+    });
+
+    test('force=true 时忽略已有 m3u8_url 并重新提取', async () => {
+      const client = require('../server/lib/core/replay/KuaishouReplayClient');
+      const record = {
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/old.m3u8',
+      };
+
+      const result = await videoProcessor.extract(record, { force: true });
+
+      expect(result.success).toBe(true);
+      expect(result.m3u8Url).toBe('https://example.com/new.m3u8');
+      expect(client.extractM3u8).toHaveBeenCalledWith(
+        record,
+        expect.objectContaining({
+          force: true,
+        })
+      );
     });
 
     test('缺少 replay_id 和 play_url 时失败', async () => {
