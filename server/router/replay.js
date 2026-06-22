@@ -4,7 +4,7 @@ const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
 const replayQueue = require('../lib/core/ReplayProcessQueue');
 
 const router = express.Router();
-const VALID_ACTIONS = new Set(['extract', 'download', 'cut', 'fix', 'upload', 'all']);
+const VALID_ACTIONS = new Set(['refresh', 'extract', 'download', 'cut', 'fix', 'upload', 'all']);
 
 function parseBool(value) {
   return value === true || value === 'true' || value === '1';
