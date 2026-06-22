@@ -9,13 +9,10 @@
  */
 
 const { RemoteBrowserClient } = require('../browser/RemoteBrowserClient');
+const { writeLog } = require('../../utils/proc-log');
 
 /** 页面加载后等待时间（毫秒），确保播放器初始化和网络请求完成 */
 const PAGE_WAIT_MS = 12000;
-
-function writeLog(logStream, message) {
-  logStream?.write(`[${new Date().toISOString()}] ${message}\n`);
-}
 
 /**
  * 解析 m3u8 内容，提取清晰度列表

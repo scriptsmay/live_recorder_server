@@ -5,7 +5,7 @@ const ReplayUploadService = require('./replay/ReplayUploadService');
 const videoProcessor = require('./replay/video-processor');
 const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
-const { createProcLog } = require('../utils/proc-log');
+const { createProcLog, writeLog } = require('../utils/proc-log');
 
 const QUEUE_KEY = 'replay_process_queue';
 const PROCESSING_KEY = 'replay_process_processing_count';
@@ -21,12 +21,6 @@ function safeParseJson(value, fallback) {
   } catch (_) {
     return fallback;
   }
-}
-
-function writeLog(logStream, message) {
-  if (!logStream) return;
-  const line = `[${new Date().toISOString()}] ${message}\n`;
-  logStream.write(line);
 }
 
 function getRecordDisplayName(record) {
@@ -45,6 +39,7 @@ class ReplayProcessQueue {
   async init() {
     await this.reloadConcurrency();
     await this.resetProcessingCount();
+    await this.clearStaleLocks();
     console.log(`[回放队列] 初始化完成, 并发数: ${this.concurrency}`);
   }
 
@@ -371,6 +366,23 @@ class ReplayProcessQueue {
     try {
       await redis.del(PROCESSING_KEY);
     } catch (_) {}
+  }
+
+  async clearStaleLocks() {
+    try {
+      const patterns = [`${RECORD_LOCK_PREFIX}*`, `${PRINCIPAL_LOCK_PREFIX}*`];
+      for (const pattern of patterns) {
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          for (const key of keys) {
+            await redis.del(key);
+          }
+          console.log(`[回放队列] 清理残留锁: ${keys.length} 个 (${pattern})`);
+        }
+      }
+    } catch (err) {
+      console.warn('[回放队列] 清理残留锁失败:', err.message);
+    }
   }
 
   async getQueueLength() {

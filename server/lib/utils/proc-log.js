@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const dayjs = require('dayjs');
 const { getLogsDir } = require('../../config/config');
 
 const LOG_DIR = path.join(getLogsDir(), 'logs');
@@ -65,4 +66,9 @@ function createProcLog(name, id) {
   return logger;
 }
 
-module.exports = { createProcLog };
+function writeLog(logStream, message) {
+  if (!logStream) return;
+  logStream.write(`[${dayjs().format('YYYY-MM-DD HH:mm:ss')}] ${message}\n`);
+}
+
+module.exports = { createProcLog, writeLog };
