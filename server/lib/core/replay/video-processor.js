@@ -74,7 +74,7 @@ async function download(record, options = {}) {
   const workDir = ReplayService.getRecordWorkDir(record);
   const basename =
     sanitizeFilename(record.video_file_name || record.replay_id || `replay_${record.id}`) || `replay_${record.id}`;
-  const outputPath = ensureInside(workDir, path.join(workDir, `${basename}.mp4`));
+  const outputPath = ensureInside(workDir, path.join(workDir, `${basename}.ts`));
   const referer = record.play_url
     ? `https://live.kuaishou.com/playback/${record.replay_id || ''}`
     : 'https://live.kuaishou.com';
@@ -89,7 +89,7 @@ async function download(record, options = {}) {
     }
   );
   if (!result.success) return result;
-  // yt-dlp 可能输出不同扩展名，优先查找 .mp4，其次扫描目录
+  // yt-dlp 可能输出不同扩展名，优先查找 .ts，其次扫描目录
   let finalPath = outputPath;
   if (!fs.existsSync(finalPath)) {
     const candidates = fs
