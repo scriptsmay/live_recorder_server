@@ -12,6 +12,7 @@ jest.mock('redis', () => {
     incr: jest.fn().mockResolvedValue(1),
     expire: jest.fn().mockResolvedValue(1),
     ttl: jest.fn().mockResolvedValue(60),
+    publish: jest.fn().mockResolvedValue(1),
     disconnect: jest.fn().mockResolvedValue(),
     on: jest.fn(),
   };
@@ -77,6 +78,20 @@ describe('RedisService', () => {
       const ttl = await redisService.ttl(testKey);
       expect(ttl).toBe(60);
       expect(redisService.client.ttl).toHaveBeenCalledWith(testKey);
+    });
+  });
+
+  describe('pub/sub', () => {
+    beforeEach(async () => {
+      await redisService.connect();
+    });
+
+    it('should publish message to channel', async () => {
+      const channel = 'test:channel';
+      const message = JSON.stringify({ type: 'test', timestamp: Date.now() });
+      const result = await redisService.publish(channel, message);
+      expect(result).toBe(1);
+      expect(redisService.client.publish).toHaveBeenCalledWith(channel, message);
     });
   });
 });
