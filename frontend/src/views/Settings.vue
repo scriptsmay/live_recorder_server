@@ -232,6 +232,18 @@ const settingGroups: SettingGroup[] = [
       },
     ],
   },
+  {
+    title: '日志设置',
+    items: [
+      {
+        key: 'log_retention_days',
+        label: '日志保留天数',
+        desc: '超过此天数的日志文件会在启动时和每日清理时删除',
+        type: 'number',
+        attrs: { min: 1, max: 3650 },
+      },
+    ],
+  },
 ]
 
 // ---- 状态 ----

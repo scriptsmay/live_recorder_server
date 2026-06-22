@@ -244,6 +244,7 @@ KV 结构的全局配置表。
 | `auto_transcode`             | `true`             | 是否自动转码 FLV 到 MP4                                                |
 | `transcode_delete_originals` | `true`             | 转码后是否删除原 FLV 文件                                              |
 | `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                               |
+| `log_retention_days`         | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件   |
 | `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                                   |
 | `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（强制最大 1）                                       |
 | `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                               |

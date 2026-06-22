@@ -15,7 +15,6 @@ const path = require('path');
 const logCleanupService = new LogCleanupService();
 const danmakuLogCleanupService = new LogCleanupService({
   logsDir: path.join(getDanmakuOutputDir(), 'logs'),
-  retentionDays: 30,
   protectedFiles: [],
 });
 

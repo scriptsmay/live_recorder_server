@@ -21,7 +21,7 @@ let accessLogStream = null;
 const ROTATION_DEFAULTS = {
   maxFileSize: 10 * 1024 * 1024,
   maxBackupsPerDay: 5,
-  retentionDays: 30,
+  retentionDays: null,
 };
 
 function logToFile(level, ...args) {
@@ -134,9 +134,9 @@ function renameIfExists(src, dst) {
  */
 function createRotatingStream(fileName, options = {}) {
   const logDir = options.logDir || LOG_DIR;
-  const maxFileSize = options.maxFileSize || ROTATION_DEFAULTS.maxFileSize;
-  const maxBackupsPerDay = options.maxBackupsPerDay || ROTATION_DEFAULTS.maxBackupsPerDay;
-  const retentionDays = options.retentionDays || ROTATION_DEFAULTS.retentionDays;
+  const maxFileSize = options.maxFileSize ?? ROTATION_DEFAULTS.maxFileSize;
+  const maxBackupsPerDay = options.maxBackupsPerDay ?? ROTATION_DEFAULTS.maxBackupsPerDay;
+  const retentionDays = options.retentionDays ?? ROTATION_DEFAULTS.retentionDays;
   const now = options.now || (() => new Date());
   const currentPath = currentLogPath(logDir, fileName);
 
@@ -167,6 +167,10 @@ function createRotatingStream(fileName, options = {}) {
   }
 
   function cleanupExpiredLogs(referenceTime = now()) {
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+      return;
+    }
+
     const cutoff = dayjs(referenceTime).subtract(retentionDays, 'day').format('YYYY-MM-DD');
 
     let names = [];

@@ -497,6 +497,7 @@ async function runMigration() {
       ['hls_enabled', 'true'],
       ['hls_segment_duration', '10'],
       ['hls_cleanup_days', '30'],
+      ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
       ['danmaku_burn_concurrency', '1'],
       ['danmaku_density_per_second', '20'],

@@ -1,11 +1,24 @@
 const fs = require('fs');
 const path = require('path');
 const { getLogsDir } = require('../config/config');
+const DataService = require('./DataService');
+
+const DEFAULT_RETENTION_DAYS = 30;
+
+function normalizeRetentionDays(value, fallback = DEFAULT_RETENTION_DAYS) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 class LogCleanupService {
   constructor(options = {}) {
     this.logsDir = path.resolve(options.logsDir || path.join(getLogsDir(), 'logs'));
-    this.retentionDays = options.retentionDays || 30;
+    this.defaultRetentionDays = normalizeRetentionDays(options.defaultRetentionDays, DEFAULT_RETENTION_DAYS);
+    this.retentionDays =
+      options.retentionDays === undefined
+        ? null
+        : normalizeRetentionDays(options.retentionDays, this.defaultRetentionDays);
+    this.settingsKey = options.settingsKey === undefined ? 'log_retention_days' : options.settingsKey;
     this.maxTotalSize = options.maxTotalSize || 1024 * 1024 * 1024;
     this.activeWindowMs = options.activeWindowMs || 5 * 60 * 1000;
     this.protectedFiles = new Set(options.protectedFiles || ['access.log', 'server.log']);
@@ -14,12 +27,13 @@ class LogCleanupService {
   }
 
   async cleanup(now = Date.now()) {
+    const retentionDays = await this.getRetentionDays();
     const files = await this.getLogFiles(now);
     const deleted = [];
     let releasedBytes = 0;
 
     for (const file of files) {
-      if (!file.protected && now - file.mtimeMs > this.retentionDays * 24 * 60 * 60 * 1000) {
+      if (!file.protected && now - file.mtimeMs > retentionDays * 24 * 60 * 60 * 1000) {
         const result = await this.deleteFile(file);
         if (result) {
           deleted.push(result);
@@ -48,6 +62,19 @@ class LogCleanupService {
     }
 
     return { deleted, releasedBytes };
+  }
+
+  async getRetentionDays() {
+    if (this.retentionDays !== null) {
+      return this.retentionDays;
+    }
+
+    if (!this.settingsKey) {
+      return this.defaultRetentionDays;
+    }
+
+    const value = await DataService.getSetting(this.settingsKey, String(this.defaultRetentionDays));
+    return normalizeRetentionDays(value, this.defaultRetentionDays);
   }
 
   start() {

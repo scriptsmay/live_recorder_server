@@ -1,8 +1,14 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+jest.mock('../server/services/DataService', () => ({
+  getSetting: jest.fn(),
+}));
+
 const LogFileService = require('../server/services/LogFileService');
 const LogCleanupService = require('../server/services/LogCleanupService');
+const DataService = require('../server/services/DataService');
 
 describe('LogFileService', () => {
   let tmpDir;
@@ -15,6 +21,7 @@ describe('LogFileService', () => {
 
   afterEach(async () => {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
+    jest.clearAllMocks();
   });
 
   it('lists only log files', async () => {
@@ -79,5 +86,27 @@ describe('LogCleanupService', () => {
     await expect(fs.promises.access(path.join(tmpDir, 'access.log'))).resolves.toBeUndefined();
     await expect(fs.promises.access(path.join(tmpDir, 'ffmpeg_2.log'))).resolves.toBeUndefined();
     await expect(fs.promises.access(path.join(tmpDir, 'ffmpeg_1.log'))).rejects.toThrow();
+  });
+
+  it('reads retention days from global settings when not explicitly configured', async () => {
+    const now = Date.now();
+    const oldDate = new Date(now - 15 * 24 * 60 * 60 * 1000);
+    const recentDate = new Date(now - 5 * 24 * 60 * 60 * 1000);
+    const service = new LogCleanupService({
+      logsDir: tmpDir,
+      maxTotalSize: 1024 * 1024,
+      activeWindowMs: 5 * 60 * 1000,
+    });
+
+    DataService.getSetting.mockResolvedValue('10');
+    await writeLog('ffmpeg_old.log', 'old', oldDate);
+    await writeLog('ffmpeg_recent.log', 'recent', recentDate);
+
+    const result = await service.cleanup(now);
+
+    expect(DataService.getSetting).toHaveBeenCalledWith('log_retention_days', '30');
+    expect(result.deleted).toEqual([{ file: 'ffmpeg_old.log', size: 3 }]);
+    await expect(fs.promises.access(path.join(tmpDir, 'ffmpeg_recent.log'))).resolves.toBeUndefined();
+    await expect(fs.promises.access(path.join(tmpDir, 'ffmpeg_old.log'))).rejects.toThrow();
   });
 });
