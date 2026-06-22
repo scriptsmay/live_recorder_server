@@ -142,8 +142,9 @@ describe('KuaishouReplayClient', () => {
           ],
         },
       };
-      const url = selectBestStreamFromV3(playUrlV3);
-      expect(url).toBe('https://h264-1080p.m3u8');
+      const result = selectBestStreamFromV3(playUrlV3);
+      expect(result.url).toBe('https://h264-1080p.m3u8');
+      expect(result.resolution).toBe('1920x1080');
     });
 
     test('hidden 流被跳过', () => {
@@ -159,8 +160,9 @@ describe('KuaishouReplayClient', () => {
           ],
         },
       };
-      const url = selectBestStreamFromV3(playUrlV3);
-      expect(url).toBe('https://visible.m3u8');
+      const result = selectBestStreamFromV3(playUrlV3);
+      expect(result.url).toBe('https://visible.m3u8');
+      expect(result.resolution).toBe('1280x720');
     });
 
     test('空 adaptationSet 返回 null', () => {
@@ -178,7 +180,9 @@ describe('KuaishouReplayClient', () => {
           ],
         },
       };
-      expect(selectBestStreamFromV3(playUrlV3)).toBe('https://hevc-only.m3u8');
+      const result = selectBestStreamFromV3(playUrlV3);
+      expect(result.url).toBe('https://hevc-only.m3u8');
+      expect(result.resolution).toBe('1920x1080');
     });
   });
 });

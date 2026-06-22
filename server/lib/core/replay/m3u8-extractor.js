@@ -69,6 +69,7 @@ function selectBestStreamFromV3(playUrlV3) {
           url: rep.url,
           width: rep.width || 0,
           height: rep.height || 0,
+          resolution: rep.width && rep.height ? `${rep.width}x${rep.height}` : null,
           pixels: (rep.width || 0) * (rep.height || 0),
           maxBitrate: rep.maxBitrate || 0,
           codec: name,
@@ -87,7 +88,7 @@ function selectBestStreamFromV3(playUrlV3) {
     return b.maxBitrate - a.maxBitrate;
   });
 
-  return candidates[0].url || null;
+  return candidates[0];
 }
 
 /**

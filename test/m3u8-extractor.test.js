@@ -91,7 +91,8 @@ segment001.ts`;
 
       const result = selectBestStreamFromV3(playUrlV3);
       // H264 优先，但 HEVC 分辨率更高时选 HEVC
-      expect(result).toBe('hevc_4k.m3u8');
+      expect(result.url).toBe('hevc_4k.m3u8');
+      expect(result.resolution).toBe('3840x2160');
     });
 
     test('空对象返回 null', () => {
@@ -114,7 +115,8 @@ segment001.ts`;
       };
 
       const result = selectBestStreamFromV3(playUrlV3);
-      expect(result).toBe('visible.m3u8');
+      expect(result.url).toBe('visible.m3u8');
+      expect(result.resolution).toBe('1280x720');
     });
 
     test('同分辨率下 H264 优先于 HEVC', () => {
@@ -136,7 +138,8 @@ segment001.ts`;
       };
 
       const result = selectBestStreamFromV3(playUrlV3);
-      expect(result).toBe('h264_720p.m3u8');
+      expect(result.url).toBe('h264_720p.m3u8');
+      expect(result.resolution).toBe('1280x720');
     });
   });
 
