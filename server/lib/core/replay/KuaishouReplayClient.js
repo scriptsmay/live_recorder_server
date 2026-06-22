@@ -333,28 +333,6 @@ async function fetchReplayDetail(replayId, cookies, principalId) {
   }
 }
 
-    const data = await response.json();
-    console.log(`[fetchReplayDetail] API response:`, JSON.stringify(data).slice(0, 500));
-    const currentWork = data?.data?.currentWork;
-
-    if (!currentWork) {
-      console.log(
-        `[fetchReplayDetail] No currentWork in response, data.data=`,
-        JSON.stringify(data?.data).slice(0, 300)
-      );
-      return { success: false, error: 'API 未返回 currentWork' };
-    }
-
-    return {
-      success: true,
-      poster: currentWork.poster || currentWork.coverUrl || '',
-      duration: currentWork.duration || null,
-    };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-
 module.exports = {
   fetchLiveList,
   syncReplays,
