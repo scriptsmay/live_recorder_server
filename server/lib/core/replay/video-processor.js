@@ -78,9 +78,12 @@ async function download(record, options = {}) {
   const referer = record.play_url
     ? `https://live.kuaishou.com/playback/${record.replay_id || ''}`
     : 'https://live.kuaishou.com';
+  const args = ['-o', outputPath, '--referer', referer, '--no-progress', '--no-warnings'];
+  if (options.force) args.push('--force-overwrites');
+  args.push(record.m3u8_url);
   const result = await runCommand(
     'yt-dlp',
-    ['-o', outputPath, '--referer', referer, '--no-progress', '--no-warnings', record.m3u8_url],
+    args,
     {
       cwd: workDir,
       logStream: options.logStream,
@@ -107,18 +110,21 @@ async function cut(record, options = {}) {
   const rawPath = record.raw_file_path;
   if (!rawPath || !fs.existsSync(rawPath)) return { success: false, error: '原始下载文件不存在' };
   const workDir = ReplayService.getRecordWorkDir(record);
-  const outputPattern = ensureInside(
-    workDir,
-    path.join(workDir, `${path.basename(rawPath, path.extname(rawPath))}_part.mkv`)
-  );
+  const base = path.basename(rawPath, path.extname(rawPath));
+  const videoSubDir = ensureInside(workDir, path.join(workDir, base));
+  if (!fs.existsSync(videoSubDir)) {
+    fs.mkdirSync(videoSubDir, { recursive: true });
+  }
 
-  const result = await runCommand('mkvmerge', ['-o', outputPattern, '--split', 'duration:00:59:00', rawPath], {
+  const outputPath = ensureInside(videoSubDir, path.join(videoSubDir, 'p.mkv'));
+  const result = await runCommand('mkvmerge', ['-o', outputPath, '--split', 'duration:00:59:00', rawPath], {
     cwd: workDir,
     logStream: options.logStream,
     onProcessStart: options.onProcessStart,
     onProcessEnd: options.onProcessEnd,
   });
   if (!result.success) {
+    const fallbackPattern = ensureInside(videoSubDir, path.join(videoSubDir, 'p%02d.ts'));
     const fallback = await runCommand(
       'ffmpeg',
       [
@@ -127,11 +133,17 @@ async function cut(record, options = {}) {
         rawPath,
         '-c',
         'copy',
+        '-map',
+        '0',
         '-f',
         'segment',
         '-segment_time',
         '3540',
-        path.join(workDir, 'part_%03d.mp4'),
+        '-segment_start_number',
+        '1',
+        '-reset_timestamps',
+        '1',
+        fallbackPattern,
       ],
       {
         cwd: workDir,
@@ -143,10 +155,10 @@ async function cut(record, options = {}) {
     if (!fallback.success) return fallback;
   }
   const files = fs
-    .readdirSync(workDir)
-    .filter((name) => /(_part-\d+\.mkv|part_\d+\.mp4|_part\.mkv)$/i.test(name))
-    .map((name) => ensureInside(workDir, path.join(workDir, name)));
-  return { success: true, cutFilePaths: files.length ? files : [outputPattern] };
+    .readdirSync(videoSubDir)
+    .filter((name) => /^p(\-\d+)?\.mkv$|^p\d+\.ts$/i.test(name))
+    .map((name) => ensureInside(videoSubDir, path.join(videoSubDir, name)));
+  return { success: true, cutFilePaths: files.length ? files : [outputPath] };
 }
 
 /**
