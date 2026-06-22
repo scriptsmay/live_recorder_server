@@ -26,6 +26,8 @@ function getReplayTemplateVars(record) {
   );
   const date = new Date(startedAt);
   const pad = (n) => String(n).padStart(2, '0');
+  const totalSeconds = parseInt(record.duration, 10) || 0;
+  const hours = Math.floor(totalSeconds / 3600);
   return {
     ...baseVars,
     room_name: displayName,
@@ -34,6 +36,8 @@ function getReplayTemplateVars(record) {
     replay_date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     replay_time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
     duration: formatDuration(record.duration),
+    duration_mins: String(Math.floor(totalSeconds / 60)),
+    H: String(hours),
     replay_id: record.replay_id || '',
   };
 }

@@ -215,6 +215,7 @@ class ReplayService {
       backed_up_at: fields.backed_up_at,
       completed_at: fields.completed_at,
       error_message: fields.error_message,
+      duration: fields.duration,
     };
     const sets = ['status = $1', 'updated_at = NOW()'];
     const params = [status];

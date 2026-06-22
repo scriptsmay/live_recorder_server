@@ -8,7 +8,7 @@
 const ReplayService = require('../../../services/ReplayService');
 
 const KUAISHOU_API_BASE = 'https://live.kuaishou.com/live_api/playback/list';
-const KUAISHOU_PLAYBACK_DETAIL_API = 'https://live.kuaishou.com/live_api/playback/detail';
+// const KUAISHOU_PLAYBACK_DETAIL_API = 'https://live.kuaishou.com/live_api/playback/detail';
 
 function writeLog(logStream, message) {
   logStream?.write(`[${new Date().toISOString()}] ${message}\n`);
@@ -187,50 +187,52 @@ async function extractM3u8(record, options = {}) {
     `Cookie 配置: ${cookies.cookie ? 'POLLING_KUAISHOU_COOKIE 已配置' : 'POLLING_KUAISHOU_COOKIE 为空'}`
   );
 
-  // 方案 1: HTTP API 直接调用 playback/detail 接口
-  try {
-    const headers = buildHeaders(cookies, record.principal_id);
-    const detailUrl = new URL(KUAISHOU_PLAYBACK_DETAIL_API);
-    detailUrl.searchParams.set('photoId', replayId);
-    detailUrl.searchParams.set('isLongVideo', 'false');
+  // // 方案 1: HTTP API 直接调用 playback/detail 接口
+  // try {
+  //   const headers = buildHeaders(cookies, record.principal_id);
+  //   const detailUrl = new URL(KUAISHOU_PLAYBACK_DETAIL_API);
+  //   detailUrl.searchParams.set('photoId', replayId);
+  //   detailUrl.searchParams.set('isLongVideo', 'false');
 
-    const response = await fetch(detailUrl.toString(), {
-      method: 'GET',
-      headers,
-      signal: AbortSignal.timeout(15000),
-    });
+  //   const response = await fetch(detailUrl.toString(), {
+  //     method: 'GET',
+  //     headers,
+  //     signal: AbortSignal.timeout(15000),
+  //   });
 
-    writeLog(logStream, `detail API HTTP ${response.status} ${response.statusText}`);
-    if (response.ok) {
-      const data = await response.json();
-      const playUrlV3 = data?.data?.currentWork?.playUrlV3;
-      writeLog(
-        logStream,
-        `detail API currentWork=${data?.data?.currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'}`
-      );
+  //   writeLog(logStream, `detail API HTTP ${response.status} ${response.statusText}`);
+  //   if (response.ok) {
+  //     const data = await response.json();
+  //     const currentWork = data?.data?.currentWork;
+  //     const playUrlV3 = currentWork?.playUrlV3;
+  //     const workDuration = currentWork?.duration || null;
+  //     writeLog(
+  //       logStream,
+  //       `detail API currentWork=${currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'} duration=${workDuration}`
+  //     );
 
-      if (playUrlV3) {
-        const m3u8Url = selectBestStreamFromV3(playUrlV3);
-        if (m3u8Url) {
-          writeLog(logStream, `detail API 提取成功: ${m3u8Url}`);
-          return { success: true, m3u8Url };
-        }
-      }
+  //     if (playUrlV3) {
+  //       const m3u8Url = selectBestStreamFromV3(playUrlV3);
+  //       if (m3u8Url) {
+  //         writeLog(logStream, `detail API 提取成功: ${m3u8Url}`);
+  //         return { success: true, m3u8Url, duration: workDuration };
+  //       }
+  //     }
 
-      // Fallback: 检查 mainMvUrls
-      const mainMvUrls = data?.data?.mainMvUrls;
-      if (mainMvUrls && Array.isArray(mainMvUrls) && mainMvUrls.length > 0) {
-        const sorted = mainMvUrls.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-        if (sorted[0]?.url) {
-          writeLog(logStream, `detail API mainMvUrls 提取成功: ${sorted[0].url}`);
-          return { success: true, m3u8Url: sorted[0].url };
-        }
-      }
-    }
-  } catch (err) {
-    console.log(`[KuaishouReplay] API 提取 m3u8 失败，降级到浏览器方案: ${err.message}`);
-    writeLog(logStream, `detail API 异常: ${err.message}`);
-  }
+  //     // Fallback: 检查 mainMvUrls
+  //     const mainMvUrls = data?.data?.mainMvUrls;
+  //     if (mainMvUrls && Array.isArray(mainMvUrls) && mainMvUrls.length > 0) {
+  //       const sorted = mainMvUrls.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+  //       if (sorted[0]?.url) {
+  //         writeLog(logStream, `detail API mainMvUrls 提取成功: ${sorted[0].url}`);
+  //         return { success: true, m3u8Url: sorted[0].url, duration: workDuration };
+  //       }
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.log(`[KuaishouReplay] API 提取 m3u8 失败，降级到浏览器方案: ${err.message}`);
+  //   writeLog(logStream, `detail API 异常: ${err.message}`);
+  // }
 
   // 方案 2: Playwright 浏览器兜底 — 打开回放页面拦截 API/网络请求
   try {

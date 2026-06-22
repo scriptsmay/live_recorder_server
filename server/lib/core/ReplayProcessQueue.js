@@ -213,6 +213,7 @@ class ReplayProcessQueue {
         if (!result.success) throw new Error(result.error);
         const updateFields = { m3u8_url: result.m3u8Url, error_message: '' };
         if (result.duration && (!current.duration || current.duration === 0)) {
+          console.log(`[回放队列][id=${current.id}] extracted: 设置时长=${result.duration}`);
           updateFields.duration = result.duration;
         }
         current = await ReplayService.updateRecordStatus(current.id, 'extracted', updateFields);
