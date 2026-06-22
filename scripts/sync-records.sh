@@ -86,7 +86,7 @@ SELECT
   video_file_name,
   NULL::bigint                                           AS replay_time,
   NULL::varchar                                          AS replay_time_text,
-  NULL::text                                             AS poster,
+  poster,
   duration,
   CASE WHEN start_time IS NOT NULL
        THEN (EXTRACT(EPOCH FROM start_time) * 1000)::bigint
@@ -94,7 +94,7 @@ SELECT
   CASE WHEN start_time IS NOT NULL
        THEN TO_CHAR(start_time, 'YYYY-MM-DD_HH24_MI_SS')
        ELSE NULL END                                     AS start_live_time_text,
-  NULL::varchar                                          AS resolution,
+  resolution,
   created_at,
   updated_at,
   status,
@@ -180,9 +180,11 @@ WITH upserted AS (
   ON CONFLICT (source, external_id) DO UPDATE SET
     principal_id         = EXCLUDED.principal_id,
     video_file_name      = EXCLUDED.video_file_name,
+    poster               = COALESCE(NULLIF(EXCLUDED.poster, ''), $REMOTE_TABLE.poster),
     duration             = EXCLUDED.duration,
     start_live_time      = EXCLUDED.start_live_time,
     start_live_time_text = EXCLUDED.start_live_time_text,
+    resolution           = COALESCE(NULLIF(EXCLUDED.resolution, ''), $REMOTE_TABLE.resolution),
     status               = EXCLUDED.status,
     bv_id                = EXCLUDED.bv_id,
     upload_time          = EXCLUDED.upload_time,
@@ -192,9 +194,11 @@ WITH upserted AS (
   WHERE (
     $REMOTE_TABLE.principal_id,
     $REMOTE_TABLE.video_file_name,
+    $REMOTE_TABLE.poster,
     $REMOTE_TABLE.duration,
     $REMOTE_TABLE.start_live_time,
     $REMOTE_TABLE.start_live_time_text,
+    $REMOTE_TABLE.resolution,
     $REMOTE_TABLE.status,
     $REMOTE_TABLE.bv_id,
     $REMOTE_TABLE.upload_time,
@@ -204,9 +208,11 @@ WITH upserted AS (
   ) IS DISTINCT FROM (
     EXCLUDED.principal_id,
     EXCLUDED.video_file_name,
+    EXCLUDED.poster,
     EXCLUDED.duration,
     EXCLUDED.start_live_time,
     EXCLUDED.start_live_time_text,
+    EXCLUDED.resolution,
     EXCLUDED.status,
     EXCLUDED.bv_id,
     EXCLUDED.upload_time,
