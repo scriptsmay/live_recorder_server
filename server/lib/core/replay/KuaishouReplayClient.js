@@ -197,17 +197,19 @@ async function extractM3u8(record, options = {}) {
     writeLog(logStream, `detail API HTTP ${response.status} ${response.statusText}`);
     if (response.ok) {
       const data = await response.json();
-      const playUrlV3 = data?.data?.currentWork?.playUrlV3;
+      const currentWork = data?.data?.currentWork;
+      const playUrlV3 = currentWork?.playUrlV3;
+      const workDuration = currentWork?.duration || null;
       writeLog(
         logStream,
-        `detail API currentWork=${data?.data?.currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'}`
+        `detail API currentWork=${currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'} duration=${workDuration}`
       );
 
       if (playUrlV3) {
         const m3u8Url = selectBestStreamFromV3(playUrlV3);
         if (m3u8Url) {
           writeLog(logStream, `detail API 提取成功: ${m3u8Url}`);
-          return { success: true, m3u8Url };
+          return { success: true, m3u8Url, duration: workDuration };
         }
       }
 
@@ -217,7 +219,7 @@ async function extractM3u8(record, options = {}) {
         const sorted = mainMvUrls.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
         if (sorted[0]?.url) {
           writeLog(logStream, `detail API mainMvUrls 提取成功: ${sorted[0].url}`);
-          return { success: true, m3u8Url: sorted[0].url };
+          return { success: true, m3u8Url: sorted[0].url, duration: workDuration };
         }
       }
     }
