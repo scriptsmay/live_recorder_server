@@ -297,7 +297,7 @@ class ReplayProcessQueue {
   }
 
   isStepComplete(record, step) {
-    if (step === 'extract') return Boolean(record.m3u8_url);
+    if (step === 'extract') return Boolean(record.m3u8_url) && Boolean(record.duration);
     if (step === 'download') {
       return (
         hasExistingFile(record.raw_file_path) ||
