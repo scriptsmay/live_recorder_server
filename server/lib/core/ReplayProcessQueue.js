@@ -6,6 +6,7 @@ const videoProcessor = require('./replay/video-processor');
 const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
 const { createProcLog } = require('../utils/proc-log');
+const { fetchReplayDetail, getKuaishouCookies, buildHeaders } = require('./replay/KuaishouReplayClient');
 
 const QUEUE_KEY = 'replay_process_queue';
 const PROCESSING_KEY = 'replay_process_processing_count';
@@ -282,6 +283,17 @@ class ReplayProcessQueue {
           { status: 'upload_started', upload_record_id: result.upload_record_id },
           logStream
         );
+      } else if (step === 'refresh') {
+        const cookies = await getKuaishouCookies();
+        const detail = await fetchReplayDetail(current.replay_id, cookies, current.principal_id);
+        this.throwIfCancelled(runtime);
+        if (!detail.success) throw new Error(`获取回放详情失败: ${detail.error}`);
+        const updateFields = {};
+        if (detail.poster) updateFields.poster = detail.poster;
+        if (detail.duration && (!current.duration || current.duration === 0)) updateFields.duration = detail.duration;
+        current = await ReplayService.updateRecordStatus(current.id, current.status, updateFields);
+        writeLog(logStream, `步骤完成: refresh poster=${detail.poster || '(empty)'}`);
+        this.notifyPipelineComplete(current, 'refresh', { poster: detail.poster }, logStream);
       } else {
         throw new Error(`未知回放动作: ${step}`);
       }

@@ -8,7 +8,7 @@
 const ReplayService = require('../../../services/ReplayService');
 
 const KUAISHOU_API_BASE = 'https://live.kuaishou.com/live_api/playback/list';
-// const KUAISHOU_PLAYBACK_DETAIL_API = 'https://live.kuaishou.com/live_api/playback/detail';
+const KUAISHOU_PLAYBACK_DETAIL_API = 'https://live.kuaishou.com/live_api/playback/detail';
 
 function writeLog(logStream, message) {
   logStream?.write(`[${new Date().toISOString()}] ${message}\n`);
@@ -134,6 +134,8 @@ async function syncReplays(principalId, count = 12, principalName) {
   for (const item of items) {
     const replayId = item.id || item.photoId || '';
     if (!replayId) continue;
+
+    console.log(`[syncReplays] replayId=${replayId} poster=${item.poster || '(empty)'} duration=${item.duration || 0}`);
 
     const existing = await ReplayService.getRecordByReplayId(principalId, replayId);
     const timePart = item.createTime ? formatTimestamp(item.createTime) : '';
@@ -300,10 +302,52 @@ function selectBestStreamFromV3(playUrlV3) {
   return candidates[0].url || null;
 }
 
+/**
+ * 获取单条回放详情（包含 poster）
+ * @param {string} replayId - 回放 ID
+ * @param {Object} cookies - 快手 cookies
+ * @param {string} principalId - 主播 ID（用于生成 headers）
+ * @returns {Promise<{success: boolean, poster?: string, duration?: number, error?: string}>}
+ */
+async function fetchReplayDetail(replayId, cookies, principalId) {
+  const headers = buildHeaders(cookies, principalId);
+  const url = new URL(KUAISHOU_PLAYBACK_DETAIL_API);
+  url.searchParams.set('photoId', replayId);
+  url.searchParams.set('isLongVideo', 'false');
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+    }
+
+    const data = await response.json();
+    const currentWork = data?.data?.currentWork;
+
+    if (!currentWork) {
+      return { success: false, error: 'API 未返回 currentWork' };
+    }
+
+    return {
+      success: true,
+      poster: currentWork.poster || currentWork.coverUrl || '',
+      duration: currentWork.duration || null,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   fetchLiveList,
   syncReplays,
   extractM3u8,
+  fetchReplayDetail,
   getKuaishouCookies,
   buildHeaders,
   generateHxfalcon,
