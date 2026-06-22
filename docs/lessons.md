@@ -807,12 +807,12 @@ RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static
 
 ### 时间线
 
-| 日期 | 版本 | 事件 |
-|------|------|------|
-| 06-09 | v1.4.5 | Docker 镜像从 johnvansickle.com 更新 FFmpeg 静态二进制到最新 nightly |
+| 日期  | 版本    | 事件                                                                          |
+| ----- | ------- | ----------------------------------------------------------------------------- |
+| 06-09 | v1.4.5  | Docker 镜像从 johnvansickle.com 更新 FFmpeg 静态二进制到最新 nightly          |
 | 06-11 | v1.4.10 | johnvansickle.com 源不稳定导致构建失败，增加 BtbN GitHub Release 作为降级备选 |
-| 06-21 | v1.5.1 | nightly 静态构建 SIGSEGV 导致生产事故，改用 Debian apt 安装 `ffmpeg 5.1.9` |
-| 06-22 | v1.5.3 | 切换到 BtbN 锁定版本 `n7.1.5` 稳定构建，生产验证通过 |
+| 06-21 | v1.5.1  | nightly 静态构建 SIGSEGV 导致生产事故，改用 Debian apt 安装 `ffmpeg 5.1.9`    |
+| 06-22 | v1.5.3  | 切换到 BtbN 锁定版本 `n7.1.5` 稳定构建，生产验证通过                          |
 
 ### 根因
 
@@ -844,11 +844,11 @@ BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），
 
 ### 方案对比
 
-| 方案 | 版本 | 稳定性 | 结果 |
-|------|------|--------|------|
-| johnvansickle nightly | 每天变 | ❌ 无 SLA，源站不稳定，nightly 代码未充分测试 | SIGSEGV |
-| Debian apt | 5.1.9 | ✅ 稳定 | 版本过老，缺少新特性 |
-| BtbN 锁定 7.1.5 | 7.1.5 | ✅ 稳定分支，GitHub CDN | **当前方案** |
+| 方案                  | 版本   | 稳定性                                        | 结果                 |
+| --------------------- | ------ | --------------------------------------------- | -------------------- |
+| johnvansickle nightly | 每天变 | ❌ 无 SLA，源站不稳定，nightly 代码未充分测试 | SIGSEGV              |
+| Debian apt            | 5.1.9  | ✅ 稳定                                       | 版本过老，缺少新特性 |
+| BtbN 锁定 7.1.5       | 7.1.5  | ✅ 稳定分支，GitHub CDN                       | **当前方案**         |
 
 ### 经验总结
 

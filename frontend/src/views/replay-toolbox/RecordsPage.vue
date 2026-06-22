@@ -24,7 +24,10 @@ const forceDialogTitle = ref('')
 const forceChecked = ref(false)
 let forceResolve: ((value: { confirmed: boolean; force: boolean }) => void) | null = null
 
-function showForceConfirm(message: string, title: string): Promise<{ confirmed: boolean; force: boolean }> {
+function showForceConfirm(
+  message: string,
+  title: string,
+): Promise<{ confirmed: boolean; force: boolean }> {
   forceDialogMessage.value = message
   forceDialogTitle.value = title
   forceChecked.value = false
@@ -115,7 +118,10 @@ async function handleAction(recordId: number, action: string) {
     }
     await store.enqueueRecord(recordId, action)
   } else {
-    const { confirmed, force } = await showForceConfirm(`确认执行 ${action} 任务？`, `回放 #${recordId}`)
+    const { confirmed, force } = await showForceConfirm(
+      `确认执行 ${action} 任务？`,
+      `回放 #${recordId}`,
+    )
     if (!confirmed) return
     await store.enqueueRecord(recordId, action, force)
   }

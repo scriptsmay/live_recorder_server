@@ -68,7 +68,7 @@ class DanmakuRecorder {
         captureId,
         fd,
         recordingStartedAt: startedAt,
-        startedAt,               // sessionStartMs 别名，供 _normalizeEvent 批量处理用
+        startedAt, // sessionStartMs 别名，供 _normalizeEvent 批量处理用
         eventCount: 0,
         outputDir,
         rawPath,

@@ -40,13 +40,13 @@ live_recorder_server/
 
 ### 影响范围总览
 
-| 类别 | 涉及文件数 | 改动行数 | 难度 |
-|------|-----------|---------|------|
-| server 内部跨边界路径 + getLogsDir() | 11 | ~18 行 | 低 |
-| 根目录配置文件 (package.json / ecosystem / Dockerfile) | 3 | ~5 行 | 低 |
-| test/ 测试文件 import 路径 | 32 | ~120 行 | 低 (机械替换) |
-| scripts/ 脚本 import 路径 | 10 | ~28 行 | 低 (机械替换) |
-| **合计** | **~56 文件** | **~170 行** | — |
+| 类别                                                   | 涉及文件数   | 改动行数    | 难度          |
+| ------------------------------------------------------ | ------------ | ----------- | ------------- |
+| server 内部跨边界路径 + getLogsDir()                   | 11           | ~18 行      | 低            |
+| 根目录配置文件 (package.json / ecosystem / Dockerfile) | 3            | ~5 行       | 低            |
+| test/ 测试文件 import 路径                             | 32           | ~120 行     | 低 (机械替换) |
+| scripts/ 脚本 import 路径                              | 10           | ~28 行      | 低 (机械替换) |
+| **合计**                                               | **~56 文件** | **~170 行** | —             |
 
 server 内部的相互引用（如 `app.js` → `./config/env`、`router/` → `../lib/`、`services/` → `../db/`）**全部不需要改动**，因为它们一起移入 `server/`，相对关系不变。
 
@@ -199,15 +199,15 @@ Dockerfile 中的 `COPY . .` 和 `WORKDIR /app` 不需要改动——源码在�
 
 所有 `require('../xxx/...')` 统一改为 `require('../server/xxx/...')`，是纯机械替换。涉及的前缀：
 
-| 原路径前缀 | 新路径前缀 | 涉及文件数 |
-|-----------|-----------|-----------|
-| `'../lib/` | `'../server/lib/` | 27 |
-| `'../db/` | `'../server/db/` | 18 |
-| `'../services/` | `'../server/services/` | 12 |
-| `'../router/` | `'../server/router/` | 3 |
-| `'../middleware/` | `'../server/middleware/` | 1 |
-| `'../config/` | `'../server/config/` | 1 |
-| `'../scripts/` | `'../server/scripts/` | 0 (scripts/ 不移入 server/) |
+| 原路径前缀        | 新路径前缀               | 涉及文件数                  |
+| ----------------- | ------------------------ | --------------------------- |
+| `'../lib/`        | `'../server/lib/`        | 27                          |
+| `'../db/`         | `'../server/db/`         | 18                          |
+| `'../services/`   | `'../server/services/`   | 12                          |
+| `'../router/`     | `'../server/router/`     | 3                           |
+| `'../middleware/` | `'../server/middleware/` | 1                           |
+| `'../config/`     | `'../server/config/`     | 1                           |
+| `'../scripts/`    | `'../server/scripts/`    | 0 (scripts/ 不移入 server/) |
 
 注意：`jest.mock('...')` 和 `jest.requireActual('...')` 中的路径也需要同步更新。
 
