@@ -225,6 +225,8 @@ export interface ReplayRecord {
   error_message: string | null
   created_at: string
   updated_at: string
+  resolution: string | null
+  poster: string | null
 }
 
 export interface ReplayUploadRecord {

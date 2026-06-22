@@ -17,6 +17,7 @@ const principalId = computed(() => route.params.principalId as string)
 const statusFilter = ref('all')
 const batchCount = ref(1)
 const selectedRecord = ref<ReplayRecord | null>(null)
+const selectedRecordIds = ref<Set<number>>(new Set())
 
 const forceDialogVisible = ref(false)
 const forceDialogMessage = ref('')
@@ -53,6 +54,33 @@ const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.page
 const activeRecordIds = computed(
   () => new Set((store.taskStatus?.active ?? []).map((task) => task.record_id)),
 )
+const selectedCount = computed(() => selectedRecordIds.value.size)
+
+function clearSelection() {
+  selectedRecordIds.value = new Set()
+}
+
+function handleToggleSelect(recordId: number, selected: boolean) {
+  const next = new Set(selectedRecordIds.value)
+  if (selected) {
+    next.add(recordId)
+  } else {
+    next.delete(recordId)
+  }
+  selectedRecordIds.value = next
+}
+
+function handleToggleSelectAll(recordIds: number[], selected: boolean) {
+  const next = new Set(selectedRecordIds.value)
+  for (const id of recordIds) {
+    if (selected) {
+      next.add(id)
+    } else {
+      next.delete(id)
+    }
+  }
+  selectedRecordIds.value = next
+}
 
 onMounted(async () => {
   store.selectedPrincipalId = principalId.value
@@ -65,16 +93,19 @@ onMounted(async () => {
 
 watch(principalId, async (id) => {
   store.selectedPrincipalId = id
+  clearSelection()
   await store.fetchRecords({ status: statusFilter.value, page: 1 })
 })
 
 async function handleFilterChange() {
+  clearSelection()
   await store.fetchRecords({ status: statusFilter.value, page: 1 })
 }
 
 async function handleClearDateFilter() {
   store.dateFrom = ''
   store.dateTo = ''
+  clearSelection()
   await store.fetchRecords({ status: statusFilter.value, page: 1 })
 }
 
@@ -86,6 +117,11 @@ async function handleBatchAll() {
 }
 
 async function handleAction(recordId: number, action: string) {
+  if (action === 'mark-completed') {
+    await handleMarkCompleted([recordId])
+    return
+  }
+
   if (action === 'upload' || action === 'all') {
     try {
       const preview = await store.fetchUploadPreview(recordId)
@@ -127,6 +163,24 @@ async function handleAction(recordId: number, action: string) {
   }
 }
 
+async function handleMarkCompleted(recordIds: number[]) {
+  const ids = Array.from(new Set(recordIds)).filter((id) => Number.isFinite(id) && id > 0)
+  if (ids.length === 0) return
+
+  const ok = await confirm(`确定将 ${ids.length} 条回放记录标记为已完成？`)
+  if (!ok) return
+
+  const success = await store.markRecordsCompleted(ids)
+  if (success) {
+    const updated = new Set(ids)
+    selectedRecordIds.value = new Set([...selectedRecordIds.value].filter((id) => !updated.has(id)))
+  }
+}
+
+async function handleMarkSelectedCompleted() {
+  await handleMarkCompleted([...selectedRecordIds.value])
+}
+
 async function handleCancel(recordId: number) {
   const ok = await confirm('确定取消当前回放任务？', { title: `回放 #${recordId}` })
   if (!ok) return
@@ -136,6 +190,7 @@ async function handleCancel(recordId: number) {
 async function handlePageChange(delta: number) {
   const next = Math.min(totalPages.value, Math.max(1, store.page + delta))
   if (next === store.page) return
+  clearSelection()
   await store.fetchRecords({ status: statusFilter.value, page: next })
 }
 </script>
@@ -158,6 +213,14 @@ async function handlePageChange(delta: number) {
         >
           批量全流程
         </button>
+        <button
+          v-if="selectedCount > 0"
+          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          :disabled="store.busy"
+          @click="handleMarkSelectedCompleted()"
+        >
+          标记已完成<span v-if="selectedCount">（{{ selectedCount }}）</span>
+        </button>
       </div>
     </div>
 
@@ -178,10 +241,13 @@ async function handlePageChange(delta: number) {
       :total="store.total"
       :busy="store.busy"
       :active-record-ids="activeRecordIds"
+      :selected-record-ids="selectedRecordIds"
       @show-detail="selectedRecord = $event"
       @action="handleAction"
       @cancel="handleCancel"
       @page-change="handlePageChange"
+      @toggle-select="handleToggleSelect"
+      @toggle-select-all="handleToggleSelectAll"
     />
 
     <ReplayRecordDetail

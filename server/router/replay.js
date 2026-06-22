@@ -51,6 +51,25 @@ router.post('/replay/records/sync', async (req, res) => {
   }
 });
 
+router.post('/replay/records/mark-completed', async (req, res) => {
+  try {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ status: 'Error', message: '缺少回放记录 ID 列表' });
+    }
+
+    const data = await ReplayService.markRecordsCompleted(ids);
+    res.json({
+      status: 'ok',
+      data,
+      message: `已标记 ${data.updated.length} 条回放为已完成`,
+    });
+  } catch (err) {
+    console.error('[replay] 标记回放完成失败:', err);
+    res.status(500).json({ status: 'Error', message: '标记回放完成失败' });
+  }
+});
+
 router.post('/replay/records/:id/actions/:action', async (req, res) => {
   try {
     const { id, action } = req.params;

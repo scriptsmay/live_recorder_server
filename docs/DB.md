@@ -361,6 +361,7 @@ queued ──→ processing ──→ completed
 | duration         | INTEGER       | DEFAULT 0     | 回放时长（秒）                                                                                                                     |
 | uploaded_at      | TIMESTAMP     |               | 投稿完成时间                                                                                                                       |
 | backed_up_at     | TIMESTAMP     |               | 备份完成时间                                                                                                                       |
+| completed_at     | TIMESTAMP     |               | 手动或投稿完成时间                                                                                                                 |
 | error_message    | TEXT          |               | 失败原因                                                                                                                           |
 | created_at       | TIMESTAMP     | DEFAULT NOW() | 创建时间                                                                                                                           |
 | updated_at       | TIMESTAMP     | DEFAULT NOW() | 更新时间                                                                                                                           |

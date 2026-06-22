@@ -189,6 +189,27 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     }
   }
 
+  async function markRecordsCompleted(ids: number[]) {
+    const recordIds = Array.from(new Set(ids.filter((id) => Number.isFinite(id) && id > 0)))
+    if (recordIds.length === 0) return false
+
+    busy.value = true
+    try {
+      const res = await apiPost<{ updated?: ReplayRecord[]; missing_ids?: number[] }>(
+        '/api/replay/records/mark-completed',
+        { ids: recordIds },
+      )
+      toast.success(res.message ?? `已标记 ${res.data?.updated?.length ?? 0} 条回放为已完成`)
+      await Promise.all([fetchPrincipals(), fetchRecords({ page: page.value })])
+      return true
+    } catch (err) {
+      toast.error('标记完成失败: ' + getErrorMessage(err))
+      return false
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function fetchUploadPreview(recordId: number) {
     const res = await apiGet<ReplayUploadPreview>(`/api/replay/records/${recordId}/upload-preview`)
     return res.data ?? null
@@ -266,6 +287,7 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     syncRecords,
     enqueueRecord,
     cancelRecord,
+    markRecordsCompleted,
     fetchUploadPreview,
     enqueuePrincipal,
     updateSettings,

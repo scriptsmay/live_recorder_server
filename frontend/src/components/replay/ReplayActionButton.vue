@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { ReplayRecordStatus } from '@/types/api'
+
 const props = defineProps<{
   recordId: number
+  status: ReplayRecordStatus | string
   busy?: boolean
   running?: boolean
 }>()
@@ -13,67 +17,58 @@ const emit = defineEmits<{
 interface ActionDef {
   action: string
   label: string
-  borderClass: string
-  textClass: string
-  hoverClass: string
-  primary?: boolean
 }
 
-const actions: ActionDef[] = [
-  {
-    action: 'refresh',
-    label: '刷新',
-    borderClass: 'border-blue-300',
-    textClass: 'text-blue-600',
-    hoverClass: 'hover:bg-blue-50',
-  },
-  {
-    action: 'extract',
-    label: '提取',
-    borderClass: 'border-gray-300',
-    textClass: 'text-gray-600',
-    hoverClass: 'hover:bg-gray-50',
-  },
-  {
-    action: 'download',
-    label: '下载',
-    borderClass: 'border-gray-300',
-    textClass: 'text-gray-600',
-    hoverClass: 'hover:bg-gray-50',
-  },
-  {
-    action: 'cut',
-    label: '剪切',
-    borderClass: 'border-gray-300',
-    textClass: 'text-gray-600',
-    hoverClass: 'hover:bg-gray-50',
-  },
-  {
-    action: 'fix',
-    label: '修复',
-    borderClass: 'border-gray-300',
-    textClass: 'text-gray-600',
-    hoverClass: 'hover:bg-gray-50',
-  },
-  {
-    action: 'upload',
-    label: '投稿',
-    borderClass: 'border-sky-300',
-    textClass: 'text-sky-600',
-    hoverClass: 'hover:bg-sky-50',
-  },
-  {
-    action: 'all',
-    label: '全流程',
-    borderClass: '',
-    textClass: '',
-    hoverClass: 'hover:bg-brand-700',
-    primary: true,
-  },
+const moreValue = ref('')
+
+const actionDefs: Record<string, ActionDef> = {
+  refresh: { action: 'refresh', label: '刷新' },
+  extract: { action: 'extract', label: '提取' },
+  download: { action: 'download', label: '下载' },
+  cut: { action: 'cut', label: '剪切' },
+  fix: { action: 'fix', label: '修复' },
+  upload: { action: 'upload', label: '投稿' },
+  'mark-completed': { action: 'mark-completed', label: '标记完成' },
+  all: { action: 'all', label: '全流程' },
+}
+
+const actionOrder = [
+  'refresh',
+  'extract',
+  'download',
+  'cut',
+  'fix',
+  'upload',
+  'all',
+  'mark-completed',
 ]
+
+const primaryAction = computed<ActionDef | null>(() => {
+  if (props.running) return null
+  if (props.status === 'pending' || props.status === 'failed' || props.status === 'cancelled') {
+    return actionDefs.extract
+  }
+  if (props.status === 'extracted') return actionDefs.download
+  if (props.status === 'downloaded') return actionDefs.cut
+  if (props.status === 'cut' || props.status === 'fixed') return actionDefs.upload
+  return null
+})
+
+const moreActions = computed(() =>
+  actionOrder
+    .filter((action) => action !== primaryAction.value?.action)
+    .filter((action) => props.status !== 'completed' || action !== 'mark-completed')
+    .map((action) => actionDefs[action]),
+)
 
 function handleClick(action: string) {
   emit('action', props.recordId, action)
+}
+
+function handleMoreChange() {
+  if (!moreValue.value) return
+  handleClick(moreValue.value)
+  moreValue.value = ''
 }
 
 function handleCancel() {
@@ -82,7 +77,7 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="inline-flex flex-wrap justify-end gap-1.5">
+  <div class="inline-flex justify-end gap-1.5">
     <button
       v-if="running"
       class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
@@ -92,18 +87,24 @@ function handleCancel() {
       取消
     </button>
     <button
-      v-for="a in actions"
-      :key="a.action"
-      class="px-2 py-1 text-xs rounded transition-colors disabled:opacity-50"
-      :class="
-        a.primary
-          ? 'bg-brand-600 text-white'
-          : `border ${a.borderClass} ${a.textClass} ${a.hoverClass}`
-      "
+      v-if="primaryAction"
+      class="min-w-14 px-2 py-1 text-xs rounded bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-50"
       :disabled="busy || running"
-      @click="handleClick(a.action)"
+      @click="handleClick(primaryAction.action)"
     >
-      {{ a.label }}
+      {{ primaryAction.label }}
     </button>
+    <select
+      v-if="!running"
+      v-model="moreValue"
+      class="w-20 px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
+      :disabled="busy"
+      @change="handleMoreChange"
+    >
+      <option value="">更多</option>
+      <option v-for="action in moreActions" :key="action.action" :value="action.action">
+        {{ action.label }}
+      </option>
+    </select>
   </div>
 </template>

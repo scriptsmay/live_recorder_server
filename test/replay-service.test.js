@@ -142,6 +142,21 @@ describe('ReplayService', () => {
     expect(sql).toContain('file_size');
   });
 
+  test('markRecordsCompleted 批量标记完成并返回缺失 ID', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        { id: 5, status: 'completed' },
+        { id: 6, status: 'completed' },
+      ],
+    });
+
+    const result = await ReplayService.markRecordsCompleted([5, '6', 6, 'bad', 999]);
+
+    expect(result.updated).toHaveLength(2);
+    expect(result.missing_ids).toEqual([999]);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining("status = 'completed'"), [[5, 6, 999]]);
+  });
+
   test('listRecords 支持 date_from 和 date_to 筛选', async () => {
     pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ count: '0' }] });
 

@@ -218,6 +218,8 @@ class ReplayService {
       completed_at: fields.completed_at,
       error_message: fields.error_message,
       duration: fields.duration,
+      resolution: fields.resolution,
+      poster: fields.poster,
     };
     const sets = ['status = $1', 'updated_at = NOW()'];
     const params = [status];
@@ -232,6 +234,32 @@ class ReplayService {
       params
     );
     return result.rows[0] || null;
+  }
+
+  static async markRecordsCompleted(ids) {
+    const normalizedIds = [
+      ...new Set((ids || []).map((id) => parseInt(id, 10)).filter((id) => Number.isFinite(id) && id > 0)),
+    ];
+    if (normalizedIds.length === 0) {
+      return { updated: [], missing_ids: [] };
+    }
+
+    const result = await pool.query(
+      `UPDATE replay_records
+       SET status = 'completed',
+           completed_at = COALESCE(completed_at, NOW()),
+           error_message = '',
+           updated_at = NOW()
+       WHERE id = ANY($1::int[])
+       RETURNING *`,
+      [normalizedIds]
+    );
+
+    const updatedIds = new Set(result.rows.map((row) => Number(row.id)));
+    return {
+      updated: result.rows,
+      missing_ids: normalizedIds.filter((id) => !updatedIds.has(id)),
+    };
   }
 
   static async listUploads(principalId, options = {}) {

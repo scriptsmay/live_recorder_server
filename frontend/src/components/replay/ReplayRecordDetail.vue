@@ -65,7 +65,7 @@ function parseJsonField(value: string | null): string[] {
           <dd><ReplayStatusBadge :status="record.status" /></dd>
         </div>
         <div class="flex gap-2">
-          <dt class="text-gray-500 w-28 shrink-0">时间</dt>
+          <dt class="text-gray-500 w-28 shrink-0">回放时间</dt>
           <dd class="text-gray-900">{{ $formatTime(record.start_time) }}</dd>
         </div>
         <div class="flex gap-2">
@@ -75,6 +75,24 @@ function parseJsonField(value: string | null): string[] {
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">大小</dt>
           <dd class="text-gray-900">{{ displaySize(record.file_size) }}</dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-gray-500 w-28 shrink-0">分辨率</dt>
+          <dd class="text-gray-900">{{ record.resolution || '-' }}</dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-gray-500 w-28 shrink-0">直播封面</dt>
+          <dd class="text-gray-900">
+            <a
+              v-if="record.poster"
+              :href="record.poster"
+              target="_blank"
+              class="text-blue-500 hover:text-blue-700"
+            >
+              查看
+            </a>
+            <span v-else>-</span>
+          </dd>
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">播放页</dt>
@@ -99,6 +117,17 @@ function parseJsonField(value: string | null): string[] {
           <dd class="text-gray-900 break-all">{{ record.raw_file_path || '-' }}</dd>
         </div>
         <div class="flex gap-2">
+          <dt class="text-gray-500 w-28 shrink-0">切割文件</dt>
+          <dd class="text-gray-900 break-all">
+            <template v-if="parseJsonField(record.cut_file_paths).length > 0">
+              <div v-for="(f, i) in parseJsonField(record.cut_file_paths)" :key="i" class="text-xs">
+                {{ f }}
+              </div>
+            </template>
+            <template v-else>-</template>
+          </dd>
+        </div>
+        <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">最终文件</dt>
           <dd class="text-gray-900 break-all">
             <template v-if="parseJsonField(record.final_file_paths).length > 0">
@@ -115,7 +144,18 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">BV 号</dt>
-          <dd class="text-gray-900">{{ record.bv_id || '-' }}</dd>
+          <dd class="text-gray-900">
+            <a
+              v-if="record.bv_id"
+              :href="`https://www.bilibili.com/video/${record.bv_id}`"
+              target="_blank"
+              rel="noopener"
+              class="text-brand-600 hover:underline font-mono text-xs"
+            >
+              {{ record.bv_id }}
+            </a>
+            <span v-else class="text-gray-400">-</span>
+          </dd>
         </div>
         <div v-if="record.error_message" class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">错误</dt>

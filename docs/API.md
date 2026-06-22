@@ -1219,6 +1219,18 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 | `count`        | number  | 否   | 拉取条数，默认 1         |
 | `dry_run`      | boolean | 否   | 只验证参数，不写入数据库 |
 
+### POST /api/replay/records/mark-completed
+
+手动将一批回放记录标记为已完成。
+
+**请求体：**
+
+| 参数  | 类型     | 必填 | 说明             |
+| ----- | -------- | ---- | ---------------- |
+| `ids` | number[] | 是   | 回放记录 ID 列表 |
+
+响应中的 `data.updated` 为已更新记录，`data.missing_ids` 为未找到的 ID。
+
 ### POST /api/replay/records/:id/actions/:action
 
 将单条回放加入处理队列。

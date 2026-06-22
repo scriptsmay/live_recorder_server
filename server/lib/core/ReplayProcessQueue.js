@@ -5,8 +5,9 @@ const ReplayUploadService = require('./replay/ReplayUploadService');
 const videoProcessor = require('./replay/video-processor');
 const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
+const fs = require('fs');
 const { createProcLog } = require('../utils/proc-log');
-const { fetchReplayDetail, getKuaishouCookies, buildHeaders } = require('./replay/KuaishouReplayClient');
+const { fetchReplayDetail, getKuaishouCookies } = require('./replay/KuaishouReplayClient');
 
 const QUEUE_KEY = 'replay_process_queue';
 const PROCESSING_KEY = 'replay_process_processing_count';
@@ -186,7 +187,7 @@ class ReplayProcessQueue {
   }
 
   async runAction(record, action, options = {}) {
-    const actions = action === 'all' ? ['extract', 'download', 'cut', 'fix', 'upload'] : [action];
+    const actions = action === 'all' ? ['extract', 'download', 'cut', 'upload'] : [action];
     let current = record;
     const { logStream } = options;
     const runtime = options.runtime || { cancelled: false };
@@ -196,6 +197,10 @@ class ReplayProcessQueue {
         const err = new Error('用户取消任务');
         err.code = 'REPLAY_TASK_CANCELLED';
         throw err;
+      }
+      if (action === 'all' && !options.force && this.canReuseStep(current, step)) {
+        writeLog(logStream, `步骤跳过: ${step} 已有可复用产物`);
+        continue;
       }
       const active = this.activeTasks.get(current.id);
       if (active) {
@@ -225,7 +230,10 @@ class ReplayProcessQueue {
         writeLog(logStream, `步骤完成: extract m3u8=${result.m3u8Url}`);
         this.notifyPipelineComplete(current, 'extract', { status: 'extracted', m3u8_url: result.m3u8Url }, logStream);
       } else if (step === 'download') {
-        const result = await videoProcessor.download(current, this.commandOptions(current.id, step, logStream));
+        const result = await videoProcessor.download(
+          current,
+          this.commandOptions(current.id, step, logStream, Boolean(options.force))
+        );
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         current = await ReplayService.updateRecordStatus(current.id, 'downloaded', {
@@ -241,7 +249,10 @@ class ReplayProcessQueue {
           logStream
         );
       } else if (step === 'cut') {
-        const result = await videoProcessor.cut(current, this.commandOptions(current.id, step, logStream));
+        const result = await videoProcessor.cut(
+          current,
+          this.commandOptions(current.id, step, logStream, Boolean(options.force))
+        );
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         current = await ReplayService.updateRecordStatus(current.id, 'cut', {
@@ -254,7 +265,10 @@ class ReplayProcessQueue {
         writeLog(logStream, `步骤完成: cut files=${JSON.stringify(result.cutFilePaths)}`);
         this.notifyPipelineComplete(current, 'cut', { status: 'cut', cut_file_paths: result.cutFilePaths }, logStream);
       } else if (step === 'fix') {
-        const result = await videoProcessor.fix(current, this.commandOptions(current.id, step, logStream));
+        const result = await videoProcessor.fix(
+          current,
+          this.commandOptions(current.id, step, logStream, Boolean(options.force))
+        );
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         const previous = safeParseJson(current.cut_file_paths, []);
@@ -309,6 +323,33 @@ class ReplayProcessQueue {
       });
   }
 
+  canReuseStep(record, step) {
+    if (step === 'extract') return Boolean(record.m3u8_url);
+    if (step === 'download') {
+      return this.hasExistingFile(record.raw_file_path) || this.hasExistingFiles(record.cut_file_paths);
+    }
+    if (step === 'cut') {
+      return this.hasExistingFiles(record.final_file_paths) || this.hasExistingFiles(record.cut_file_paths);
+    }
+    if (step === 'upload') {
+      return Boolean(record.bv_id || record.uploaded_at || record.completed_at);
+    }
+    return false;
+  }
+
+  hasExistingFiles(value) {
+    return safeParseJson(value, []).some((filePath) => this.hasExistingFile(filePath));
+  }
+
+  hasExistingFile(filePath) {
+    if (!filePath) return false;
+    try {
+      return fs.statSync(filePath).isFile();
+    } catch (_) {
+      return false;
+    }
+  }
+
   throwIfCancelled(runtime) {
     if (!runtime?.cancelled) return;
     const err = new Error('用户取消任务');
@@ -316,7 +357,7 @@ class ReplayProcessQueue {
     throw err;
   }
 
-  commandOptions(recordId, step, logStream) {
+  commandOptions(recordId, step, logStream, force = false) {
     return {
       logStream,
       onProcessStart: (proc, command, args) => {
@@ -336,6 +377,7 @@ class ReplayProcessQueue {
         active.pid = null;
         active.command = '';
       },
+      force,
     };
   }
 
