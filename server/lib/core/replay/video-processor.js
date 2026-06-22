@@ -209,6 +209,32 @@ async function fix(record, options = {}) {
   return { success: true, fixedFilePaths: fixed, finalFilePaths: fixed };
 }
 
+/**
+ * 通过 ffprobe 获取视频文件的分辨率
+ * @param {string} filePath - 视频文件路径
+ * @returns {{width: number, height: number}|null}
+ */
+function getVideoResolution(filePath) {
+  const ffprobePath = process.env.FFPROBE_PATH || 'ffprobe';
+  try {
+    const { execSync } = require('child_process');
+    const output = execSync(
+      `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=width,height -of json "${filePath}"`,
+      { encoding: 'utf-8', timeout: 30000 }
+    );
+    const data = JSON.parse(output);
+    if (data.streams && data.streams.length > 0) {
+      return {
+        width: parseInt(data.streams[0].width),
+        height: parseInt(data.streams[0].height),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   extract,
   download,
@@ -216,4 +242,5 @@ module.exports = {
   fix,
   runCommand,
   ensureInside,
+  getVideoResolution,
 };

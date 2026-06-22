@@ -236,11 +236,26 @@ class ReplayProcessQueue {
         );
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
-        current = await ReplayService.updateRecordStatus(current.id, 'downloaded', {
+        const downloadFields = {
           raw_file_path: result.rawFilePath,
           file_size: result.fileSize,
           error_message: '',
-        });
+        };
+        // 下载完成后用 ffprobe 补充分辨率（extract 阶段未获取到时兜底）
+        if (!current.resolution || current.resolution === '') {
+          try {
+            const probed = videoProcessor.getVideoResolution(result.rawFilePath);
+            if (probed && probed.width && probed.height) {
+              const probedResolution = `${probed.width}x${probed.height}`;
+              console.log(`[回放队列][id=${current.id}] download: ffprobe 补充分辨率=${probedResolution}`);
+              writeLog(logStream, `ffprobe 补充分辨率: ${probedResolution}`);
+              downloadFields.resolution = probedResolution;
+            }
+          } catch (err) {
+            writeLog(logStream, `ffprobe 获取分辨率失败: ${err.message}`);
+          }
+        }
+        current = await ReplayService.updateRecordStatus(current.id, 'downloaded', downloadFields);
         writeLog(logStream, `步骤完成: download file=${result.rawFilePath}`);
         this.notifyPipelineComplete(
           current,
