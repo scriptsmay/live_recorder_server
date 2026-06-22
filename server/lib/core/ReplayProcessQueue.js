@@ -176,7 +176,7 @@ class ReplayProcessQueue {
   }
 
   async runAction(record, action, options = {}) {
-    const actions = action === 'all' ? ['extract', 'download', 'cut', 'fix', 'upload'] : [action];
+    const actions = action === 'all' ? ['extract', 'download', 'cut', 'upload'] : [action];
     let current = record;
     const { logStream } = options;
     const runtime = options.runtime || { cancelled: false };
