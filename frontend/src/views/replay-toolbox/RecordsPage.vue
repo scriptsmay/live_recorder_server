@@ -18,6 +18,34 @@ const statusFilter = ref('all')
 const batchCount = ref(1)
 const selectedRecord = ref<ReplayRecord | null>(null)
 
+const forceDialogVisible = ref(false)
+const forceDialogMessage = ref('')
+const forceDialogTitle = ref('')
+const forceChecked = ref(false)
+let forceResolve: ((value: { confirmed: boolean; force: boolean }) => void) | null = null
+
+function showForceConfirm(message: string, title: string): Promise<{ confirmed: boolean; force: boolean }> {
+  forceDialogMessage.value = message
+  forceDialogTitle.value = title
+  forceChecked.value = false
+  forceDialogVisible.value = true
+  return new Promise((resolve) => {
+    forceResolve = resolve
+  })
+}
+
+function onForceConfirm() {
+  forceDialogVisible.value = false
+  forceResolve?.({ confirmed: true, force: forceChecked.value })
+  forceResolve = null
+}
+
+function onForceCancel() {
+  forceDialogVisible.value = false
+  forceResolve?.({ confirmed: false, force: false })
+  forceResolve = null
+}
+
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.pageSize)))
 const activeRecordIds = computed(
   () => new Set((store.taskStatus?.active ?? []).map((task) => task.record_id)),
@@ -85,11 +113,12 @@ async function handleAction(recordId: number, action: string) {
       const ok = await confirm('投稿预览获取失败，仍要继续？', { title: `回放 #${recordId}` })
       if (!ok) return
     }
+    await store.enqueueRecord(recordId, action)
   } else {
-    const ok = await confirm(`确认执行 ${action} 任务？`, { title: `回放 #${recordId}` })
-    if (!ok) return
+    const { confirmed, force } = await showForceConfirm(`确认执行 ${action} 任务？`, `回放 #${recordId}`)
+    if (!confirmed) return
+    await store.enqueueRecord(recordId, action, force)
   }
-  await store.enqueueRecord(recordId, action)
 }
 
 async function handleCancel(recordId: number) {
@@ -154,5 +183,65 @@ async function handlePageChange(delta: number) {
       :record="selectedRecord"
       @close="selectedRecord = null"
     />
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="forceDialogVisible"
+          class="fixed inset-0 z-[9998] flex items-center justify-center"
+          @click.self="onForceCancel"
+        >
+          <div class="absolute inset-0 bg-black/40" />
+          <div class="relative bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div class="px-6 pt-5 pb-3">
+              <h3 class="text-lg font-semibold text-gray-900">{{ forceDialogTitle }}</h3>
+            </div>
+            <div class="px-6 pb-4">
+              <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line break-words">
+                {{ forceDialogMessage }}
+              </p>
+              <label class="flex items-center gap-2 mt-4 cursor-pointer select-none">
+                <input
+                  v-model="forceChecked"
+                  type="checkbox"
+                  class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span class="text-sm text-gray-700">强制重写（忽略已有缓存产物）</span>
+              </label>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                @click="onForceCancel"
+              >
+                取消
+              </button>
+              <button
+                class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors"
+                @click="onForceConfirm"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active {
+  transition: all 0.2s ease-out;
+}
+.modal-leave-active {
+  transition: all 0.15s ease-in;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from > div:last-child {
+  transform: scale(0.95);
+}
+</style>
