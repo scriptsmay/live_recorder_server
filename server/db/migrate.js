@@ -251,6 +251,9 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_replay_records_start_time ON replay_records(principal_id, start_time DESC)
     `);
 
+    await client.query(`ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS poster TEXT DEFAULT ''`);
+    await client.query(`ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS resolution VARCHAR(50) DEFAULT ''`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS replay_settings (
         key VARCHAR(255) NOT NULL,
