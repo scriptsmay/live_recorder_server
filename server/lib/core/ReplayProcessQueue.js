@@ -6,7 +6,7 @@ const videoProcessor = require('./replay/video-processor');
 const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
 const fs = require('fs');
-const { createProcLog } = require('../utils/proc-log');
+const { createProcLog, writeLog } = require('../utils/proc-log');
 const { fetchReplayDetail, getKuaishouCookies } = require('./replay/KuaishouReplayClient');
 
 const QUEUE_KEY = 'replay_process_queue';
@@ -23,12 +23,6 @@ function safeParseJson(value, fallback) {
   } catch (_) {
     return fallback;
   }
-}
-
-function writeLog(logStream, message) {
-  if (!logStream) return;
-  const line = `[${new Date().toISOString()}] ${message}\n`;
-  logStream.write(line);
 }
 
 function getRecordDisplayName(record) {

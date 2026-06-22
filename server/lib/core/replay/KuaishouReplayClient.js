@@ -6,12 +6,9 @@
  */
 
 const ReplayService = require('../../../services/ReplayService');
+const { writeLog } = require('../../utils/proc-log');
 
 const KUAISHOU_API_BASE = 'https://live.kuaishou.com/live_api/playback/list';
-
-function writeLog(logStream, message) {
-  logStream?.write(`[${new Date().toISOString()}] ${message}\n`);
-}
 
 /**
  * 获取快手访问态配置。
