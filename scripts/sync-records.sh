@@ -92,10 +92,14 @@ SELECT
        ELSE NULL END                                     AS replay_time_text,
   poster,
   duration,
-  CASE WHEN start_time IS NOT NULL
+  CASE WHEN start_time IS NOT NULL AND duration > 0
+       THEN (EXTRACT(EPOCH FROM start_time) * 1000 - duration * 1000)::bigint
+       WHEN start_time IS NOT NULL
        THEN (EXTRACT(EPOCH FROM start_time) * 1000)::bigint
        ELSE NULL END                                     AS start_live_time,
-  CASE WHEN start_time IS NOT NULL
+  CASE WHEN start_time IS NOT NULL AND duration > 0
+       THEN TO_CHAR(start_time - (duration || ' seconds')::interval, 'YYYY-MM-DD_HH24_MI_SS')
+       WHEN start_time IS NOT NULL
        THEN TO_CHAR(start_time, 'YYYY-MM-DD_HH24_MI_SS')
        ELSE NULL END                                     AS start_live_time_text,
   resolution,
