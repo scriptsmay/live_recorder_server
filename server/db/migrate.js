@@ -215,6 +215,7 @@ async function runMigration() {
         replay_id VARCHAR(128) DEFAULT '',
         play_url TEXT DEFAULT '',
         m3u8_url TEXT DEFAULT '',
+        poster TEXT DEFAULT '',
         video_file_name VARCHAR(512) DEFAULT '',
         raw_file_path VARCHAR(1024) DEFAULT '',
         cut_file_paths TEXT DEFAULT '[]',

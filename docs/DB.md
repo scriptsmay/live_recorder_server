@@ -347,6 +347,7 @@ queued ──→ processing ──→ completed
 | replay_id        | VARCHAR(128)  |               | 平台回放 ID                                                                                                                        |
 | play_url         | TEXT          |               | 回放播放页地址                                                                                                                     |
 | m3u8_url         | TEXT          |               | 已提取的 m3u8 地址                                                                                                                 |
+| poster           | TEXT          |               | 直播封面 URL                                                                                                                       |
 | video_file_name  | VARCHAR(512)  |               | 原始视频文件名                                                                                                                     |
 | raw_file_path    | VARCHAR(1024) |               | 下载后的原始文件路径                                                                                                               |
 | cut_file_paths   | TEXT          | JSON 字符串   | 剪切后的文件路径数组                                                                                                               |

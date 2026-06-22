@@ -153,13 +153,14 @@ class ReplayService {
 
     const result = await pool.query(
       `INSERT INTO replay_records
-       (principal_id, principal_name, replay_id, play_url, m3u8_url, video_file_name, status, start_time, duration, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+       (principal_id, principal_name, replay_id, play_url, m3u8_url, poster, video_file_name, status, start_time, duration, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
        ON CONFLICT (principal_id, replay_id) WHERE replay_id IS NOT NULL AND replay_id <> ''
        DO UPDATE SET
          principal_name = COALESCE(NULLIF(EXCLUDED.principal_name, ''), replay_records.principal_name),
          play_url = COALESCE(NULLIF(EXCLUDED.play_url, ''), replay_records.play_url),
          m3u8_url = COALESCE(NULLIF(EXCLUDED.m3u8_url, ''), replay_records.m3u8_url),
+         poster = COALESCE(NULLIF(EXCLUDED.poster, ''), replay_records.poster),
          video_file_name = COALESCE(NULLIF(EXCLUDED.video_file_name, ''), replay_records.video_file_name),
          start_time = COALESCE(EXCLUDED.start_time, replay_records.start_time),
          duration = COALESCE(NULLIF(EXCLUDED.duration, 0), replay_records.duration),
@@ -171,6 +172,7 @@ class ReplayService {
         replayId,
         record.play_url || '',
         record.m3u8_url || '',
+        record.poster || '',
         record.video_file_name || '',
         record.status || 'pending',
         record.start_time || null,

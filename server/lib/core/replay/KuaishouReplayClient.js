@@ -142,6 +142,7 @@ async function syncReplays(principalId, count = 12, principalName) {
       principal_name: displayName,
       replay_id: replayId,
       play_url: item.playUrl || `https://live.kuaishou.com/playback/${replayId}`,
+      poster: item.poster || '',
       video_file_name: timePart ? `${displayName}_${timePart}` : `${displayName}_${replayId}`,
       status: 'pending',
       start_time: item.createTime ? new Date(item.createTime) : null,
