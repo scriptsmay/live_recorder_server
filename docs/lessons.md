@@ -798,3 +798,62 @@ RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static
 1. **Dockerfile 中 `curl` 默认不失败**：不加 `-f` 参数时，HTTP 404/500 仍返回 exit code 0，`||` 降级不会触发。必须加 `-f`（`--fail`）确保非 2xx 时返回错误码。
 2. **外部二进制下载要有降级源**：`johnvansickle.com` 是个人维护站点无 SLA，BtbN GitHub Release 由 GitHub 托管更稳定。两者互补。
 3. **Docker 构建失败要先看具体阶段**：多阶段构建中错误可能出现在任意阶段，定位到具体 `RUN` 行再排查，避免误改代码。
+
+## FFmpeg nightly 静态构建 SIGSEGV：从 johnvansickle 到 BtbN 版本锁定
+
+### 现象
+
+2026-06-21 生产环境快手录制失败——轮询已检测到 `isLive=true` 并创建录制会话，但 FFmpeg 启动后立即 `SIGSEGV`（段错误），导致会话反复复用且无有效录制文件。
+
+### 时间线
+
+| 日期 | 版本 | 事件 |
+|------|------|------|
+| 06-09 | v1.4.5 | Docker 镜像从 johnvansickle.com 更新 FFmpeg 静态二进制到最新 nightly |
+| 06-11 | v1.4.10 | johnvansickle.com 源不稳定导致构建失败，增加 BtbN GitHub Release 作为降级备选 |
+| 06-21 | v1.5.1 | nightly 静态构建 SIGSEGV 导致生产事故，改用 Debian apt 安装 `ffmpeg 5.1.9` |
+| 06-22 | v1.5.3 | 切换到 BtbN 锁定版本 `n7.1.5` 稳定构建，生产验证通过 |
+
+### 根因
+
+johnvansickle 提供的是 **nightly 编译的静态二进制**，每天从 FFmpeg master 分支自动构建。master 分支包含未充分测试的代码变更，在特定输入流（快手 FLV）上触发段错误。Debian bookworm 默认源的 `ffmpeg 5.1.9` 虽然稳定但版本过老（5.x），缺少对新格式和编解码器的支持。
+
+### 最终方案
+
+Dockerfile 多阶段构建，从 BtbN GitHub Release 下载 **锁定版本** 的静态二进制：
+
+```dockerfile
+# 阶段3：下载并解压 FFmpeg 7.1.5 静态二进制文件
+# 使用 BtbN GitHub Release（GitHub CDN，构建时走内网，稳定可靠）
+# 锁定 7.1.5 稳定版，升级时只需更新版本号和解压目录名
+FROM alpine:latest AS ffmpeg-downloader
+RUN apk add --no-cache curl tar xz
+RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1.5-linux64-gpl-7.1.tar.xz \
+        -o /tmp/ffmpeg.tar.xz \
+    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
+    && mv /tmp/ffmpeg-n7.1.5-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
+    && mv /tmp/ffmpeg-n7.1.5-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
+    && rm -rf /tmp/ffmpeg*
+```
+
+### 踩坑点：BtbN 没有 `latest` tag
+
+BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），不存在固定的 `latest` tag。URL 中的 `latest` 实际指向一个特殊重定向，**只能用于 master 分支构建**，不能用于指定版本。
+
+正确的版本锁定方式：使用 `autobuild-*` tag 下的 `ffmpeg-n7.1.5-linux64-gpl-7.1.tar.xz` 文件名。该文件在每次自动构建中都会更新（补丁版本可能递增），但 7.1 稳定分支的兼容性有保障。
+
+### 方案对比
+
+| 方案 | 版本 | 稳定性 | 结果 |
+|------|------|--------|------|
+| johnvansickle nightly | 每天变 | ❌ 无 SLA，源站不稳定，nightly 代码未充分测试 | SIGSEGV |
+| Debian apt | 5.1.9 | ✅ 稳定 | 版本过老，缺少新特性 |
+| BtbN 锁定 7.1.5 | 7.1.5 | ✅ 稳定分支，GitHub CDN | **当前方案** |
+
+### 经验总结
+
+1. **nightly 构建不适合生产环境**：master 分支的 nightly 构建包含未充分测试的代码，在特定输入（如快手 FLV 流）上可能触发崩溃。生产环境应锁定稳定分支版本。
+2. **Docker 镜像源比 wget 更可靠**：之前考虑的 `mwader/static-ffmpeg:7.1` Docker 镜像方案也验证可用（Docker Hub tag 固定），但 BtbN + GitHub CDN 在 GitHub Actions 构建场景下走内网更快。
+3. **FFmpeg 版本选择要匹配场景**：录制场景用 `-c copy` 不涉及编解码，7.x 稳定分支完全够用，8.x 的新特性（Vulkan 硬件加速、新编码器）对本项目无实际价值。
+4. **`ffmpeg -version` 验证是上线前必做项**：构建成功不代表运行时正常，生产容器启动后应立即验证 FFmpeg 版本和功能（如 `ffmpeg -version`、`ffmpeg -codecs | grep flv`）。
+5. **升级路径要记录**：从 nightly → Debian stable → BtbN locked，每次变更都应记录版本号和原因，方便后续回溯。
