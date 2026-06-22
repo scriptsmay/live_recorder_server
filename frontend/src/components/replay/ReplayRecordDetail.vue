@@ -45,7 +45,7 @@ function parseJsonField(value: string | null): string[] {
     @click.self="emit('close')"
   >
     <div
-      class="bg-white rounded-xl shadow-lg p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto"
+      class="bg-white rounded-xl shadow-lg p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto"
     >
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold text-gray-900">回放详情 #{{ record.id }}</h3>

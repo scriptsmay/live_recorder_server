@@ -241,6 +241,8 @@ class ReplayProcessQueue {
         if (!result.success) throw new Error(result.error);
         current = await ReplayService.updateRecordStatus(current.id, 'cut', {
           cut_file_paths: result.cutFilePaths,
+          // 切割完就是最终文件
+          final_file_paths: result.cutFilePaths,
           error_message: '',
         });
         if (current.raw_file_path) cleanup.removeFiles([current.raw_file_path]).catch(() => {});
@@ -253,6 +255,7 @@ class ReplayProcessQueue {
         const previous = safeParseJson(current.cut_file_paths, []);
         current = await ReplayService.updateRecordStatus(current.id, 'fixed', {
           fixed_file_paths: result.fixedFilePaths,
+          // 如果修复成功，则最终文件就是修复后的文件
           final_file_paths: result.finalFilePaths,
           error_message: '',
         });

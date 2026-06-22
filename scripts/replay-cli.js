@@ -298,6 +298,7 @@ async function runPipeline(record, actions, options = {}) {
       if (!result.success) throw new Error(result.error);
       current = await ReplayService.updateRecordStatus(current.id, 'cut', {
         cut_file_paths: result.cutFilePaths,
+        final_file_paths: result.cutFilePaths,
       });
       if (current.raw_file_path) cleanup.removeFiles([current.raw_file_path]).catch(() => {});
     } else if (step === 'fix') {
