@@ -21,6 +21,13 @@ interface ActionDef {
 
 const actions: ActionDef[] = [
   {
+    action: 'refresh',
+    label: '刷新',
+    borderClass: 'border-blue-300',
+    textClass: 'text-blue-600',
+    hoverClass: 'hover:bg-blue-50',
+  },
+  {
     action: 'extract',
     label: '提取',
     borderClass: 'border-gray-300',
