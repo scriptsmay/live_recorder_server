@@ -19,6 +19,8 @@ const client = {
   rPop: (key) => redisService.rPop(key),
   lLen: (key) => redisService.lLen(key),
   lRange: (key, start, end) => redisService.lRange(key, start, end),
+  // 发布订阅
+  publish: (channel, message) => redisService.publish(channel, message),
 };
 
 module.exports = client;

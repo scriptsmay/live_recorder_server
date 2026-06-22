@@ -128,6 +128,11 @@ class RedisService {
     return this.client.lRange(key, start, end);
   }
 
+  async publish(channel, message) {
+    await this.connect();
+    return this.client.publish(channel, message);
+  }
+
   async getClient() {
     await this.connect();
     return this.client;
