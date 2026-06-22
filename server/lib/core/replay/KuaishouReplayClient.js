@@ -303,33 +303,45 @@ function selectBestStreamFromV3(playUrlV3) {
 }
 
 /**
- * 获取单条回放详情（包含 poster）
+ * 获取单条回放详情（从 list API 获取 poster）
  * @param {string} replayId - 回放 ID
  * @param {Object} cookies - 快手 cookies
- * @param {string} principalId - 主播 ID（用于生成 headers）
+ * @param {string} principalId - 主播 ID
  * @returns {Promise<{success: boolean, poster?: string, duration?: number, error?: string}>}
  */
 async function fetchReplayDetail(replayId, cookies, principalId) {
-  const headers = buildHeaders(cookies, principalId);
-  const url = new URL(KUAISHOU_PLAYBACK_DETAIL_API);
-  url.searchParams.set('photoId', replayId);
-  url.searchParams.set('isLongVideo', 'false');
-
   try {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+    const result = await fetchLiveList(principalId, cookies, 50);
+    if (result.error) {
+      return { success: false, error: result.error };
     }
 
+    const items = result.data?.list || [];
+    const item = items.find((i) => (i.id || i.photoId) === replayId);
+
+    if (!item) {
+      return { success: false, error: `未找到 replayId=${replayId} 的记录` };
+    }
+
+    return {
+      success: true,
+      poster: item.poster || '',
+      duration: item.duration || null,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
     const data = await response.json();
+    console.log(`[fetchReplayDetail] API response:`, JSON.stringify(data).slice(0, 500));
     const currentWork = data?.data?.currentWork;
 
     if (!currentWork) {
+      console.log(
+        `[fetchReplayDetail] No currentWork in response, data.data=`,
+        JSON.stringify(data?.data).slice(0, 300)
+      );
       return { success: false, error: 'API 未返回 currentWork' };
     }
 
