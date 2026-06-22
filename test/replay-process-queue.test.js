@@ -109,6 +109,25 @@ describe('ReplayProcessQueue', () => {
     });
   });
 
+  test('runAction extract 支持 force 重新提取 m3u8', async () => {
+    const record = { id: 10, principal_id: 'abc', m3u8_url: 'https://example.com/old.m3u8' };
+    videoProcessor.extract.mockResolvedValue({ success: true, m3u8Url: 'https://example.com/new.m3u8' });
+    ReplayService.updateRecordStatus.mockResolvedValue({ ...record, status: 'extracted' });
+
+    await replayQueue.runAction(record, 'extract', { force: true });
+
+    expect(videoProcessor.extract).toHaveBeenCalledWith(
+      record,
+      expect.objectContaining({
+        force: true,
+      })
+    );
+    expect(ReplayService.updateRecordStatus).toHaveBeenCalledWith(10, 'extracted', {
+      m3u8_url: 'https://example.com/new.m3u8',
+      error_message: '',
+    });
+  });
+
   test('runAction download 步骤成功后更新状态', async () => {
     const record = { id: 10, principal_id: 'abc', m3u8_url: 'https://example.com/a.m3u8' };
     videoProcessor.download.mockResolvedValue({ success: true, rawFilePath: '/tmp/a.mp4', fileSize: 2048 });

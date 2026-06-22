@@ -308,7 +308,8 @@ onMounted(loadData)
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 简介模板
                 <span class="text-xs text-gray-400 font-normal">
-                  支持: {room_name} {caption} {date} {datetime} {YYYY} {MM} {DD} {HH} {mm} {ss}
+                  支持: {room_name} {caption} {date} {datetime} {YYYY} {MM} {DD} {HH} {mm} {ss} {H}
+                  {M} {D} {duration_mins}
                 </span>
               </label>
               <textarea

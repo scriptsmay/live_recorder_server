@@ -6,10 +6,13 @@
  */
 
 const ReplayService = require('../../../services/ReplayService');
-const { writeLog } = require('../../utils/proc-log');
 
 const KUAISHOU_API_BASE = 'https://live.kuaishou.com/live_api/playback/list';
 const KUAISHOU_PLAYBACK_DETAIL_API = 'https://live.kuaishou.com/live_api/playback/detail';
+
+function writeLog(logStream, message) {
+  logStream?.write(`[${new Date().toISOString()}] ${message}\n`);
+}
 
 /**
  * 获取快手访问态配置。
@@ -169,7 +172,7 @@ async function extractM3u8(record, options = {}) {
     return { success: true, m3u8Url: record.m3u8_url };
   }
   if (record.m3u8_url && options.force) {
-    writeLog(logStream, `force=true，重新提取 m3u8，忽略已有地址: ${record.m3u8_url}`);
+    writeLog(logStream, `force=true，忽略旧 m3u8_url 并重新提取: ${record.m3u8_url}`);
   }
 
   const replayId = record.replay_id;
@@ -200,19 +203,17 @@ async function extractM3u8(record, options = {}) {
     writeLog(logStream, `detail API HTTP ${response.status} ${response.statusText}`);
     if (response.ok) {
       const data = await response.json();
-      const currentWork = data?.data?.currentWork;
-      const playUrlV3 = currentWork?.playUrlV3;
-      const workDuration = currentWork?.duration || null;
+      const playUrlV3 = data?.data?.currentWork?.playUrlV3;
       writeLog(
         logStream,
-        `detail API currentWork=${currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'} duration=${workDuration}`
+        `detail API currentWork=${data?.data?.currentWork ? 'yes' : 'no'} playUrlV3=${playUrlV3 ? 'yes' : 'no'}`
       );
 
       if (playUrlV3) {
         const m3u8Url = selectBestStreamFromV3(playUrlV3);
         if (m3u8Url) {
           writeLog(logStream, `detail API 提取成功: ${m3u8Url}`);
-          return { success: true, m3u8Url, duration: workDuration };
+          return { success: true, m3u8Url };
         }
       }
 
@@ -222,7 +223,7 @@ async function extractM3u8(record, options = {}) {
         const sorted = mainMvUrls.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
         if (sorted[0]?.url) {
           writeLog(logStream, `detail API mainMvUrls 提取成功: ${sorted[0].url}`);
-          return { success: true, m3u8Url: sorted[0].url, duration: workDuration };
+          return { success: true, m3u8Url: sorted[0].url };
         }
       }
     }

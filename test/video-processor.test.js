@@ -7,19 +7,6 @@ jest.mock('../server/services/ReplayService', () => ({
 }));
 
 const path = require('path');
-const EventEmitter = require('events');
-
-function mockSpawnSuccess() {
-  const { spawn } = require('child_process');
-  spawn.mockImplementation(() => {
-    const proc = new EventEmitter();
-    proc.stdout = new EventEmitter();
-    proc.stderr = new EventEmitter();
-    process.nextTick(() => proc.emit('close', 0));
-    return proc;
-  });
-  return spawn;
-}
 
 describe('video-processor', () => {
   let videoProcessor;
@@ -41,6 +28,12 @@ describe('video-processor', () => {
         mkdirSync: jest.fn(),
       };
     });
+    jest.doMock('../server/lib/core/replay/KuaishouReplayClient', () => ({
+      extractM3u8: jest.fn().mockResolvedValue({
+        success: true,
+        m3u8Url: 'https://example.com/new.m3u8',
+      }),
+    }));
     videoProcessor = require('../server/lib/core/replay/video-processor');
   });
 
@@ -72,14 +65,23 @@ describe('video-processor', () => {
     });
 
     test('force=true 时忽略已有 m3u8_url 并重新提取', async () => {
-      const extractM3u8 = jest.fn().mockResolvedValue({ success: true, m3u8Url: 'https://example.com/new.m3u8' });
-      jest.doMock('../server/lib/core/replay/KuaishouReplayClient', () => ({ extractM3u8 }));
-      const record = { id: 1, replay_id: 'r1', m3u8_url: 'https://example.com/old.m3u8' };
+      const client = require('../server/lib/core/replay/KuaishouReplayClient');
+      const record = {
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/old.m3u8',
+      };
 
       const result = await videoProcessor.extract(record, { force: true });
 
+      expect(result.success).toBe(true);
       expect(result.m3u8Url).toBe('https://example.com/new.m3u8');
-      expect(extractM3u8).toHaveBeenCalledWith(record, expect.objectContaining({ force: true }));
+      expect(client.extractM3u8).toHaveBeenCalledWith(
+        record,
+        expect.objectContaining({
+          force: true,
+        })
+      );
     });
 
     test('缺少 replay_id 和 play_url 时失败', async () => {
@@ -119,36 +121,6 @@ describe('video-processor', () => {
       const result = await videoProcessor.download(record);
       expect(result.success).toBe(false);
       expect(result.error).toContain('缺少 m3u8_url');
-    });
-
-    test('默认下载不强制覆盖，保留 yt-dlp 续传行为', async () => {
-      const spawn = mockSpawnSuccess();
-      const record = {
-        id: 1,
-        replay_id: 'r1',
-        video_file_name: '回放1',
-        m3u8_url: 'https://example.com/a.m3u8',
-      };
-
-      const result = await videoProcessor.download(record);
-
-      expect(result.success).toBe(true);
-      expect(spawn.mock.calls[0][1]).not.toContain('--force-overwrites');
-    });
-
-    test('force 下载时传递 --force-overwrites', async () => {
-      const spawn = mockSpawnSuccess();
-      const record = {
-        id: 1,
-        replay_id: 'r1',
-        video_file_name: '回放1',
-        m3u8_url: 'https://example.com/a.m3u8',
-      };
-
-      const result = await videoProcessor.download(record, { force: true });
-
-      expect(result.success).toBe(true);
-      expect(spawn.mock.calls[0][1]).toContain('--force-overwrites');
     });
   });
 

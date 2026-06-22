@@ -1,4 +1,3 @@
-const fs = require('fs');
 const redis = require('../../db/redis');
 const pool = require('../../db/index');
 const ReplayService = require('../../services/ReplayService');
@@ -6,7 +5,7 @@ const ReplayUploadService = require('./replay/ReplayUploadService');
 const videoProcessor = require('./replay/video-processor');
 const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
-const { createProcLog, writeLog } = require('../utils/proc-log');
+const { createProcLog } = require('../utils/proc-log');
 
 const QUEUE_KEY = 'replay_process_queue';
 const PROCESSING_KEY = 'replay_process_processing_count';
@@ -24,18 +23,10 @@ function safeParseJson(value, fallback) {
   }
 }
 
-function hasExistingFile(filePath) {
-  if (!filePath) return false;
-  try {
-    return fs.statSync(filePath).isFile();
-  } catch (_) {
-    return false;
-  }
-}
-
-function hasExistingFiles(value) {
-  const files = Array.isArray(value) ? value : safeParseJson(value, []);
-  return files.length > 0 && files.every(hasExistingFile);
+function writeLog(logStream, message) {
+  if (!logStream) return;
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  logStream.write(line);
 }
 
 function getRecordDisplayName(record) {
@@ -54,7 +45,6 @@ class ReplayProcessQueue {
   async init() {
     await this.reloadConcurrency();
     await this.resetProcessingCount();
-    await this.clearStaleLocks();
     console.log(`[回放队列] 初始化完成, 并发数: ${this.concurrency}`);
   }
 
@@ -174,7 +164,11 @@ class ReplayProcessQueue {
         logStream,
       });
 
-      await this.runAction(record, task.action || 'all', { logStream, runtime, force: task.force });
+      await this.runAction(record, task.action || 'all', {
+        logStream,
+        runtime,
+        force: Boolean(task.force),
+      });
       writeLog(logStream, '任务完成');
     } catch (err) {
       console.error(`[回放队列] 任务失败 record=${record.id}:`, err.message);
@@ -190,20 +184,11 @@ class ReplayProcessQueue {
     }
   }
 
-  resolveSteps(action, _record, force) {
-    const allSteps = ['extract', 'download', 'cut', 'upload'];
-    if (action !== 'all') return [action];
-    if (force) return allSteps;
-    return allSteps;
-  }
-
   async runAction(record, action, options = {}) {
-    const force = options.force || false;
-    const actions = this.resolveSteps(action, record, force);
+    const actions = action === 'all' ? ['extract', 'download', 'cut', 'fix', 'upload'] : [action];
     let current = record;
     const { logStream } = options;
     const runtime = options.runtime || { cancelled: false };
-    if (!force) writeLog(logStream, `续跑模式: 将复用已有产物 (status=${record.status})`);
 
     for (const step of actions) {
       if (runtime.cancelled) {
@@ -219,12 +204,11 @@ class ReplayProcessQueue {
         active.command = '';
       }
       writeLog(logStream, `步骤开始: ${step}`);
-      if (action === 'all' && !force && this.isStepComplete(current, step)) {
-        writeLog(logStream, `步骤跳过: ${step} 已有可复用产物`);
-        continue;
-      }
       if (step === 'extract') {
-        const result = await videoProcessor.extract(current, { logStream, force });
+        const result = await videoProcessor.extract(current, {
+          logStream,
+          force: Boolean(options.force),
+        });
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         const updateFields = { m3u8_url: result.m3u8Url, error_message: '' };
@@ -235,7 +219,7 @@ class ReplayProcessQueue {
         writeLog(logStream, `步骤完成: extract m3u8=${result.m3u8Url}`);
         this.notifyPipelineComplete(current, 'extract', { status: 'extracted', m3u8_url: result.m3u8Url }, logStream);
       } else if (step === 'download') {
-        const result = await videoProcessor.download(current, this.commandOptions(current.id, step, logStream, force));
+        const result = await videoProcessor.download(current, this.commandOptions(current.id, step, logStream));
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         current = await ReplayService.updateRecordStatus(current.id, 'downloaded', {
@@ -251,7 +235,7 @@ class ReplayProcessQueue {
           logStream
         );
       } else if (step === 'cut') {
-        const result = await videoProcessor.cut(current, this.commandOptions(current.id, step, logStream, force));
+        const result = await videoProcessor.cut(current, this.commandOptions(current.id, step, logStream));
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         current = await ReplayService.updateRecordStatus(current.id, 'cut', {
@@ -262,7 +246,7 @@ class ReplayProcessQueue {
         writeLog(logStream, `步骤完成: cut files=${JSON.stringify(result.cutFilePaths)}`);
         this.notifyPipelineComplete(current, 'cut', { status: 'cut', cut_file_paths: result.cutFilePaths }, logStream);
       } else if (step === 'fix') {
-        const result = await videoProcessor.fix(current, this.commandOptions(current.id, step, logStream, force));
+        const result = await videoProcessor.fix(current, this.commandOptions(current.id, step, logStream));
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
         const previous = safeParseJson(current.cut_file_paths, []);
@@ -296,21 +280,6 @@ class ReplayProcessQueue {
     }
   }
 
-  isStepComplete(record, step) {
-    if (step === 'extract') return Boolean(record.m3u8_url) && Boolean(record.duration);
-    if (step === 'download') {
-      return (
-        hasExistingFile(record.raw_file_path) ||
-        hasExistingFiles(record.cut_file_paths) ||
-        hasExistingFiles(record.final_file_paths)
-      );
-    }
-    if (step === 'cut') return hasExistingFiles(record.cut_file_paths) || hasExistingFiles(record.final_file_paths);
-    if (step === 'fix') return hasExistingFiles(record.final_file_paths);
-    if (step === 'upload') return Boolean(record.bv_id || record.uploaded_at || record.completed_at);
-    return false;
-  }
-
   notifyPipelineComplete(record, step, detail, logStream) {
     notify
       .replayPipelineComplete(getRecordDisplayName(record), step, record.id, detail, record.play_url)
@@ -327,9 +296,8 @@ class ReplayProcessQueue {
     throw err;
   }
 
-  commandOptions(recordId, step, logStream, force = false) {
+  commandOptions(recordId, step, logStream) {
     return {
-      force,
       logStream,
       onProcessStart: (proc, command, args) => {
         const active = this.activeTasks.get(recordId);
@@ -410,23 +378,6 @@ class ReplayProcessQueue {
     try {
       await redis.del(PROCESSING_KEY);
     } catch (_) {}
-  }
-
-  async clearStaleLocks() {
-    try {
-      const patterns = [`${RECORD_LOCK_PREFIX}*`, `${PRINCIPAL_LOCK_PREFIX}*`];
-      for (const pattern of patterns) {
-        const keys = await redis.keys(pattern);
-        if (keys.length > 0) {
-          for (const key of keys) {
-            await redis.del(key);
-          }
-          console.log(`[回放队列] 清理残留锁: ${keys.length} 个 (${pattern})`);
-        }
-      }
-    } catch (err) {
-      console.warn('[回放队列] 清理残留锁失败:', err.message);
-    }
   }
 
   async getQueueLength() {

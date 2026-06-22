@@ -109,7 +109,7 @@ class HLSGenerator {
       const inputPath = recording.file_path;
       const outputDir = path.dirname(inputPath);
 
-      const genResult = await this.generate(inputPath, outputDir, reording.session_id);
+      const genResult = await this.generate(inputPath, outputDir, recording.session_id);
 
       if (genResult.success) {
         await this.updateRecordingHLSStatus(recordingId, genResult.playlistPath);

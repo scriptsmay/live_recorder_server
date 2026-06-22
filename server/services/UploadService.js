@@ -75,12 +75,27 @@ class UploadService {
    * @param {string} room.room_url - 直播间URL
    * @param {Object} session - 录制会话对象
    * @param {Date|string} session.started_at - 会话开始时间
-   * @param {string} session.caption - 会话标题/描述
-   * @returns {Object} 包含所有可用变量的对象，如room_name、date、datetime、YYYY、MM等
+   * @param {string} [session.caption] - 会话标题/描述
+   * @param {Date|string} [session.ended_at] - 会话结束时间（用于计算 duration_mins）
+   * @param {number} [session.duration_seconds] - 会话时长秒数（优先于 ended_at 计算）
+   * @returns {Object} 包含所有可用变量的对象
+   *   补零时间: YYYY, MM, DD, HH, mm, ss, date, datetime
+   *   不补零时间: H, M, D
+   *   其他: room_name, room_url, caption, duration_mins
    */
   static getTemplateVars(room, session) {
     const date = session.started_at ? new Date(session.started_at) : new Date();
     const pad = (n) => String(n).padStart(2, '0');
+
+    // 计算时长（分钟）
+    let duration_mins = '';
+    if (session.duration_seconds > 0) {
+      duration_mins = String(Math.round(session.duration_seconds / 60));
+    } else if (session.ended_at && session.started_at) {
+      const diffMs = new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
+      if (diffMs > 0) duration_mins = String(Math.round(diffMs / 60000));
+    }
+
     return {
       room_name: room.room_name || room.room_url || 'unknown',
       room_url: room.room_url || '',
@@ -93,6 +108,12 @@ class UploadService {
       HH: pad(date.getHours()),
       mm: pad(date.getMinutes()),
       ss: pad(date.getSeconds()),
+      // 不补零的时间变量
+      H: String(date.getHours()),
+      M: String(date.getMinutes()),
+      D: String(date.getDate()),
+      // 时长
+      duration_mins,
     };
   }
 
@@ -359,7 +380,7 @@ class UploadService {
   static async scanPendingAutoUpload() {
     try {
       const { rows } = await pool.query(
-        `SELECT rs.id, rs.room_url, rs.started_at, r.room_name, r.upload_template_id
+        `SELECT rs.id, rs.room_url, rs.started_at, rs.ended_at, r.room_name, r.upload_template_id
          FROM recording_sessions rs
          INNER JOIN rooms r ON r.room_url = rs.room_url
          WHERE rs.status = 'completed'
@@ -394,6 +415,7 @@ class UploadService {
           room_url: row.room_url,
           room_name: row.room_name,
           started_at: row.started_at,
+          ended_at: row.ended_at,
         };
         console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
         await this.executeUpload(session, tmpl);
