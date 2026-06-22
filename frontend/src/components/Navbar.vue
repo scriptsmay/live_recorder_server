@@ -33,30 +33,32 @@ function isActive(item: NavItem) {
   <nav class="bg-gray-900 border-b-2 border-brand-500 sticky top-0 z-50 shadow-sm">
     <div class="mx-auto px-4">
       <div class="flex items-center justify-between h-14">
-        <!-- 品牌标识 -->
-        <router-link
-          to="/dashboard"
-          class="text-white font-semibold text-lg tracking-wide shrink-0 hover:text-brand-400 transition-colors"
-        >
-          <img src="/logo.svg" alt="Live Recorder" class="h-6 inline-block align-middle" />
-          K-Recorder
-        </router-link>
-
-        <!-- 桌面导航 -->
-        <div class="hidden lg:flex items-center gap-1 overflow-x-auto mx-4">
+        <div class="flex items-center">
+          <!-- 品牌标识 -->
           <router-link
-            v-for="item in navItems"
-            :key="item.to"
-            :to="item.to"
-            class="px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors"
-            :class="
-              isActive(item)
-                ? 'text-white bg-brand-600'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
-            "
+            to="/dashboard"
+            class="text-white font-semibold text-lg tracking-wide shrink-0 hover:text-brand-400 transition-colors"
           >
-            {{ item.label }}
+            <img src="/logo.svg" alt="Live Recorder" class="h-6 inline-block align-middle" />
+            K-Recorder
           </router-link>
+
+          <!-- 桌面导航 -->
+          <div class="hidden lg:flex items-center gap-1 overflow-x-auto mx-4">
+            <router-link
+              v-for="item in navItems"
+              :key="item.to"
+              :to="item.to"
+              class="px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors"
+              :class="
+                isActive(item)
+                  ? 'text-white bg-brand-600'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
+              "
+            >
+              {{ item.label }}
+            </router-link>
+          </div>
         </div>
 
         <div class="hidden lg:block shrink-0">
