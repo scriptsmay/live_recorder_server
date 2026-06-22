@@ -22,7 +22,7 @@ function getReplayTemplateVars(record) {
   const displayName = resolveDisplayName(record);
   const baseVars = UploadService.getTemplateVars(
     { room_name: displayName, room_url: record.play_url },
-    { started_at: startedAt, caption: '' }
+    { started_at: startedAt, caption: '', duration_seconds: record.duration || 0 }
   );
   const date = new Date(startedAt);
   const pad = (n) => String(n).padStart(2, '0');
