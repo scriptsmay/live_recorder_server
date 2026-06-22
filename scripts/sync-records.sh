@@ -84,8 +84,12 @@ SELECT
   replay_id                                              AS external_id,
   principal_id,
   video_file_name,
-  NULL::bigint                                           AS replay_time,
-  NULL::varchar                                          AS replay_time_text,
+  CASE WHEN start_time IS NOT NULL
+       THEN (EXTRACT(EPOCH FROM start_time) * 1000)::bigint
+       ELSE NULL END                                     AS replay_time,
+  CASE WHEN start_time IS NOT NULL
+       THEN TO_CHAR(start_time, 'YYYY-MM-DD_HH24_MI_SS')
+       ELSE NULL END                                     AS replay_time_text,
   poster,
   duration,
   CASE WHEN start_time IS NOT NULL
