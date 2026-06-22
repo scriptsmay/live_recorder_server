@@ -431,20 +431,24 @@ async function extractM3u8WithBrowser(playbackUrl, cookieStr, options = {}) {
         const title = await page.title().catch(() => '');
         writeLog(logStream, `[m3u8-extractor] title=${title}`);
 
-        // 获取视频时长
+        // 方案 1: 从 API 响应中解析 playUrlV3
+        let bestM3u8 = null;
+        const currentWork = playbackDetailData?.data?.currentWork;
+
+        // 获取视频时长：优先 video 元素，fallback 到 currentWork.duration
         let duration = null;
         try {
           duration = await page.evaluate(() => {
             const video = document.querySelector('video');
-            return video?.duration ? Math.floor(video.duration) : null;
+            return video?.duration && isFinite(video.duration) ? Math.floor(video.duration) : null;
           });
         } catch {
           // 忽略
         }
-
-        // 方案 1: 从 API 响应中解析 playUrlV3
-        let bestM3u8 = null;
-        const currentWork = playbackDetailData?.data?.currentWork;
+        if (!duration && currentWork?.duration) {
+          duration = currentWork.duration;
+        }
+        writeLog(logStream, `[m3u8-extractor] duration=${duration}s`);
         writeLog(
           logStream,
           `[m3u8-extractor] playbackDetail=${playbackDetailData ? 'yes' : 'no'} currentWork=${currentWork ? 'yes' : 'no'} candidates=${m3u8Candidates.length}`
