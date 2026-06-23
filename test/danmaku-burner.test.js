@@ -107,9 +107,12 @@ function mockSpawnFail(exitCode, stderrText) {
 // ============================================================
 
 describe('DanmakuBurner — buildFilterChain', () => {
-  test('正常路径生成 subtitles 滤镜', () => {
+  test('正常路径生成稳定帧率 ASS 滤镜链', () => {
     const filter = DanmakuBurner._buildFilterChain('/videos/test.ass');
-    expect(filter).toContain('subtitles=');
+    expect(filter).toContain('setpts=PTS-STARTPTS');
+    expect(filter).toContain('fps=30');
+    expect(filter).toContain('ass=');
+    expect(filter).toContain('format=yuv420p');
     expect(filter).toContain('/videos/test.ass');
   });
 
@@ -134,16 +137,16 @@ describe('DanmakuBurner — buildFilterChain', () => {
 
   test('中文路径正常处理', () => {
     const filter = DanmakuBurner._buildFilterChain('/视频/弹幕字幕.ass');
-    expect(filter).toContain('subtitles=');
+    expect(filter).toContain('ass=');
     expect(filter).toContain('/视频/弹幕字幕.ass');
   });
 
   test('相对路径被解析为绝对路径', () => {
     const filter = DanmakuBurner._buildFilterChain('relative/path/test.ass');
-    expect(filter).toContain('subtitles=');
+    expect(filter).toContain('ass=');
     // 绝对路径应以 / 开头（POSIX）
-    expect(filter).toMatch(/subtitles='\/.*relative\/path\/test\.ass'/);
-    expect(filter).not.toMatch(/^subtitles='relative/);
+    expect(filter).toMatch(/ass='\/.*relative\/path\/test\.ass'/);
+    expect(filter).not.toMatch(/^ass='relative/);
   });
 
   test('方括号被转义', () => {
@@ -164,7 +167,8 @@ describe('DanmakuBurner — buildArgs', () => {
     expect(args).toContain('-i');
     expect(args).toContain('/videos/test.mp4');
     expect(args).toContain('-vf');
-    expect(args[args.indexOf('-vf') + 1]).toContain('subtitles=');
+    expect(args[args.indexOf('-vf') + 1]).toContain('setpts=PTS-STARTPTS');
+    expect(args[args.indexOf('-vf') + 1]).toContain('ass=');
     expect(args).toContain('libx264');
     expect(args).toContain('veryfast');
     expect(args).toContain('-crf');

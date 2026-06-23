@@ -478,6 +478,20 @@ async function runMigration() {
       DELETE FROM settings WHERE key IN ('auto_burn_danmaku', 'prefer_danmaku_burned_video', 'danmaku_preserve_clean_video')
     `);
 
+    // 弹幕压制视觉稳定性默认值升级：仅更新仍停留在旧默认值的配置，避免覆盖用户自定义。
+    const danmakuVisualDefaultUpgrades = [
+      ['danmaku_density_per_second', '20', '15'],
+      ['danmaku_font_size', '32', '38'],
+      ['danmaku_font_size', '40', '38'],
+      ['danmaku_opacity', '1.0', '0.88'],
+      ['danmaku_opacity', '1', '0.88'],
+      ['danmaku_outline_width', '2.8', '2'],
+      ['danmaku_outline_width', '3', '2'],
+    ];
+    for (const [key, oldValue, newValue] of danmakuVisualDefaultUpgrades) {
+      await client.query(`UPDATE settings SET value = $3 WHERE key = $1 AND value = $2`, [key, oldValue, newValue]);
+    }
+
     // ========== 推迟执行：recording_files 弹幕字段 DROP ==========
     // 以下 migration 推迟到发布后至少 1 个月执行，确保无回滚需求后再取消注释
     // -- await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
@@ -506,10 +520,10 @@ async function runMigration() {
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
       ['danmaku_burn_concurrency', '1'],
-      ['danmaku_density_per_second', '20'],
+      ['danmaku_density_per_second', '15'],
       ['danmaku_font_family', 'Noto Sans CJK SC'],
-      ['danmaku_font_size', '32'],
-      ['danmaku_opacity', '1.0'],
+      ['danmaku_font_size', '38'],
+      ['danmaku_opacity', '0.88'],
       ['danmaku_outline_colour', '000000'],
       ['danmaku_outline_width', '2'],
       ['replay_enabled', 'true'],

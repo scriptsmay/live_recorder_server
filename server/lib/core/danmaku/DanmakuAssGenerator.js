@@ -22,13 +22,14 @@ class DanmakuAssGenerator {
     // B站级默认样式
     this.defaultStyle = {
       fontName: 'Source Han Sans SC Medium',
-      fontSize: 40, // 1080p 默认字号
-      outline: 2.8, // 描边宽度（像素）
+      fontSize: 38, // 1080p 默认字号
+      outline: 2, // 描边宽度（像素），使用整数减少运动边缘闪烁
       outlineColour: '000000', // 描边颜色，6位 RGB hex
-      shadow: 1.2, // 阴影
-      alpha: 0x00, // 透明度（0 = 完全不透明，opacity=1.0）
-      screenUsage: 0.75, // 屏幕占用比例 75%（B站风格）
-      stepY: 42, // Y轴步进（像素），含字号+间距
+      shadow: 0, // 阴影，默认关闭避免移动时边缘闪烁
+      alpha: 0x1f, // 透明度（0 = 完全不透明，0x1f 约等于 opacity=0.88）
+      screenUsage: 0.6, // 屏幕占用比例，优先保证视频可观看性
+      stepY: 44, // Y轴步进（像素），含字号+间距
+      scrollSpeed: 150, // px / second，1080p 下比旧默认更稳
     };
   }
 
@@ -79,7 +80,7 @@ class DanmakuAssGenerator {
       const deduped = this._deduplicateByContent(comments, 5000);
 
       // 密度限制
-      const densityLimit = await this._getSettingInt('danmaku_density_per_second', 25);
+      const densityLimit = await this._getSettingInt('danmaku_density_per_second', 15);
       const limited = this._applyDensityLimit(deduped, densityLimit);
 
       // 应用时间偏移
@@ -138,7 +139,7 @@ class DanmakuAssGenerator {
     }
 
     const style = await this._loadStyle(styleOverrides);
-    const densityLimit = await this._getSettingInt('danmaku_density_per_second', 25);
+    const densityLimit = await this._getSettingInt('danmaku_density_per_second', 15);
 
     // 一次性读取所有事件
     const allEvents = await this._readJsonl(jsonlPath);
@@ -297,7 +298,7 @@ class DanmakuAssGenerator {
    * 3. 动态滚动时长：根据文本长度自适应，短文本更快通过
    */
   _generateAssEvents(comments, videoWidth, videoHeight, style, durationMs) {
-    // const fontSize = this._scaleFontSize(style.fontSize, videoHeight);
+    const fontSize = this._scaleFontSize(style.fontSize, videoHeight);
     const stepY = style.stepY || 42;
     const maxY = videoHeight * style.screenUsage;
 
@@ -321,8 +322,10 @@ class DanmakuAssGenerator {
 
       const startMs = comment.ts_ms;
 
-      // 使用配置的滚动时长，或动态计算
-      const duration = style.scrollDuration || this._calcDuration(videoWidth, text);
+      const textWidth = this._estimateTextWidth(comment.text, fontSize);
+
+      // 使用配置的滚动时长，或按文本宽度动态计算。长弹幕需要更远的离屏终点。
+      const duration = style.scrollDuration || this._calcDuration(videoWidth, textWidth, style, fontSize);
       const endMs = startMs + duration;
 
       // 像素级碰撞检测：找一个不与任何活跃弹幕冲突的 Y
@@ -332,8 +335,9 @@ class DanmakuAssGenerator {
       active.push({ start: startMs, end: endMs, y });
 
       // 滚动坐标：从右侧屏幕外到左侧屏幕外
-      const startX = videoWidth + 200;
-      const endX = -400;
+      const padding = Math.max(80, Math.round(fontSize * 2));
+      const startX = videoWidth + padding;
+      const endX = -textWidth - padding;
 
       const startTime = this._msToAssTime(startMs);
       const endTime = this._msToAssTime(endMs);
@@ -390,21 +394,47 @@ class DanmakuAssGenerator {
    * @param {string} text - 弹幕文本（已转义）
    * @returns {number} 持续时长 ms
    */
-  _calcDuration(videoWidth, text) {
-    // const base = 7000; // 基础 7 秒
-    // const perChar = 170; // 每字符额外 170ms
-    // return Math.max(base, text.length * perChar);
-    const speed = 95; // px / second（B站真实区间 85~110）
-    const distance = videoWidth + 600; // 进入 + 离开屏幕
-    const baseDuration = (distance / speed) * 1000;
+  _calcDuration(videoWidth, textWidthOrText, style = {}, fontSize = this.defaultStyle.fontSize) {
+    const textWidth =
+      typeof textWidthOrText === 'number' ? textWidthOrText : this._estimateTextWidth(String(textWidthOrText || ''), fontSize);
+    const padding = Math.max(80, Math.round(fontSize * 2));
+    const speed = style.scrollSpeed || this.defaultStyle.scrollSpeed;
+    const distance = videoWidth + textWidth + padding * 2;
+    const duration = (distance / speed) * 1000;
 
-    // 防止过快（短弹幕）
-    const minDuration = 4500;
+    // 1080p 横向移动要避免每帧位移过大；同时给长弹幕上限，避免长时间占轨。
+    const minDuration = 12000;
+    const maxDuration = 20000;
+    return Math.round(Math.min(maxDuration, Math.max(minDuration, duration)));
+  }
 
-    // 防止过慢（长弹幕）
-    const maxDuration = 12000;
-    const textPenalty = text.length * 60;
-    return Math.min(maxDuration, Math.max(minDuration, baseDuration + textPenalty));
+  /**
+   * 估算文本宽度，用于离屏距离和滚动时长计算。
+   */
+  _estimateTextWidth(text, fontSize) {
+    if (!text) return fontSize;
+
+    let width = 0;
+    for (const char of String(text)) {
+      const code = char.codePointAt(0);
+      if (/\s/.test(char)) {
+        width += fontSize * 0.35;
+      } else if (code <= 0x007f) {
+        width += fontSize * 0.55;
+      } else if (
+        (code >= 0x1100 && code <= 0x11ff) ||
+        (code >= 0x2e80 && code <= 0x9fff) ||
+        (code >= 0xac00 && code <= 0xd7af) ||
+        (code >= 0xf900 && code <= 0xfaff) ||
+        (code >= 0xff00 && code <= 0xffef)
+      ) {
+        width += fontSize;
+      } else {
+        width += fontSize * 0.9;
+      }
+    }
+
+    return Math.max(fontSize, Math.ceil(width));
   }
 
   /**

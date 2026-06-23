@@ -118,7 +118,7 @@ class DanmakuBurner {
       };
     }
 
-    // 检查 FFmpeg 是否编译了 libass（subtitles 滤镜的前提）
+    // 检查 FFmpeg 是否编译了 libass（ass/subtitles 滤镜的前提）
     const caps = await this._getCapabilities();
     if (!caps.subtitlesFilter) {
       return {
@@ -126,7 +126,7 @@ class DanmakuBurner {
         outputPath,
         duration: 0,
         error:
-          'FFmpeg 未编译 libass，subtitles 滤镜不可用。请安装带 libass 的 FFmpeg（brew install homebrew-ffmpeg/ffmpeg/ffmpeg）',
+          'FFmpeg 未编译 libass，ass/subtitles 滤镜不可用。请安装带 libass 的 FFmpeg（brew install homebrew-ffmpeg/ffmpeg/ffmpeg）',
         logPath: null,
       };
     }
@@ -310,9 +310,9 @@ class DanmakuBurner {
 
   /**
    * 构建 FFmpeg 滤镜链
-   * 使用 subtitles 滤镜渲染 ASS 字幕
+   * 先规整直播分段的时间轴和帧率，再使用 ass 滤镜渲染 ASS 字幕。
    *
-   * 注意：FFmpeg subtitles 滤镜要求绝对路径，且路径中的
+   * 注意：FFmpeg ass 滤镜要求绝对路径，且路径中的
    * \ : ' [ ] 需要反斜杠转义（filtergraph 语法要求）。
    */
   _buildFilterChain(assPath) {
@@ -329,7 +329,14 @@ class DanmakuBurner {
       .replace(/\[/g, '\\[') // [ → \[
       .replace(/\]/g, '\\]'); // ] → \]
 
-    return `subtitles='${escapedPath}'`;
+    const fps = this._getBurnFps();
+    return `setpts=PTS-STARTPTS,fps=${fps},ass='${escapedPath}',format=yuv420p`;
+  }
+
+  _getBurnFps() {
+    const fps = parseInt(process.env.DANMAKU_BURN_FPS || '30', 10);
+    if (!Number.isFinite(fps)) return 30;
+    return Math.min(60, Math.max(24, fps));
   }
 
   /**
