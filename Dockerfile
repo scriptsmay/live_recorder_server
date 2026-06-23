@@ -48,8 +48,11 @@ COPY --from=ffmpeg-downloader /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 
 # 这里去掉了 ffmpeg 安装
+# fontconfig + fonts-noto-cjk：弹幕压制 libass 渲染 CJK 字幕必需
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl mkvtoolnix python3 python3-pip \
+    fontconfig fonts-noto-cjk \
+    && fc-cache -fv \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \

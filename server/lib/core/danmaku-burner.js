@@ -154,6 +154,18 @@ class DanmakuBurner {
       });
 
       let killed = false;
+      let fontError = null;
+
+      // 字体错误检测：FFmpeg 启动后前 30 秒内扫描 stderr，
+      // 若发现字体/字幕渲染相关错误则立即中止，避免产出无弹幕的空压制视频。
+      const FONT_ERROR_PATTERNS = [
+        { pattern: /fontselect:\s*failed to find any fallback/i, label: '字体缺失：无法找到任何 fallback 字体' },
+        { pattern: /Failed to load fontconfig fonts/i, label: 'fontconfig 字体加载失败' },
+        { pattern: /Fontconfig error:\s*Cannot load default config file/i, label: 'fontconfig 配置文件缺失' },
+        { pattern: /No usable fontconfig configuration/i, label: 'fontconfig 配置不可用' },
+      ];
+      const FONT_CHECK_WINDOW_MS = 30_000; // 前 30 秒
+      let fontCheckDone = false;
 
       // 超时控制
       const timeout = setTimeout(() => {
@@ -164,13 +176,35 @@ class DanmakuBurner {
         }, 5000);
       }, timeoutMs);
 
+      // 字体检测窗口定时器：30 秒后关闭检测，说明字体正常
+      const fontCheckTimer = setTimeout(() => {
+        fontCheckDone = true;
+      }, FONT_CHECK_WINDOW_MS);
+
       // stderr 同时写入 proc-log 和内存（用于错误摘要）
       let stderrTail = '';
       proc.stderr.on('data', (chunk) => {
         procLog.stream.write(chunk);
-        // 只保留最后 2KB 用于错误消息
-        stderrTail += chunk.toString();
+        const text = chunk.toString();
+        stderrTail += text;
         if (stderrTail.length > 2048) stderrTail = stderrTail.slice(-2048);
+
+        // 前 30 秒内检测字体错误
+        if (!fontCheckDone && !fontError) {
+          for (const { pattern, label } of FONT_ERROR_PATTERNS) {
+            if (pattern.test(text)) {
+              fontError = label;
+              console.error(`[DanmakuBurner] 检测到字体错误，中止压制: ${label}`);
+              clearTimeout(timeout);
+              clearTimeout(fontCheckTimer);
+              proc.kill('SIGTERM');
+              setTimeout(() => {
+                if (!proc.killed) proc.kill('SIGKILL');
+              }, 3000);
+              break;
+            }
+          }
+        }
       });
 
       proc.on('error', (err) => {
@@ -187,7 +221,22 @@ class DanmakuBurner {
 
       proc.on('close', (code) => {
         clearTimeout(timeout);
+        clearTimeout(fontCheckTimer);
         procLog.destroy();
+
+        // 字体错误中止：优先判断
+        if (fontError) {
+          // 清理未完成的输出文件
+          try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch (_) {}
+          resolve({
+            success: false,
+            outputPath,
+            duration: Date.now() - startTime,
+            error: `弹幕压制中止 — ${fontError}。请确认 Docker 容器已安装 fontconfig 和 CJK 字体（apt install fontconfig fonts-noto-cjk）`,
+            logPath: procLog.logPath,
+          });
+          return;
+        }
 
         if (killed) {
           resolve({
