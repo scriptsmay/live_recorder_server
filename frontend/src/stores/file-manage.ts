@@ -45,8 +45,10 @@ export const useFileStore = defineStore('file-manage', () => {
       if (params.type) query.set('type', params.type)
       if (params.category) query.set('category', params.category)
       if (params.status) query.set('status', params.status)
-      if (params.exists_on_disk !== undefined) query.set('exists_on_disk', String(params.exists_on_disk))
-      if (params.safe_to_delete !== undefined) query.set('safe_to_delete', String(params.safe_to_delete))
+      if (params.exists_on_disk !== undefined)
+        query.set('exists_on_disk', String(params.exists_on_disk))
+      if (params.safe_to_delete !== undefined)
+        query.set('safe_to_delete', String(params.safe_to_delete))
       if (params.ext) query.set('ext', params.ext)
       if (params.min_size) query.set('min_size', String(params.min_size))
       if (params.start_date) query.set('start_date', params.start_date)
@@ -89,7 +91,10 @@ export const useFileStore = defineStore('file-manage', () => {
   const deletePlan = ref<DeletePlan | null>(null)
   const deletePlanLoading = ref(false)
 
-  async function generateDeletePlan(input: { file_ids?: number[]; filters?: Record<string, unknown> }) {
+  async function generateDeletePlan(input: {
+    file_ids?: number[]
+    filters?: Record<string, unknown>
+  }) {
     deletePlanLoading.value = true
     try {
       const res = await apiPost<DeletePlan>('/api/files/delete-plan', input)
@@ -169,9 +174,12 @@ export const useFileStore = defineStore('file-manage', () => {
   async function triggerScan() {
     scanLoading.value = true
     try {
-      const res = await apiPost<{ scanned: number; created: number; updated: number; missing: number }>(
-        '/api/files/scan',
-      )
+      const res = await apiPost<{
+        scanned: number
+        created: number
+        updated: number
+        missing: number
+      }>('/api/files/scan')
       toast.success(`扫描完成: ${res.data.scanned} 个文件已索引`)
       await fetchSummary()
       await fetchFileList()

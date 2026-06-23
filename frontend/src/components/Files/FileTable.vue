@@ -73,7 +73,9 @@ function toggleSelectAll() {
   }
 }
 
-const allSelected = computed(() => props.files.length > 0 && props.selectedIds.size === props.files.length)
+const allSelected = computed(
+  () => props.files.length > 0 && props.selectedIds.size === props.files.length,
+)
 
 function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
   e.stopPropagation()
@@ -86,7 +88,11 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
   <div v-if="loading" class="text-center py-12 text-gray-500">
     <svg class="animate-spin h-6 w-6 mx-auto mb-2 text-gray-400" fill="none" viewBox="0 0 24 24">
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
     </svg>
     加载中...
   </div>
@@ -94,8 +100,12 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
   <!-- Empty -->
   <div v-else-if="files.length === 0" class="text-center py-12 text-gray-400">
     <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.5"
+        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+      />
     </svg>
     暂无文件
   </div>
@@ -104,9 +114,16 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
   <div v-else class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead>
-        <tr class="border-b border-gray-200 text-left text-gray-500 text-xs uppercase tracking-wider">
+        <tr
+          class="border-b border-gray-200 text-left text-gray-500 text-xs uppercase tracking-wider"
+        >
           <th class="px-3 py-3 w-10">
-            <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" class="rounded" />
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              @change="toggleSelectAll"
+              class="rounded"
+            />
           </th>
           <th class="px-3 py-3">文件名</th>
           <th class="px-3 py-3">类型</th>
@@ -125,20 +142,34 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
           @click="emit('row-click', file)"
         >
           <td class="px-3 py-3" @click.stop>
-            <input type="checkbox" :checked="selectedIds.has(file.id)" @change="toggleSelect(file.id)" class="rounded" />
+            <input
+              type="checkbox"
+              :checked="selectedIds.has(file.id)"
+              @change="toggleSelect(file.id)"
+              class="rounded"
+            />
           </td>
           <td class="px-3 py-3 max-w-xs">
-            <div class="font-medium text-gray-900 truncate" :title="file.file_name || ''">{{ file.file_name || '-' }}</div>
-            <div class="text-xs text-gray-400 truncate" :title="file.file_path">{{ file.file_path }}</div>
+            <div class="font-medium text-gray-900 truncate" :title="file.file_name || ''">
+              {{ file.file_name || '-' }}
+            </div>
+            <div class="text-xs text-gray-400 truncate" :title="file.file_path">
+              {{ file.file_path }}
+            </div>
           </td>
           <td class="px-3 py-3">
             <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
               {{ fileTypeLabels[file.file_type] || file.file_type }}
             </span>
           </td>
-          <td class="px-3 py-3 text-right text-gray-700 font-mono text-xs">{{ formatBytes(file.file_size) }}</td>
+          <td class="px-3 py-3 text-right text-gray-700 font-mono text-xs">
+            {{ formatBytes(file.file_size) }}
+          </td>
           <td class="px-3 py-3">
-            <span class="inline-block px-2 py-0.5 rounded text-xs" :class="statusStyles[file.status] || 'text-gray-600 bg-gray-100'">
+            <span
+              class="inline-block px-2 py-0.5 rounded text-xs"
+              :class="statusStyles[file.status] || 'text-gray-600 bg-gray-100'"
+            >
               {{ file.status }}
             </span>
           </td>
@@ -163,19 +194,26 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
     </table>
 
     <!-- 分页 -->
-    <div v-if="totalPages > 1" class="flex items-center justify-between px-3 py-3 border-t border-gray-100 text-sm text-gray-500">
+    <div
+      v-if="totalPages > 1"
+      class="flex items-center justify-between px-3 py-3 border-t border-gray-100 text-sm text-gray-500"
+    >
       <span>共 {{ total }} 个文件，第 {{ page }}/{{ totalPages }} 页</span>
       <div class="flex gap-2">
         <button
           class="px-3 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
           :disabled="page <= 1"
           @click="emit('page-change', page - 1)"
-        >上一页</button>
+        >
+          上一页
+        </button>
         <button
           class="px-3 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
           :disabled="page >= totalPages"
           @click="emit('page-change', page + 1)"
-        >下一页</button>
+        >
+          下一页
+        </button>
       </div>
     </div>
   </div>

@@ -182,12 +182,33 @@ onUnmounted(() => {
           :disabled="fileStore.scanLoading"
           @click="handleScan"
         >
-          <svg v-if="fileStore.scanLoading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          <svg
+            v-if="fileStore.scanLoading"
+            class="animate-spin w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
           <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           扫描
         </button>
@@ -223,7 +244,10 @@ onUnmounted(() => {
       </div>
 
       <!-- 筛选条件栏（非清理规则标签页时显示） -->
-      <div v-if="activeTab !== 'cleanup'" class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+      <div
+        v-if="activeTab !== 'cleanup'"
+        class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50"
+      >
         <select
           v-model="filterStatus"
           class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
@@ -302,7 +326,10 @@ onUnmounted(() => {
 
     <!-- 批量删除对话框 -->
     <Transition name="fade">
-      <div v-if="batchDialogVisible" class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+      <div
+        v-if="batchDialogVisible"
+        class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
+      >
         <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
           <!-- 头部 -->
           <div class="px-6 py-4 border-b border-gray-200">
@@ -312,9 +339,24 @@ onUnmounted(() => {
           <div class="px-6 py-4">
             <!-- Step: plan (dry-run 进行中) -->
             <div v-if="batchStep === 'plan'" class="text-center py-8">
-              <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-gray-400" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <svg
+                class="animate-spin h-8 w-8 mx-auto mb-3 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
               <p class="text-gray-500">正在生成删除计划...</p>
             </div>
@@ -323,14 +365,19 @@ onUnmounted(() => {
             <div v-if="batchStep === 'confirm' && fileStore.deletePlan" class="space-y-4">
               <div class="bg-green-50 rounded-lg p-4">
                 <div class="text-sm text-green-800">
-                  <span class="font-bold">{{ fileStore.deletePlan.deletable_count }}</span> 个文件可删除，
-                  预计释放 <span class="font-bold">{{ formatBytes(fileStore.deletePlan.total_size) }}</span>
+                  <span class="font-bold">{{ fileStore.deletePlan.deletable_count }}</span>
+                  个文件可删除， 预计释放
+                  <span class="font-bold">{{ formatBytes(fileStore.deletePlan.total_size) }}</span>
                 </div>
               </div>
 
-              <div v-if="fileStore.deletePlan.blocked_count > 0" class="bg-yellow-50 rounded-lg p-4">
+              <div
+                v-if="fileStore.deletePlan.blocked_count > 0"
+                class="bg-yellow-50 rounded-lg p-4"
+              >
                 <div class="text-sm text-yellow-800">
-                  <span class="font-bold">{{ fileStore.deletePlan.blocked_count }}</span> 个文件被阻止删除
+                  <span class="font-bold">{{ fileStore.deletePlan.blocked_count }}</span>
+                  个文件被阻止删除
                 </div>
                 <div class="mt-2 space-y-1">
                   <div
@@ -340,50 +387,84 @@ onUnmounted(() => {
                   >
                     {{ b.file_name }} — {{ b.reason }}
                   </div>
-                  <div v-if="fileStore.deletePlan.blocked.length > 5" class="text-xs text-yellow-600">
+                  <div
+                    v-if="fileStore.deletePlan.blocked.length > 5"
+                    class="text-xs text-yellow-600"
+                  >
                     ...还有 {{ fileStore.deletePlan.blocked.length - 5 }} 个
                   </div>
                 </div>
               </div>
 
-              <p class="text-sm text-gray-500">删除后将同步更新数据库记录和业务状态。此操作不可撤销。</p>
+              <p class="text-sm text-gray-500">
+                删除后将同步更新数据库记录和业务状态。此操作不可撤销。
+              </p>
             </div>
 
             <!-- Step: progress -->
             <div v-if="batchStep === 'progress'" class="space-y-4">
               <div class="text-center py-4">
-                <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-blue-500" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <svg
+                  class="animate-spin h-8 w-8 mx-auto mb-3 text-blue-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  />
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
                 <p class="text-gray-700 font-medium">正在安全擦除磁盘文件并更新业务索引...</p>
               </div>
 
-              <div v-if="fileStore.deleteTaskStatus" class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+              <div
+                v-if="fileStore.deleteTaskStatus"
+                class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm"
+              >
                 <div class="flex justify-between">
                   <span>总文件数</span>
                   <span class="font-medium">{{ fileStore.deleteTaskStatus.total_count }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span>已删除</span>
-                  <span class="font-medium text-green-600">{{ fileStore.deleteTaskStatus.deleted_count }}</span>
+                  <span class="font-medium text-green-600">{{
+                    fileStore.deleteTaskStatus.deleted_count
+                  }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span>已阻止</span>
-                  <span class="font-medium text-yellow-600">{{ fileStore.deleteTaskStatus.blocked_count }}</span>
+                  <span class="font-medium text-yellow-600">{{
+                    fileStore.deleteTaskStatus.blocked_count
+                  }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span>失败</span>
-                  <span class="font-medium text-red-600">{{ fileStore.deleteTaskStatus.failed_count }}</span>
+                  <span class="font-medium text-red-600">{{
+                    fileStore.deleteTaskStatus.failed_count
+                  }}</span>
                 </div>
                 <!-- 进度条 -->
                 <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
                   <div
                     class="bg-blue-500 h-2 rounded-full transition-all duration-300"
                     :style="{
-                      width: (fileStore.deleteTaskStatus.total_count > 0
-                        ? ((fileStore.deleteTaskStatus.deleted_count + fileStore.deleteTaskStatus.blocked_count + fileStore.deleteTaskStatus.failed_count) / fileStore.deleteTaskStatus.total_count) * 100
-                        : 0) + '%'
+                      width:
+                        (fileStore.deleteTaskStatus.total_count > 0
+                          ? ((fileStore.deleteTaskStatus.deleted_count +
+                              fileStore.deleteTaskStatus.blocked_count +
+                              fileStore.deleteTaskStatus.failed_count) /
+                              fileStore.deleteTaskStatus.total_count) *
+                            100
+                          : 0) + '%',
                     }"
                   />
                 </div>
@@ -399,11 +480,15 @@ onUnmounted(() => {
               <div class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span>成功删除</span>
-                  <span class="font-medium text-green-600">{{ batchTaskStatus.deleted_count }}</span>
+                  <span class="font-medium text-green-600">{{
+                    batchTaskStatus.deleted_count
+                  }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span>被阻止</span>
-                  <span class="font-medium text-yellow-600">{{ batchTaskStatus.blocked_count }}</span>
+                  <span class="font-medium text-yellow-600">{{
+                    batchTaskStatus.blocked_count
+                  }}</span>
                 </div>
                 <div class="flex justify-between">
                   <span>失败</span>
@@ -411,16 +496,26 @@ onUnmounted(() => {
                 </div>
                 <div class="flex justify-between">
                   <span>实际释放空间</span>
-                  <span class="font-medium">{{ formatBytes(batchTaskStatus.actual_release_size) }}</span>
+                  <span class="font-medium">{{
+                    formatBytes(batchTaskStatus.actual_release_size)
+                  }}</span>
                 </div>
               </div>
 
               <!-- 失败文件列表 -->
-              <div v-if="batchTaskStatus.results?.some(r => r.result === 'failed' || r.result === 'blocked')">
+              <div
+                v-if="
+                  batchTaskStatus.results?.some(
+                    (r) => r.result === 'failed' || r.result === 'blocked',
+                  )
+                "
+              >
                 <div class="text-sm font-medium text-gray-700 mb-2">失败/阻止详情</div>
                 <div class="space-y-1 max-h-40 overflow-y-auto">
                   <div
-                    v-for="r in batchTaskStatus.results.filter(r => r.result === 'failed' || r.result === 'blocked')"
+                    v-for="r in batchTaskStatus.results.filter(
+                      (r) => r.result === 'failed' || r.result === 'blocked',
+                    )"
                     :key="r.file_id"
                     class="text-xs bg-red-50 rounded p-2"
                   >
@@ -464,6 +559,12 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

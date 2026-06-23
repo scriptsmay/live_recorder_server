@@ -1,5 +1,3 @@
-const fs = require('fs');
-const path = require('path');
 const FileManageService = require('../../services/FileManageService');
 const DataService = require('../../services/DataService');
 const { send } = require('./notify');
@@ -52,10 +50,18 @@ async function checkDiskWatermark() {
     const criticalThreshold = parseInt(await DataService.getSetting('file_cleanup_watermark_critical', '90'), 10);
 
     if (usedPercent >= criticalThreshold) {
-      return { level: 'critical', percent: usedPercent, message: `🔴 磁盘空间紧急！已使用 ${usedPercent}%（阈值 ${criticalThreshold}%）` };
+      return {
+        level: 'critical',
+        percent: usedPercent,
+        message: `🔴 磁盘空间紧急！已使用 ${usedPercent}%（阈值 ${criticalThreshold}%）`,
+      };
     }
     if (usedPercent >= warnThreshold) {
-      return { level: 'warn', percent: usedPercent, message: `🟡 磁盘空间警告：已使用 ${usedPercent}%（阈值 ${warnThreshold}%）` };
+      return {
+        level: 'warn',
+        percent: usedPercent,
+        message: `🟡 磁盘空间警告：已使用 ${usedPercent}%（阈值 ${warnThreshold}%）`,
+      };
     }
     return { level: 'ok', percent: usedPercent };
   } catch (err) {
@@ -125,7 +131,9 @@ async function runAutoCleanup() {
       const plan = await FileManageService.generateDeletePlan({ filters: f }, 'auto-scheduler');
       if (plan.deletable_count === 0) continue;
 
-      console.log(`[自动清理] ${cat || '全部'}: 匹配 ${plan.deletable_count} 个文件, 预计释放 ${formatBytes(plan.total_size)}`);
+      console.log(
+        `[自动清理] ${cat || '全部'}: 匹配 ${plan.deletable_count} 个文件, 预计释放 ${formatBytes(plan.total_size)}`
+      );
 
       const taskId = await FileManageService.executeDelete(plan.plan_id, 'auto-scheduler');
 

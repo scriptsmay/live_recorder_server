@@ -39,16 +39,22 @@ const categoryColors: Record<string, string> = {
       class="rounded-xl border p-4"
       :class="categoryColors[group.type] || 'bg-gray-50 border-gray-200'"
     >
-      <div class="text-sm font-medium opacity-75">{{ categoryLabels[group.type] || group.type }}</div>
+      <div class="text-sm font-medium opacity-75">
+        {{ categoryLabels[group.type] || group.type }}
+      </div>
       <div class="text-2xl font-bold mt-1">{{ formatBytes(group.size) }}</div>
       <div class="text-xs mt-1 opacity-60">{{ group.file_count }} 个文件</div>
-      <div v-if="group.root" class="text-xs mt-1 opacity-40 truncate" :title="group.root">{{ group.root }}</div>
+      <div v-if="group.root" class="text-xs mt-1 opacity-40 truncate" :title="group.root">
+        {{ group.root }}
+      </div>
     </div>
     <!-- 总计卡片 -->
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div class="text-sm font-medium text-gray-500">总计</div>
       <div class="text-2xl font-bold text-gray-900 mt-1">{{ formatBytes(summary.total_size) }}</div>
-      <div class="text-xs mt-1 text-green-600">可清理: {{ formatBytes(summary.safe_to_delete_size) }}</div>
+      <div class="text-xs mt-1 text-green-600">
+        可清理: {{ formatBytes(summary.safe_to_delete_size) }}
+      </div>
     </div>
   </div>
 </template>

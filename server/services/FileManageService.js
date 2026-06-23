@@ -3,10 +3,9 @@ const path = require('path');
 const crypto = require('crypto');
 const pool = require('../db/index');
 const redis = require('../db/redis');
-const { resolveAndValidate, ALLOWLIST_ROOTS } = require('../lib/utils/path-safety');
+const { resolveAndValidate } = require('../lib/utils/path-safety');
 
 const DELETE_PLAN_TTL = 600; // 10 分钟
-const CONCURRENCY_STAT = 5;
 const EVENT_LOOP_YIELD_INTERVAL = 10;
 
 /**
@@ -851,7 +850,7 @@ class FileManageService {
    * @returns {Promise<{safe: boolean, reason?: string}>}
    */
   static async validateFileSafety(fileRecord) {
-    const { file_path, file_type, source_table, source_id, group_id } = fileRecord;
+    const { file_path, file_type, source_table, source_id } = fileRecord;
 
     // 1. 路径位于 allowlist 内
     const pathCheck = await resolveAndValidate(file_path);
@@ -915,7 +914,10 @@ class FileManageService {
 
     if (source_table === 'replay_records' && source_id) {
       const rrCheck = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [source_id]);
-      if (rrCheck.rows.length > 0 && !['completed', 'uploaded', 'backed_up', 'failed', 'cancelled'].includes(rrCheck.rows[0].status)) {
+      if (
+        rrCheck.rows.length > 0 &&
+        !['completed', 'uploaded', 'backed_up', 'failed', 'cancelled'].includes(rrCheck.rows[0].status)
+      ) {
         return { safe: false, reason: `replay_status_${rrCheck.rows[0].status}` };
       }
     }
