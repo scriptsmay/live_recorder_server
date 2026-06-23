@@ -9,6 +9,10 @@ async function logout() {
   await auth.logout()
   await router.push('/login')
 }
+
+async function goSettings() {
+  await router.push('/settings')
+}
 </script>
 
 <template>
@@ -23,6 +27,13 @@ async function logout() {
     >
       <div class="px-4 py-2 text-xs text-gray-400">当前用户</div>
       <div class="px-4 pb-2 text-sm text-white truncate">{{ auth.user.username }}</div>
+      <button
+        type="button"
+        class="block w-full px-4 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+        @click="goSettings"
+      >
+        修改密码
+      </button>
       <button
         type="button"
         class="block w-full px-4 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
