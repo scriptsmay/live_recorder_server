@@ -10,8 +10,8 @@ async function logout() {
   await router.push('/login')
 }
 
-async function goSettings() {
-  await router.push('/settings')
+async function goChangePassword() {
+  await router.push('/change-password')
 }
 </script>
 
@@ -23,14 +23,15 @@ async function goSettings() {
       {{ auth.user.username }}
     </summary>
     <div
-      class="absolute right-0 bottom-full mb-2 w-40 rounded-lg border border-gray-700 bg-gray-800 py-2 shadow-xl"
+      class="absolute left-0 bottom-full mb-2 w-40 rounded-lg border border-gray-700 bg-gray-800 py-2 shadow-xl"
     >
-      <div class="px-4 py-2 text-xs text-gray-400">当前用户</div>
-      <div class="px-4 pb-2 text-sm text-white truncate">{{ auth.user.username }}</div>
+      <div class="px-4 py-2 text-xs text-gray-400">
+        <span>当前：</span><span class="text-white bold">{{ auth.user.username }}</span>
+      </div>
       <button
         type="button"
         class="block w-full px-4 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
-        @click="goSettings"
+        @click="goChangePassword"
       >
         修改密码
       </button>

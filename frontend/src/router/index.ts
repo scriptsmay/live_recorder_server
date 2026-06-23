@@ -120,6 +120,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '设置' },
   },
   {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('@/views/ChangePassword.vue'),
+    meta: { title: '修改密码' },
+  },
+  {
     path: '/logs',
     name: 'Logs',
     component: () => import('@/views/Logs.vue'),
