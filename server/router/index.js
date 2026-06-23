@@ -44,6 +44,7 @@ function createRoutes() {
       req.path === '/api/auth/me' ||
       req.path === '/api/notify/live_download' ||
       req.path === '/api/notify/status' ||
+      req.path === '/api/danmaku/batch' ||
       isCronAuthorized(req)
     ) {
       return next();
