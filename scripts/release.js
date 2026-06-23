@@ -254,9 +254,9 @@ async function main() {
       console.log('✅ dev 已合并到 main 并推送');
     }
 
-    console.log('\n=== Release complete! ===');
+    console.log(`\n=== ✅ Auto Release v${newVersion} complete! ===`);
   } else {
-    console.log('\n=== Release complete! ===');
+    console.log('\n=== ✅ Release complete! ===');
     console.log('Next steps:');
     console.log(`  git push origin $(git rev-parse --abbrev-ref HEAD)`);
     console.log(`  git push origin v${newVersion}`);
