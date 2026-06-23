@@ -66,7 +66,9 @@ async function handleRefresh() {
 function handleTabChange(tab: string) {
   activeTab.value = tab
   selectedIds.value = new Set()
-  loadFiles(1)
+  if (tab !== 'cleanup') {
+    loadFiles(1)
+  }
 }
 
 function handleFilterChange() {
