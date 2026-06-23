@@ -308,9 +308,9 @@ router.get('/upload_records/merged', async (req, res) => {
 
     const countSql = `
       SELECT COUNT(*) FROM (
-        SELECT id FROM upload_records WHERE TRUE
+        SELECT id, 'recording' AS source, status FROM upload_records
         UNION ALL
-        SELECT id FROM replay_upload_records WHERE TRUE
+        SELECT id, 'replay' AS source, status FROM replay_upload_records
       ) t
       ${where}
     `;
