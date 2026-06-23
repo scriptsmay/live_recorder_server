@@ -244,6 +244,45 @@ const settingGroups: SettingGroup[] = [
       },
     ],
   },
+  {
+    title: '文件管理',
+    items: [
+      {
+        key: 'file_cleanup_enabled',
+        label: '自动清理',
+        desc: '启用后每日自动扫描并按保留天数清理可安全删除的文件',
+        type: 'select',
+        options: ['false', 'true'],
+      },
+      {
+        key: 'file_cleanup_retention_days',
+        label: '保留天数',
+        desc: '超过此天数且可安全删除的文件将被自动清理',
+        type: 'number',
+        attrs: { min: 1, max: 365 },
+      },
+      {
+        key: 'file_cleanup_categories',
+        label: '清理分类',
+        desc: '留空清理全部；可填 recording,replay,danmaku 逗号分隔',
+        type: 'text',
+      },
+      {
+        key: 'file_cleanup_watermark_warn',
+        label: '水位警告阈值（%）',
+        desc: '磁盘占用超过此百分比时发送警告通知',
+        type: 'number',
+        attrs: { min: 50, max: 99 },
+      },
+      {
+        key: 'file_cleanup_watermark_critical',
+        label: '水位紧急阈值（%）',
+        desc: '磁盘占用超过此百分比时发送紧急通知',
+        type: 'number',
+        attrs: { min: 60, max: 99 },
+      },
+    ],
+  },
 ]
 
 // ---- 状态 ----
