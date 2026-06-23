@@ -578,6 +578,85 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_free_burn_created ON danmaku_free_burn_records(created_at DESC);
     `);
 
+    // ========== 文件管理模块表 ==========
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS managed_files (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(20),
+        file_type VARCHAR(30),
+        source_table VARCHAR(50),
+        source_id INTEGER,
+        group_id VARCHAR(100),
+        file_path VARCHAR(1024) NOT NULL,
+        file_name VARCHAR(512),
+        extension VARCHAR(20),
+        file_size BIGINT,
+        mtime TIMESTAMP,
+        exists_on_disk BOOLEAN DEFAULT true,
+        status VARCHAR(20) DEFAULT 'active',
+        safe_to_delete BOOLEAN DEFAULT false,
+        delete_block_reason VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        deleted_at TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'managed_files_file_path_key') THEN
+          ALTER TABLE managed_files ADD CONSTRAINT managed_files_file_path_key UNIQUE (file_path);
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_managed_files_category_type_status
+        ON managed_files(category, file_type, status);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_managed_files_safe_size
+        ON managed_files(safe_to_delete, file_size DESC);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_managed_files_mtime
+        ON managed_files(mtime DESC);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_managed_files_source
+        ON managed_files(source_table, source_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS file_delete_audit_logs (
+        id SERIAL PRIMARY KEY,
+        file_id INTEGER,
+        file_path VARCHAR(1024),
+        file_size BIGINT,
+        category VARCHAR(20),
+        source_table VARCHAR(50),
+        source_id INTEGER,
+        operator VARCHAR(100),
+        deleted_by VARCHAR(20),
+        action VARCHAR(20),
+        result VARCHAR(20),
+        estimated_release_size BIGINT,
+        actual_release_size BIGINT,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_file_delete_audit_logs_file_id
+        ON file_delete_audit_logs(file_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_file_delete_audit_logs_created_at
+        ON file_delete_audit_logs(created_at DESC);
+    `);
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {
