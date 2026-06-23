@@ -28,6 +28,7 @@ interface StatCard {
   accent: string
   iconPath: string
   warning?: string
+  to?: string
 }
 
 const appStore = useAppStore()
@@ -122,6 +123,7 @@ const statCards = computed<StatCard[]>(() => [
     accent: 'text-cyan-100',
     iconPath:
       'M7.5 8.25h9m-9 3H12m-7.5 3.75V5.25A2.25 2.25 0 0 1 6.75 3h10.5a2.25 2.25 0 0 1 2.25 2.25v6.75a2.25 2.25 0 0 1-2.25 2.25H9.75L4.5 18Z',
+    to: '/danmaku-toolbox',
   },
   {
     label: '今日录制',
@@ -143,6 +145,7 @@ const statCards = computed<StatCard[]>(() => [
     accent: 'text-rose-100',
     iconPath:
       'M6 12 3.269 3.126A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.876L6 12Zm0 0h7.5',
+    to: '/upload-records',
   },
   {
     label: '回放待处理',
@@ -153,6 +156,7 @@ const statCards = computed<StatCard[]>(() => [
     gradient: 'from-purple-500 to-purple-600',
     accent: 'text-purple-100',
     iconPath: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+    to: '/replay',
   },
   {
     label: '今日回放',
@@ -160,7 +164,9 @@ const statCards = computed<StatCard[]>(() => [
     sublines: hasSummary.value ? [formatBytes(summary.value.replay_completed_today_size)] : [],
     gradient: 'from-emerald-500 to-emerald-600',
     accent: 'text-emerald-100',
-    iconPath: 'M5.25 5.653c0-.856.917-1.402 1.669-.981l11.662 6.847a1.121 1.121 0 0 1 0 1.948l-11.662 6.847a1.121 1.121 0 0 1-1.669-.981V5.653Z',
+    iconPath:
+      'M5.25 5.653c0-.856.917-1.402 1.669-.981l11.662 6.847a1.121 1.121 0 0 1 0 1.948l-11.662 6.847a1.121 1.121 0 0 1-1.669-.981V5.653Z',
+    to: '/sessions?tab=replay',
   },
 ])
 
@@ -267,12 +273,17 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-      <div
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <component
+        :is="card.to ? 'router-link' : 'div'"
         v-for="card in statCards"
         :key="card.label"
-        class="rounded-xl bg-gradient-to-br text-white p-5 shadow-sm min-h-[136px]"
-        :class="card.gradient"
+        :to="card.to"
+        class="rounded-xl bg-gradient-to-br text-white p-5 shadow-sm min-h-[136px] block"
+        :class="[
+          card.gradient,
+          card.to ? 'cursor-pointer hover:opacity-90 transition-opacity' : '',
+        ]"
       >
         <div v-if="loading" class="animate-pulse">
           <div class="h-3 w-20 rounded bg-white/30 mb-4"></div>
@@ -305,17 +316,19 @@ onUnmounted(() => {
             </svg>
           </div>
         </div>
-      </div>
+      </component>
     </div>
 
     <!-- 活跃录制 + 近期活动 横向布局 -->
-    <div class="grid grid-cols-1 xl:grid-cols-[1fr_2fr] gap-6 mb-6">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
       <!-- 左侧：活跃录制 -->
-      <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden xl:sticky xl:top-20 xl:self-start">
+      <section
+        class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden xl:sticky xl:top-20 xl:self-start"
+      >
         <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-gray-900">活跃录制</h2>
+          <h2 class="text-sm font-semibold text-gray-900">活跃录制进程</h2>
           <span v-if="!loading" class="text-xs text-gray-400">
-            {{ activeRecordings.length }} 个进程 / {{ dashboard?.active_count ?? 0 }}/{{ dashboard?.pool_size ?? 0 }}
+            {{ dashboard?.active_count ?? 0 }}/{{ dashboard?.pool_size ?? 0 }}
           </span>
         </div>
         <div class="overflow-x-auto">
@@ -326,7 +339,6 @@ onUnmounted(() => {
                 <th class="px-4 py-2.5 text-left font-medium text-gray-500 text-xs">Session</th>
                 <th class="px-4 py-2.5 text-left font-medium text-gray-500 text-xs">PID</th>
                 <th class="px-4 py-2.5 text-left font-medium text-gray-500 text-xs">开始时间</th>
-                <th class="px-4 py-2.5 text-left font-medium text-gray-500 text-xs">引擎</th>
                 <th class="px-4 py-2.5 text-left font-medium text-gray-500 text-xs">时长</th>
               </tr>
             </thead>
@@ -340,9 +352,19 @@ onUnmounted(() => {
                 </td>
               </tr>
               <tr v-else-if="activeRecordings.length === 0">
-                <td colspan="6" class="px-4 py-8 text-center text-gray-400">
-                  <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                <td colspan="5" class="px-4 py-8 text-center text-gray-400">
+                  <svg
+                    class="w-8 h-8 mx-auto mb-2 text-gray-200"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
+                    />
                   </svg>
                   <div class="text-xs text-gray-400">暂无活跃录制</div>
                   <div v-if="hasPolling" class="text-xs text-gray-300 mt-1">
@@ -359,30 +381,33 @@ onUnmounted(() => {
                   <td class="px-4 py-2.5">
                     <div class="flex items-center gap-2">
                       <span class="relative flex h-2 w-2 shrink-0">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span
+                          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
+                        ></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                       </span>
                       <div class="min-w-0">
-                        <div class="font-medium text-gray-900 text-sm truncate max-w-[160px]">{{ rec.room_name || rec.room_url }}</div>
+                        <div class="font-medium text-gray-900 text-sm truncate max-w-[160px]">
+                          {{ rec.room_name || rec.room_url }}
+                        </div>
                       </div>
                     </div>
                   </td>
                   <td class="px-4 py-2.5">
                     <router-link
-                      :to="{ path: '/sessions', query: { room_url: rec.room_url } }"
+                      :to="{ path: '/sessions', query: { room_id: rec.room_id } }"
                       class="text-brand-600 hover:text-brand-700 font-mono text-xs"
                     >
                       #{{ rec.session_id }}
                     </router-link>
                   </td>
                   <td class="px-4 py-2.5 font-mono text-xs text-gray-500">{{ rec.pid }}</td>
-                  <td class="px-4 py-2.5 text-gray-500 text-xs">{{ $formatTime(rec.started_at) }}</td>
-                  <td class="px-4 py-2.5">
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                      {{ rec.downloader }}
-                    </span>
+                  <td class="px-4 py-2.5 text-gray-500 text-xs">
+                    {{ $formatTime(rec.started_at) }}
                   </td>
-                  <td class="px-4 py-2.5 text-gray-500 text-xs">{{ formatDuration(rec.started_at) }}</td>
+                  <td class="px-4 py-2.5 text-gray-500 text-xs">
+                    {{ formatDuration(rec.started_at) }}
+                  </td>
                 </tr>
               </template>
             </tbody>
