@@ -18,6 +18,9 @@ import type { UploadRecord, PaginatedResponse } from '@/types/api'
 const toast = useToast()
 const { confirm } = useConfirm()
 
+// ---- 筛选状态 ----
+const sourceFilter = ref<'all' | 'recording' | 'replay'>('all')
+
 // ---- 列表状态 ----
 const records = ref<UploadRecord[]>([])
 const total = ref(0)
@@ -61,11 +64,16 @@ function statusBadge(status: string): Badge {
 async function fetchRecords() {
   loading.value = true
   try {
-    const res = await apiGet<PaginatedResponse<UploadRecord>>(
-      `/api/upload_records?limit=${pageSize}&page=${page.value}`,
+    const params = new URLSearchParams({
+      limit: String(pageSize),
+      page: String(page.value),
+      source: sourceFilter.value,
+    })
+    const res = await apiGet<{ data: UploadRecord[]; total: number }>(
+      `/api/upload_records/merged?${params}`,
     )
-    records.value = res.data.rows
-    total.value = res.data.total
+    records.value = res.data
+    total.value = res.total
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : '加载投稿记录失败')
   } finally {
@@ -75,6 +83,12 @@ async function fetchRecords() {
 
 function handlePageChange(p: number) {
   page.value = p
+  fetchRecords()
+}
+
+function handleSourceChange(val: 'all' | 'recording' | 'replay') {
+  sourceFilter.value = val
+  page.value = 1
   fetchRecords()
 }
 
@@ -123,6 +137,28 @@ onMounted(fetchRecords)
   <div>
     <h1 class="text-2xl font-bold text-gray-900 mb-6">投稿记录</h1>
 
+    <!-- 来源筛选 -->
+    <div class="mb-4 flex items-center gap-2">
+      <span class="text-sm text-gray-500">来源：</span>
+      <button
+        v-for="opt in ([
+          { value: 'all', label: '全部' },
+          { value: 'recording', label: '录制' },
+          { value: 'replay', label: '回放' },
+        ] as const)"
+        :key="opt.value"
+        class="px-3 py-1 text-sm rounded-lg border transition-colors"
+        :class="
+          sourceFilter === opt.value
+            ? 'bg-brand-600 text-white border-brand-600'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+        "
+        @click="handleSourceChange(opt.value)"
+      >
+        {{ opt.label }}
+      </button>
+    </div>
+
     <!-- 加载中 -->
     <div v-if="loading && records.length === 0" class="text-center py-12">
       <div
@@ -138,7 +174,8 @@ onMounted(fetchRecords)
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500">ID</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">会话 ID</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500">来源</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500">关联</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">标题</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">投稿文件</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">状态</th>
@@ -150,11 +187,26 @@ onMounted(fetchRecords)
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="records.length === 0">
-              <td colspan="9" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
+              <td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
             </tr>
-            <tr v-for="r in records" :key="r.id" class="hover:bg-gray-50 transition-colors">
+            <tr v-for="r in records" :key="`${r.source}-${r.id}`" class="hover:bg-gray-50 transition-colors">
               <td class="px-4 py-3 text-gray-900 font-medium">{{ r.id }}</td>
-              <td class="px-4 py-3 text-gray-600">{{ r.session_id ?? '-' }}</td>
+              <td class="px-4 py-3">
+                <span
+                  class="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
+                  :class="
+                    r.source === 'replay'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-blue-100 text-blue-700'
+                  "
+                >
+                  {{ r.source === 'replay' ? '回放' : '录制' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-gray-600 text-xs">
+                <span v-if="r.source === 'replay'">{{ r.principal_name || `#${r.session_id}` }}</span>
+                <span v-else>{{ r.session_id ?? '-' }}</span>
+              </td>
               <td class="px-4 py-3">
                 <div class="text-gray-900">{{ r.title || '-' }}</div>
                 <div v-if="r.template_name" class="text-xs text-gray-400">

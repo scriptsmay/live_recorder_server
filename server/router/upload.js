@@ -235,6 +235,105 @@ router.get('/upload_records', async (req, res) => {
   }
 });
 
+router.get('/upload_records/merged', async (req, res) => {
+  try {
+    const { source = 'all', status, page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions = [];
+    const params = [];
+    let paramIdx = 1;
+
+    // source filter
+    if (source === 'recording') {
+      conditions.push(`t.source = 'recording'`);
+    } else if (source === 'replay') {
+      conditions.push(`t.source = 'replay'`);
+    }
+
+    // status filter
+    if (status) {
+      conditions.push(`t.status = $${paramIdx++}`);
+      params.push(status);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT * FROM (
+        SELECT
+          ur.id,
+          'recording' AS source,
+          ur.title,
+          ur.status,
+          ur.bv_id,
+          ur.started_at,
+          ur.completed_at,
+          ur.created_at,
+          ur.file_count,
+          ur.total_size,
+          ur.template_id,
+          ur.session_id,
+          r.room_name AS principal_name
+        FROM upload_records ur
+        LEFT JOIN recording_sessions rs ON ur.session_id = rs.id
+        LEFT JOIN rooms r ON rs.room_url = r.room_url
+
+        UNION ALL
+
+        SELECT
+          rur.id,
+          'replay' AS source,
+          rur.title,
+          rur.status,
+          rur.bv_id,
+          rur.started_at,
+          rur.completed_at,
+          rur.created_at,
+          rur.file_count,
+          rur.total_size,
+          rur.template_id,
+          rur.replay_record_id AS session_id,
+          rr.principal_name
+        FROM replay_upload_records rur
+        LEFT JOIN replay_records rr ON rur.replay_record_id = rr.id
+      ) t
+      ${where}
+      ORDER BY COALESCE(t.started_at, t.created_at) DESC
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `;
+    params.push(limitNum, offset);
+
+    const countSql = `
+      SELECT COUNT(*) FROM (
+        SELECT id FROM upload_records WHERE TRUE
+        UNION ALL
+        SELECT id FROM replay_upload_records WHERE TRUE
+      ) t
+      ${where}
+    `;
+    const countParams = status ? [status] : [];
+
+    const [dataResult, countResult] = await Promise.all([
+      pool.query(sql, params),
+      pool.query(countSql, countParams),
+    ]);
+
+    res.json({
+      status: 'ok',
+      data: dataResult.rows,
+      total: parseInt(countResult.rows[0]?.count || '0', 10),
+      page: pageNum,
+      limit: limitNum,
+    });
+  } catch (err) {
+    console.error('[upload_records/merged] 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
 router.delete('/upload_records/:id', async (req, res) => {
   try {
     const { id } = req.params;

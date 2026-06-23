@@ -528,6 +528,16 @@ async function runMigration() {
       );
     }
 
+    // 投稿记录合并查询性能索引
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_upload_records_started_at
+        ON upload_records(started_at DESC);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_replay_upload_records_started_at
+        ON replay_upload_records(started_at DESC);
+    `);
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {

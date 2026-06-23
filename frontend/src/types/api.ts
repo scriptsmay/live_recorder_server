@@ -134,9 +134,11 @@ export interface UploadTemplateFormData {
 
 export interface UploadRecord {
   id: number
+  source?: 'recording' | 'replay'
   session_id: number | null
   template_id: number | null
-  template_name: string
+  template_name?: string
+  principal_name?: string
   title: string
   status: string
   message: string | null
