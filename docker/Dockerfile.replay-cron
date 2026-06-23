@@ -1,5 +1,17 @@
-FROM postgres:17.5-alpine
+# replay_cron 专用镜像：轻量 Alpine + 预装工具
+# 替代原 postgres:17.5-alpine 方案（~250MB → ~50MB）
+#
+# 包含工具：
+# - curl        : API 调用（replay-cron.sh、飞书通知）
+# - redis-cli   : Redis Pub/Sub 监听（事件驱动同步）
+# - psql        : PostgreSQL 客户端（sync-records.sh 数据同步）
+# - crond       : 定时任务调度（Alpine busybox 内置）
+FROM alpine:3.21
 
-RUN apk add --no-cache curl redis
+RUN apk add --no-cache \
+    curl \
+    redis \
+    postgresql17-client \
+    && rm -rf /var/cache/apk/*
 
 ENTRYPOINT ["/bin/sh"]

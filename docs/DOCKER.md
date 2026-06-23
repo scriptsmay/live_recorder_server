@@ -62,7 +62,7 @@ COMPOSE_NETWORK_NAME=external-network
 
 `replay_cron` 使用专用镜像
 `ghcr.io/scriptsmay/live_recorder_server-replay-cron:latest`，基于
-`postgres:17.5-alpine` 并预装 `curl` 与 `redis-cli`，避免容器每次重建时运行
+`alpine:3.21` 并预装 `curl`、`redis-cli`、`psql`，避免容器每次重建时运行
 `apk add`。如生产环境通过内部镜像源拉取，可覆盖：
 
 ```env
