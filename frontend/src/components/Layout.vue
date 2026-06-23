@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Sidebar from './Sidebar.vue'
 import { useAppStore } from '@/stores/app'
 
@@ -8,6 +9,7 @@ defineSlots<{
 }>()
 
 const appStore = useAppStore()
+const route = useRoute()
 
 // 侧边栏折叠状态同步
 const sidebarCollapsed = ref(localStorage.getItem('sidebar-collapsed') === 'true')
@@ -38,7 +40,11 @@ onMounted(() => {
       :class="sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-56'"
     >
       <main class="px-4 py-6 mx-auto w-full">
-        <slot />
+        <Transition name="page" mode="out-in">
+          <div :key="route.path">
+            <slot />
+          </div>
+        </Transition>
       </main>
       <footer
         class="text-center text-xs text-gray-400 py-4 border-t border-gray-200 flex flex-wrap items-center justify-center gap-x-6 gap-y-1"
@@ -59,3 +65,16 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.page-enter-active {
+  transition: opacity 0.15s ease;
+}
+.page-leave-active {
+  transition: opacity 0.1s ease;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+</style>
