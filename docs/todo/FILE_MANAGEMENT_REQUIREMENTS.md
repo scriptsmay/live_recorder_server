@@ -20,7 +20,7 @@
 
 ## 目标
 
-1. 提供统一的文件管理页面，覆盖直播录制、HLS、回放、弹幕压制输出和孤儿文件。
+1. 提供统一的文件管理页面，覆盖直播录制、HLS、回放和弹幕压制输出。孤儿文件管理放到第二阶段，依赖文件索引表实现。
 2. 支持按业务对象删除指定文件，例如某个录制分段、某条回放的原始文件/切片、某个弹幕压制成品。
 3. 删除前展示文件大小、路径、引用关系、风险提示和预计释放空间。
 4. 删除后同步更新数据库状态，避免文件系统和前端状态不一致。
@@ -65,7 +65,7 @@
   - `直播录制`
   - `回放文件`
   - `弹幕压制`
-  - `孤儿文件`
+  - `孤儿文件`（第二阶段）
   - `清理规则`
 - 文件表格
   - 文件名
@@ -84,8 +84,8 @@
 
 用户可以按以下条件筛选：
 
-- 文件分类：直播录制、HLS、回放原始文件、回放切片、弹幕压制、弹幕数据、孤儿文件
-- 业务状态：录制中、已完成、已投稿、已备份、缺失、孤儿
+- 文件分类：直播录制、HLS、HLS 目录、回放原始文件、回放切片、弹幕压制、弹幕数据、孤儿文件（第二阶段）
+- 业务状态：录制中、已完成、已投稿、已备份、缺失、孤儿（第二阶段）
 - 主播/房间
 - 会话 ID
 - 回放 ID
@@ -143,6 +143,8 @@
 
 用户确认后才执行真实删除。
 
+批量删除必须异步执行。确认后后端创建删除任务并立即返回 `task_id`，真实删除由 Redis 队列或后台 worker 执行，前端通过轮询或 WebSocket 展示进度。单文件删除可以同步执行，但仍必须在执行前重新校验安全规则。
+
 ### 清理规则
 
 第一版建议支持手动触发，不先做自动定时清理：
@@ -172,6 +174,8 @@
 6. 不属于 `recording_sessions.status = 'recording'` 的会话。
 7. 不属于 Redis 队列中的待处理任务。
 8. 对应业务记录已完成、失败、取消、已投稿或已备份。
+
+`delete-plan` 的校验结果只能作为前端确认依据，不能作为执行时的最终依据。`POST /api/files/delete` 开始执行每个文件前，后端必须重新读取数据库、Redis 队列、进程/打开文件状态和磁盘 `stat`，重新跑完整安全规则，避免 dry-run 与实际删除之间的时间差导致 TOCTOU 风险。
 
 风险较高但可手动强制删除的情况：
 
@@ -225,6 +229,7 @@
 - `start_date`
 - `end_date`
 - `safe_to_delete`
+- `is_orphan`（第二阶段，依赖 `managed_files` 索引）
 - `page`
 - `limit`
 - `sort`
@@ -270,7 +275,7 @@
 
 ### POST `/api/files/delete`
 
-执行删除计划。
+提交删除计划，创建异步删除任务。
 
 请求必须携带 `plan_id`，避免前端确认和后端执行使用不同条件。
 
@@ -281,21 +286,55 @@
 }
 ```
 
+响应：
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "task_id": "task_del_20260623_xyz",
+    "status": "processing"
+  }
+}
+```
+
+后端执行任务时必须重新校验 `plan_id` 中每个文件的最新安全状态。校验失败的文件标记为 `blocked`，不影响同批次其他文件继续执行。
+
+### GET `/api/files/delete-tasks/:taskId`
+
+查询删除任务进度。
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "task_id": "task_del_20260623_xyz",
+    "status": "processing",
+    "total_count": 120,
+    "deleted_count": 80,
+    "blocked_count": 2,
+    "failed_count": 1,
+    "released_size": 8589934592
+  }
+}
+```
+
 ### POST `/api/files/scan`
 
-重新扫描业务目录，刷新文件索引和缺失状态。应复用现有文件扫描能力，但扩展到 replay 和 danmaku output。
+第一阶段只扫描数据库已知路径，刷新存在性和缺失状态，不主动遍历业务根目录寻找孤儿文件。第二阶段引入 `managed_files` 后，再扩展为增量索引扫描，并支持孤儿文件发现。
 
 ## 数据模型建议
 
-第一版可以不立即新增全量文件索引表，先组合以下来源生成列表：
+第一版不立即新增全量文件索引表，先组合以下数据库已知来源生成列表：
 
 - `recording_files`
 - `recording_sessions`
 - `replay_records`
 - `danmaku_burn_records`
-- 文件系统扫描结果
 
-但为了支持分页、审计和高效筛选，建议新增两张表。
+第一版不做全盘目录遍历，也不展示磁盘有但数据库没有的孤儿文件。否则在 NAS 文件量较大时，实时计算孤儿文件会造成明显 I/O 压力。
+
+第二阶段为了支持分页、审计、孤儿文件和高效筛选，建议新增三张表。
 
 ### `managed_files`
 
@@ -305,8 +344,10 @@
 
 - `id`
 - `category`
+- `file_type`
 - `source_table`
 - `source_id`
+- `group_id`
 - `file_path`
 - `file_name`
 - `extension`
@@ -322,6 +363,18 @@
 
 `file_path` 需要唯一索引。
 
+`file_type` 建议包含：
+
+- `recording_file`
+- `hls_directory`
+- `replay_raw`
+- `replay_final`
+- `danmaku_output`
+- `danmaku_source`
+- `orphan`
+
+HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m3u8` 和 `segment_*.ts` 的目录，删除时按目录级对象执行，避免用户只删除 playlist 或只删除部分 segment。执行层面应按目录任务处理并删除整个切片文件夹，避免对大量 segment 逐个暴露前端操作。
+
 ### `file_delete_audit_logs`
 
 记录删除审计。
@@ -332,7 +385,11 @@
 - `file_id`
 - `file_path`
 - `file_size`
+- `link_count`
+- `estimated_release_size`
+- `actual_release_size`
 - `category`
+- `file_type`
 - `source_table`
 - `source_id`
 - `operator`
@@ -340,6 +397,27 @@
 - `result`
 - `error_message`
 - `created_at`
+
+### `file_delete_tasks`
+
+记录异步删除任务。
+
+字段建议：
+
+- `id`
+- `task_id`
+- `plan_id`
+- `status`
+- `total_count`
+- `deleted_count`
+- `blocked_count`
+- `failed_count`
+- `estimated_release_size`
+- `actual_release_size`
+- `operator`
+- `created_at`
+- `updated_at`
+- `completed_at`
 
 ## 状态同步规则
 
@@ -412,13 +490,16 @@
 5. 删除直播录制文件时同步更新 `recording_files.status = 'deleted'`。
 6. 删除回放/弹幕文件时写审计日志并在列表中显示缺失。
 7. 禁止删除活跃任务文件。
+8. 批量删除使用异步任务，前端展示删除进度。
+9. 只处理数据库已知文件，不展示孤儿文件。
 
 第二阶段：
 
 1. 增加清理规则页面。
 2. 增加 `managed_files` 索引表。
-3. 增加按主播/会话/回放聚合的删除计划。
-4. 增加定时扫描和清理建议通知。
+3. 增加孤儿文件扫描和 `is_orphan` 筛选。
+4. 增加按主播/会话/回放/HLS 目录聚合的删除计划。
+5. 增加定时扫描和清理建议通知。
 
 第三阶段：
 
@@ -433,18 +514,21 @@
 - 用户可以删除指定文件，无需登录 NAS。
 - 删除前能看到预计释放空间和风险说明。
 - 正在录制、下载、转码、压制、投稿的文件无法删除。
+- 执行删除时会重新校验安全规则，不信任 dry-run 的历史状态。
 - 删除后刷新页面，文件状态与磁盘一致。
 - 删除直播录制文件后，`recording_files` 状态正确变为 `deleted`。
-- 批量删除支持 dry-run，且 dry-run 与执行结果可追踪。
+- 批量删除支持 dry-run 和异步执行，且 dry-run、任务进度与执行结果可追踪。
 - 所有删除动作都有审计记录。
 
 ## 实现注意事项
 
 - 不要直接信任前端传入的路径。
-- 删除前后都要 `stat` 文件，避免 TOCTOU 风险。
-- 批量删除要限制单次数量，避免长时间阻塞请求。
-- 大批量删除建议异步任务化，通过 Redis 队列执行。
+- 删除计划生成时要 `stat` 文件；真实删除执行前还要重新 `stat` 并重新校验安全规则，避免 TOCTOU 风险。
+- 批量删除要限制单次数量，避免单个任务过大。
+- 批量删除必须异步任务化，通过 Redis 队列执行，不在 HTTP 请求线程内逐个删除文件。
 - 文件扫描和删除都应避免跨 allowlist 根目录。
 - 对中文文件名和空格路径做端到端测试。
-- HLS 目录中 `.m3u8` 与 `segment_*.ts` 应作为一个可聚合对象展示，避免用户只删 playlist 或只删部分 segment。
+- HLS 目录中 `.m3u8` 与 `segment_*.ts` 应作为 `file_type = 'hls_directory'` 的聚合对象展示和删除，避免用户只删 playlist 或只删部分 segment。
 - 回放记录的 `final_file_paths` 是 JSON 字符串，解析失败时要降级展示原始文本并禁止自动删除。
+- 如果文件在磁盘上已经被手动删除，即 `stat` 失败，但数据库仍为激活状态，单文件删除接口应允许直接更新数据库状态为 `missing` 或 `deleted`，不要返回不可闭环的 404。
+- 计算预计释放空间时读取 `stat.nlink`。如果 `nlink > 1`，说明可能存在硬链接，删除当前路径未必释放等同于文件大小的空间，前端和审计日志都要提示 `actual_release_size` 可能小于 `file_size`。
