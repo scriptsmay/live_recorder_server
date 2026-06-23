@@ -120,7 +120,12 @@ const routes: RouteRecordRaw[] = [
     redirect: '/upload-records',
   },
   {
-    path: '/settings',
+    path: '/files',
+    name: 'Files',
+    component: () => import('@/views/Files.vue'),
+    meta: { title: '文件管理' },
+  },
+  {
     name: 'Settings',
     component: () => import('@/views/Settings.vue'),
     meta: { title: '设置' },
