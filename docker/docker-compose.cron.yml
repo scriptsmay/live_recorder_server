@@ -8,12 +8,15 @@
 #     docker compose -f docker-compose.cron.yml up -d
 services:
   replay_cron:
-    image: postgres:17.5-alpine
+    image: ${REPLAY_CRON_IMAGE:-ghcr.io/scriptsmay/live_recorder_server-replay-cron:latest}
     container_name: replay_cron
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_BASE: http://live_recorder_server:1123
       CRON_API_TOKEN: ${CRON_API_TOKEN:-}
+      # Redis 事件监听
+      REDIS_URL: ${REDIS_URL:-}
+      REDIS_PUBLISH_CHANNEL: ${REDIS_PUBLISH_CHANNEL:-task:completed}
       # 回放定时任务
       REPLAY_CRON_EXPR: ${REPLAY_CRON_EXPR:-0 3 * * *}
       REPLAY_CRON_ENABLED: ${REPLAY_CRON_ENABLED:-false}
@@ -32,10 +35,6 @@ services:
     command:
       - -c
       - |
-        if ! command -v curl >/dev/null 2>&1; then
-          apk add --no-cache curl
-        fi
-
         CRONTAB_FILE=/tmp/crontab
 
         if [ "$$REPLAY_CRON_ENABLED" = "true" ]; then
@@ -52,15 +51,61 @@ services:
           echo "[sync-cron] 已禁用（SYNC_CRON_ENABLED=$$SYNC_CRON_ENABLED）"
         fi
 
-        if [ ! -f $$CRONTAB_FILE ]; then
-          echo "[cron] 无启用的定时任务，退出"
+        REDIS_LISTENER_PID=
+        if [ -n "$$REDIS_URL" ]; then
+          echo "[redis-listener] 启用，监听 channel: $$REDIS_PUBLISH_CHANNEL"
+          echo "[redis-listener] REDIS_URL 已配置（凭据隐藏）"
+
+          (
+            while true; do
+              echo "[redis-listener] 连接 Redis URL（已隐藏凭据），channel: $$REDIS_PUBLISH_CHANNEL ..."
+
+              redis-cli --no-auth-warning -u "$$REDIS_URL" subscribe "$$REDIS_PUBLISH_CHANNEL" | while read -r line; do
+                if echo "$$line" | grep -q "message"; then
+                  echo "[redis-listener] 收到任务完成通知，触发同步..."
+                  /sync-records.sh >> /proc/1/fd/1 2>&1 || true
+                fi
+              done
+
+              echo "[redis-listener] Redis 连接断开，5秒后重试..."
+              sleep 5
+            done
+          ) &
+          REDIS_LISTENER_PID=$!
+          echo "[redis-listener] 已启动，PID: $$REDIS_LISTENER_PID"
+        else
+          echo "[redis-listener] 未配置 REDIS_URL，已禁用"
+        fi
+
+        cleanup() {
+          echo "[cron] 收到退出信号，清理..."
+          if [ -n "$$REDIS_LISTENER_PID" ]; then
+            kill $$REDIS_LISTENER_PID 2>/dev/null || true
+          fi
+          exit 0
+        }
+        trap cleanup TERM INT
+
+        if [ ! -f $$CRONTAB_FILE ] && [ -z "$$REDIS_LISTENER_PID" ]; then
+          echo "[cron] 无启用的定时任务且 Redis 监听未启用，退出"
           exit 0
         fi
 
-        crontab $$CRONTAB_FILE
-        echo "[cron] 当前 crontab:"
-        crontab -l
-        crond -f -l 2
+        if [ -f $$CRONTAB_FILE ]; then
+          crontab $$CRONTAB_FILE
+          echo "[cron] 当前 crontab:"
+          crontab -l
+          if [ -n "$$REDIS_LISTENER_PID" ]; then
+            crond -l 2
+          else
+            crond -f -l 2
+          fi
+        fi
+
+        if [ -n "$$REDIS_LISTENER_PID" ]; then
+          echo "[cron] 服务已启动，等待任务..."
+          wait $$REDIS_LISTENER_PID 2>/dev/null || true
+        fi
     restart: unless-stopped
     depends_on:
       - live_recorder_server

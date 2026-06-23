@@ -7,6 +7,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Hls from 'hls.js'
 import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
@@ -46,18 +47,6 @@ const playerSrc = ref('')
 const playerTitle = ref('视频播放')
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hlsPlayer: Hls | null = null
-function formatBytes(bytes: number) {
-  if (!bytes) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let val = bytes
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024
-    i++
-  }
-  return val.toFixed(1) + ' ' + units[i]
-}
-
 const currentRoomFilter = computed(() => (route.query.room_url as string) || '')
 
 async function loadData() {

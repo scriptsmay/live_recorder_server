@@ -7,6 +7,7 @@ import {
 } from '@/stores/danmaku-toolbox'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
+import { formatBytes } from '@/utils/lib'
 
 const props = defineProps<{
   sessionId: number
@@ -57,11 +58,6 @@ async function loadData() {
   } finally {
     loading.value = false
   }
-}
-
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return '—'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 function getFileName(filePath: string | null): string {
@@ -155,7 +151,7 @@ function handlePlayBurn(burnId: number) {
               >
             </td>
             <td class="px-3 py-2 text-gray-500">
-              {{ formatFileSize(file.file_size) }}
+              {{ formatBytes(file.file_size) }}
             </td>
             <td class="px-3 py-2">
               <span

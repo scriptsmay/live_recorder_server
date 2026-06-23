@@ -1,0 +1,5 @@
+FROM postgres:17.5-alpine
+
+RUN apk add --no-cache curl redis
+
+ENTRYPOINT ["/bin/sh"]

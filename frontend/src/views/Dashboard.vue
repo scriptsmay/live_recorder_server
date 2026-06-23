@@ -12,6 +12,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import { useAppStore } from '@/stores/app'
 import { apiGet } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import type {
   DashboardDanmaku,
   DashboardPolling,
@@ -187,19 +188,6 @@ function formatDuration(d: string | null | undefined): string {
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   return h + ' 时 ' + m + ' 分'
-}
-
-function formatBytes(bytes: number | string | null | undefined) {
-  const n = Number(bytes)
-  if (!Number.isFinite(n) || n <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = n
-  let unitIndex = 0
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
 function statusText(value: boolean | null) {

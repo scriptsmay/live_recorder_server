@@ -60,8 +60,15 @@ docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
 COMPOSE_NETWORK_NAME=external-network
 ```
 
-`replay_cron` 使用 `postgres:17.5-alpine` 以便 `sync-records.sh` 调用
-`psql`，启动时会安装 `curl` 供 `replay-cron.sh` 调用后端 API 和通知转发接口。
+`replay_cron` 使用专用镜像
+`ghcr.io/scriptsmay/live_recorder_server-replay-cron:latest`，基于
+`postgres:17.5-alpine` 并预装 `curl` 与 `redis-cli`，避免容器每次重建时运行
+`apk add`。如生产环境通过内部镜像源拉取，可覆盖：
+
+```env
+REPLAY_CRON_IMAGE=<internal-registry>/scriptsmay/live_recorder_server-replay-cron:latest
+```
+
 两个 cron 脚本都会通过 `/api/notify/feishu_webhook` 发送执行结果通知；
 `replay-cron.sh` 通知回放同步与入队统计，`sync-records.sh` 通知本地导出、
 远端暂存导入和 upsert 写入数量。

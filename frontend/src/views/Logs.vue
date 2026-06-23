@@ -15,6 +15,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiGet, apiDelete, ApiError } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 
@@ -45,18 +46,6 @@ const logPanelRef = ref<HTMLElement | null>(null)
 let eventSource: EventSource | null = null
 
 // ---- 工具函数 ----
-function formatBytes(bytes: number) {
-  if (!bytes) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let val = bytes
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024
-    i++
-  }
-  return val.toFixed(1) + ' ' + units[i]
-}
-
 function scrollToBottom() {
   if (autoScroll.value && logPanelRef.value) {
     logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight

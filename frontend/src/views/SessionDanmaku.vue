@@ -9,6 +9,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiGet, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
+import { formatBytes } from '@/utils/lib'
 
 const route = useRoute()
 const toast = useToast()
@@ -114,11 +115,6 @@ const roomDisplayName = computed(() => {
 })
 
 // ---- Helpers ----
-function formatFileSize(bytes: number | null) {
-  if (!bytes) return '-'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-}
-
 function formatMs(ms: number | null | undefined) {
   if (ms == null) return '-'
   return (ms / 1000).toFixed(0) + 's'
@@ -409,7 +405,7 @@ onMounted(() => {
               >
                 <td class="px-3 py-2 text-gray-600">{{ f.id }}</td>
                 <td class="px-3 py-2 text-gray-600">{{ fileName(f.file_path) }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ formatFileSize(f.file_size) }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ formatBytes(f.file_size) }}</td>
                 <td class="px-3 py-2 text-gray-500">
                   {{ formatSegmentTime(f.segment_start_ms, f.segment_end_ms) }}
                 </td>

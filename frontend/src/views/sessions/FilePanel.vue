@@ -8,6 +8,7 @@
 import { ref, watch } from 'vue'
 import Hls from 'hls.js'
 import { apiGet, ApiError } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import type { RecordingFile } from '@/types/api'
 
@@ -62,19 +63,6 @@ watch(
     }
   },
 )
-
-function formatBytes(bytes: number | string | null | undefined) {
-  const n = Number(bytes)
-  if (!n || !isFinite(n)) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let val = n
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024
-    i++
-  }
-  return val.toFixed(1) + ' ' + units[i]
-}
 
 const fileStatusBadge = (status: string) => {
   switch (status) {

@@ -7,6 +7,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { apiGet } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import FilePanel from './FilePanel.vue'
 import type { RecordingSession, UploadRecord, UploadTemplate } from '@/types/api'
@@ -114,19 +115,6 @@ const uploadBadgeCls = (status: string) => {
 }
 
 // ---- Helpers ----
-
-function formatBytes(bytes: number | string | null | undefined) {
-  const n = Number(bytes)
-  if (!n || !isFinite(n)) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let val = n
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024
-    i++
-  }
-  return val.toFixed(1) + ' ' + units[i]
-}
 
 // 统一的成功提示函数（可以对接你上一问的 Bootstrap Toast）
 function handleCopySuccess(text: string) {

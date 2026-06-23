@@ -251,10 +251,14 @@ class ReplayProcessQueue {
         }
         current = await ReplayService.updateRecordStatus(current.id, 'downloaded', downloadFields);
         writeLog(logStream, `步骤完成: download file=${result.rawFilePath}`);
+        let fileSizeMb = result.fileSize;
+        if (fileSize > 0) {
+          fileSizeMb = ((fileSize || 0) / 1024 / 1024).toFixed(1);
+        }
         this.notifyPipelineComplete(
           current,
           'download',
-          { status: 'downloaded', raw_file_path: result.rawFilePath, file_size: result.fileSize },
+          { status: 'downloaded', raw_file_path: result.rawFilePath, file_size: fileSizeMb },
           logStream
         );
       } else if (step === 'cut') {
