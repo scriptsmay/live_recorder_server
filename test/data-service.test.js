@@ -6,6 +6,42 @@ jest.mock('../server/db/index', () => ({
   query: jest.fn(),
 }));
 
+describe('DataService.getSessions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('列表查询不读取弹幕 JSONL 文件计数', async () => {
+    const readFileSpy = jest.spyOn(fs.promises, 'readFile');
+    const existsSpy = jest.spyOn(fs, 'existsSync');
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 22,
+            danmaku_event_count: 9565,
+            danmaku_raw_path: '/tmp/session-22/danmaku/danmaku.jsonl',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ count: '1' }],
+      });
+
+    const { rows, total } = await DataService.getSessions({ page: 1, limit: 50 });
+
+    expect(rows[0].danmaku_event_count).toBe(9565);
+    expect(total).toBe(1);
+    expect(readFileSpy).not.toHaveBeenCalled();
+    expect(existsSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('DataService.getRecordingFiles', () => {
   beforeEach(() => {
     jest.clearAllMocks();

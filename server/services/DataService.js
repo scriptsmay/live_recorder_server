@@ -288,21 +288,6 @@ class DataService {
 
     const result = await pool.query(sql, params);
 
-    // 从 JSONL 文件修正弹幕条数（DB 中的 event_count 可能在服务重启后失准）
-    await Promise.all(
-      result.rows.map((row) => {
-        if (row.danmaku_raw_path && fs.existsSync(row.danmaku_raw_path)) {
-          return fs.promises
-            .readFile(row.danmaku_raw_path, 'utf-8')
-            .then((content) => {
-              row.danmaku_event_count = content.split('\n').filter(Boolean).length;
-            })
-            .catch(() => {});
-        }
-        return Promise.resolve();
-      })
-    );
-
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url ${where}`,
       params.slice(0, params.length - (page ? 2 : 1))
