@@ -12,6 +12,7 @@ const settingsRouter = require('./settings');
 const transcodeRouter = require('./transcode');
 const danmakuRouter = require('./danmaku');
 const replayRouter = require('./replay');
+const fileManageRouter = require('./file-manage');
 const { requireAuth } = require('../middleware/require-auth');
 
 const CRON_AUTH_PATHS = new Set([
@@ -59,6 +60,7 @@ function createRoutes() {
   router.use('/api', transcodeRouter);
   router.use('/api', danmakuRouter);
   router.use('/api', replayRouter);
+  router.use('/api', fileManageRouter);
   // Vue SPA 路由（静态资源 + history 模式回退）
   router.use(spaRouter);
 
