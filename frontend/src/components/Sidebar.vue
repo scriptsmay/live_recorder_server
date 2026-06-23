@@ -336,7 +336,7 @@ function hideTooltip() {
     </nav>
 
     <!-- 底部 -->
-    <div class="border-t border-gray-700 px-4 py-3 shrink-0">
+    <div class="border-t border-gray-700 px-4 py-3 shrink-0 overflow-visible relative z-10">
       <div v-if="!collapsed" class="flex items-center justify-between">
         <UserMenu />
         <span class="text-xs text-gray-500">v{{ appStore.appVersion || '—' }}</span>

@@ -23,7 +23,7 @@ async function goSettings() {
       {{ auth.user.username }}
     </summary>
     <div
-      class="absolute right-0 top-full mt-2 w-40 rounded-lg border border-gray-700 bg-gray-800 py-2 shadow-xl"
+      class="absolute right-0 bottom-full mb-2 w-40 rounded-lg border border-gray-700 bg-gray-800 py-2 shadow-xl"
     >
       <div class="px-4 py-2 text-xs text-gray-400">当前用户</div>
       <div class="px-4 pb-2 text-sm text-white truncate">{{ auth.user.username }}</div>
