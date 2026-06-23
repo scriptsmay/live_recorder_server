@@ -202,7 +202,7 @@ function handleRefreshAll() {
       </div>
       <div class="flex items-center gap-2">
         <router-link
-          to="/danmaku-toolbox/free-burn"
+          to="/danmaku-free-burn"
           class="px-3 py-1.5 text-sm font-medium rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
         >
           自由压制

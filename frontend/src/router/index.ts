@@ -56,7 +56,7 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '弹幕工具箱' },
   },
   {
-    path: '/danmaku-toolbox/free-burn',
+    path: '/danmaku-free-burn',
     name: 'FreeBurn',
     component: () => import('@/views/FreeBurnPage.vue'),
     meta: { title: '自由压制' },
