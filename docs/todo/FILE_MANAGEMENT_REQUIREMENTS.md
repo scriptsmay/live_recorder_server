@@ -7,6 +7,7 @@
 - 直播录制：`VIDEO_DOWNLOAD_DIR`，生产挂载为 `/data/video_downloads`
 - 回放下载：`REPLAY_OUTPUT_DIR`，生产挂载为 `/data/replay`
 - 弹幕压制输出：`DANMAKU_OUTPUT_DIR`，生产挂载为 `/data/danmaku_output`
+- 弹幕数据归档：建议新增 `DANMAKU_ARCHIVE_DIR`，生产默认 `/data/danmaku_archive`
 
 这些目录在 NAS 上对应 `/srv/nas-data/videos/live_records/*`。直播录制、HLS 分片、回放切片、弹幕压制产物都会产生大文件。当前前端只能查看录制、回放、转码、弹幕压制等业务记录，缺少统一的文件管理入口。用户如果要释放空间，只能直接登录 NAS 删除文件，这会带来几个问题：
 
@@ -18,14 +19,27 @@
 
 目标是新增一个文件管理模块，让用户在 Web UI 内安全查看、筛选、删除和清理视频文件，并保持数据库记录与磁盘状态一致。
 
+### 弹幕数据的特殊性
+
+弹幕原始数据和视频文件的保留策略不同。视频、HLS、回放中间文件和弹幕压制 MP4 都是大文件，适合纳入空间释放和保留期清理；但 `danmaku.jsonl` 是体积较小的文本数据，具备长期检索、回看上下文、重新生成 ASS、重新压制和后续数据分析价值。
+
+因此弹幕文件需要拆分为三类：
+
+- **原始弹幕 JSONL**：权威源数据，应长期保存，默认不跟随视频清理。
+- **ASS 字幕文件**：可由 JSONL 和分段时间重新生成，属于派生缓存。
+- **弹幕压制视频**：大文件产物，属于可清理对象。
+
+当前实现把 `danmaku.jsonl` 放在 `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/` 下，路径语义更像录制会话附件。如果后续文件管理按会话目录清理视频，很容易误删原始弹幕归档。因此长期方案应将原始 JSONL 从视频工作目录中解耦出来。
+
 ## 目标
 
-1. 提供统一的文件管理页面，覆盖直播录制、HLS、回放和弹幕压制输出。孤儿文件管理放到第二阶段，依赖文件索引表实现。
+1. 提供统一的文件管理页面，覆盖直播录制、HLS、回放、弹幕压制输出和弹幕数据归档。孤儿文件管理放到第二阶段，依赖文件索引表实现。
 2. 支持按业务对象删除指定文件，例如某个录制分段、某条回放的原始文件/切片、某个弹幕压制成品。
 3. 删除前展示文件大小、路径、引用关系、风险提示和预计释放空间。
 4. 删除后同步更新数据库状态，避免文件系统和前端状态不一致。
 5. 支持批量清理已完成、已投稿、已备份或超过保留期的文件。
 6. 对所有删除动作做路径安全校验、任务状态校验和审计记录。
+7. 将弹幕原始 JSONL 作为长期归档数据保护，默认不参与空间清理；删除视频时默认保留弹幕归档。
 
 ## 非目标
 
@@ -40,12 +54,46 @@
 
 | 分类 | 容器路径 | 主要来源 |
 | --- | --- | --- |
-| 直播录制 | `VIDEO_DOWNLOAD_DIR` | FFmpeg 录制、HLS 生成、弹幕 JSONL/ASS |
+| 直播录制 | `VIDEO_DOWNLOAD_DIR` | FFmpeg 录制、HLS 生成、弹幕 ASS 缓存 |
 | 回放文件 | `REPLAY_OUTPUT_DIR` | 回放下载、切片、修复、投稿 |
 | 弹幕压制 | `DANMAKU_OUTPUT_DIR` | 手动触发的弹幕压制成品 |
+| 弹幕归档 | `DANMAKU_ARCHIVE_DIR` | 长期保存的原始 JSONL、可选元数据索引 |
 | biliup 工作文件 | `BILIUP_WORK_DIR` 下项目专属目录 | 投稿缓存、cookies、临时配置 |
 
 所有删除接口必须将真实路径解析为 absolute path，并确认它位于 allowlist 根目录内。符号链接、`..` 路径穿越、空路径和根目录删除必须拒绝。
+
+### 弹幕路径建议
+
+建议新增环境变量：
+
+```text
+DANMAKU_ARCHIVE_DIR=/data/danmaku_archive
+```
+
+推荐目录结构：
+
+```text
+/data/danmaku_archive/
+└── kuaishou/
+    └── {room_id}/
+        └── {session_id}/
+            ├── danmaku.jsonl
+            └── metadata.json
+```
+
+路径职责：
+
+- `DANMAKU_ARCHIVE_DIR/.../danmaku.jsonl`：长期保存的原始弹幕数据，`danmaku_capture_records.raw_path` 指向这里。
+- `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/segments/*.ass`：分段 ASS 缓存，可删除、可重建。
+- `DANMAKU_OUTPUT_DIR/.../*.mp4`：弹幕压制视频产物，可按保留期清理。
+
+迁移策略：
+
+1. 新录制会话直接将 `danmaku.jsonl` 写入 `DANMAKU_ARCHIVE_DIR`。
+2. 会话目录内可保留 `danmaku/segments/*.ass`，因为 ASS 与具体视频分段强相关。
+3. 历史数据迁移时，扫描 `recording_sessions.output_dir/danmaku/danmaku.jsonl` 和旧路径 `output_dir/danmaku.jsonl`，复制到归档目录并更新 `danmaku_capture_records.raw_path`。
+4. 初期不要移动删除旧 JSONL，先复制并记录校验结果；确认搜索和压制都改用 `raw_path` 后，再考虑清理旧副本。
+5. `GET /api/danmaku/search`、自由压制和 ASS 生成应优先读取 `danmaku_capture_records.raw_path`，只在历史记录缺失时 fallback 到会话目录。
 
 ## 信息架构
 
@@ -59,12 +107,14 @@
   - `/data/video_downloads` 占用
   - `/data/replay` 占用
   - `/data/danmaku_output` 占用
+  - `/data/danmaku_archive` 占用
   - 总占用与预计可清理空间
 - 标签页
   - `全部文件`
   - `直播录制`
   - `回放文件`
   - `弹幕压制`
+  - `弹幕归档`
   - `孤儿文件`（第二阶段）
   - `清理规则`
 - 文件表格
@@ -84,7 +134,7 @@
 
 用户可以按以下条件筛选：
 
-- 文件分类：直播录制、HLS、HLS 目录、回放原始文件、回放切片、弹幕压制、弹幕数据、孤儿文件（第二阶段）
+- 文件分类：直播录制、HLS、HLS 目录、回放原始文件、回放切片、弹幕压制、弹幕归档、弹幕 ASS 缓存、孤儿文件（第二阶段）
 - 业务状态：录制中、已完成、已投稿、已备份、缺失、孤儿（第二阶段）
 - 主播/房间
 - 会话 ID
@@ -152,8 +202,11 @@
 - 删除超过 N 天的 HLS 分片。
 - 删除超过 N 天且已投稿的直播录制原始文件。
 - 删除超过 N 天且已完成的弹幕压制输出。
+- 删除超过 N 天的弹幕 ASS 缓存（可重建）。
 - 删除超过 N 天且已投稿/已完成的回放中间文件。
 - 标记数据库中已缺失的文件。
+
+弹幕原始 JSONL 默认不提供自动清理规则。后续如确实需要，可单独增加“弹幕归档保留策略”，并要求显式开启。
 
 后续再增加自动清理：
 
@@ -181,7 +234,8 @@
 
 - 已完成但未投稿的直播录制文件。
 - 已完成但未备份的回放成品。
-- 弹幕 JSONL/ASS 文件。
+- 弹幕 ASS 缓存文件。
+- 弹幕原始 JSONL 归档文件（默认隐藏删除入口；必须在详情页显式强制删除）。
 
 禁止删除的情况：
 
@@ -189,6 +243,7 @@
 - 转码/压制/回放下载正在处理的输入或输出文件。
 - allowlist 根目录本身。
 - 不在业务目录下的任意文件。
+- 清理视频会话目录时，禁止隐式删除 `DANMAKU_ARCHIVE_DIR` 中的原始 JSONL。
 
 ## 后端 API 设计
 
@@ -331,6 +386,7 @@
 - `recording_sessions`
 - `replay_records`
 - `danmaku_burn_records`
+- `danmaku_capture_records`
 
 第一版不做全盘目录遍历，也不展示磁盘有但数据库没有的孤儿文件。否则在 NAS 文件量较大时，实时计算孤儿文件会造成明显 I/O 压力。
 
@@ -370,7 +426,8 @@
 - `replay_raw`
 - `replay_final`
 - `danmaku_output`
-- `danmaku_source`
+- `danmaku_archive`
+- `danmaku_ass_cache`
 - `orphan`
 
 HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m3u8` 和 `segment_*.ts` 的目录，删除时按目录级对象执行，避免用户只删除 playlist 或只删除部分 segment。执行层面应按目录任务处理并删除整个切片文件夹，避免对大量 segment 逐个暴露前端操作。
@@ -446,6 +503,16 @@ HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m
 - 增加文件缺失状态展示。
 - 如后续需要重压制，可继续使用原输入文件和 ASS 文件重新生成。
 
+### `danmaku_capture_records`
+
+弹幕采集记录是原始 JSONL 的主索引：
+
+- `raw_path` 应指向长期归档目录中的 `danmaku.jsonl`。
+- 搜索、ASS 生成、自由压制都应优先读取 `raw_path`。
+- 文件管理中将 `raw_path` 标记为 `danmaku_archive`，默认 `safe_to_delete=false`。
+- 删除录制视频、HLS、弹幕压制 MP4 时，不应修改 `raw_path`。
+- 若归档 JSONL 缺失，文件扫描应标记为 `missing` 并在弹幕工具箱中提示“弹幕归档缺失”。
+
 ## 前端状态
 
 文件操作需要覆盖以下状态：
@@ -484,14 +551,15 @@ HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m
 第一阶段只做最小可用版本：
 
 1. 新增 `/files` 页面。
-2. 展示 `downloads`、`replay`、`danmaku_output` 三类文件占用。
+2. 展示 `downloads`、`replay`、`danmaku_output`、`danmaku_archive` 四类文件占用。
 3. 支持按文件类型、大小、时间、业务类型筛选。
 4. 支持单文件删除和批量 dry-run。
 5. 删除直播录制文件时同步更新 `recording_files.status = 'deleted'`。
-6. 删除回放/弹幕文件时写审计日志并在列表中显示缺失。
-7. 禁止删除活跃任务文件。
-8. 批量删除使用异步任务，前端展示删除进度。
-9. 只处理数据库已知文件，不展示孤儿文件。
+6. 删除回放/弹幕压制输出/ASS 缓存时写审计日志并在列表中显示缺失。
+7. 弹幕原始 JSONL 作为归档数据展示但默认不可清理；删除视频会话目录时必须保留。
+8. 禁止删除活跃任务文件。
+9. 批量删除使用异步任务，前端展示删除进度。
+10. 只处理数据库已知文件，不展示孤儿文件。
 
 第二阶段：
 
@@ -500,6 +568,7 @@ HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m
 3. 增加孤儿文件扫描和 `is_orphan` 筛选。
 4. 增加按主播/会话/回放/HLS 目录聚合的删除计划。
 5. 增加定时扫描和清理建议通知。
+6. 增加历史弹幕 JSONL 复制到 `DANMAKU_ARCHIVE_DIR` 的迁移工具和校验报告。
 
 第三阶段：
 
