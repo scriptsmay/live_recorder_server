@@ -200,12 +200,20 @@ function handleRefreshAll() {
           弹幕压制管理：会话筛选、批量压制、状态监控、产物管理
         </p>
       </div>
-      <button
-        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-        @click="handleRefreshAll"
-      >
-        刷新
-      </button>
+      <div class="flex items-center gap-2">
+        <router-link
+          to="/danmaku-toolbox/free-burn"
+          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
+        >
+          自由压制
+        </router-link>
+        <button
+          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          @click="handleRefreshAll"
+        >
+          刷新
+        </button>
+      </div>
     </div>
 
     <!-- 增加一个提示区域 -->
