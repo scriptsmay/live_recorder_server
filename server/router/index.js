@@ -42,6 +42,8 @@ function createRoutes() {
       req.path === '/api/auth/login' ||
       req.path === '/api/auth/logout' ||
       req.path === '/api/auth/me' ||
+      req.path === '/api/notify/live_download' ||
+      req.path === '/api/notify/status' ||
       isCronAuthorized(req)
     ) {
       return next();
