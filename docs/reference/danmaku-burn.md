@@ -34,10 +34,24 @@ setpts=PTS-STARTPTS,fps=30,ass='path/to/segment.ass',format=yuv420p
 
 - 输入视频：`dev_downloads/2/22/test_video.mp4`
 - 分段 ASS：`dev_downloads/2/22/danmaku/segments/154.ass`
-- 输出视频：`dev_downloads/2/22/test_video_danmaku_stable.mp4`
+- 输出视频：`dev_downloads/2/22/test_video_danmaku_test_offset.mp4`
+
+可用测试脚本重新生成 ASS 并压制：
+
+```bash
+NODE_ENV=development node scripts/test-danmaku-burn-session.js 22 --normalize-start
+```
+
+常用参数：
+
+- `--normalize-start`：减去 JSONL 中首条 comment 的 `ts_ms`，适合测试数据整体偏移较大的场景。
+- `--offset-ms <ms>`：手动指定额外偏移，可与 `--normalize-start` 叠加。
+- `--segment-id <id>`：指定要压制的 `recording_files.id`，默认取会话第一个分段。
+- `--output <path>`：指定测试输出文件路径。
+- `--fps <24-60>`：指定压制输出帧率，默认 30。
 
 验证结果：
 
 - 输出为 1920x1080、30fps、`yuv420p`、60 秒。
 - FFmpeg 日志显示 libass 正常加载 ASS 文件和字体。
-- 55 秒截图确认弹幕可见。
+- `--normalize-start` 后，测试分段 ASS 从 14 条增加到 56 条，5 秒截图确认弹幕可见。
