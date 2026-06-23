@@ -420,6 +420,14 @@ class FileManageService {
       conditions.push(`mtime <= $${paramIdx}`);
       params.push(filters.end_date);
     }
+    // older_than_days: 计算为 end_date（mtime < N 天前）
+    if (filters.older_than_days) {
+      const days = parseInt(filters.older_than_days, 10);
+      if (!isNaN(days) && days > 0) {
+        paramIdx++;
+        conditions.push(`mtime <= NOW() - INTERVAL '${days} days'`);
+      }
+    }
     // group_id 用于按 session / principal 筛选
     if (filters.session_id) {
       paramIdx++;
@@ -503,7 +511,10 @@ class FileManageService {
     let files;
 
     if (input.file_ids && input.file_ids.length > 0) {
-      const ids = input.file_ids.slice(0, 200); // 硬上限
+      if (input.file_ids.length > 200) {
+        throw new Error('file_ids 模式单次最多 200 个文件');
+      }
+      const ids = input.file_ids;
       const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
       const { rows } = await pool.query(
         `SELECT * FROM managed_files WHERE id IN (${placeholders}) AND status NOT IN ('deleted', 'deleting')`,
@@ -511,9 +522,29 @@ class FileManageService {
       );
       files = rows;
     } else if (input.filters) {
-      // 复用 getFileList 的筛选逻辑，但不分页
-      const result = await this.getFileList(input.filters, { page: 1, limit: 200 });
-      files = result.data;
+      // 清理规则模式：不设 200 条上限，使用 getFileList 的分页机制遍历全部
+      // 先获取总数
+      const countResult = await this.getFileList(input.filters, { page: 1, limit: 1 });
+      const total = countResult.total;
+      if (total === 0) {
+        return {
+          plan_id: crypto.randomUUID(),
+          expires_at: new Date(Date.now() + DELETE_PLAN_TTL * 1000).toISOString(),
+          deletable_count: 0,
+          blocked_count: 0,
+          total_size: 0,
+          deletable: [],
+          blocked: [],
+        };
+      }
+      // 分批获取全部文件（每批 500）
+      files = [];
+      const batchSize = 500;
+      for (let p = 1; files.length < total; p++) {
+        const result = await this.getFileList(input.filters, { page: p, limit: batchSize });
+        files.push(...result.data);
+        if (result.data.length < batchSize) break;
+      }
     } else {
       throw new Error('必须提供 file_ids 或 filters');
     }
@@ -712,10 +743,15 @@ class FileManageService {
       // 标记为 deleting
       await pool.query(`UPDATE managed_files SET status = 'deleting', updated_at = NOW() WHERE id = $1`, [file_id]);
 
-      // unlink 文件
+      // unlink 文件（目录使用递归删除）
       let unlinkResult;
       try {
-        await fs.promises.unlink(file_path);
+        const stat = await fs.promises.stat(file_path);
+        if (stat.isDirectory()) {
+          await fs.promises.rm(file_path, { recursive: true, force: true });
+        } else {
+          await fs.promises.unlink(file_path);
+        }
         unlinkResult = 'success';
         result.actual_release_size = Number(file_size || 0);
       } catch (err) {

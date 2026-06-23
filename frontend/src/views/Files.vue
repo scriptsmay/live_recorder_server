@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useFileStore } from '@/stores/file-manage'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import FileSummary from '@/components/Files/FileSummary.vue'
 import FileTable from '@/components/Files/FileTable.vue'
 import FileDetailDrawer from '@/components/Files/FileDetailDrawer.vue'
-import type { ManagedFile, FileCategory, DeleteTaskStatus } from '@/types/file-manage'
+import CleanupRules from '@/components/Files/CleanupRules.vue'
+import type { ManagedFile, DeleteTaskStatus } from '@/types/file-manage'
 
 const fileStore = useFileStore()
 const toast = useToast()
@@ -27,6 +28,7 @@ const tabs = [
   { key: 'replay', label: '回放文件' },
   { key: 'danmaku', label: '弹幕压制' },
   { key: 'orphan', label: '孤儿文件' },
+  { key: 'cleanup', label: '清理规则' },
 ]
 
 // ---- 批量删除流程 ----
@@ -87,13 +89,10 @@ function handleCloseDetail() {
 
 // ---- 单文件删除 ----
 async function handleDeleteSingle(file: ManagedFile) {
-  const ok = await confirm({
-    title: '删除文件',
-    message: `确定删除文件 "${file.file_name}" (${formatBytes(file.file_size || 0)})？\n路径: ${file.file_path}\n\n此操作不可撤销。`,
-    confirmText: '删除',
-    cancelText: '取消',
-    danger: true,
-  })
+  const ok = await confirm(
+    `确定删除文件 "${file.file_name}" (${formatBytes(file.file_size || 0)})？\n路径: ${file.file_path}\n\n此操作不可撤销。`,
+    { title: '删除文件', confirmText: '删除', cancelText: '取消' },
+  )
   if (!ok) return
 
   const result = await fileStore.deleteSingleFile(file.id)
@@ -221,8 +220,8 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- 筛选条件栏 -->
-      <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+      <!-- 筛选条件栏（非清理规则标签页时显示） -->
+      <div v-if="activeTab !== 'cleanup'" class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/50">
         <select
           v-model="filterStatus"
           class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
@@ -269,19 +268,26 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- 文件表格 -->
-      <FileTable
-        :files="fileStore.fileList"
-        :loading="fileStore.fileListLoading"
-        :selected-ids="selectedIds"
-        v-model:total="fileStore.fileListTotal"
-        v-model:page="fileStore.fileListPage"
-        v-model:limit="fileStore.fileListLimit"
-        @update:selected-ids="selectedIds = $event"
-        @row-click="handleRowClick"
-        @delete-single="handleDeleteSingle"
-        @page-change="handlePageChange"
-      />
+      <!-- 文件表格（非清理规则标签页时显示） -->
+      <div v-if="activeTab !== 'cleanup'">
+        <FileTable
+          :files="fileStore.fileList"
+          :loading="fileStore.fileListLoading"
+          :selected-ids="selectedIds"
+          v-model:total="fileStore.fileListTotal"
+          v-model:page="fileStore.fileListPage"
+          v-model:limit="fileStore.fileListLimit"
+          @update:selected-ids="selectedIds = $event"
+          @row-click="handleRowClick"
+          @delete-single="handleDeleteSingle"
+          @page-change="handlePageChange"
+        />
+      </div>
+
+      <!-- 清理规则（仅在清理规则标签页时显示） -->
+      <div v-else class="p-4">
+        <CleanupRules />
+      </div>
     </section>
 
     <!-- 文件详情抽屉 -->
