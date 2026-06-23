@@ -36,6 +36,7 @@ const pool = require('../server/db/index');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
+const REPLAY_WORK_DIR = process.env.REPLAY_WORK_DIR || path.join(__dirname, '..', 'dev_replay');
 const DEV_PORT = process.env.PORT || '3001';
 
 console.log('========================================');
@@ -44,6 +45,39 @@ console.log('========================================');
 console.log('⚠️  注意：本脚本只清理开发环境，不会影响 生产环境');
 console.log('----------------------------------------');
 console.log(`DOWNLOAD_DIR: ${DOWNLOAD_DIR} | PORT: ${DEV_PORT}`);
+
+function cleanupDir(dirPath) {
+  // 清空下载目录（开发环境）
+  if (fs.existsSync(dirPath)) {
+    console.log(`  └─ 清空下载目录 ${dirPath} ...`);
+    let fileCount = 0;
+    let dirCount = 0;
+    for (const f of fs.readdirSync(dirPath)) {
+      const fullPath = path.join(dirPath, f);
+      const stat = fs.statSync(fullPath);
+      // 修改后的删除目录逻辑
+      if (stat.isDirectory()) {
+        try {
+          // 增加 recursive 和 force 选项，并处理可能的锁定问题
+          fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          dirCount++;
+        } catch (err) {
+          console.error(`    ❌ 无法删除目录 ${fullPath}: ${err.message}`);
+        }
+      } else {
+        fs.unlinkSync(fullPath);
+        fileCount++;
+      }
+    }
+    if (fileCount > 0 || dirCount > 0) {
+      console.log(`    ✅ 删除 ${fileCount} 个文件, ${dirCount} 个目录`);
+    } else {
+      console.log('    ✅ 无待处理文件');
+    }
+  } else {
+    console.log(`    ⚠️  目录 ${dirPath} 不存在`);
+  }
+}
 
 async function cleanup() {
   console.log('\n[1/5] 清理开发环境进程...');
@@ -135,55 +169,11 @@ async function cleanup() {
   console.log('\n[3/5] 清理磁盘文件...');
 
   // 清空下载目录（开发环境）
-  if (fs.existsSync(DOWNLOAD_DIR)) {
-    console.log(`  └─ 清空下载目录 ${DOWNLOAD_DIR} ...`);
-    let fileCount = 0;
-    let dirCount = 0;
-    for (const f of fs.readdirSync(DOWNLOAD_DIR)) {
-      const fullPath = path.join(DOWNLOAD_DIR, f);
-      const stat = fs.statSync(fullPath);
-      // 修改后的删除目录逻辑
-      if (stat.isDirectory()) {
-        try {
-          // 增加 recursive 和 force 选项，并处理可能的锁定问题
-          fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-          dirCount++;
-        } catch (err) {
-          console.error(`    ❌ 无法删除目录 ${fullPath}: ${err.message}`);
-        }
-      } else {
-        fs.unlinkSync(fullPath);
-        fileCount++;
-      }
-    }
-    if (fileCount > 0 || dirCount > 0) {
-      console.log(`    ✅ 删除 ${fileCount} 个文件, ${dirCount} 个目录`);
-    } else {
-      console.log('    ✅ 无待处理文件');
-    }
-  } else {
-    console.log('    ⚠️  下载目录不存在');
-  }
-
+  cleanupDir(DOWNLOAD_DIR);
   // 清空日志目录（开发环境）
-  if (fs.existsSync(LOG_DIR)) {
-    console.log(`  └─ 清空日志目录 ${LOG_DIR} ...`);
-    let logFileCount = 0;
-    for (const f of fs.readdirSync(LOG_DIR)) {
-      const fullPath = path.join(LOG_DIR, f);
-      if (fs.statSync(fullPath).isFile()) {
-        fs.unlinkSync(fullPath);
-        logFileCount++;
-      }
-    }
-    if (logFileCount > 0) {
-      console.log(`    ✅ 删除 ${logFileCount} 个日志文件`);
-    } else {
-      console.log('    ✅ 无待处理日志文件');
-    }
-  } else {
-    console.log('    ⚠️  日志目录不存在');
-  }
+  cleanupDir(LOG_DIR);
+  // 清空 replay 工作目录
+  cleanupDir(REPLAY_WORK_DIR);
 
   console.log('\n[4/5] 清理数据库...');
 
@@ -302,7 +292,6 @@ async function cleanup() {
   console.log('========================================\n');
 
   console.log('💡 启动开发环境: npm run dev');
-  console.log('💡 查看生产状态: pm2 list');
   console.log('');
 
   process.exit(hasWarning ? 1 : 0);

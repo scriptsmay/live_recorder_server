@@ -35,6 +35,7 @@ dev_downloads/
 dev_biliup/
 danmaku_output/
 /replay/
+/dev_replay/
 
 test_downloads/
 test/tmp_*
