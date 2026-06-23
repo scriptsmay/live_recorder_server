@@ -72,7 +72,7 @@ onMounted(async () => {
   <div class="api-container flex max-w-7xl mx-auto gap-6">
     <!-- 目录侧边栏 -->
     <aside
-      class="toc-sidebar hidden lg:block w-64 sticky top-24 h-fit max-h-[calc(100vh-8rem)] overflow-y-auto border-r border-gray-200 pr-6"
+      class="toc-sidebar hidden lg:block w-80 sticky top-0 h-fit max-h-[calc(100vh-3rem)] overflow-y-auto border-r border-gray-200 pr-6"
     >
       <h3 class="text-sm font-semibold text-gray-900 mb-3">目录</h3>
       <nav v-if="toc.length" class="space-y-1">
