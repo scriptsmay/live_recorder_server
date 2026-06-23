@@ -164,6 +164,9 @@ describe('DataService dashboard helpers', () => {
       })
       .mockResolvedValueOnce({
         rows: [{ orphaned_files: '4' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ replay_pending: '5', replay_completed_today: '2', replay_completed_today_size: '1024000' }],
       });
 
     const summary = await DataService.getDashboardSummary('2026-06-10T00:00:00.000Z');
@@ -175,10 +178,14 @@ describe('DataService dashboard helpers', () => {
       uploads_today: 2,
       uploads_failed_today: 1,
       orphaned_files: 4,
+      replay_pending: 5,
+      replay_completed_today: 2,
+      replay_completed_today_size: 1024000,
     });
-    expect(pool.query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(4);
     expect(pool.query.mock.calls[0][1]).toEqual(['2026-06-10T00:00:00.000Z']);
     expect(pool.query.mock.calls[1][1]).toEqual(['2026-06-10T00:00:00.000Z']);
+    expect(pool.query.mock.calls[3][1]).toEqual(['2026-06-10T00:00:00.000Z']);
   });
 
   test('查询 Dashboard 近期活动并限制条数', async () => {

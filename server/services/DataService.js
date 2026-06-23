@@ -122,7 +122,7 @@ class DataService {
   }
 
   static async getDashboardSummary(todayStart) {
-    const [sessionStats, uploadStats, orphanedStats] = await Promise.all([
+    const [sessionStats, uploadStats, orphanedStats, replayStats] = await Promise.all([
       pool.query(
         `SELECT
            COUNT(*) FILTER (WHERE status = 'completed') AS sessions_today,
@@ -141,11 +141,20 @@ class DataService {
         [todayStart]
       ),
       pool.query(`SELECT COUNT(*) AS orphaned_files FROM recording_files WHERE status = 'orphaned'`),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status IN ('pending', 'extracted')) AS replay_pending,
+           COUNT(*) FILTER (WHERE status = 'completed' AND completed_at >= $1) AS replay_completed_today,
+           COALESCE(SUM(file_size) FILTER (WHERE status = 'completed' AND completed_at >= $1), 0) AS replay_completed_today_size
+         FROM replay_records`,
+        [todayStart]
+      ),
     ]);
 
     const sessions = sessionStats.rows[0] || {};
     const uploads = uploadStats.rows[0] || {};
     const orphaned = orphanedStats.rows[0] || {};
+    const replay = replayStats.rows[0] || {};
 
     return {
       sessions_today: parseInt(sessions.sessions_today || '0', 10),
@@ -154,6 +163,9 @@ class DataService {
       uploads_today: parseInt(uploads.uploads_today || '0', 10),
       uploads_failed_today: parseInt(uploads.uploads_failed_today || '0', 10),
       orphaned_files: parseInt(orphaned.orphaned_files || '0', 10),
+      replay_pending: parseInt(replay.replay_pending || '0', 10),
+      replay_completed_today: parseInt(replay.replay_completed_today || '0', 10),
+      replay_completed_today_size: parseInt(replay.replay_completed_today_size || '0', 10),
     };
   }
 

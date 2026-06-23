@@ -328,6 +328,9 @@ export interface DashboardSummary {
   uploads_today: number
   uploads_failed_today: number
   orphaned_files: number
+  replay_pending: number
+  replay_completed_today: number
+  replay_completed_today_size: number
 }
 
 export interface ActivityItem {

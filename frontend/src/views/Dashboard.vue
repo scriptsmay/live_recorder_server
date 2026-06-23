@@ -61,6 +61,9 @@ const defaultSummary: DashboardSummary = {
   uploads_today: 0,
   uploads_failed_today: 0,
   orphaned_files: 0,
+  replay_pending: 0,
+  replay_completed_today: 0,
+  replay_completed_today_size: 0,
 }
 
 const polling = computed(() => dashboard.value?.polling ?? defaultPolling)
@@ -140,6 +143,24 @@ const statCards = computed<StatCard[]>(() => [
     accent: 'text-rose-100',
     iconPath:
       'M6 12 3.269 3.126A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.876L6 12Zm0 0h7.5',
+  },
+  {
+    label: '回放待处理',
+    value: hasSummary.value ? String(summary.value.replay_pending) : '--',
+    sublines: [
+      `队列 ${dashboard.value?.replay?.queue_length ?? 0} / 处理中 ${dashboard.value?.replay?.processing ?? 0}/${dashboard.value?.replay?.concurrency ?? 1}`,
+    ],
+    gradient: 'from-purple-500 to-purple-600',
+    accent: 'text-purple-100',
+    iconPath: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  },
+  {
+    label: '今日回放',
+    value: hasSummary.value ? String(summary.value.replay_completed_today) : '--',
+    sublines: hasSummary.value ? [formatBytes(summary.value.replay_completed_today_size)] : [],
+    gradient: 'from-emerald-500 to-emerald-600',
+    accent: 'text-emerald-100',
+    iconPath: 'M5.25 5.653c0-.856.917-1.402 1.669-.981l11.662 6.847a1.121 1.121 0 0 1 0 1.948l-11.662 6.847a1.121 1.121 0 0 1-1.669-.981V5.653Z',
   },
 ])
 
