@@ -1,6 +1,7 @@
 const migrate = require('../../db/migrate');
 const redis = require('../../db/redis');
 const watchdog = require('./watchdog');
+const fileCleanupScheduler = require('./FileCleanupScheduler');
 const { pollingManager } = require('./polling');
 const RecorderService = require('../../services/RecorderService');
 const transcodeQueue = require('./TranscodeQueue');
@@ -37,6 +38,7 @@ async function bootstrap(app, port) {
     await danmakuBurnQueue.init();
     await replayProcessQueue.init();
     watchdog.start();
+    fileCleanupScheduler.start();
 
     app.listen(port, () => {
       console.log(`K-Recorder 已启动，端口 ${port}`);
@@ -56,6 +58,7 @@ async function gracefulShutdown(signal) {
 
   try {
     await pollingManager.stop();
+    fileCleanupScheduler.stop();
     logCleanupService.stop();
     danmakuLogCleanupService.stop();
 
