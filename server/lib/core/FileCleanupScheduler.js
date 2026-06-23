@@ -135,7 +135,7 @@ async function runAutoCleanup() {
         `[自动清理] ${cat || '全部'}: 匹配 ${plan.deletable_count} 个文件, 预计释放 ${formatBytes(plan.total_size)}`
       );
 
-      const taskId = await FileManageService.executeDelete(plan.plan_id, 'auto-scheduler');
+      const { task_id: taskId } = await FileManageService.executeDelete(plan.plan_id, 'auto-scheduler');
 
       // 轮询等待任务完成（最多 10 分钟）
       const maxWait = 10 * 60 * 1000;

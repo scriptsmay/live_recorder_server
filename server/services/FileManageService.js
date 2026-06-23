@@ -125,7 +125,7 @@ class FileManageService {
           [
             'recording',
             'hls_directory',
-            'recording_files',
+            'recording_sessions',
             row.session_id,
             row.session_id ? String(row.session_id) : null,
             hlsDir,
@@ -419,11 +419,10 @@ class FileManageService {
       conditions.push(`mtime <= $${paramIdx}`);
       params.push(filters.end_date);
     }
-    // older_than_days: 计算为 end_date（mtime < N 天前）
+    // older_than_days: 直接拼接 SQL interval，不使用参数化（days 已 parseInt 校验）
     if (filters.older_than_days) {
       const days = parseInt(filters.older_than_days, 10);
       if (!isNaN(days) && days > 0) {
-        paramIdx++;
         conditions.push(`mtime <= NOW() - INTERVAL '${days} days'`);
       }
     }
@@ -536,13 +535,12 @@ class FileManageService {
           blocked: [],
         };
       }
-      // 分批获取全部文件（每批 500）
+      // 分批获取全部文件
       files = [];
-      const batchSize = 500;
       for (let p = 1; files.length < total; p++) {
-        const result = await this.getFileList(input.filters, { page: p, limit: batchSize });
+        const result = await this.getFileList(input.filters, { page: p, limit: 500 });
         files.push(...result.data);
-        if (result.data.length < batchSize) break;
+        if (result.data.length === 0 || files.length >= total) break;
       }
     } else {
       throw new Error('必须提供 file_ids 或 filters');
@@ -709,7 +707,7 @@ class FileManageService {
 
   /** 删除单个文件（内部方法） */
   static async _deleteSingleFile(item, operator) {
-    const { file_id, file_path, file_size, category, source_table, source_id } = item;
+    const { file_id, file_path, file_size, category, file_type, source_table, source_id } = item;
     const result = { file_id, file_path, result: null, error: null, actual_release_size: 0 };
 
     // 获取 advisory lock
@@ -798,7 +796,9 @@ class FileManageService {
         );
 
         // 更新源业务表状态
-        if (source_table === 'recording_files' && source_id) {
+        // 注意：HLS 目录的 source_table='recording_files' 但 source_id 是 session_id，
+        // 不应直接用 source_id 更新 recording_files（会误标同 ID 的录制文件为 deleted）
+        if (source_table === 'recording_files' && source_id && file_type !== 'hls_directory') {
           await client.query(`UPDATE recording_files SET status = 'deleted' WHERE id = $1`, [source_id]);
         }
 
