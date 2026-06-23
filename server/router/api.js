@@ -237,13 +237,16 @@ router.get('/dashboard/status', async (req, res) => {
         const data = JSON.parse(await redis.get(key));
         const roomUrl = key.replace('active_task:', '');
         let roomName = '';
+        let roomId = null;
         try {
           const room = await DataService.getRoomByUrl(roomUrl);
           roomName = room?.room_name || '';
+          roomId = room?.id || null;
         } catch (_) {}
         activeRecordings.push({
           room_url: roomUrl,
           room_name: roomName,
+          room_id: roomId,
           pid: data.pid,
           session_id: data.sessionId,
           started_at: data.startTime,

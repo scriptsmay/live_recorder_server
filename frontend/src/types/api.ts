@@ -292,6 +292,11 @@ export interface DashboardStatus {
     processing: number
     concurrency: number
   }
+  replay?: {
+    queue_length: number
+    processing: number
+    concurrency: number
+  }
   danmaku?: DashboardDanmaku
   polling?: DashboardPolling
   summary?: DashboardSummary
@@ -301,6 +306,7 @@ export interface DashboardStatus {
 export interface ActiveRecording {
   room_url: string
   room_name: string
+  room_id: number | null
   pid: number
   session_id: number
   started_at: string
