@@ -31,6 +31,8 @@
 
 当前实现把 `danmaku.jsonl` 放在 `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/` 下，路径语义更像录制会话附件。如果后续文件管理按会话目录清理视频，很容易误删原始弹幕归档。因此长期方案应将原始 JSONL 从视频工作目录中解耦出来。
 
+下个版本直播录制目录也应同步简化：新会话使用 `VIDEO_DOWNLOAD_DIR/{sessionId}/`，不再额外嵌套 `roomId`。`recording_sessions.id` 全局唯一，已经足够避免文件覆盖；`roomId` 继续作为数据库元数据和筛选条件，而不是物理路径的一部分。
+
 ## 目标
 
 1. 提供统一的文件管理页面，覆盖直播录制、HLS、回放、弹幕压制输出和弹幕数据归档。孤儿文件管理放到第二阶段，依赖文件索引表实现。
@@ -84,7 +86,7 @@ DANMAKU_ARCHIVE_DIR=/data/danmaku_archive
 路径职责：
 
 - `DANMAKU_ARCHIVE_DIR/.../danmaku.jsonl`：长期保存的原始弹幕数据，`danmaku_capture_records.raw_path` 指向这里。
-- `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/segments/*.ass`：分段 ASS 缓存，可删除、可重建。
+- `VIDEO_DOWNLOAD_DIR/{sessionId}/danmaku/segments/*.ass`：分段 ASS 缓存，可删除、可重建。
 - `DANMAKU_OUTPUT_DIR/.../*.mp4`：弹幕压制视频产物，可按保留期清理。
 
 迁移策略：
@@ -94,6 +96,13 @@ DANMAKU_ARCHIVE_DIR=/data/danmaku_archive
 3. 历史数据迁移时，扫描 `recording_sessions.output_dir/danmaku/danmaku.jsonl` 和旧路径 `output_dir/danmaku.jsonl`，复制到归档目录并更新 `danmaku_capture_records.raw_path`。
 4. 初期不要移动删除旧 JSONL，先复制并记录校验结果；确认搜索和压制都改用 `raw_path` 后，再考虑清理旧副本。
 5. `GET /api/danmaku/search`、自由压制和 ASS 生成应优先读取 `danmaku_capture_records.raw_path`，只在历史记录缺失时 fallback 到会话目录。
+
+录制目录简化策略：
+
+1. 新会话目录改为 `VIDEO_DOWNLOAD_DIR/{sessionId}/`。
+2. 历史会话不强制迁移；文件管理、看门狗、投稿、弹幕工具箱都必须以数据库中的 `recording_sessions.output_dir` 和 `recording_files.file_path` 为准。
+3. `roomId` 不再参与新路径生成，只用于列表筛选、聚合展示和权限/业务关联。
+4. 若后续需要统一历史目录，可提供离线迁移脚本：复制/移动目录、校验文件数量和大小、更新 `recording_sessions.output_dir` 与 `recording_files.file_path`，并保留回滚清单。
 
 ## 信息架构
 
@@ -244,6 +253,7 @@ DANMAKU_ARCHIVE_DIR=/data/danmaku_archive
 - allowlist 根目录本身。
 - 不在业务目录下的任意文件。
 - 清理视频会话目录时，禁止隐式删除 `DANMAKU_ARCHIVE_DIR` 中的原始 JSONL。
+- 对历史 `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}` 和新 `VIDEO_DOWNLOAD_DIR/{sessionId}` 两种结构都必须通过 DB 路径识别，不允许用固定层级假设推导文件归属。
 
 ## 后端 API 设计
 
@@ -557,9 +567,10 @@ HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m
 5. 删除直播录制文件时同步更新 `recording_files.status = 'deleted'`。
 6. 删除回放/弹幕压制输出/ASS 缓存时写审计日志并在列表中显示缺失。
 7. 弹幕原始 JSONL 作为归档数据展示但默认不可清理；删除视频会话目录时必须保留。
-8. 禁止删除活跃任务文件。
-9. 批量删除使用异步任务，前端展示删除进度。
-10. 只处理数据库已知文件，不展示孤儿文件。
+8. 文件管理兼容新旧录制路径结构，不依赖固定目录层级。
+9. 禁止删除活跃任务文件。
+10. 批量删除使用异步任务，前端展示删除进度。
+11. 只处理数据库已知文件，不展示孤儿文件。
 
 第二阶段：
 
@@ -569,6 +580,7 @@ HLS 应作为聚合对象管理。`hls_directory` 表示一个包含 `playlist.m
 4. 增加按主播/会话/回放/HLS 目录聚合的删除计划。
 5. 增加定时扫描和清理建议通知。
 6. 增加历史弹幕 JSONL 复制到 `DANMAKU_ARCHIVE_DIR` 的迁移工具和校验报告。
+7. 可选增加历史录制目录扁平化迁移工具，将 `VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}` 迁移为 `VIDEO_DOWNLOAD_DIR/{sessionId}`。
 
 第三阶段：
 

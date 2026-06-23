@@ -137,10 +137,9 @@ _handleDanmakuFinish()
 
 ```text
 VIDEO_DOWNLOAD_DIR/
-  └── [roomId]/[sessionId]/
+  └── [sessionId]/
       ├── *.mp4 / *.ts                    ← 录制分段（纯净）
       └── danmaku/                        ← 弹幕数据目录
-          ├── danmaku.jsonl               ← 原始弹幕
           ├── danmaku.ass                 ← 会话级 ASS
           └── segments/                   ← 分段 ASS
 
@@ -154,8 +153,10 @@ DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
 
 - 弹幕压制从录制流程中完全解耦，录制模块只负责「采集 + ASS 生成」，压制作为独立工具箱功能
 - 压制产物存放在独立目录，不与录制文件混合，避免文件扫描、统计、投稿环节的过滤负担
-- 分段 ASS 文件通过确定性路径 `{session.output_dir}/danmaku/segments/{segment_index}.ass` 查询，不再依赖 DB 列；`recording_files.danmaku_ass_path` 已废弃，保留列以兼容历史数据
-- 兼容旧路径：JSONL 优先读取 `[sessionDir]/danmaku/danmaku.jsonl`，fallback 到旧路径 `[sessionDir]/danmaku.jsonl`
+- 分段 ASS 文件通过确定性路径 `{session.output_dir}/danmaku/segments/{recording_file_id}.ass` 查询，不再依赖 DB 列；`recording_files.danmaku_ass_path` 已废弃，保留列以兼容历史数据
+- 新录制目录结构从下个版本开始简化为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
+- 原始弹幕 JSONL 后续迁移到 `DANMAKU_ARCHIVE_DIR` 长期归档；会话目录仅保留可重建的 ASS 缓存
+- 兼容旧路径：JSONL 优先读取 `danmaku_capture_records.raw_path`，fallback 到 `[sessionDir]/danmaku/danmaku.jsonl` 和 `[sessionDir]/danmaku.jsonl`
 - `danmaku_burn_records` 表集中管理所有压制数据，JOIN `recording_files` 查询状态
 
 ## 1. 会话生命周期
@@ -209,17 +210,17 @@ DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
 
 ```text
 VIDEO_DOWNLOAD_DIR/
-├── [roomId]/                    # 房间ID目录
-│   ├── [sessionId]/             # 会话ID目录
-│   │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
-│   │   └── danmaku/             # 弹幕数据目录
-│   │       ├── danmaku.jsonl    # 原始弹幕数据
-│   │       ├── danmaku.ass      # 会话级 ASS 字幕
-│   │       └── segments/        # 分段 ASS 字幕
-│   │           ├── 0.ass
-│   │           └── 1.ass
+├── [sessionId]/                 # 会话ID目录（新结构）
+│   ├── {room_name}_{datetime}.ts      # 非分段录制
+│   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   └── danmaku/                 # 可重建的弹幕 ASS 缓存
+│       ├── danmaku.ass          # 会话级 ASS 字幕
+│       └── segments/            # 分段 ASS 字幕
+│           ├── {recording_file_id}.ass
+│           └── ...
 ```
+
+历史录制可能仍位于 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/`。代码不得再从 `room_id` 推导历史路径，应始终以 `recording_sessions.output_dir` 和 `recording_files.file_path` 为准。
 
 **压制产物独立目录**：
 
@@ -237,7 +238,8 @@ DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
 **优势**：
 
 - 避免文件名冲突：每个会话有独立的目录
-- 便于管理：按房间和会话组织文件
+- 目录更浅：会话 ID 全局唯一，去掉 roomId 层不会引入覆盖风险
+- 便于管理：文件管理、投稿、弹幕 ASS 都直接围绕 session 组织
 - 扫描效率提升：看门狗可以只扫描特定会话目录
 - 投稿简化：直接从会话目录获取文件
 
