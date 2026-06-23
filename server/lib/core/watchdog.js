@@ -376,19 +376,13 @@ async function cleanupFragmentFiles() {
             continue;
           }
 
-          // 检查文件管理模块是否正在处理该文件，避免双重删除竞争
-          const managedCheck = await pool.query(
-            `SELECT status FROM managed_files WHERE file_path = $1 AND status IN ('deleting', 'deleted')`,
-            [fp]
-          );
-          if (managedCheck.rows.length > 0) continue;
-
           // 先删磁盘文件，成功后再删 DB 记录（避免 unlink 失败时丢失 DB 追踪）
           try {
             fs.unlinkSync(fp);
             console.log(`[碎片清理] 已删除: ${path.basename(fp)} (${(size / 1024).toFixed(0)}KB)`);
           } catch (unlinkErr) {
             if (unlinkErr.code === 'ENOENT') {
+              // 文件已被文件管理模块或其他进程提前删除，降级清理 DB 记录
               console.log(`[碎片清理] 文件已被其他进程删除: ${path.basename(fp)}`);
             } else {
               continue; // unlink 失败则跳过 DB 删除
