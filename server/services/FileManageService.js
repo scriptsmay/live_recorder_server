@@ -572,10 +572,11 @@ class FileManageService {
   }
 
   /**
-   * 执行删除
+   * 异步执行删除（批量删除）
+   * 创建删除任务，立即返回 task_id，后台 worker 异步执行。
    * @param {string} planId
    * @param {string} operator
-   * @returns {object[]} 逐文件结果
+   * @returns {{ task_id: string, status: string }}
    */
   static async executeDelete(planId, operator = 'user') {
     const planJson = await redis.get(`file_delete_plan:${planId}`);
@@ -584,7 +585,47 @@ class FileManageService {
     }
 
     const plan = JSON.parse(planJson);
-    const results = [];
+    const taskId = crypto.randomUUID();
+    const totalCount = plan.deletable.length;
+
+    // 将任务状态写入 Redis
+    const task = {
+      task_id: taskId,
+      plan_id: planId,
+      status: 'processing',
+      total_count: totalCount,
+      deleted_count: 0,
+      blocked_count: plan.blocked.length,
+      failed_count: 0,
+      estimated_release_size: plan.total_size,
+      actual_release_size: 0,
+      operator,
+      results: [],
+      created_at: new Date().toISOString(),
+    };
+    await redis.setEx(`file_delete_task:${taskId}`, DELETE_PLAN_TTL * 3, JSON.stringify(task));
+
+    // 后台异步执行（不 await，fire-and-forget）
+    this._processDeleteTask(taskId, plan, operator).catch((err) => {
+      console.error(`[FileManage] 删除任务 ${taskId} 异常:`, err);
+    });
+
+    return { task_id: taskId, status: 'processing' };
+  }
+
+  /** 查询删除任务进度 */
+  static async getDeleteTaskStatus(taskId) {
+    const taskJson = await redis.get(`file_delete_task:${taskId}`);
+    if (!taskJson) return null;
+    return JSON.parse(taskJson);
+  }
+
+  /**
+   * 后台处理删除任务（内部方法）
+   * 逐文件执行删除，实时更新 Redis 中的任务状态。
+   */
+  static async _processDeleteTask(taskId, plan, operator) {
+    const task = JSON.parse(await redis.get(`file_delete_task:${taskId}`));
 
     for (let i = 0; i < plan.deletable.length; i++) {
       const item = plan.deletable[i];
@@ -594,13 +635,46 @@ class FileManageService {
       }
 
       const result = await this._deleteSingleFile(item, operator);
-      results.push(result);
+      task.results.push(result);
+
+      if (result.result === 'success' || result.result === 'success_noop') {
+        task.deleted_count++;
+        task.actual_release_size += result.actual_release_size;
+      } else if (result.result === 'blocked') {
+        task.blocked_count++;
+      } else {
+        task.failed_count++;
+      }
+
+      // 每处理一个文件就更新 Redis 状态（供轮询）
+      await redis.setEx(`file_delete_task:${taskId}`, DELETE_PLAN_TTL * 3, JSON.stringify(task));
     }
 
-    // 删除计划执行完毕后清理 Redis
-    await redis.del(`file_delete_plan:${planId}`);
+    task.status = 'completed';
+    await redis.setEx(`file_delete_task:${taskId}`, DELETE_PLAN_TTL * 3, JSON.stringify(task));
 
-    return results;
+    // 清理删除计划
+    await redis.del(`file_delete_plan:${plan.plan_id}`);
+  }
+
+  /**
+   * 同步执行单文件删除
+   * 单文件删除可同步执行，但仍需重新校验安全规则。
+   * @param {object} fileRecord - managed_files 行
+   * @param {string} operator
+   * @returns {object} 单文件删除结果
+   */
+  static async executeSingleDelete(fileRecord, operator = 'user') {
+    const item = {
+      file_id: fileRecord.id,
+      file_path: fileRecord.file_path,
+      file_size: fileRecord.file_size,
+      category: fileRecord.category,
+      file_type: fileRecord.file_type,
+      source_table: fileRecord.source_table,
+      source_id: fileRecord.source_id,
+    };
+    return this._deleteSingleFile(item, operator);
   }
 
   /** 删除单个文件（内部方法） */
@@ -821,8 +895,9 @@ class FileManageService {
   }
 
   /**
-   * 检查文件是否属于活跃任务
-   * @returns {Promise<{type: string}|null>}
+   * 检查文件是否属于活跃任务（录制/转码/压制/投稿）
+   * @param {string} filePath - 文件路径
+   * @returns {Promise<{type: string}|null>} 活跃任务类型或 null
    */
   static async isFileInActiveTask(filePath) {
     // 录制中：recording_sessions.status = 'recording' 的文件
