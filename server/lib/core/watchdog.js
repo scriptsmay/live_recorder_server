@@ -231,6 +231,13 @@ async function scanActiveSegments() {
           const oldSize = tracked.rows[0].file_size || 0;
           const newSize = stat.size;
 
+          // 跳过已被文件管理模块标记为删除中/已删除的文件
+          const managedCheck = await pool.query(
+            `SELECT status FROM managed_files WHERE file_path = $1 AND status IN ('deleting', 'deleted')`,
+            [fp]
+          );
+          if (managedCheck.rows.length > 0) continue;
+
           if (newSize !== oldSize) {
             await pool.query(`UPDATE recording_files SET file_size = $1, checked_at = NOW() WHERE id = $2`, [
               newSize,
@@ -270,6 +277,13 @@ async function scanActiveSegments() {
         try {
           durationSec = Math.round((await probeSegmentDuration(fp)) / 1000);
         } catch (_) {}
+
+        // 检查文件管理模块是否已标记该文件为删除中/已删除，避免"复活"已删文件
+        const managedCheck = await pool.query(
+          `SELECT status FROM managed_files WHERE file_path = $1 AND status IN ('deleting', 'deleted')`,
+          [fp]
+        );
+        if (managedCheck.rows.length > 0) continue;
 
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, segment_start_ms, segment_end_ms, duration_seconds, checked_at)
@@ -362,6 +376,25 @@ async function cleanupFragmentFiles() {
             continue;
           }
 
+          // 检查文件管理模块是否正在处理该文件，避免双重删除竞争
+          const managedCheck = await pool.query(
+            `SELECT status FROM managed_files WHERE file_path = $1 AND status IN ('deleting', 'deleted')`,
+            [fp]
+          );
+          if (managedCheck.rows.length > 0) continue;
+
+          // 先删磁盘文件，成功后再删 DB 记录（避免 unlink 失败时丢失 DB 追踪）
+          try {
+            fs.unlinkSync(fp);
+            console.log(`[碎片清理] 已删除: ${path.basename(fp)} (${(size / 1024).toFixed(0)}KB)`);
+          } catch (unlinkErr) {
+            if (unlinkErr.code === 'ENOENT') {
+              console.log(`[碎片清理] 文件已被其他进程删除: ${path.basename(fp)}`);
+            } else {
+              continue; // unlink 失败则跳过 DB 删除
+            }
+          }
+
           const rec = await pool.query(
             'DELETE FROM recording_files WHERE file_path = $1 RETURNING session_id, file_size',
             [fp]
@@ -372,10 +405,6 @@ async function cleanupFragmentFiles() {
               [rec.rows[0].file_size || 0, rec.rows[0].session_id]
             );
           }
-          try {
-            fs.unlinkSync(fp);
-            console.log(`[碎片清理] 已删除: ${path.basename(fp)} (${(size / 1024).toFixed(0)}KB)`);
-          } catch (_) {}
         }
       } catch (_) {}
     }
@@ -397,9 +426,14 @@ async function cleanupFragmentFiles() {
  */
 async function syncMissingFiles() {
   try {
-    const { rows: files } = await pool.query(
-      `SELECT id, file_path FROM recording_files WHERE status NOT IN ('missing', 'deleted')`
-    );
+    // 跳过已被文件管理模块标记为 deleting/deleted 的文件，避免覆写删除状态
+    const { rows: files } = await pool.query(`
+      SELECT rf.id, rf.file_path
+      FROM recording_files rf
+      LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
+      WHERE rf.status NOT IN ('missing', 'deleted')
+        AND (mf.id IS NULL OR mf.status NOT IN ('deleting', 'deleted'))
+    `);
     let count = 0;
     for (const row of files) {
       if (!fs.existsSync(row.file_path)) {

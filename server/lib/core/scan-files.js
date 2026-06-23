@@ -44,9 +44,14 @@ async function scanRecordingFiles(force = false) {
   if (!VIDEO_DOWNLOAD_DIR || !fs.existsSync(VIDEO_DOWNLOAD_DIR)) return { missing: 0, orphaned: 0 };
 
   // 从数据库中获取所有非缺失且非删除状态的已跟踪文件，构建文件路径到记录的映射
-  const tracked = await pool.query(
-    `SELECT id, file_path, status FROM recording_files WHERE status NOT IN ('missing', 'deleted')`
-  );
+  // 跳过已被文件管理模块标记为 deleting/deleted 的文件，避免与文件管理竞争
+  const tracked = await pool.query(`
+    SELECT rf.id, rf.file_path, rf.status
+    FROM recording_files rf
+    LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
+    WHERE rf.status NOT IN ('missing', 'deleted')
+      AND (mf.id IS NULL OR mf.status NOT IN ('deleting', 'deleted'))
+  `);
   const trackedSet = new Map();
   for (const row of tracked.rows) trackedSet.set(row.file_path, row);
 
