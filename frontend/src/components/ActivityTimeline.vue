@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { timeAgo } from '@/utils/lib'
 import type { ActivityItem } from '@/types/api'
 
@@ -11,6 +12,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   retry: []
 }>()
+
+const expanded = ref(false)
+const INITIAL_COUNT = 6
+
+const visibleActivities = computed(() =>
+  expanded.value ? props.activities : props.activities.slice(0, INITIAL_COUNT),
+)
+const hasMore = computed(() => props.activities.length > INITIAL_COUNT)
 
 const typeMeta: Record<ActivityItem['type'], { dot: string; label: string }> = {
   session_completed: { dot: 'bg-green-500', label: '录制完成' },
@@ -32,8 +41,8 @@ function activityKey(item: ActivityItem) {
 
 <template>
   <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200">
-      <h2 class="text-lg font-semibold text-gray-900">近期活动</h2>
+    <div class="px-6 py-3 border-b border-gray-200">
+      <h2 class="text-sm font-semibold text-gray-900">近期活动</h2>
     </div>
 
     <div v-if="loading" class="p-5 space-y-3">
@@ -63,49 +72,61 @@ function activityKey(item: ActivityItem) {
       暂无近期活动
     </div>
 
-    <TransitionGroup v-else name="activity-list" tag="div" class="divide-y divide-gray-100">
-      <div v-for="item in props.activities" :key="activityKey(item)">
-        <router-link
-          v-if="item.link"
-          :to="item.link"
-          class="flex items-start gap-3 px-6 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors no-underline"
-        >
-          <span
-            class="mt-2 h-2.5 w-2.5 rounded-full shrink-0"
-            :class="metaOf(item.type).dot"
-          ></span>
-          <span class="min-w-0 flex-1">
-            <span class="flex items-center justify-between gap-3">
-              <span class="font-medium text-gray-900 truncate">{{ item.title }}</span>
-              <span class="text-xs text-gray-400 shrink-0">{{ timeAgo(item.timestamp) }}</span>
+    <template v-else>
+      <TransitionGroup name="activity-list" tag="div" class="divide-y divide-gray-100">
+        <div v-for="item in visibleActivities" :key="activityKey(item)">
+          <router-link
+            v-if="item.link"
+            :to="item.link"
+            class="flex items-start gap-3 px-6 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors no-underline"
+          >
+            <span
+              class="mt-2 h-2 w-2 rounded-full shrink-0"
+              :class="metaOf(item.type).dot"
+            ></span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-gray-900 truncate">{{ item.title }}</span>
+                <span class="text-xs text-gray-400 shrink-0">{{ timeAgo(item.timestamp) }}</span>
+              </span>
+              <span class="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
+                <span>{{ metaOf(item.type).label }}</span>
+                <span class="text-gray-200">·</span>
+                <span class="truncate">{{ item.detail }}</span>
+              </span>
             </span>
-            <span class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-              <span>{{ metaOf(item.type).label }}</span>
-              <span class="text-gray-300">/</span>
-              <span class="truncate">{{ item.detail }}</span>
-            </span>
-          </span>
-        </router-link>
+          </router-link>
 
-        <div v-else class="flex items-start gap-3 px-6 py-3">
-          <span
-            class="mt-2 h-2.5 w-2.5 rounded-full shrink-0"
-            :class="metaOf(item.type).dot"
-          ></span>
-          <span class="min-w-0 flex-1">
-            <span class="flex items-center justify-between gap-3">
-              <span class="font-medium text-gray-900 truncate">{{ item.title }}</span>
-              <span class="text-xs text-gray-400 shrink-0">{{ timeAgo(item.timestamp) }}</span>
+          <div v-else class="flex items-start gap-3 px-6 py-2.5">
+            <span
+              class="mt-2 h-2 w-2 rounded-full shrink-0"
+              :class="metaOf(item.type).dot"
+            ></span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-gray-900 truncate">{{ item.title }}</span>
+                <span class="text-xs text-gray-400 shrink-0">{{ timeAgo(item.timestamp) }}</span>
+              </span>
+              <span class="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
+                <span>{{ metaOf(item.type).label }}</span>
+                <span class="text-gray-200">·</span>
+                <span class="truncate">{{ item.detail }}</span>
+              </span>
             </span>
-            <span class="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-              <span>{{ metaOf(item.type).label }}</span>
-              <span class="text-gray-300">/</span>
-              <span class="truncate">{{ item.detail }}</span>
-            </span>
-          </span>
+          </div>
         </div>
+      </TransitionGroup>
+
+      <div v-if="hasMore" class="border-t border-gray-100">
+        <button
+          type="button"
+          class="w-full py-2.5 text-xs font-medium text-gray-500 hover:text-brand-600 hover:bg-gray-50 transition-colors"
+          @click="expanded = !expanded"
+        >
+          {{ expanded ? '收起' : `查看全部 ${props.activities.length} 条` }}
+        </button>
       </div>
-    </TransitionGroup>
+    </template>
   </section>
 </template>
 

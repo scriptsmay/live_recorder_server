@@ -308,111 +308,58 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)] gap-6">
-      <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">活跃录制进程</h2>
+    <!-- 活跃录制 + 近期活动 横向布局 -->
+    <div class="grid grid-cols-1 xl:grid-cols-[1fr_2fr] gap-6 mb-6">
+      <!-- 左侧：活跃录制 -->
+      <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden xl:sticky xl:top-20 xl:self-start">
+        <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-gray-900">活跃录制</h2>
+          <span v-if="!loading" class="text-xs text-gray-400">
+            {{ dashboard?.active_count ?? 0 }}/{{ dashboard?.pool_size ?? 0 }}
+          </span>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">直播间</th>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">Session ID</th>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">PID</th>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">开始时间</th>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">下载引擎</th>
-                <th class="px-6 py-3 text-left font-medium text-gray-500">已录制时长</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-if="loading">
-                <td colspan="6" class="px-6 py-10">
-                  <div class="space-y-3 animate-pulse">
-                    <div class="h-3 rounded bg-gray-100 w-2/3"></div>
-                    <div class="h-3 rounded bg-gray-100 w-1/2"></div>
-                  </div>
-                </td>
-              </tr>
-              <tr v-else-if="activeRecordings.length === 0">
-                <td colspan="6" class="px-6 py-12 text-center text-gray-400">
-                  <svg
-                    class="w-10 h-10 mx-auto mb-2 text-gray-300"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
-                    />
-                  </svg>
-                  <div class="text-sm font-medium text-gray-500">暂无活跃录制</div>
-                  <div v-if="hasPolling" class="text-xs text-gray-400 mt-1">
-                    {{ polling.total_polled }} 个房间正在监控中，{{ polling.currently_live }}
-                    个主播在线
-                  </div>
-                </td>
-              </tr>
-              <template v-else>
-                <tr
-                  v-for="rec in activeRecordings"
-                  :key="`${rec.room_url}:${rec.session_id}`"
-                  class="hover:bg-gray-50 transition-colors"
-                >
-                  <td class="px-6 py-3">
-                    <div class="flex items-center gap-2">
-                      <span class="relative flex h-2.5 w-2.5">
-                        <span
-                          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
-                        ></span>
-                        <span
-                          class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"
-                        ></span>
-                      </span>
-                      <div>
-                        <div class="font-medium text-gray-900">
-                          {{ rec.room_name || rec.room_url }}
-                        </div>
-                        <a
-                          :href="rec.room_url"
-                          target="_blank"
-                          class="text-xs text-gray-400 hover:text-brand-600 truncate block max-w-[280px]"
-                        >
-                          {{ rec.room_url }}
-                        </a>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="px-6 py-3">
-                    <router-link
-                      :to="{ path: '/sessions', query: { room_url: rec.room_url } }"
-                      class="text-brand-600 hover:text-brand-700 font-mono text-xs"
-                    >
-                      #{{ rec.session_id }}
-                    </router-link>
-                  </td>
-                  <td class="px-6 py-3 font-mono text-xs text-gray-500">{{ rec.pid }}</td>
-                  <td class="px-6 py-3 text-gray-500 text-xs">{{ $formatTime(rec.started_at) }}</td>
-                  <td class="px-6 py-3">
-                    <span
-                      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-                    >
-                      {{ rec.downloader }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-3 text-gray-500 text-xs">
-                    {{ formatDuration(rec.started_at) }}
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
+
+        <div v-if="loading" class="px-4 py-4 animate-pulse space-y-2">
+          <div class="h-3 rounded bg-gray-100 w-2/3"></div>
+          <div class="h-3 rounded bg-gray-100 w-1/2"></div>
+        </div>
+
+        <div v-else-if="activeRecordings.length === 0" class="px-4 py-6 text-center">
+          <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          <div class="text-xs text-gray-400">暂无活跃录制</div>
+          <div v-if="hasPolling" class="text-xs text-gray-300 mt-1">
+            {{ polling.currently_live }}/{{ polling.total_polled }} 在线
+          </div>
+        </div>
+
+        <div v-else class="divide-y divide-gray-50">
+          <router-link
+            v-for="rec in activeRecordings"
+            :key="`${rec.room_url}:${rec.session_id}`"
+            :to="{ path: '/sessions', query: { room_url: rec.room_url } }"
+            class="block px-4 py-3 hover:bg-gray-50 transition-colors no-underline"
+          >
+            <div class="flex items-center gap-2">
+              <span class="relative flex h-2 w-2 shrink-0">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              <span class="text-sm font-medium text-gray-900 truncate">{{ rec.room_name || '未知' }}</span>
+            </div>
+            <div class="mt-1 ml-4 flex items-center gap-1.5 text-xs text-gray-400">
+              <span class="font-mono text-brand-600">#{{ rec.session_id }}</span>
+              <span class="text-gray-200">·</span>
+              <span>{{ rec.downloader }}</span>
+              <span class="text-gray-200">·</span>
+              <span>{{ formatDuration(rec.started_at) }}</span>
+            </div>
+          </router-link>
         </div>
       </section>
 
+      <!-- 右侧：近期活动（填满剩余空间） -->
       <ActivityTimeline
         :activities="recentActivity"
         :loading="loading"
