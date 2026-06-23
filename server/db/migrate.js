@@ -538,6 +538,32 @@ async function runMigration() {
         ON replay_upload_records(started_at DESC);
     `);
 
+    // 弹幕自由压制记录表
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS danmaku_free_burn_records (
+        id SERIAL PRIMARY KEY,
+        source_type VARCHAR(20) NOT NULL,
+        source_id INTEGER NOT NULL,
+        danmaku_session_id INTEGER NOT NULL,
+        video_path VARCHAR(1024) NOT NULL,
+        jsonl_path VARCHAR(1024) NOT NULL,
+        offset_ms INTEGER DEFAULT 0,
+        manual_adjust_ms INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'pending',
+        output_path VARCHAR(1024) DEFAULT '',
+        error_message TEXT DEFAULT '',
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_free_burn_status ON danmaku_free_burn_records(status);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_free_burn_created ON danmaku_free_burn_records(created_at DESC);
+    `);
+
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');
   } catch (err) {

@@ -588,4 +588,225 @@ router.get('/danmaku/burn_output/:id/stream', async (req, res) => {
   }
 });
 
+// ── 弹幕自由压制 ────────────────────────────────────────────
+
+const DANMAKU_OUTPUT_DIR = process.env.DANMAKU_OUTPUT_DIR || '/data/danmaku_output';
+const VIDEO_DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads';
+const REPLAY_WORK_DIR = process.env.REPLAY_WORK_DIR || '/data/replay';
+const ALLOWED_DIRS = [VIDEO_DOWNLOAD_DIR, REPLAY_WORK_DIR, DANMAKU_OUTPUT_DIR];
+
+function isPathSafe(filePath) {
+  const resolved = path.resolve(filePath);
+  return ALLOWED_DIRS.some((dir) => resolved.startsWith(path.resolve(dir) + path.sep));
+}
+
+function basenameNoExt(filePath) {
+  return path.basename(filePath, path.extname(filePath));
+}
+
+/**
+ * POST /api/danmaku/free-burn
+ * 创建自由压制任务（回放视频 + 录制弹幕 组合压制）
+ */
+router.post('/free-burn', async (req, res) => {
+  try {
+    const {
+      source_type,
+      source_id,
+      selected_file_index = 0,
+      danmaku_session_id,
+      manual_adjust_ms = 0,
+      video_width = 1920,
+      video_height = 1080,
+    } = req.body;
+
+    if (!source_type || !source_id || !danmaku_session_id) {
+      return res.status(400).json({ status: 'Error', message: '缺少必要参数' });
+    }
+    if (!['recording', 'replay'].includes(source_type)) {
+      return res.status(400).json({ status: 'Error', message: 'source_type 无效' });
+    }
+
+    // 1. 解析视频路径
+    let videoPath;
+    let videoStartTime = null;
+    if (source_type === 'recording') {
+      const rec = await pool.query(
+        'SELECT output_path, started_at FROM recordings WHERE id = $1',
+        [source_id]
+      );
+      if (rec.rows.length === 0 || !rec.rows[0].output_path) {
+        return res.status(404).json({ status: 'Error', message: '录制文件不存在或未转码' });
+      }
+      videoPath = rec.rows[0].output_path;
+      videoStartTime = rec.rows[0].started_at;
+    } else {
+      const replay = await pool.query(
+        'SELECT final_file_paths, raw_file_path, start_time FROM replay_records WHERE id = $1',
+        [source_id]
+      );
+      if (replay.rows.length === 0) {
+        return res.status(404).json({ status: 'Error', message: '回放记录不存在' });
+      }
+      const row = replay.rows[0];
+      try {
+        const paths = JSON.parse(row.final_file_paths || '[]');
+        videoPath = paths[selected_file_index] || row.raw_file_path;
+      } catch {
+        videoPath = row.raw_file_path;
+      }
+      videoStartTime = row.start_time;
+    }
+
+    if (!videoPath || !isPathSafe(videoPath)) {
+      return res.status(400).json({ status: 'Error', message: '视频路径不安全或为空' });
+    }
+
+    // 2. 解析弹幕 JSONL 路径
+    const sessionDir = await pool.query(
+      'SELECT output_dir FROM recording_sessions WHERE id = $1',
+      [danmaku_session_id]
+    );
+    if (sessionDir.rows.length === 0 || !sessionDir.rows[0].output_dir) {
+      return res.status(404).json({ status: 'Error', message: '弹幕会话不存在' });
+    }
+    const jsonlPath = path.join(sessionDir.rows[0].output_dir, 'danmaku', 'danmaku.jsonl');
+    if (!fs.existsSync(jsonlPath)) {
+      return res.status(404).json({ status: 'Error', message: '弹幕 JSONL 文件不存在' });
+    }
+
+    // 3. 计算时间偏移
+    const firstLine = fs.readFileSync(jsonlPath, 'utf-8').split('\n').find((l) => l.trim());
+    if (!firstLine) {
+      return res.status(400).json({ status: 'Error', message: '弹幕文件为空' });
+    }
+    const firstEvent = JSON.parse(firstLine);
+    if (!firstEvent.ts_abs_ms || firstEvent.ts_ms == null) {
+      return res.status(400).json({ status: 'Error', message: '弹幕缺少时间戳字段' });
+    }
+
+    const captureStartEpochMs = firstEvent.ts_abs_ms - firstEvent.ts_ms;
+    let offsetMs = 0;
+    if (videoStartTime) {
+      const videoStartEpochMs = new Date(videoStartTime).getTime();
+      offsetMs = captureStartEpochMs - videoStartEpochMs + (manual_adjust_ms || 0);
+    }
+
+    // 4. 创建任务记录
+    const insertResult = await pool.query(
+      `INSERT INTO danmaku_free_burn_records
+       (source_type, source_id, danmaku_session_id, video_path, jsonl_path, offset_ms, manual_adjust_ms, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+       RETURNING id`,
+      [source_type, source_id, danmaku_session_id, videoPath, jsonlPath, offsetMs, manual_adjust_ms || 0]
+    );
+    const taskId = insertResult.rows[0].id;
+
+    // 5. 异步执行压制
+    executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, video_width, video_height).catch((err) => {
+      console.error(`[free-burn] 任务 ${taskId} 执行失败:`, err);
+    });
+
+    res.json({
+      status: 'ok',
+      data: { id: taskId, offset_ms: offsetMs },
+    });
+  } catch (err) {
+    console.error('[free-burn] 创建任务失败:', err);
+    res.status(500).json({ status: 'Error', message: '创建任务失败' });
+  }
+});
+
+/**
+ * 执行自由压制任务
+ */
+async function executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, height) {
+  const outputDir = path.join(DANMAKU_OUTPUT_DIR, 'free-burn', String(taskId));
+  fs.mkdirSync(outputDir, { recursive: true });
+  const assPath = path.join(outputDir, 'danmaku.ass');
+  const outputPath = path.join(outputDir, `${basenameNoExt(videoPath)}_danmaku.mp4`);
+
+  try {
+    await pool.query(
+      "UPDATE danmaku_free_burn_records SET status = 'processing', started_at = NOW() WHERE id = $1",
+      [taskId]
+    );
+
+    // 生成 ASS
+    const assResult = await danmakuAssGenerator.generateFromJsonl({
+      jsonlPath,
+      assPath,
+      videoWidth: width,
+      videoHeight: height,
+      offsetMs,
+    });
+    if (!assResult.success) {
+      throw new Error(`ASS 生成失败: ${assResult.error}`);
+    }
+
+    // FFmpeg 压制
+    const ffmpegArgs = [
+      '-y', '-i', videoPath,
+      '-vf', `ass=${assPath}`,
+      '-c:a', 'copy',
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+      outputPath,
+    ];
+    await new Promise((resolve, reject) => {
+      const proc = require('child_process').spawn('ffmpeg', ffmpegArgs);
+      let stderr = '';
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg 退出码 ${code}: ${stderr.slice(-500)}`));
+      });
+      proc.on('error', reject);
+    });
+
+    await pool.query(
+      "UPDATE danmaku_free_burn_records SET status = 'completed', output_path = $1, completed_at = NOW() WHERE id = $2",
+      [outputPath, taskId]
+    );
+    console.log(`[free-burn] 任务 ${taskId} 完成: ${outputPath}`);
+  } catch (err) {
+    await pool.query(
+      "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
+      [err.message, taskId]
+    );
+    console.error(`[free-burn] 任务 ${taskId} 失败:`, err.message);
+  }
+}
+
+/**
+ * GET /api/danmaku/free-burn/records
+ * 查询自由压制任务列表
+ */
+router.get('/free-burn/records', async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    const [data, count] = await Promise.all([
+      pool.query(
+        'SELECT * FROM danmaku_free_burn_records ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+        [limitNum, offset]
+      ),
+      pool.query('SELECT COUNT(*) FROM danmaku_free_burn_records'),
+    ]);
+
+    res.json({
+      status: 'ok',
+      data: data.rows,
+      total: parseInt(count.rows[0]?.count || '0', 10),
+      page: pageNum,
+      limit: limitNum,
+    });
+  } catch (err) {
+    console.error('[free-burn] 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
 module.exports = router;
