@@ -89,7 +89,7 @@ async function loadSessions() {
 
 async function loadRecords() {
   try {
-    const res = await apiGet<{ data: FreeBurnRecord[]; total: number }>(
+    const res = await apiGet<FreeBurnRecord[]>(
       `/api/danmaku/free-burn/records?page=${recordsPage.value}&limit=10`,
     )
     records.value = res.data ?? []

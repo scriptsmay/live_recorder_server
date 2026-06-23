@@ -11,6 +11,10 @@ export interface ApiResponse<T = unknown> {
   status: string
   data: T
   message?: string
+  // 分页字段（服务端分页接口会返回）
+  total?: number
+  page?: number
+  limit?: number
 }
 
 export class ApiError extends Error {

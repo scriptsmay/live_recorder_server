@@ -13,7 +13,7 @@ import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
 import Modal from '@/components/Modal.vue'
-import type { UploadRecord, PaginatedResponse } from '@/types/api'
+import type { UploadRecord } from '@/types/api'
 
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -69,11 +69,11 @@ async function fetchRecords() {
       page: String(page.value),
       source: sourceFilter.value,
     })
-    const res = await apiGet<{ data: UploadRecord[]; total: number }>(
+    const res = await apiGet<UploadRecord[]>(
       `/api/upload_records/merged?${params}`,
     )
     records.value = res.data
-    total.value = res.total
+    total.value = res.total ?? 0
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : '加载投稿记录失败')
   } finally {
