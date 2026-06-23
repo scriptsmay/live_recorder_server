@@ -3,6 +3,7 @@ const {
   getAuthConfig,
   getCookieOptions,
   newToken,
+  hashPassword,
   validateCredentials,
   createSession,
   destroySession,
@@ -11,6 +12,7 @@ const {
   clearFailures,
 } = require('../lib/core/auth-service');
 const { requireAuth, readToken } = require('../middleware/require-auth');
+const pool = require('../db/index');
 
 const router = express.Router();
 
@@ -89,6 +91,36 @@ router.get('/me', requireAuth(), async (req, res) => {
     status: 'ok',
     data: { username: req.auth.username },
   });
+});
+
+router.post('/change-password', requireAuth(), async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body || {};
+    const username = req.auth.username;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'missing_fields' });
+    }
+
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ error: 'password_too_short' });
+    }
+
+    // 验证当前密码
+    const ok = await validateCredentials(username, String(current_password));
+    if (!ok) {
+      return res.status(401).json({ error: 'invalid_current_password' });
+    }
+
+    // 更新密码
+    const newHash = hashPassword(String(new_password));
+    await pool.query('UPDATE admin_users SET password_hash = $1 WHERE username = $2', [newHash, username]);
+
+    return res.json({ status: 'ok', data: null });
+  } catch (err) {
+    console.error('[Auth] 修改密码失败:', err);
+    return res.status(500).json({ error: 'change_password_failed' });
+  }
 });
 
 router.get('/lock-status', async (req, res) => {
