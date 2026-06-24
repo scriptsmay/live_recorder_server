@@ -46,11 +46,15 @@ describe('runCleanupCheck', () => {
   });
 
   test('有可清理文件时发送建议通知', async () => {
+    const origNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production'; // sendCleanupSuggestion 在 test 环境下跳过通知
+
     FileManageService.scanAllFiles.mockResolvedValue({ scanned: 10, created: 0, updated: 10, missing: 0 });
     DataService.getSetting
       .mockResolvedValueOnce('80') // watermark_warn
       .mockResolvedValueOnce('90') // watermark_critical
-      .mockResolvedValueOnce('false'); // file_cleanup_enabled
+      .mockResolvedValueOnce('false') // file_cleanup_enabled
+      .mockResolvedValueOnce('true'); // file_cleanup_suggestion_notify
     FileManageService.getFileSummary.mockResolvedValue({
       total_size: 10000,
       safe_to_delete_size: 5000,
@@ -67,6 +71,7 @@ describe('runCleanupCheck', () => {
     expect(send).toHaveBeenCalledWith('文件管理 - 清理建议', expect.stringContaining('可清理:'));
 
     childProcess.execSync = origExecSync;
+    process.env.NODE_ENV = origNodeEnv;
   });
 
   test('自动清理启用时执行删除', async () => {
