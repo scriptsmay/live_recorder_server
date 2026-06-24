@@ -29,6 +29,10 @@ function applyDockerDefaults() {
     process.env.BILIUP_WORK_DIR = path.join(appDataDir, 'biliup');
   }
 
+  if (!process.env.DANMAKU_ARCHIVE_DIR) {
+    process.env.DANMAKU_ARCHIVE_DIR = path.join(appDataDir, 'danmaku_archive');
+  }
+
   if (!process.env.REPLAY_WORK_DIR) {
     process.env.REPLAY_WORK_DIR = path.join(path.dirname(process.env.VIDEO_DOWNLOAD_DIR), 'replay');
   }
