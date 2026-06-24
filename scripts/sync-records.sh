@@ -281,11 +281,6 @@ EOF
 psql -q "$SUPABASE_PSQL_URL" -c "DROP TABLE IF EXISTS $STAGING" || log "警告: 暂存表清理失败（不影响同步结果）"
 
 log "同步完成: $UPSERT_RESULT 条记录已写入 $REMOTE_TABLE"
-notify_sync "sync-records 同步完成" "本地表：replay_records
-目标表：$REMOTE_TABLE
-本地记录：$LOCAL_TOTAL_COUNT
-筛选记录：$LOCAL_COUNT
-远端记录：$REMOTE_COUNT
-导出记录：$EXPORT_COUNT
-暂存导入：$STAGING_COUNT
-变更写入：$UPSERT_RESULT"
+notify_sync "sync-records 同步完成" "目标表：$REMOTE_TABLE
+本次导出：$EXPORT_COUNT 条
+实际更新：$UPSERT_RESULT 条"
