@@ -297,12 +297,12 @@ onUnmounted(() => {
       <!-- 文件表格（非清理规则标签页时显示） -->
       <div v-if="activeTab !== 'cleanup'">
         <FileTable
-          :files="fileStore.fileList"
-          :loading="fileStore.fileListLoading"
-          :selected-ids="selectedIds"
           v-model:total="fileStore.fileListTotal"
           v-model:page="fileStore.fileListPage"
           v-model:limit="fileStore.fileListLimit"
+          :files="fileStore.fileList"
+          :loading="fileStore.fileListLoading"
+          :selected-ids="selectedIds"
           @update:selected-ids="selectedIds = $event"
           @row-click="handleRowClick"
           @delete-single="handleDeleteSingle"

@@ -12,7 +12,8 @@ let lastScanTime = 0;
 /**
  * 扫描录像文件目录，将磁盘上的视频文件与数据库中的会话记录进行关联或标记为孤立文件。
  *
- * 目录结构：VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]
+ * 目录结构：VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]（新格式）
+ *           VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]（旧格式，兼容）
  *
  * 该函数会执行以下操作：
  * 1. 检查冷却时间，避免频繁扫描。
@@ -121,19 +122,27 @@ async function scanRecordingFiles(force = false) {
     // 检查是否在活跃录制目录中
     if (activeDirs.has(fileDir)) continue;
 
-    // 尝试从路径中解析 roomId 和 sessionId
-    // 路径结构: VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]
+    // 尝试从路径中解析 sessionId
+    // 新格式: VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]
+    // 旧格式: VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]
     const relativePath = path.relative(VIDEO_DOWNLOAD_DIR, fp);
     const parts = relativePath.split(path.sep);
 
     let matchedSession = null;
     let roomUrl = null;
 
-    // 如果路径符合预期的层级结构
-    if (parts.length >= 3) {
+    // 兼容新旧两种目录结构
+    if (parts.length >= 2) {
+      // 新格式：第一级就是 sessionId
+      const sessionId = parts[0];
+      if (sessionsById.has(sessionId)) {
+        matchedSession = sessionsById.get(sessionId);
+        roomUrl = matchedSession.room_url;
+      }
+    }
+    if (!matchedSession && parts.length >= 3) {
+      // 旧格式：第二级是 sessionId（roomId/sessionId/filename）
       const sessionId = parts[1];
-
-      // 通过 sessionId 直接查找会话
       if (sessionsById.has(sessionId)) {
         matchedSession = sessionsById.get(sessionId);
         roomUrl = matchedSession.room_url;

@@ -36,21 +36,21 @@ function log(msg) {
 
 /**
  * 从 raw_path 推导归档目录下的目标路径
- * 原始：VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/danmaku.jsonl
- * 归档：DANMAKU_ARCHIVE_DIR/{roomId}/{sessionId}/danmaku.jsonl
+ * 新格式：VIDEO_DOWNLOAD_DIR/{sessionId}/danmaku/danmaku.jsonl
+ * 旧格式：VIDEO_DOWNLOAD_DIR/{roomId}/{sessionId}/danmaku/danmaku.jsonl
+ * 归档：DANMAKU_ARCHIVE_DIR/{sessionId}/danmaku.jsonl
  */
 function archiveDestFor(rawPath) {
   const videoDir = process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads';
   const rel = path.relative(videoDir, rawPath);
-  // rel 可能是 roomId/sessionId/danmaku/danmaku.jsonl
-  // 去掉末级 danmaku/ 子目录，直接放 roomId/sessionId/danmaku.jsonl
   const parts = rel.split(path.sep);
-  if (parts.length >= 3 && parts[parts.length - 2] === 'danmaku') {
-    // roomId/sessionId/danmaku/danmaku.jsonl → roomId/sessionId/danmaku.jsonl
-    const roomId = parts[0];
-    const sessionId = parts[1];
-    return path.join(ARCHIVE_DIR, roomId, sessionId, 'danmaku.jsonl');
+
+  // 新格式：sessionId/danmaku/danmaku.jsonl（2 级 + danmaku 子目录）
+  if (parts.length >= 2 && parts[parts.length - 2] === 'danmaku') {
+    const sessionId = parts.length >= 3 ? parts[1] : parts[0];
+    return path.join(ARCHIVE_DIR, sessionId, 'danmaku.jsonl');
   }
+
   // fallback：保持相对路径
   return path.join(ARCHIVE_DIR, rel);
 }

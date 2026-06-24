@@ -72,6 +72,13 @@ async function gracefulShutdown(signal) {
       accessLogStream.end();
     }
 
+    // 优雅关闭 Redis 连接（M11 修复）
+    try {
+      await redis.disconnect();
+    } catch (redisErr) {
+      console.warn('[退出] Redis 断开失败:', redisErr.message);
+    }
+
     console.log('[退出] 所有资源已清理');
   } catch (err) {
     console.error('[退出] 清理资源时出错:', err);

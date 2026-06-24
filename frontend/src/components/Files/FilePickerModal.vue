@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { apiGet } from '@/utils/api'
-import type { ManagedFile, FileCategory } from '@/types/file-manage'
+import type { ManagedFile } from '@/types/file-manage'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
 
@@ -82,7 +82,7 @@ async function loadCategoryCounts() {
         exists_on_disk: 'true',
         limit: '1',
       })
-      const res = await apiGet<{ total: number }>(`/api/files?${params}`)
+      const res = await apiGet<ManagedFile[]>(`/api/files?${params}`)
       entries.push({
         key: cat,
         label: CATEGORY_LABELS[cat] || cat,
@@ -120,9 +120,10 @@ async function loadFiles() {
     const qs = Object.entries(params)
       .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
       .join('&')
-    const res = await apiGet<{ data: ManagedFile[]; total: number }>(`/api/files?${qs}`)
-    files.value = res.data ?? []
-    total.value = res.total ?? 0
+    const res = await apiGet<ManagedFile[]>(`/api/files?${qs}`)
+    const body = res as unknown as { data: ManagedFile[]; total: number }
+    files.value = body.data ?? []
+    total.value = body.total ?? 0
   } catch {
     files.value = []
     total.value = 0
@@ -151,6 +152,11 @@ function switchCategory(cat: string) {
 // ---- 选择 ----
 function selectFile(file: ManagedFile) {
   selected.value = selected.value?.id === file.id ? null : file
+}
+
+function selectAndConfirm(file: ManagedFile) {
+  selectFile(file)
+  confirmSelect()
 }
 
 function confirmSelect() {
@@ -253,13 +259,13 @@ watch(
       <div v-else-if="files.length === 0" class="py-12 text-center text-sm text-gray-400">
         暂无可用文件
       </div>
-      <table v-else class="w-full text-sm">
+      <table v-else class="w-full text-sm border-collapse border-gray-400">
         <thead>
           <tr class="text-left text-xs text-gray-500 border-b border-gray-100">
-            <th class="pb-2 font-medium">文件名</th>
-            <th class="pb-2 font-medium w-20">来源</th>
-            <th class="pb-2 font-medium w-24 text-right">大小</th>
-            <th class="pb-2 font-medium w-40">修改时间</th>
+            <th class="p-2 font-medium">文件名</th>
+            <th class="p-2 font-medium w-24">来源</th>
+            <th class="p-2 font-medium w-24 text-right">大小</th>
+            <th class="p-2 font-medium w-40">修改时间</th>
           </tr>
         </thead>
         <tbody>
@@ -268,26 +274,28 @@ watch(
             :key="file.id"
             class="cursor-pointer transition-colors border-b border-gray-50"
             :class="
-              selected?.id === file.id
-                ? 'bg-brand-50 ring-1 ring-brand-300'
-                : 'hover:bg-gray-50'
+              selected?.id === file.id ? 'bg-brand-50 ring-1 ring-brand-300' : 'hover:bg-gray-50'
             "
             @click="selectFile(file)"
-            @dblclick="selectFile(file); confirmSelect()"
+            @dblclick="selectAndConfirm(file)"
           >
-            <td class="py-2.5 pr-3">
-              <div class="font-medium text-gray-900" :title="file.file_path">
+            <td class="px-2 py-2 pr-3">
+              <div class="font-medium break-all" :title="file.file_path">
                 {{ file.file_name || file.file_path }}
               </div>
-              <div class="text-xs text-gray-400">{{ file.file_path }}</div>
+              <div class="text-xs text-gray-400 break-all">{{ file.file_path }}</div>
             </td>
-            <td class="py-2.5">
-              <span class="inline-block px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+            <td class="px-2 py-2">
+              <span
+                class="inline-block px-1.5 py-0.5 text-xs rounded-md border border-blue-300 bg-white text-blue-600"
+              >
                 {{ CATEGORY_LABELS[file.category] || file.category }}
               </span>
             </td>
-            <td class="py-2.5 text-right text-gray-600">{{ formatBytes(file.file_size) }}</td>
-            <td class="py-2.5 text-gray-500">{{ formatTime(file.mtime) }}</td>
+            <td class="px-2 py-2 text-right text-xs text-gray-600">
+              {{ formatBytes(file.file_size) }}
+            </td>
+            <td class="px-2 py-2 text-xs">{{ formatTime(file.mtime) }}</td>
           </tr>
         </tbody>
       </table>
@@ -295,7 +303,16 @@ watch(
 
     <!-- 分页 -->
     <div class="px-6 pb-2">
-      <Pagination :current="page" :total="total" @change="(p: number) => { page = p; loadFiles() }" />
+      <Pagination
+        :current="page"
+        :total="total"
+        @change="
+          (p: number) => {
+            page = p
+            loadFiles()
+          }
+        "
+      />
     </div>
 
     <!-- 底部操作栏 -->

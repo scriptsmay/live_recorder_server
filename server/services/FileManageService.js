@@ -496,8 +496,18 @@ class FileManageService {
       [id]
     );
 
+    // 解析来源表的分辨率信息
+    let resolution = null;
+    if (file.source_table === 'replay_records' && file.source_id) {
+      try {
+        const rr = await pool.query('SELECT resolution FROM replay_records WHERE id = $1', [file.source_id]);
+        resolution = rr.rows[0]?.resolution || null;
+      } catch { /* ignore */ }
+    }
+
     return {
       ...file,
+      resolution,
       active_task: activeTask,
       recent_audits: auditResult.rows,
     };
@@ -842,7 +852,11 @@ class FileManageService {
       result.result = 'failed';
       result.error = err.message;
     } finally {
-      await pool.query(`SELECT pg_advisory_unlock($1)`, [file_id]);
+      try {
+        await pool.query(`SELECT pg_advisory_unlock($1)`, [file_id]);
+      } catch (unlockErr) {
+        console.warn(`[FileManage] advisory_unlock 失败 (file_id=${file_id}): ${unlockErr.message}`);
+      }
     }
 
     return result;
@@ -976,9 +990,10 @@ class FileManageService {
     }
 
     // 投稿中
+    const escapedPath = filePath.replace(/[%_]/g, '\\$&');
     const uploadCheck = await pool.query(
       `SELECT id FROM upload_records WHERE status IN ('pending', 'uploading') AND upload_files::text LIKE $1`,
-      [`%${filePath}%`]
+      [`%${escapedPath}%`]
     );
     if (uploadCheck.rows.length > 0) {
       return { type: 'uploading' };

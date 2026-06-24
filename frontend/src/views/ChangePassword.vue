@@ -53,7 +53,9 @@ async function handleChangePassword() {
     <div class="max-w-md bg-white rounded-xl border border-gray-200 shadow-sm">
       <div class="p-6 space-y-4">
         <div>
-          <label for="pw_current" class="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+          <label for="pw_current" class="block text-sm font-medium text-gray-700 mb-1"
+            >当前密码</label
+          >
           <input
             id="pw_current"
             v-model="pwForm.currentPassword"
@@ -73,7 +75,9 @@ async function handleChangePassword() {
           />
         </div>
         <div>
-          <label for="pw_confirm" class="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+          <label for="pw_confirm" class="block text-sm font-medium text-gray-700 mb-1"
+            >确认新密码</label
+          >
           <input
             id="pw_confirm"
             v-model="pwForm.confirmPassword"

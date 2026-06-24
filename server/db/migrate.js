@@ -633,6 +633,34 @@ async function runMigration() {
         ON managed_files(source_table, source_id);
     `);
 
+    // managed_files 核心列 NOT NULL 约束（H5 修复）
+    await client.query(`UPDATE managed_files SET category = 'unknown' WHERE category IS NULL`);
+    await client.query(`UPDATE managed_files SET file_type = 'unknown' WHERE file_type IS NULL`);
+    await client.query(`UPDATE managed_files SET source_table = 'unknown' WHERE source_table IS NULL`);
+    await client.query(`UPDATE managed_files SET file_name = '' WHERE file_name IS NULL`);
+    await client.query(`ALTER TABLE managed_files ALTER COLUMN category SET NOT NULL`);
+    await client.query(`ALTER TABLE managed_files ALTER COLUMN file_type SET NOT NULL`);
+    await client.query(`ALTER TABLE managed_files ALTER COLUMN source_table SET NOT NULL`);
+    await client.query(`ALTER TABLE managed_files ALTER COLUMN file_name SET NOT NULL`);
+
+    // managed_files.updated_at 自动更新触发器（M14 修复）
+    await client.query(`
+      CREATE OR REPLACE FUNCTION managed_files_set_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await client.query(`DROP TRIGGER IF EXISTS trg_managed_files_updated_at ON managed_files`);
+    await client.query(`
+      CREATE TRIGGER trg_managed_files_updated_at
+      BEFORE UPDATE ON managed_files
+      FOR EACH ROW
+      EXECUTE FUNCTION managed_files_set_updated_at()
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS file_delete_audit_logs (
         id SERIAL PRIMARY KEY,

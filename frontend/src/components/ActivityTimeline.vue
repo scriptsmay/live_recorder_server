@@ -80,10 +80,7 @@ function activityKey(item: ActivityItem) {
             :to="item.link"
             class="flex items-start gap-3 px-6 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors no-underline"
           >
-            <span
-              class="mt-2 h-2 w-2 rounded-full shrink-0"
-              :class="metaOf(item.type).dot"
-            ></span>
+            <span class="mt-2 h-2 w-2 rounded-full shrink-0" :class="metaOf(item.type).dot"></span>
             <span class="min-w-0 flex-1">
               <span class="flex items-center justify-between gap-3">
                 <span class="text-sm font-medium text-gray-900 truncate">{{ item.title }}</span>
@@ -98,10 +95,7 @@ function activityKey(item: ActivityItem) {
           </router-link>
 
           <div v-else class="flex items-start gap-3 px-6 py-2.5">
-            <span
-              class="mt-2 h-2 w-2 rounded-full shrink-0"
-              :class="metaOf(item.type).dot"
-            ></span>
+            <span class="mt-2 h-2 w-2 rounded-full shrink-0" :class="metaOf(item.type).dot"></span>
             <span class="min-w-0 flex-1">
               <span class="flex items-center justify-between gap-3">
                 <span class="text-sm font-medium text-gray-900 truncate">{{ item.title }}</span>

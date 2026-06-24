@@ -17,7 +17,7 @@
 
 ## 目录结构
 
-```
+```text
 ├── server/
 │   ├── app.js              # 主入口文件（仅做启动编排）
 │   ├── config/             # 配置
@@ -94,7 +94,8 @@
   - 排除 `public/`（minified bootstrap）、`node_modules/`、`logs/`、`backups/`
 - **Prettier**：`npm run format` 运行，配置见 `.prettierrc.json`，忽略规则见 `.prettierignore`
   - 单引号、尾逗号 es5、每行 80 字符、2 空格缩进
-- 提交前建议执行 `npm run lint && npm run format`
+- **TypeScript 类型检查**：修改 `frontend/src/` 下任何 `.vue` 或 `.ts` 文件后，**必须**在 `frontend/` 目录执行 `npm run build` 验证类型检查通过。`npm run dev` 使用 esbuild 跳过 TS 检查，不能作为正确性依据
+- 提交前建议执行 `npm run lint && npm run format && cd frontend && npm run build`
 
 ### 测试规范
 
@@ -215,23 +216,22 @@ npm run lint && npm run format && npm run test
 
 ## 文件路径结构
 
-录制文件采用层级目录结构存储：`VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`
+录制文件采用平级目录结构存储：`VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]`
 
-- 每个会话有独立的目录，避免文件名冲突
-- 看门狗按会话目录扫描，提升效率
-- 工具函数：`server/lib/utils/tool.js` 中的 `generateOutputPath()` / `getSessionDir()` / `getRoomDir()`
+- `sessionId` 全局唯一，无需嵌套 `roomId`
+- 历史数据仍保留旧格式 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`，scan-files 兼容两种格式
+- 工具函数：`server/lib/utils/tool.js` 中的 `generateOutputPath()`
 
-```
+```text
 VIDEO_DOWNLOAD_DIR/
-├── [roomId]/
-│   ├── [sessionId]/
-│   │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
-│   │   └── danmaku/                       # 弹幕数据（与录制文件隔离）
-│   │       ├── danmaku.jsonl              # 弹幕原始数据
-│   │       ├── danmaku.ass                # 会话级 ASS
-│   │       └── segments/                  # 分段 ASS
-│   │           └── {segment_index}.ass
+├── [sessionId]/
+│   ├── {room_name}_{datetime}.ts      # 非分段录制
+│   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
+│   └── danmaku/                       # 弹幕数据（与录制文件隔离）
+│       ├── danmaku.jsonl              # 弹幕原始数据
+│       ├── danmaku.ass                # 会话级 ASS
+│       └── segments/                  # 分段 ASS
+│           └── {segment_index}.ass
 
 DANMAKU_OUTPUT_DIR/                        # 弹幕压制产物（独立目录）
 └── [sessionId]/

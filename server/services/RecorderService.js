@@ -706,7 +706,7 @@ class RecorderService {
         // console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
 
-      // 二、使用 roomId 和 sessionId 生成带层级的输出路径
+      // 二、使用 sessionId 生成输出路径
       const outputFilePattern = generateOutputPath(
         downloader,
         template,
@@ -714,7 +714,6 @@ class RecorderService {
         '',
         segmentDuration,
         null,
-        room.id,
         sessionId
       );
 

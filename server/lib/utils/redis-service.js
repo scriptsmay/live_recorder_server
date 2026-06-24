@@ -13,7 +13,10 @@ class RedisService {
       return this.connectPromise;
     }
 
-    this.connectPromise = this._doConnect();
+    this.connectPromise = this._doConnect().catch((err) => {
+      this.connectPromise = null; // 允许下次调用重试
+      throw err;
+    });
     return this.connectPromise;
   }
 
@@ -47,6 +50,7 @@ class RedisService {
     this.client.on('end', () => {
       console.log('[Redis] 连接已关闭');
       this.isConnected = false;
+      this.connectPromise = null; // 允许下次 connect() 重试
     });
 
     await this.client.connect();

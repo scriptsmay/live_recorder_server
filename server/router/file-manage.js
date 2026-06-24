@@ -43,6 +43,21 @@ router.get('/files', async (req, res) => {
       sort,
     } = req.query;
 
+    // 输入校验
+    if (min_size !== undefined) {
+      const parsed = parseInt(min_size, 10);
+      if (isNaN(parsed) || parsed < 0) {
+        return res.status(400).json({ status: 'Error', message: 'min_size 必须为非负整数' });
+      }
+    }
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (start_date && !dateRegex.test(start_date)) {
+      return res.status(400).json({ status: 'Error', message: 'start_date 格式应为 YYYY-MM-DD' });
+    }
+    if (end_date && !dateRegex.test(end_date)) {
+      return res.status(400).json({ status: 'Error', message: 'end_date 格式应为 YYYY-MM-DD' });
+    }
+
     const filters = {};
     if (type) filters.type = type;
     if (category) filters.category = category;
@@ -95,6 +110,15 @@ router.post('/files/delete-plan', async (req, res) => {
   try {
     const { file_ids, filters } = req.body || {};
 
+    if (file_ids !== undefined) {
+      if (!Array.isArray(file_ids)) {
+        return res.status(400).json({ status: 'Error', message: 'file_ids 必须是数组' });
+      }
+      if (file_ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+        return res.status(400).json({ status: 'Error', message: 'file_ids 中包含无效 ID' });
+      }
+    }
+
     if ((!file_ids || file_ids.length === 0) && !filters) {
       return res.status(400).json({ status: 'Error', message: '必须提供 file_ids 或 filters' });
     }
@@ -136,7 +160,7 @@ router.post('/files/delete', async (req, res) => {
     const data = await FileManageService.executeDelete(plan_id, operator);
     res.json({ status: 'ok', data });
   } catch (err) {
-    if (err.message.includes('不存在或已过期')) {
+    if (err?.message?.includes('不存在或已过期')) {
       return res.status(404).json({ status: 'Error', message: err.message });
     }
     console.error('[file-manage] 执行删除失败:', err);

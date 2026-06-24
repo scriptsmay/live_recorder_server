@@ -67,9 +67,9 @@ function templateToStrftime(template, roomName, ext = '.mp4') {
 }
 
 /**
- * 生成输出文件路径（支持层级目录结构）
+ * 生成输出文件路径
  *
- * 路径结构：VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]
+ * 路径结构：VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]
  *
  * @param {Object} downloader - 下载器实例
  * @param {string} template - 文件名模板，默认 '{room_name}_{datetime}'
@@ -77,7 +77,6 @@ function templateToStrftime(template, roomName, ext = '.mp4') {
  * @param {string} title - 直播标题
  * @param {number} segmentDuration - 分段时长（秒）
  * @param {boolean} _reuseSession - 是否复用会话（预留参数）
- * @param {string} roomId - 房间ID
  * @param {string|number} sessionId - 会话ID（可选，用于生成目录路径）
  * @returns {string} 输出文件路径
  */
@@ -88,7 +87,6 @@ function generateOutputPath(
   title,
   segmentDuration,
   _reuseSession,
-  roomId = null,
   sessionId = null
 ) {
   // useSegment 代表的是输出文件名是否会随时间变量变化
@@ -99,9 +97,9 @@ function generateOutputPath(
   let outputFilePattern;
   let baseDir = DOWNLOAD_DIR;
 
-  // 如果提供了 roomId 和 sessionId，构建层级目录结构
-  if (roomId && sessionId) {
-    baseDir = path.join(DOWNLOAD_DIR, String(roomId), String(sessionId));
+  // 如果提供了 sessionId，构建会话目录
+  if (sessionId) {
+    baseDir = path.join(DOWNLOAD_DIR, String(sessionId));
   }
 
   if (useSegment) {
@@ -117,32 +115,9 @@ function generateOutputPath(
   return outputFilePattern;
 }
 
-/**
- * 获取会话目录路径
- *
- * @param {string|number} roomId - 房间ID
- * @param {string|number} sessionId - 会话ID
- * @returns {string} 会话目录路径
- */
-function getSessionDir(roomId, sessionId) {
-  return path.join(DOWNLOAD_DIR, String(roomId), String(sessionId));
-}
-
-/**
- * 获取房间目录路径
- *
- * @param {string|number} roomId - 房间ID
- * @returns {string} 房间目录路径
- */
-function getRoomDir(roomId) {
-  return path.join(DOWNLOAD_DIR, String(roomId));
-}
-
 module.exports = {
   generateFilename,
   templateToStrftime,
   sanitizeFilename,
   generateOutputPath,
-  getSessionDir,
-  getRoomDir,
 };

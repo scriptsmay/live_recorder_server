@@ -69,9 +69,7 @@ async function fetchRecords() {
       page: String(page.value),
       source: sourceFilter.value,
     })
-    const res = await apiGet<UploadRecord[]>(
-      `/api/upload_records/merged?${params}`,
-    )
+    const res = await apiGet<UploadRecord[]>(`/api/upload_records/merged?${params}`)
     records.value = res.data
     total.value = res.total ?? 0
   } catch (err) {
@@ -141,11 +139,11 @@ onMounted(fetchRecords)
     <div class="mb-4 flex items-center gap-2">
       <span class="text-sm text-gray-500">来源：</span>
       <button
-        v-for="opt in ([
+        v-for="opt in [
           { value: 'all', label: '全部' },
           { value: 'recording', label: '录制' },
           { value: 'replay', label: '回放' },
-        ] as const)"
+        ] as const"
         :key="opt.value"
         class="px-3 py-1 text-sm rounded-lg border transition-colors"
         :class="
@@ -189,7 +187,11 @@ onMounted(fetchRecords)
             <tr v-if="records.length === 0">
               <td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
             </tr>
-            <tr v-for="r in records" :key="`${r.source}-${r.id}`" class="hover:bg-gray-50 transition-colors">
+            <tr
+              v-for="r in records"
+              :key="`${r.source}-${r.id}`"
+              class="hover:bg-gray-50 transition-colors"
+            >
               <td class="px-4 py-3 text-gray-900 font-medium">{{ r.id }}</td>
               <td class="px-4 py-3">
                 <span
@@ -204,7 +206,9 @@ onMounted(fetchRecords)
                 </span>
               </td>
               <td class="px-4 py-3 text-gray-600 text-xs">
-                <span v-if="r.source === 'replay'">{{ r.principal_name || `#${r.session_id}` }}</span>
+                <span v-if="r.source === 'replay'">{{
+                  r.principal_name || `#${r.session_id}`
+                }}</span>
                 <span v-else>{{ r.session_id ?? '-' }}</span>
               </td>
               <td class="px-4 py-3">

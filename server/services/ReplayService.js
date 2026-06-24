@@ -235,10 +235,20 @@ class ReplayService {
       params
     );
     const updated = result.rows[0] || null;
-    if (updated && (fields.duration !== undefined || fields.resolution !== undefined)) {
-      publishReplayEventFireAndForget('replay_metadata_updated', updated, {
-        changed_fields: ['duration', 'resolution'].filter((key) => fields[key] !== undefined),
-      });
+    if (updated) {
+      // 元数据变更事件（向后兼容）
+      if (fields.duration !== undefined || fields.resolution !== undefined) {
+        publishReplayEventFireAndForget('replay_metadata_updated', updated, {
+          changed_fields: ['duration', 'resolution'].filter((key) => fields[key] !== undefined),
+        });
+      }
+      // 状态变更事件（M13 修复：覆盖所有有意义的状态转换）
+      const meaningfulStatuses = ['extracted', 'downloaded', 'completed', 'uploaded', 'backed_up', 'failed', 'cancelled'];
+      if (meaningfulStatuses.includes(status)) {
+        publishReplayEventFireAndForget('replay_status_changed', updated, {
+          changed_fields: Object.keys(fields).filter((key) => fields[key] !== undefined),
+        });
+      }
     }
     return updated;
   }

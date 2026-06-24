@@ -168,7 +168,7 @@ async function checkStaleRecordings() {
  * 该函数执行以下主要逻辑：
  * 1. 获取文件大小过滤阈值。
  * 2. 查询数据库中所有状态为"recording"或最近完成的会话及其关联的房间信息。
- * 3. 遍历每个会话的输出目录（按 roomId/sessionId 层级结构），识别未被追踪的视频文件。
+ * 3. 遍历每个会话的输出目录（基于 recording_sessions.output_dir），识别未被追踪的视频文件。
  * 4. 对符合条件的文件进行大小校验，跳过小于阈值的碎片文件。
  * 5. 将有效文件记录插入到 recordings 和 recording_files 表中，并更新会话统计信息。
  *
@@ -315,7 +315,7 @@ async function scanActiveSegments() {
 }
 
 /**
- * 清理视频下载目录中的碎片文件（按会话目录层级结构）。
+ * 清理视频下载目录中的碎片文件（基于 recording_sessions.output_dir）。
  *
  * 该函数执行以下主要逻辑：
  * 1. 获取VIDEO_DOWNLOAD_DIR环境变量指定的目录路径。
@@ -389,8 +389,11 @@ async function cleanupFragmentFiles() {
             }
           }
 
+          // 软删除：标记为 deleted 而非硬 DELETE，与 managed_files 协调
           const rec = await pool.query(
-            'DELETE FROM recording_files WHERE file_path = $1 RETURNING session_id, file_size',
+            `UPDATE recording_files SET status = 'deleted', checked_at = NOW()
+             WHERE file_path = $1 AND status != 'deleted'
+             RETURNING session_id, file_size`,
             [fp]
           );
           if (rec.rows.length > 0) {
@@ -398,6 +401,15 @@ async function cleanupFragmentFiles() {
               `UPDATE recording_sessions SET total_segments = GREATEST(total_segments - 1, 0), total_size = GREATEST(total_size - $1, 0) WHERE id = $2`,
               [rec.rows[0].file_size || 0, rec.rows[0].session_id]
             );
+            // 同步更新 managed_files（H3 修复）
+            await pool.query(
+              `UPDATE managed_files
+               SET status = 'deleted', exists_on_disk = false, deleted_at = NOW(), updated_at = NOW()
+               WHERE file_path = $1 AND status NOT IN ('deleted', 'deleting')`,
+              [fp]
+            ).catch((err) => {
+              console.warn(`[碎片清理] 更新 managed_files 失败: ${err.message}`);
+            });
           }
         }
       } catch (_) {}
@@ -431,7 +443,17 @@ async function syncMissingFiles() {
     let count = 0;
     for (const row of files) {
       if (!fs.existsSync(row.file_path)) {
-        await pool.query(`UPDATE recording_files SET status = 'missing', checked_at = NOW() WHERE id = $1`, [row.id]);
+        // TOCTOU 防护：重新检查 managed_files 是否正在被删除（H4 修复）
+        const recheck = await pool.query(
+          `SELECT status FROM managed_files WHERE file_path = $1 AND status IN ('deleting', 'deleted')`,
+          [row.file_path]
+        );
+        if (recheck.rows.length > 0) continue;
+
+        await pool.query(
+          `UPDATE recording_files SET status = 'missing', checked_at = NOW() WHERE id = $1 AND status NOT IN ('deleted', 'missing')`,
+          [row.id]
+        );
         count++;
       }
     }

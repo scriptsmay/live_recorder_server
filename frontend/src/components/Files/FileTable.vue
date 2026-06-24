@@ -121,8 +121,8 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
             <input
               type="checkbox"
               :checked="allSelected"
-              @change="toggleSelectAll"
               class="rounded"
+              @change="toggleSelectAll"
             />
           </th>
           <th class="px-3 py-3">文件名</th>
@@ -145,8 +145,8 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
             <input
               type="checkbox"
               :checked="selectedIds.has(file.id)"
-              @change="toggleSelect(file.id)"
               class="rounded"
+              @change="toggleSelect(file.id)"
             />
           </td>
           <td class="px-3 py-3 max-w-xs">
