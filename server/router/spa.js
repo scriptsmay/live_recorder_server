@@ -56,6 +56,7 @@ if (spaExists) {
       '/settings',
       '/logs',
       '/api-doc',
+      '/files',
     ];
 
     // 动态路由模式匹配
