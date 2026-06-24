@@ -3,10 +3,15 @@ set -eu
 
 CRONTAB_FILE=/tmp/crontab
 
+# ── 脚本路径（生产环境通过 named volume 挂载到 /mnt/scripts/）──
+SCRIPTS_DIR="${SCRIPTS_DIR:-/mnt/scripts}"
+REPLAY_CRON_SCRIPT="$SCRIPTS_DIR/replay-cron.sh"
+SYNC_RECORDS_SCRIPT="$SCRIPTS_DIR/sync-records.sh"
+
 # ── 回放定时任务 ──
 if [ "$REPLAY_CRON_ENABLED" = "true" ]; then
   echo "[replay-cron] 启用，表达式: $REPLAY_CRON_EXPR"
-  echo "$REPLAY_CRON_EXPR /replay-cron.sh >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
+  echo "$REPLAY_CRON_EXPR $REPLAY_CRON_SCRIPT >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
 else
   echo "[replay-cron] 已禁用"
 fi
@@ -14,7 +19,7 @@ fi
 # ── 数据同步定时任务 ──
 if [ "$SYNC_CRON_ENABLED" = "true" ] && [ -n "$SUPABASE_URL" ]; then
   echo "[sync-cron] 启用，表达式: $SYNC_CRON_EXPR，目标表: $REMOTE_TABLE"
-  echo "$SYNC_CRON_EXPR /sync-records.sh >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
+  echo "$SYNC_CRON_EXPR $SYNC_RECORDS_SCRIPT >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
 else
   echo "[sync-cron] 已禁用（SYNC_CRON_ENABLED=$SYNC_CRON_ENABLED）"
 fi
@@ -36,10 +41,10 @@ if [ -n "$REDIS_URL" ]; then
           record_id=$(printf '%s' "$payload" | sed -n 's/.*"record_id"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
           if [ -n "$record_id" ]; then
             echo "[redis-listener] 收到记录 $record_id 变更通知，触发单条同步..."
-            /sync-records.sh --ids "$record_id" >> /proc/1/fd/1 2>&1 || true
+            "$SYNC_RECORDS_SCRIPT" --ids "$record_id" >> /proc/1/fd/1 2>&1 || true
           else
             echo "[redis-listener] 收到任务完成通知，触发全量同步..."
-            /sync-records.sh >> /proc/1/fd/1 2>&1 || true
+            "$SYNC_RECORDS_SCRIPT" >> /proc/1/fd/1 2>&1 || true
           fi
         fi
       done

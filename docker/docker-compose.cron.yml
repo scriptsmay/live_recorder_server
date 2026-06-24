@@ -14,6 +14,8 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       API_BASE: http://live_recorder_server:1123
       CRON_API_TOKEN: ${CRON_API_TOKEN:-}
+      # 脚本目录（容器内路径，需与 volume 挂载一致）
+      SCRIPTS_DIR: ${SCRIPTS_DIR:-/mnt/scripts}
       # Redis 事件监听
       REDIS_URL: ${REDIS_URL:-}
       REDIS_PUBLISH_CHANNEL: ${REDIS_PUBLISH_CHANNEL:-task:completed}
@@ -29,11 +31,11 @@ services:
       SYNC_CRON_EXPR: ${SYNC_CRON_EXPR:-0 4 * * *}
       SYNC_CRON_ENABLED: ${SYNC_CRON_ENABLED:-false}
     volumes:
-      - ../scripts/replay-cron.sh:/replay-cron.sh:ro
-      - ../scripts/sync-records.sh:/sync-records.sh:ro
-      - ./scripts/cron-entrypoint.sh:/cron-entrypoint.sh:ro
+      # 生产环境：named volume 或 bind mount 到含脚本的目录
+      # 默认挂载仓库 scripts/ 目录到 /mnt/scripts
+      - ${SCRIPTS_VOLUME:-../scripts}:/mnt/scripts:ro
     entrypoint: /bin/sh
-    command: /cron-entrypoint.sh
+    command: ${CRON_ENTRYPOINT:-/mnt/scripts/cron-entrypoint.sh}
     restart: unless-stopped
     depends_on:
       - live_recorder_server
