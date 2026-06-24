@@ -618,9 +618,11 @@ async function checkSessionAss() {
               rs.output_dir
        FROM recording_files rf
        JOIN recording_sessions rs ON rf.session_id = rs.id
+       LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
        WHERE rs.status IN ('completed', 'interrupted')
          AND rf.status = 'completed'
-         AND rf.file_path IS NOT NULL`
+         AND rf.file_path IS NOT NULL
+         AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
 
     if (files.length === 0) return;

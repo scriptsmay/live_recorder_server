@@ -311,6 +311,9 @@ class FileManageService {
             [row.id]
           );
           results.missing++;
+        } else {
+          // 非 ENOENT 错误（EACCES/ELOOP/EIO 等）记录警告，不改变文件状态
+          console.warn(`[FileManage] _refreshDiskStatus: stat failed for ${row.file_path}: ${err.code || err.message}`);
         }
       }
       if (idx % EVENT_LOOP_YIELD_INTERVAL === 0) {
@@ -540,6 +543,10 @@ class FileManageService {
       // 先获取总数
       const countResult = await this.getFileList(input.filters, { page: 1, limit: 1 });
       const total = countResult.total;
+      const MAX_FILTER_FILES = 2000;
+      if (total > MAX_FILTER_FILES) {
+        throw new Error(`筛选结果过多（${total} 个文件），请缩小筛选范围或使用 file_ids 模式（单次最多 200 个）`);
+      }
       if (total === 0) {
         return {
           plan_id: crypto.randomUUID(),
@@ -843,6 +850,17 @@ class FileManageService {
         result.result = unlinkResult === 'success_noop' ? 'success_noop' : 'success';
       } catch (err) {
         await client.query('ROLLBACK');
+        // 补偿：文件已从磁盘删除但事务回滚，标记 exists_on_disk = false 避免状态不一致
+        if (unlinkResult === 'success') {
+          try {
+            await pool.query(
+              `UPDATE managed_files SET exists_on_disk = false, status = 'missing', updated_at = NOW() WHERE id = $1`,
+              [file_id]
+            );
+          } catch (compErr) {
+            console.warn(`[FileManage] _deleteSingleFile: compensation failed for file_id=${file_id}: ${compErr.message}`);
+          }
+        }
         result.result = 'failed';
         result.error = err.message;
       } finally {
@@ -865,7 +883,7 @@ class FileManageService {
   // ========== 安全校验 ==========
 
   /**
-   * 校验文件是否可安全删除（8 条规则）
+   * 校验文件是否可安全删除（7 条规则）
    * @param {object} fileRecord - managed_files 行
    * @returns {Promise<{safe: boolean, reason?: string}>}
    */
@@ -897,13 +915,13 @@ class FileManageService {
       }
     }
 
-    // 5. 不属于活跃任务
+    // 4. 不属于活跃任务
     const activeTask = await this.isFileInActiveTask(file_path);
     if (activeTask) {
       return { safe: false, reason: `active_task_${activeTask.type}` };
     }
 
-    // 6. 不属于 recording 会话
+    // 5. 不属于 recording 会话
     if (source_table === 'recording_files' && source_id) {
       const sessionCheck = await pool.query(
         `SELECT rs.status FROM recording_sessions rs
@@ -916,7 +934,7 @@ class FileManageService {
       }
     }
 
-    // 7. 不属于 Redis 队列中的待处理任务
+    // 6. 不属于 Redis 队列中的待处理任务
     if (source_table === 'recording_files' && source_id) {
       const inQueue = await this._isFileInRedisQueue(file_path);
       if (inQueue) {
@@ -924,7 +942,7 @@ class FileManageService {
       }
     }
 
-    // 8. 业务记录已完成/失败/取消
+    // 7. 业务记录已完成/失败/取消
     if (source_table === 'recording_files' && source_id) {
       const rfCheck = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [source_id]);
       if (rfCheck.rows.length > 0 && !['completed', 'interrupted'].includes(rfCheck.rows[0].status)) {
