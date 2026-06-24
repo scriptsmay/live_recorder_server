@@ -648,7 +648,7 @@ class FileManageService {
     const blocked = [];
 
     for (const file of files) {
-      const validation = await this.validateFileSafety(file);
+      const validation = await this.validateFileSafety(file, { allowMissing: true });
       if (validation.safe) {
         deletable.push({
           file_id: file.id,
@@ -828,7 +828,7 @@ class FileManageService {
       }
 
       // 重新跑安全规则
-      const validation = await this.validateFileSafety(currentFile);
+      const validation = await this.validateFileSafety(currentFile, { allowMissing: true });
       if (!validation.safe) {
         result.result = 'blocked';
         result.error = validation.reason;
@@ -962,10 +962,13 @@ class FileManageService {
   /**
    * 校验文件是否可安全删除（7 条规则）
    * @param {object} fileRecord - managed_files 行
+   * @param {object} [options]
+   * @param {boolean} [options.allowMissing=false] - 删除托管记录时允许磁盘文件已不存在
    * @returns {Promise<{safe: boolean, reason?: string}>}
    */
-  static async validateFileSafety(fileRecord) {
+  static async validateFileSafety(fileRecord, options = {}) {
     const { file_path, file_type, source_table, source_id } = fileRecord;
+    const { allowMissing = false } = options;
 
     // 1. 路径位于 allowlist 内
     const pathCheck = await resolveAndValidate(file_path);
@@ -979,13 +982,16 @@ class FileManageService {
       stat = await fs.promises.stat(file_path);
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { safe: false, reason: 'file_not_found' };
+        if (!allowMissing) {
+          return { safe: false, reason: 'file_not_found' };
+        }
+      } else {
+        return { safe: false, reason: `stat_error: ${err.message}` };
       }
-      return { safe: false, reason: `stat_error: ${err.message}` };
     }
 
     // 3. 不是目录
-    if (stat.isDirectory()) {
+    if (stat && stat.isDirectory()) {
       // HLS 目录作为聚合对象，允许目录级删除
       if (file_type !== 'hls_directory') {
         return { safe: false, reason: 'is_directory' };

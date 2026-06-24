@@ -149,6 +149,24 @@ describe('generateDeletePlan', () => {
 
     fs.promises.stat = origStat;
   });
+
+  test('missing 记录也进入删除计划', async () => {
+    const file = makeFile({ status: 'missing', exists_on_disk: false });
+    pool.query.mockResolvedValueOnce({ rows: [file] });
+    mockSafetyQueries(1);
+    redis.setEx.mockResolvedValueOnce('OK');
+
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+
+    const plan = await FileManageService.generateDeletePlan({ file_ids: [1] });
+
+    expect(plan.deletable_count).toBe(1);
+    expect(plan.blocked_count).toBe(0);
+    expect(plan.deletable[0].file_id).toBe(file.id);
+
+    fs.promises.stat = origStat;
+  });
 });
 
 // ========== validateFileSafety ==========
@@ -190,6 +208,20 @@ describe('validateFileSafety', () => {
     const result = await FileManageService.validateFileSafety(makeFile());
     expect(result.safe).toBe(false);
     expect(result.reason).toBe('file_not_found');
+
+    fs.promises.stat = origStat;
+  });
+
+  test('删除语义允许 missing 文件继续做业务安全校验', async () => {
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+    mockSafetyQueries(1);
+
+    const result = await FileManageService.validateFileSafety(makeFile({ status: 'missing' }), {
+      allowMissing: true,
+    });
+
+    expect(result.safe).toBe(true);
 
     fs.promises.stat = origStat;
   });
@@ -369,6 +401,40 @@ describe('_deleteSingleFile', () => {
     FileManageService.validateFileSafety.mockRestore();
   });
 
+  test('missing 记录 — 磁盘文件不存在时删除记录并返回 success_noop', async () => {
+    const file = makeFile({ status: 'missing', exists_on_disk: false });
+    const client = mockClient();
+
+    pool.query.mockResolvedValueOnce({ rows: [{}] }); // advisory lock
+    pool.query.mockResolvedValueOnce({ rows: [file] }); // SELECT managed_files
+    mockSafetyQueries(1);
+    pool.query.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE deleting
+
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT', message: 'no such file' });
+    fs.promises.unlink = jest.fn();
+
+    pool.connect.mockResolvedValueOnce(client);
+    pool.query.mockResolvedValueOnce({ rows: [{}] }); // advisory unlock
+
+    const result = await FileManageService._deleteSingleFile(
+      {
+        file_id: file.id,
+        file_path: file.file_path,
+        file_size: file.file_size,
+        category: file.category,
+        file_type: file.file_type,
+        source_table: file.source_table,
+        source_id: file.source_id,
+      },
+      'user'
+    );
+
+    expect(result.result).toBe('success_noop');
+    expect(result.actual_release_size).toBe(0);
+    expect(fs.promises.unlink).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+  });
+
   test('EBUSY — 文件被锁定，返回 blocked 并回滚状态', async () => {
     const file = makeFile();
 
@@ -417,9 +483,7 @@ describe('_deleteSingleFile', () => {
     const file = makeFile();
     const client = mockClient();
     // COMMIT 抛异常触发 ROLLBACK
-    let callCount = 0;
     client.query.mockImplementation(async (sql) => {
-      callCount++;
       if (sql === 'BEGIN') return { rows: [] };
       if (sql === 'COMMIT') throw new Error('connection lost');
       if (sql === 'ROLLBACK') return { rows: [] };
@@ -458,9 +522,7 @@ describe('_deleteSingleFile', () => {
     expect(result.error).toBe('connection lost');
     expect(client.release).toHaveBeenCalled();
     // 验证补偿逻辑被执行
-    const compCall = pool.query.mock.calls.find(
-      (c) => typeof c[0] === 'string' && c[0].includes("status = 'missing'")
-    );
+    const compCall = pool.query.mock.calls.find((c) => typeof c[0] === 'string' && c[0].includes("status = 'missing'"));
     expect(compCall).toBeDefined();
     expect(compCall[1]).toEqual([file.id]);
 
@@ -576,9 +638,7 @@ describe('_deleteSingleFile', () => {
     );
 
     expect(result.result).toBe('success');
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('advisory_unlock 失败')
-    );
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('advisory_unlock 失败'));
 
     consoleSpy.mockRestore();
     FileManageService.validateFileSafety.mockRestore();
@@ -710,9 +770,7 @@ describe('_deleteSingleFile', () => {
 describe('executeDelete', () => {
   test('plan 不存在抛异常', async () => {
     redis.get.mockResolvedValueOnce(null);
-    await expect(FileManageService.executeDelete('nonexistent-plan')).rejects.toThrow(
-      '删除计划不存在或已过期'
-    );
+    await expect(FileManageService.executeDelete('nonexistent-plan')).rejects.toThrow('删除计划不存在或已过期');
   });
 
   test('返回 task_id 和 processing 状态', async () => {
