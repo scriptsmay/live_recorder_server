@@ -167,6 +167,19 @@ async function runAutoCleanup() {
 
 async function sendCleanupSuggestion() {
   try {
+    // 全局开关：可通过 DB 设置关闭清理建议通知
+    const suggestionEnabled = await DataService.getSetting('file_cleanup_suggestion_notify', 'true');
+    if (suggestionEnabled !== 'true') {
+      console.log('[文件管理定时] 清理建议通知已关闭（file_cleanup_suggestion_notify=false）');
+      return;
+    }
+
+    // 开发环境不发通知
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+      console.log('[文件管理定时] 开发环境跳过清理建议通知');
+      return;
+    }
+
     const summary = await FileManageService.getFileSummary();
     if (summary.safe_to_delete_size === 0) {
       console.log('[文件管理定时] 无可清理文件，跳过建议通知');
