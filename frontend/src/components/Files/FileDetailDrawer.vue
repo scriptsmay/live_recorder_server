@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useFileStore } from '@/stores/file-manage'
+import { formatBytes } from '@/utils/lib'
 import type { ManagedFile, FileType } from '@/types/file-manage'
 
 const props = defineProps<{
@@ -17,30 +18,13 @@ const fileStore = useFileStore()
 const detail = computed(() => fileStore.fileDetail)
 
 watch(
-  () => props.fileId,
-  (id) => {
-    if (id !== null && props.visible) {
+  () => [props.fileId, props.visible] as const,
+  ([id, v]) => {
+    if (v && id !== null) {
       fileStore.fetchFileDetail(id)
     }
   },
 )
-
-watch(
-  () => props.visible,
-  (v) => {
-    if (v && props.fileId !== null) {
-      fileStore.fetchFileDetail(props.fileId)
-    }
-  },
-)
-
-function formatBytes(bytes: number | null): string {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
-}
 
 function formatTime(t: string | null): string {
   if (!t) return '-'

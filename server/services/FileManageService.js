@@ -116,10 +116,15 @@ class FileManageService {
         return {
           filePath: row.file_path,
           params: [
-            'recording', 'recording_file', 'recording_files',
+            'recording',
+            'recording_file',
+            'recording_files',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.file_path, row.file_name, ext, row.file_size,
+            row.file_path,
+            row.file_name,
+            ext,
+            row.file_size,
             row.status === 'completed' ? 'active' : row.status,
             row.status === 'completed',
             row.status !== 'completed' ? `recording_status_${row.status}` : null,
@@ -153,10 +158,17 @@ class FileManageService {
         return {
           filePath: hlsDir,
           params: [
-            'recording', 'hls_directory', 'recording_sessions',
+            'recording',
+            'hls_directory',
+            'recording_sessions',
             row.session_id,
             row.session_id ? String(row.session_id) : null,
-            hlsDir, path.basename(hlsDir), '', 'active', true, null,
+            hlsDir,
+            path.basename(hlsDir),
+            '',
+            'active',
+            true,
+            null,
           ],
         };
       }
@@ -208,10 +220,16 @@ class FileManageService {
       const safeToDelete = ['completed', 'uploaded', 'backed_up', 'failed'].includes(row.status);
       try {
         await pool.query(UPSERT_SQL, [
-          'replay', row.fileType, 'replay_records',
-          row.id, row.principal_id,
-          row.filePath, path.basename(row.filePath), ext,
-          'active', safeToDelete,
+          'replay',
+          row.fileType,
+          'replay_records',
+          row.id,
+          row.principal_id,
+          row.filePath,
+          path.basename(row.filePath),
+          ext,
+          'active',
+          safeToDelete,
           !safeToDelete ? `replay_status_${row.status}` : null,
         ]);
         results.created++;
@@ -243,11 +261,17 @@ class FileManageService {
         return {
           filePath: row.output_path,
           params: [
-            'danmaku', 'danmaku_output', 'danmaku_burn_records',
+            'danmaku',
+            'danmaku_output',
+            'danmaku_burn_records',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.output_path, path.basename(row.output_path), ext,
-            'active', true, null,
+            row.output_path,
+            path.basename(row.output_path),
+            ext,
+            'active',
+            true,
+            null,
           ],
         };
       }
@@ -275,11 +299,16 @@ class FileManageService {
         return {
           filePath: row.raw_path,
           params: [
-            'danmaku', 'danmaku_archive', 'danmaku_capture_records',
+            'danmaku',
+            'danmaku_archive',
+            'danmaku_capture_records',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.raw_path, path.basename(row.raw_path), ext,
-            'active', false, // 弹幕归档默认不可清理
+            row.raw_path,
+            path.basename(row.raw_path),
+            ext,
+            'active',
+            false, // 弹幕归档默认不可清理
             'danmaku_archive_protected',
           ],
         };
@@ -507,7 +536,9 @@ class FileManageService {
       try {
         const rr = await pool.query('SELECT resolution FROM replay_records WHERE id = $1', [file.source_id]);
         resolution = rr.rows[0]?.resolution || null;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     return {
@@ -860,7 +891,9 @@ class FileManageService {
               [file_id]
             );
           } catch (compErr) {
-            console.warn(`[FileManage] _deleteSingleFile: compensation failed for file_id=${file_id}: ${compErr.message}`);
+            console.warn(
+              `[FileManage] _deleteSingleFile: compensation failed for file_id=${file_id}: ${compErr.message}`
+            );
           }
         }
         result.result = 'failed';

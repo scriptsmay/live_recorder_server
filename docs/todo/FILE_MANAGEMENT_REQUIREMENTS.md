@@ -54,13 +54,13 @@
 
 文件管理模块只管理以下 allowlist 根目录内的文件：
 
-| 分类 | 容器路径 | 主要来源 |
-| --- | --- | --- |
-| 直播录制 | `VIDEO_DOWNLOAD_DIR` | FFmpeg 录制、HLS 生成、弹幕 ASS 缓存 |
-| 回放文件 | `REPLAY_OUTPUT_DIR` | 回放下载、切片、修复、投稿 |
-| 弹幕压制 | `DANMAKU_OUTPUT_DIR` | 手动触发的弹幕压制成品 |
-| 弹幕归档 | `DANMAKU_ARCHIVE_DIR` | 长期保存的原始 JSONL、可选元数据索引 |
-| biliup 工作文件 | `BILIUP_WORK_DIR` 下项目专属目录 | 投稿缓存、cookies、临时配置 |
+| 分类            | 容器路径                         | 主要来源                             |
+| --------------- | -------------------------------- | ------------------------------------ |
+| 直播录制        | `VIDEO_DOWNLOAD_DIR`             | FFmpeg 录制、HLS 生成、弹幕 ASS 缓存 |
+| 回放文件        | `REPLAY_OUTPUT_DIR`              | 回放下载、切片、修复、投稿           |
+| 弹幕压制        | `DANMAKU_OUTPUT_DIR`             | 手动触发的弹幕压制成品               |
+| 弹幕归档        | `DANMAKU_ARCHIVE_DIR`            | 长期保存的原始 JSONL、可选元数据索引 |
+| biliup 工作文件 | `BILIUP_WORK_DIR` 下项目专属目录 | 投稿缓存、cookies、临时配置          |
 
 所有删除接口必须将真实路径解析为 absolute path，并确认它位于 allowlist 根目录内。符号链接、`..` 路径穿越、空路径和根目录删除必须拒绝。
 

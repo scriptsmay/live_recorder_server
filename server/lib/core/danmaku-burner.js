@@ -227,7 +227,9 @@ class DanmakuBurner {
         // 字体错误中止：优先判断
         if (fontError) {
           // 清理未完成的输出文件
-          try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch (_) {}
+          try {
+            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+          } catch (_) {}
           resolve({
             success: false,
             outputPath,

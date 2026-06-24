@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ManagedFile, FileType } from '@/types/file-manage'
+import { formatBytes } from '@/utils/lib'
 
 const props = defineProps<{
   files: ManagedFile[]
@@ -24,14 +25,6 @@ const page = defineModel<number>('page', { default: 1 })
 const limit = defineModel<number>('limit', { default: 50 })
 
 const totalPages = computed(() => Math.ceil(total.value / limit.value))
-
-function formatBytes(bytes: number | null): string {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
-}
 
 function formatTime(t: string | null): string {
   if (!t) return '-'
@@ -66,16 +59,26 @@ function toggleSelect(id: number) {
 }
 
 function toggleSelectAll() {
-  if (props.selectedIds.size === props.files.length) {
-    emit('update:selectedIds', new Set())
+  const currentPageIds = props.files.map((f) => f.id)
+  const allCurrentPageSelected = currentPageIds.every((id) => props.selectedIds.has(id))
+
+  if (allCurrentPageSelected) {
+    // 取消当前页选择，保留其他页的选中状态
+    const next = new Set(props.selectedIds)
+    for (const id of currentPageIds) next.delete(id)
+    emit('update:selectedIds', next)
   } else {
-    emit('update:selectedIds', new Set(props.files.map((f) => f.id)))
+    // 添加当前页所有 ID 到已有选中集合
+    const next = new Set(props.selectedIds)
+    for (const id of currentPageIds) next.add(id)
+    emit('update:selectedIds', next)
   }
 }
 
-const allSelected = computed(
-  () => props.files.length > 0 && props.selectedIds.size === props.files.length,
-)
+const allSelected = computed(() => {
+  if (props.files.length === 0) return false
+  return props.files.every((f) => props.selectedIds.has(f.id))
+})
 
 function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
   e.stopPropagation()

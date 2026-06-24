@@ -402,14 +402,16 @@ async function cleanupFragmentFiles() {
               [rec.rows[0].file_size || 0, rec.rows[0].session_id]
             );
             // 同步更新 managed_files（H3 修复）
-            await pool.query(
-              `UPDATE managed_files
+            await pool
+              .query(
+                `UPDATE managed_files
                SET status = 'deleted', exists_on_disk = false, deleted_at = NOW(), updated_at = NOW()
                WHERE file_path = $1 AND status NOT IN ('deleted', 'deleting')`,
-              [fp]
-            ).catch((err) => {
-              console.warn(`[碎片清理] 更新 managed_files 失败: ${err.message}`);
-            });
+                [fp]
+              )
+              .catch((err) => {
+                console.warn(`[碎片清理] 更新 managed_files 失败: ${err.message}`);
+              });
           }
         }
       } catch (_) {}
@@ -559,9 +561,11 @@ async function checkSessionHLS() {
     // console.log('[看门狗][HLS] 开始检查待生成 HLS 的文件');
 
     const { rows: recordings } = await pool.query(
-      `SELECT id, file_path, is_hls_ready, hls_playlist_path
-       FROM recording_files
-       WHERE status = 'completed' AND file_path IS NOT NULL`
+      `SELECT rf.id, rf.file_path, rf.is_hls_ready, rf.hls_playlist_path
+       FROM recording_files rf
+       LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
+       WHERE rf.status = 'completed' AND rf.file_path IS NOT NULL
+         AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
 
     for (const recording of recordings) {

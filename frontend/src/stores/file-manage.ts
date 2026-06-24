@@ -139,11 +139,38 @@ export const useFileStore = defineStore('file-manage', () => {
     }
   }
 
+  // 删除任务轮询：最大 5 分钟，连续错误 10 次停止，支持 failed/cancelled 终止状态
+  const POLL_MAX_MS = 5 * 60 * 1000
+  const POLL_MAX_ERRORS = 10
+  const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'error']
+
   function startPollingDeleteTask(taskId: string, onComplete?: (status: DeleteTaskStatus) => void) {
     stopPollingDeleteTask()
+    const startTime = Date.now()
+    let consecutiveErrors = 0
+
     pollTimer = setInterval(async () => {
+      // 超时保护
+      if (Date.now() - startTime > POLL_MAX_MS) {
+        stopPollingDeleteTask()
+        toast.error('删除任务轮询超时，请手动刷新查看结果')
+        return
+      }
+
       const status = await fetchDeleteTaskStatus(taskId)
-      if (status && status.status === 'completed') {
+
+      if (!status) {
+        consecutiveErrors++
+        if (consecutiveErrors >= POLL_MAX_ERRORS) {
+          stopPollingDeleteTask()
+          toast.error('删除任务状态查询连续失败，请手动刷新查看结果')
+        }
+        return
+      }
+
+      consecutiveErrors = 0
+
+      if (TERMINAL_STATUSES.includes(status.status)) {
         stopPollingDeleteTask()
         onComplete?.(status)
       }

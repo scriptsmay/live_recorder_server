@@ -5,6 +5,7 @@
  */
 import { ref, computed } from 'vue'
 import { useFileStore } from '@/stores/file-manage'
+import { formatBytes } from '@/utils/lib'
 import type { DeletePlan, DeleteTaskStatus, FileType, FileCategory } from '@/types/file-manage'
 
 const fileStore = useFileStore()
@@ -68,14 +69,6 @@ const scanLoading = ref(false)
 const batchStep = ref<'idle' | 'plan' | 'confirm' | 'progress' | 'result'>('idle')
 const deletePlan = ref<DeletePlan | null>(null)
 const deleteTaskStatus = ref<DeleteTaskStatus | null>(null)
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
-}
 
 async function selectRule(rule: CleanupRule) {
   selectedRule.value = rule

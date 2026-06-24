@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
+import { formatBytes } from '@/utils/lib'
 import type { ManagedFile } from '@/types/file-manage'
 import FilePickerModal from '@/components/Files/FilePickerModal.vue'
 import DanmakuPickerModal from '@/components/Danmaku/DanmakuPickerModal.vue'
@@ -98,14 +99,6 @@ function onSessionSelect(session: SessionOption) {
 // ---- 用户手动修改分辨率 ----
 function onResolutionInput() {
   userEditedResolution.value = true
-}
-
-// ---- 工具函数 ----
-function formatBytes(bytes: number | null): string {
-  if (bytes == null || bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
 // ---- 加载历史 ----

@@ -316,10 +316,7 @@ router.get('/upload_records/merged', async (req, res) => {
     `;
     const countParams = status ? [status] : [];
 
-    const [dataResult, countResult] = await Promise.all([
-      pool.query(sql, params),
-      pool.query(countSql, countParams),
-    ]);
+    const [dataResult, countResult] = await Promise.all([pool.query(sql, params), pool.query(countSql, countParams)]);
 
     res.json({
       status: 'ok',

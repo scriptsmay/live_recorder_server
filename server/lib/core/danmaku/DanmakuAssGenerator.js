@@ -396,7 +396,9 @@ class DanmakuAssGenerator {
    */
   _calcDuration(videoWidth, textWidthOrText, style = {}, fontSize = this.defaultStyle.fontSize) {
     const textWidth =
-      typeof textWidthOrText === 'number' ? textWidthOrText : this._estimateTextWidth(String(textWidthOrText || ''), fontSize);
+      typeof textWidthOrText === 'number'
+        ? textWidthOrText
+        : this._estimateTextWidth(String(textWidthOrText || ''), fontSize);
     const padding = Math.max(80, Math.round(fontSize * 2));
     const speed = style.scrollSpeed || this.defaultStyle.scrollSpeed;
     const distance = videoWidth + textWidth + padding * 2;

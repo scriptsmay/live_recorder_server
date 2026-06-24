@@ -86,9 +86,7 @@ describe('getFileList', () => {
   });
 
   test('older_than_days 不破坏参数化', async () => {
-    pool.query
-      .mockResolvedValueOnce({ rows: [{ total: '0' }] })
-      .mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [{ total: '0' }] }).mockResolvedValueOnce({ rows: [] });
 
     await FileManageService.getFileList({ older_than_days: '30', category: 'recording' });
     const countCall = pool.query.mock.calls[0];
@@ -123,8 +121,9 @@ describe('getFileSummary', () => {
 describe('generateDeletePlan', () => {
   test('file_ids 模式超过 200 个抛错', async () => {
     const ids = Array.from({ length: 201 }, (_, i) => i);
-    await expect(FileManageService.generateDeletePlan({ file_ids: ids }))
-      .rejects.toThrow('file_ids 模式单次最多 200 个文件');
+    await expect(FileManageService.generateDeletePlan({ file_ids: ids })).rejects.toThrow(
+      'file_ids 模式单次最多 200 个文件'
+    );
   });
 
   test('file_ids 模式正常执行', async () => {
@@ -212,11 +211,11 @@ describe('validateFileSafety', () => {
     // 实际上 mockSafetyQueries 用的是 mockResolvedValueOnce 链，无法覆盖
     // 所以手动设置，但保持与 mockSafetyQueries 相同的查询顺序
     pool.query
-      .mockResolvedValueOnce({ rows: [] })                    // isFileInActiveTask: recording
-      .mockResolvedValueOnce({ rows: [] })                    // isFileInActiveTask: transcode
-      .mockResolvedValueOnce({ rows: [] })                    // isFileInActiveTask: burn
-      .mockResolvedValueOnce({ rows: [] })                    // isFileInActiveTask: upload
-      .mockResolvedValueOnce({ rows: [] })                    // session check
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: recording
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: transcode
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: burn
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: upload
+      .mockResolvedValueOnce({ rows: [] }) // session check
       .mockResolvedValueOnce({ rows: [{ status: 'recording' }] }); // recording_files status → 非 completed
 
     const result = await FileManageService.validateFileSafety(makeFile());

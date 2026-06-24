@@ -243,7 +243,15 @@ class ReplayService {
         });
       }
       // 状态变更事件（M13 修复：覆盖所有有意义的状态转换）
-      const meaningfulStatuses = ['extracted', 'downloaded', 'completed', 'uploaded', 'backed_up', 'failed', 'cancelled'];
+      const meaningfulStatuses = [
+        'extracted',
+        'downloaded',
+        'completed',
+        'uploaded',
+        'backed_up',
+        'failed',
+        'cancelled',
+      ];
       if (meaningfulStatuses.includes(status)) {
         publishReplayEventFireAndForget('replay_status_changed', updated, {
           changed_fields: Object.keys(fields).filter((key) => fields[key] !== undefined),

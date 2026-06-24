@@ -63,14 +63,8 @@ describe('runCleanupCheck', () => {
 
     await runCleanupCheck();
 
-    expect(send).toHaveBeenCalledWith(
-      '文件管理 - 清理建议',
-      expect.stringContaining('总占用:')
-    );
-    expect(send).toHaveBeenCalledWith(
-      '文件管理 - 清理建议',
-      expect.stringContaining('可清理:')
-    );
+    expect(send).toHaveBeenCalledWith('文件管理 - 清理建议', expect.stringContaining('总占用:'));
+    expect(send).toHaveBeenCalledWith('文件管理 - 清理建议', expect.stringContaining('可清理:'));
 
     childProcess.execSync = origExecSync;
   });
@@ -117,10 +111,7 @@ describe('runCleanupCheck', () => {
       'auto-scheduler'
     );
     expect(FileManageService.executeDelete).toHaveBeenCalledWith('test-plan-id', 'auto-scheduler');
-    expect(send).toHaveBeenCalledWith(
-      '文件管理 - 自动清理',
-      expect.stringContaining('删除 5 个文件')
-    );
+    expect(send).toHaveBeenCalledWith('文件管理 - 自动清理', expect.stringContaining('删除 5 个文件'));
 
     childProcess.execSync = origExecSync;
   });
@@ -152,9 +143,7 @@ describe('runCleanupCheck', () => {
 
 describe('checkDiskWatermark', () => {
   test('正常水位返回 ok', async () => {
-    DataService.getSetting
-      .mockResolvedValueOnce('80')
-      .mockResolvedValueOnce('90');
+    DataService.getSetting.mockResolvedValueOnce('80').mockResolvedValueOnce('90');
 
     const childProcess = require('child_process');
     const origExecSync = childProcess.execSync;
@@ -168,9 +157,7 @@ describe('checkDiskWatermark', () => {
   });
 
   test('超警告阈值返回 warn', async () => {
-    DataService.getSetting
-      .mockResolvedValueOnce('80')
-      .mockResolvedValueOnce('90');
+    DataService.getSetting.mockResolvedValueOnce('80').mockResolvedValueOnce('90');
 
     const childProcess = require('child_process');
     const origExecSync = childProcess.execSync;
@@ -186,7 +173,9 @@ describe('checkDiskWatermark', () => {
   test('df 命令失败返回 null', async () => {
     const childProcess = require('child_process');
     const origExecSync = childProcess.execSync;
-    childProcess.execSync = jest.fn().mockImplementation(() => { throw new Error('command failed'); });
+    childProcess.execSync = jest.fn().mockImplementation(() => {
+      throw new Error('command failed');
+    });
 
     const result = await checkDiskWatermark();
     expect(result).toBeNull();

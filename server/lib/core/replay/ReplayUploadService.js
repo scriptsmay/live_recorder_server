@@ -207,12 +207,17 @@ class ReplayUploadService {
            WHERE id=$4`,
           [cmdStr, result.output, result.bvId, uploadRecordId]
         );
-        const { rows: [updatedRecord] } = await pool.query(
+        const {
+          rows: [updatedRecord],
+        } = await pool.query(
           `UPDATE replay_records SET status='completed', bv_id=$1, uploaded_at=NOW(), completed_at=NOW(), updated_at=NOW() WHERE id=$2 RETURNING *`,
           [result.bvId, record.id]
         );
 
-        publishReplayEventFireAndForget('replay_completed', updatedRecord || { ...record, status: 'completed', bv_id: result.bvId });
+        publishReplayEventFireAndForget(
+          'replay_completed',
+          updatedRecord || { ...record, status: 'completed', bv_id: result.bvId }
+        );
 
         const displayName = resolveDisplayName(record);
         notify.uploadComplete(displayName, title, result.bvId, record.play_url);

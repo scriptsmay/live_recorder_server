@@ -95,10 +95,7 @@ async function main() {
     // 检查目标是否已存在且大小一致（增量判断）
     let needCopy = true;
     try {
-      const [srcStat, destStat] = await Promise.all([
-        fs.promises.stat(src),
-        fs.promises.stat(dest),
-      ]);
+      const [srcStat, destStat] = await Promise.all([fs.promises.stat(src), fs.promises.stat(dest)]);
       if (srcStat.size === destStat.size && srcStat.mtimeMs <= destStat.mtimeMs) {
         needCopy = false;
       }

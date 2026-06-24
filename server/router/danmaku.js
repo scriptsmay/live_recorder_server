@@ -706,7 +706,9 @@ router.post('/danmaku/free-burn', async (req, res) => {
     } = req.body;
 
     if ((!source_type || !source_id) && !video_path) {
-      return res.status(400).json({ status: 'Error', message: '缺少必要参数：需要 video_path 或 source_type + source_id' });
+      return res
+        .status(400)
+        .json({ status: 'Error', message: '缺少必要参数：需要 video_path 或 source_type + source_id' });
     }
     if (!danmaku_session_id) {
       return res.status(400).json({ status: 'Error', message: '缺少必要参数：danmaku_session_id' });
@@ -724,10 +726,9 @@ router.post('/danmaku/free-burn', async (req, res) => {
       videoPath = video_path;
       // 从 managed_files 反查业务表获取 start_time
       try {
-        const mf = await pool.query(
-          'SELECT source_table, source_id AS sid FROM managed_files WHERE file_path = $1',
-          [video_path]
-        );
+        const mf = await pool.query('SELECT source_table, source_id AS sid FROM managed_files WHERE file_path = $1', [
+          video_path,
+        ]);
         if (mf.rows.length > 0) {
           const { source_table, sid } = mf.rows[0];
           if (source_table === 'replay_records') {
@@ -745,10 +746,7 @@ router.post('/danmaku/free-burn', async (req, res) => {
         console.warn('[free-burn] 从 managed_files 反查 start_time 失败:', err.message);
       }
     } else if (source_type === 'recording') {
-      const rec = await pool.query(
-        'SELECT output_path, started_at FROM recordings WHERE id = $1',
-        [source_id]
-      );
+      const rec = await pool.query('SELECT output_path, started_at FROM recordings WHERE id = $1', [source_id]);
       if (rec.rows.length === 0 || !rec.rows[0].output_path) {
         return res.status(404).json({ status: 'Error', message: '录制文件不存在或未转码' });
       }
@@ -777,10 +775,9 @@ router.post('/danmaku/free-burn', async (req, res) => {
     }
 
     // 2. 解析弹幕 JSONL 路径（兼容新旧两种目录结构）
-    const sessionDir = await pool.query(
-      'SELECT output_dir FROM recording_sessions WHERE id = $1',
-      [danmaku_session_id]
-    );
+    const sessionDir = await pool.query('SELECT output_dir FROM recording_sessions WHERE id = $1', [
+      danmaku_session_id,
+    ]);
     if (sessionDir.rows.length === 0 || !sessionDir.rows[0].output_dir) {
       return res.status(404).json({ status: 'Error', message: '弹幕会话不存在' });
     }
@@ -792,7 +789,10 @@ router.post('/danmaku/free-burn', async (req, res) => {
     }
 
     // 3. 计算时间偏移
-    const firstLine = fs.readFileSync(jsonlPath, 'utf-8').split('\n').find((l) => l.trim());
+    const firstLine = fs
+      .readFileSync(jsonlPath, 'utf-8')
+      .split('\n')
+      .find((l) => l.trim());
     if (!firstLine) {
       return res.status(400).json({ status: 'Error', message: '弹幕文件为空' });
     }
@@ -843,10 +843,9 @@ async function executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, he
   const outputPath = path.join(outputDir, `${basenameNoExt(videoPath)}_danmaku.mp4`);
 
   try {
-    await pool.query(
-      "UPDATE danmaku_free_burn_records SET status = 'processing', started_at = NOW() WHERE id = $1",
-      [taskId]
-    );
+    await pool.query("UPDATE danmaku_free_burn_records SET status = 'processing', started_at = NOW() WHERE id = $1", [
+      taskId,
+    ]);
 
     // 生成 ASS
     const assResult = await danmakuAssGenerator.generateFromJsonl({
@@ -862,16 +861,27 @@ async function executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, he
 
     // FFmpeg 压制
     const ffmpegArgs = [
-      '-y', '-i', videoPath,
-      '-vf', `ass=${assPath}`,
-      '-c:a', 'copy',
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+      '-y',
+      '-i',
+      videoPath,
+      '-vf',
+      `ass=${assPath}`,
+      '-c:a',
+      'copy',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      '23',
       outputPath,
     ];
     await new Promise((resolve, reject) => {
       const proc = require('child_process').spawn('ffmpeg', ffmpegArgs);
       let stderr = '';
-      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.stderr.on('data', (d) => {
+        stderr += d.toString();
+      });
       proc.on('close', (code) => {
         if (code === 0) resolve();
         else reject(new Error(`FFmpeg 退出码 ${code}: ${stderr.slice(-500)}`));
@@ -905,10 +915,10 @@ router.get('/danmaku/free-burn/records', async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const [data, count] = await Promise.all([
-      pool.query(
-        'SELECT * FROM danmaku_free_burn_records ORDER BY created_at DESC LIMIT $1 OFFSET $2',
-        [limitNum, offset]
-      ),
+      pool.query('SELECT * FROM danmaku_free_burn_records ORDER BY created_at DESC LIMIT $1 OFFSET $2', [
+        limitNum,
+        offset,
+      ]),
       pool.query('SELECT COUNT(*) FROM danmaku_free_burn_records'),
     ]);
 
