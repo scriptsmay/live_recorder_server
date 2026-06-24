@@ -538,6 +538,7 @@ async function runMigration() {
       ['file_cleanup_categories', ''],
       ['file_cleanup_watermark_warn', '80'],
       ['file_cleanup_watermark_critical', '90'],
+      ['file_cleanup_suggestion_notify', 'true'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

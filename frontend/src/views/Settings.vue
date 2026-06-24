@@ -281,6 +281,13 @@ const settingGroups: SettingGroup[] = [
         type: 'number',
         attrs: { min: 60, max: 99 },
       },
+      {
+        key: 'file_cleanup_suggestion_notify',
+        label: '启用清理通知',
+        desc: '启用后发送通知，提示清理可安全删除的文件',
+        type: 'select',
+        options: ['false', 'true'],
+      },
     ],
   },
 ]
