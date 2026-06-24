@@ -68,12 +68,12 @@ COPY . .
 COPY --from=frontend-builder /app/public/frontend ./public/frontend
 
 RUN mkdir -p /data/video_downloads /data/danmaku_output /data/replay /data/biliup /app/logs \
-    && chmod +x scripts/docker-entrypoint.sh scripts/replay-cron.sh
+    && chmod +x docker/scripts/docker-entrypoint.sh scripts/replay-cron.sh
 
 EXPOSE 1123
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:1123/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["./docker/scripts/docker-entrypoint.sh"]
 CMD ["node", "server/app.js"]
