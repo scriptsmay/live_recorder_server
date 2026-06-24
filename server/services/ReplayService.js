@@ -4,6 +4,7 @@ const pool = require('../db/index');
 const DataService = require('./DataService');
 const { sanitizeFilename } = require('../lib/utils/tool');
 const { getReplayWorkDir } = require('../config/config');
+const { publishReplayEventFireAndForget } = require('../lib/core/replay/replay-events');
 
 const KUAISHOU_HOST_RE = /(?:^|\.)kuaishou\.com$/i;
 
@@ -233,7 +234,13 @@ class ReplayService {
       `UPDATE replay_records SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
       params
     );
-    return result.rows[0] || null;
+    const updated = result.rows[0] || null;
+    if (updated && (fields.duration !== undefined || fields.resolution !== undefined)) {
+      publishReplayEventFireAndForget('replay_metadata_updated', updated, {
+        changed_fields: ['duration', 'resolution'].filter((key) => fields[key] !== undefined),
+      });
+    }
+    return updated;
   }
 
   static async markRecordsCompleted(ids) {
@@ -256,6 +263,9 @@ class ReplayService {
     );
 
     const updatedIds = new Set(result.rows.map((row) => Number(row.id)));
+    for (const record of result.rows) {
+      publishReplayEventFireAndForget('replay_completed', record);
+    }
     return {
       updated: result.rows,
       missing_ids: normalizedIds.filter((id) => !updatedIds.has(id)),

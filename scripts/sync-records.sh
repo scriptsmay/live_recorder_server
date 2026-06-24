@@ -17,6 +17,28 @@ TMPDIR="${TMPDIR:-/tmp}"
 EXPORT_CSV="$TMPDIR/sync_replay_$$.csv"
 EXPORT_SQL="$TMPDIR/sync_replay_$$.sql"
 STAGING="_staging_sync_$$"
+SYNC_REPLAY_RECORD_IDS="${SYNC_REPLAY_RECORD_IDS:-}"
+
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    --ids|--id)
+      shift
+      SYNC_REPLAY_RECORD_IDS="${1:-}"
+      ;;
+    --help|-h)
+      cat <<HELP
+Usage: sync-records.sh [--ids "1,2,3"]
+
+Environment:
+  SYNC_REPLAY_RECORD_IDS  Comma-separated local replay_records.id values to sync.
+HELP
+      exit 0
+      ;;
+    *)
+      SYNC_REPLAY_RECORD_IDS="$1"
+      ;;
+  esac
+fi
 
 if [ -n "$CRON_API_TOKEN" ]; then
   CRON_HEADER_ARGS="-H X-Cron-Token:$CRON_API_TOKEN"
@@ -55,16 +77,36 @@ die() {
 # ── 1. 连接检查 ───────────────────────────────────────────
 log "开始同步 replay_records → $REMOTE_TABLE"
 
+if [ -n "$SYNC_REPLAY_RECORD_IDS" ]; then
+  case "$SYNC_REPLAY_RECORD_IDS" in
+    *[!0-9,[:space:]]*)
+      die "SYNC_REPLAY_RECORD_IDS 只能包含数字、逗号和空白字符: $SYNC_REPLAY_RECORD_IDS"
+      ;;
+  esac
+  log "限定同步本地记录 ID: $SYNC_REPLAY_RECORD_IDS"
+fi
+
+LOCAL_TOTAL_COUNT=$(psql -tA "$DATABASE_URL" \
+  -c "SELECT COUNT(*) FROM replay_records" 2>&1) || die "本地数据库连接失败: $LOCAL_TOTAL_COUNT"
+log "本地共 $LOCAL_TOTAL_COUNT 条回放记录"
+
+LOCAL_FILTER_SQL=""
+if [ -n "$SYNC_REPLAY_RECORD_IDS" ]; then
+  LOCAL_FILTER_SQL=" AND id = ANY(string_to_array('$SYNC_REPLAY_RECORD_IDS', ',')::int[])"
+fi
+
 LOCAL_COUNT=$(psql -tA "$DATABASE_URL" \
-  -c "SELECT COUNT(*) FROM replay_records" 2>&1) || die "本地数据库连接失败: $LOCAL_COUNT"
-log "本地共 $LOCAL_COUNT 条回放记录"
+  -c "SELECT COUNT(*) FROM replay_records WHERE true$LOCAL_FILTER_SQL" 2>&1) || die "本地筛选记录失败: $LOCAL_COUNT"
+if [ -n "$SYNC_REPLAY_RECORD_IDS" ]; then
+  log "本地匹配 $LOCAL_COUNT 条回放记录"
+fi
 
 REMOTE_COUNT=$(psql -tA "$SUPABASE_PSQL_URL" \
   -c "SELECT COUNT(*) FROM $REMOTE_TABLE WHERE source = 'kuaishou'" 2>&1) || die "远程数据库连接失败: $REMOTE_COUNT"
 log "远端 $REMOTE_TABLE 中 kuaishou 记录 $REMOTE_COUNT 条"
 
-if [ "$REMOTE_COUNT" -gt 0 ] && [ "$LOCAL_COUNT" -lt "$REMOTE_COUNT" ] && [ "$SYNC_ALLOW_SOURCE_SHRINK" != "true" ]; then
-  die "本地记录数少于远端（local=$LOCAL_COUNT remote=$REMOTE_COUNT），已停止同步。若确认要允许源数据减少，请设置 SYNC_ALLOW_SOURCE_SHRINK=true"
+if [ -z "$SYNC_REPLAY_RECORD_IDS" ] && [ "$REMOTE_COUNT" -gt 0 ] && [ "$LOCAL_TOTAL_COUNT" -lt "$REMOTE_COUNT" ] && [ "$SYNC_ALLOW_SOURCE_SHRINK" != "true" ]; then
+  die "本地记录数少于远端（local=$LOCAL_TOTAL_COUNT remote=$REMOTE_COUNT），已停止同步。若确认要允许源数据减少，请设置 SYNC_ALLOW_SOURCE_SHRINK=true"
 fi
 
 [ "$LOCAL_COUNT" -gt 0 ] || {
@@ -112,6 +154,7 @@ SELECT
   error_message
 FROM replay_records
 WHERE replay_id IS NOT NULL AND replay_id <> ''
+$LOCAL_FILTER_SQL
 ORDER BY id
 ) TO STDOUT WITH CSV HEADER;
 EOF
@@ -240,7 +283,8 @@ psql -q "$SUPABASE_PSQL_URL" -c "DROP TABLE IF EXISTS $STAGING" || log "警告: 
 log "同步完成: $UPSERT_RESULT 条记录已写入 $REMOTE_TABLE"
 notify_sync "sync-records 同步完成" "本地表：replay_records
 目标表：$REMOTE_TABLE
-本地记录：$LOCAL_COUNT
+本地记录：$LOCAL_TOTAL_COUNT
+筛选记录：$LOCAL_COUNT
 远端记录：$REMOTE_COUNT
 导出记录：$EXPORT_COUNT
 暂存导入：$STAGING_COUNT

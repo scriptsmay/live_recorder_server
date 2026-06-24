@@ -79,6 +79,11 @@ async function download(record, options = {}) {
     ? `https://live.kuaishou.com/playback/${record.replay_id || ''}`
     : 'https://live.kuaishou.com';
   const args = ['-o', outputPath, '--referer', referer, '--no-progress', '--no-warnings'];
+  const tempDir = process.env.YTDLP_TEMP_DIR;
+  if (tempDir) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    args.push('--paths', `temp:${tempDir}`);
+  }
   if (options.force) args.push('--force-overwrites');
   args.push(record.m3u8_url);
   const result = await runCommand('yt-dlp', args, {

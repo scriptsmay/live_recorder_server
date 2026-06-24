@@ -7,6 +7,7 @@ jest.mock('../server/services/ReplayService', () => ({
 }));
 
 const path = require('path');
+const EventEmitter = require('events');
 
 describe('video-processor', () => {
   let videoProcessor;
@@ -35,6 +36,10 @@ describe('video-processor', () => {
       }),
     }));
     videoProcessor = require('../server/lib/core/replay/video-processor');
+  });
+
+  afterEach(() => {
+    delete process.env.YTDLP_TEMP_DIR;
   });
 
   describe('ensureInside', () => {
@@ -121,6 +126,33 @@ describe('video-processor', () => {
       const result = await videoProcessor.download(record);
       expect(result.success).toBe(false);
       expect(result.error).toContain('缺少 m3u8_url');
+    });
+
+    test('配置 YTDLP_TEMP_DIR 时传递 yt-dlp temp 路径', async () => {
+      const { spawn } = require('child_process');
+      const fs = require('fs');
+      const proc = new EventEmitter();
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      spawn.mockImplementation(() => {
+        setImmediate(() => proc.emit('close', 0));
+        return proc;
+      });
+      process.env.YTDLP_TEMP_DIR = '/tmp/yt_dlp_cache';
+
+      const result = await videoProcessor.download({
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/a.m3u8',
+        video_file_name: '回放',
+      });
+
+      expect(result.success).toBe(true);
+      expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp/yt_dlp_cache', { recursive: true });
+      const args = spawn.mock.calls[0][1];
+      expect(args).toContain('--paths');
+      expect(args).toContain('temp:/tmp/yt_dlp_cache');
+      expect(args[args.length - 1]).toBe('https://example.com/a.m3u8');
     });
   });
 
