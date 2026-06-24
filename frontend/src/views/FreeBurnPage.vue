@@ -308,7 +308,7 @@ onMounted(() => {
           <div
             v-for="rec in records"
             :key="rec.id"
-            class="px-6 py-3 hover:bg-gray-50 transition-colors"
+            class="px-6 py-3 text-sm hover:bg-gray-50 transition-colors"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
@@ -334,6 +334,9 @@ onMounted(() => {
                   <span>{{ basename(rec.video_path) }}</span>
                   <span class="text-gray-200">·</span>
                   <span>结束时间 {{ $formatTime(rec.completed_at) }}</span>
+                </div>
+                <div v-if="rec.output_path" class="mt-1">
+                  <span>输出文件路径：{{ rec.output_path }}</span>
                 </div>
                 <div
                   v-if="rec.status === 'failed' && rec.error_message"

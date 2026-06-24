@@ -5,6 +5,7 @@ const router = express.Router();
 const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
+const danmakuBurner = require('../lib/core/danmaku-burner');
 const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 const watchdog = require('../lib/core/watchdog');
 const DataService = require('../services/DataService');
@@ -818,9 +819,9 @@ router.post('/danmaku/free-burn', async (req, res) => {
     );
     const taskId = insertResult.rows[0].id;
 
-    // 5. 异步执行压制
-    executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, video_width, video_height).catch((err) => {
-      console.error(`[free-burn] 任务 ${taskId} 执行失败:`, err);
+    // 5. 异步入队压制（通过 DanmakuBurnQueue 统一调度，含 proc-log）
+    enqueueFreeBurn(taskId, videoPath, jsonlPath, offsetMs, video_width, video_height).catch((err) => {
+      console.error(`[free-burn] 任务 ${taskId} 入队失败:`, err);
     });
 
     res.json({
@@ -834,73 +835,23 @@ router.post('/danmaku/free-burn', async (req, res) => {
 });
 
 /**
- * 执行自由压制任务
+ * 自由压制任务入队（通过 DanmakuBurnQueue 统一调度）
  */
-async function executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, height) {
+async function enqueueFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, height) {
   const outputDir = path.join(DANMAKU_OUTPUT_DIR, 'free-burn', String(taskId));
-  fs.mkdirSync(outputDir, { recursive: true });
   const assPath = path.join(outputDir, 'danmaku.ass');
   const outputPath = path.join(outputDir, `${basenameNoExt(videoPath)}_danmaku.mp4`);
 
-  try {
-    await pool.query("UPDATE danmaku_free_burn_records SET status = 'processing', started_at = NOW() WHERE id = $1", [
-      taskId,
-    ]);
-
-    // 生成 ASS
-    const assResult = await danmakuAssGenerator.generateFromJsonl({
-      jsonlPath,
-      assPath,
-      videoWidth: width,
-      videoHeight: height,
-      offsetMs,
-    });
-    if (!assResult.success) {
-      throw new Error(`ASS 生成失败: ${assResult.error}`);
-    }
-
-    // FFmpeg 压制
-    const ffmpegArgs = [
-      '-y',
-      '-i',
-      videoPath,
-      '-vf',
-      `ass=${assPath}`,
-      '-c:a',
-      'copy',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'medium',
-      '-crf',
-      '23',
-      outputPath,
-    ];
-    await new Promise((resolve, reject) => {
-      const proc = require('child_process').spawn('ffmpeg', ffmpegArgs);
-      let stderr = '';
-      proc.stderr.on('data', (d) => {
-        stderr += d.toString();
-      });
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`FFmpeg 退出码 ${code}: ${stderr.slice(-500)}`));
-      });
-      proc.on('error', reject);
-    });
-
-    await pool.query(
-      "UPDATE danmaku_free_burn_records SET status = 'completed', output_path = $1, completed_at = NOW() WHERE id = $2",
-      [outputPath, taskId]
-    );
-    console.log(`[free-burn] 任务 ${taskId} 完成: ${outputPath}`);
-  } catch (err) {
-    await pool.query(
-      "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
-      [err.message, taskId]
-    );
-    console.error(`[free-burn] 任务 ${taskId} 失败:`, err.message);
-  }
+  await danmakuBurnQueue.enqueueFreeBurn({
+    taskId,
+    videoPath,
+    jsonlPath,
+    assPath,
+    outputPath,
+    offsetMs,
+    width,
+    height,
+  });
 }
 
 /**

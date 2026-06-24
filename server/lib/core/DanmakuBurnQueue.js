@@ -3,6 +3,7 @@ const path = require('path');
 const redis = require('../../db/redis');
 const pool = require('../../db/index');
 const burner = require('./danmaku-burner');
+const danmakuAssGenerator = require('./danmaku/DanmakuAssGenerator');
 const { SUPPORTED_TRANSCODE_EXT, getDanmakuOutputDir } = require('../../config/config');
 
 const QUEUE_KEY = 'danmaku_burn_queue';
@@ -127,6 +128,11 @@ class DanmakuBurnQueue {
    * 处理单个压制任务
    */
   async processTask(task) {
+    // 自由压制任务走独立流程
+    if (task.type === 'free-burn') {
+      return this._processFreeBurnTask(task);
+    }
+
     const {
       recordingFileId,
       sessionId,
@@ -200,6 +206,95 @@ class DanmakuBurnQueue {
           [err.message, recordingFileId]
         )
         .catch(() => {});
+    }
+  }
+
+  /**
+   * 自由压制任务入队
+   *
+   * @param {Object} taskData
+   * @param {number} taskData.taskId - danmaku_free_burn_records.id
+   * @param {string} taskData.videoPath - 输入视频路径
+   * @param {string} taskData.jsonlPath - 弹幕 JSONL 路径
+   * @param {string} taskData.assPath - ASS 输出路径
+   * @param {string} taskData.outputPath - 视频输出路径
+   * @param {number} taskData.offsetMs - 时间偏移
+   * @param {number} [taskData.width] - 视频宽度
+   * @param {number} [taskData.height] - 视频高度
+   */
+  async enqueueFreeBurn(taskData) {
+    try {
+      if (!taskData.videoPath || !fs.existsSync(taskData.videoPath)) {
+        console.warn(`[弹幕压制队列] 自由压制输入文件不存在: ${taskData.videoPath}`);
+        await pool.query(
+          "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
+          ['输入视频文件不存在', taskData.taskId]
+        );
+        return;
+      }
+
+      const task = { type: 'free-burn', ...taskData };
+      await redis.lPush(QUEUE_KEY, JSON.stringify(task));
+      await redis.sAdd(QUEUE_PATHS_SET, taskData.videoPath);
+      await redis.sAdd(QUEUE_PATHS_SET, taskData.outputPath);
+
+      console.log(`[弹幕压制队列] 自由压制入队: taskId=${taskData.taskId}`);
+      this.processQueue();
+    } catch (err) {
+      console.error('[弹幕压制队列] 自由压制入队失败:', err.message);
+    }
+  }
+
+  /**
+   * 处理自由压制任务（先生成 ASS，再调用 burner.burn）
+   */
+  async _processFreeBurnTask(task) {
+    const { taskId, videoPath, jsonlPath, assPath, outputPath, offsetMs, width, height } = task;
+
+    try {
+      // 确保输出目录存在
+      fs.mkdirSync(path.dirname(assPath), { recursive: true });
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+      // 生成 ASS
+      const assResult = await danmakuAssGenerator.generateFromJsonl({
+        jsonlPath,
+        assPath,
+        videoWidth: width,
+        videoHeight: height,
+        offsetMs,
+      });
+      if (!assResult.success) {
+        throw new Error(`ASS 生成失败: ${assResult.error}`);
+      }
+
+      // 调用 burner 执行 FFmpeg（含 proc-log、字体检测、超时控制）
+      const result = await burner.burn({
+        inputPath: videoPath,
+        assPath,
+        outputPath,
+        force: true,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      await pool.query(
+        "UPDATE danmaku_free_burn_records SET status = 'completed', output_path = $1, log_path = $2, completed_at = NOW() WHERE id = $3",
+        [outputPath, result.logPath, taskId]
+      );
+      console.log(`[弹幕压制队列] 自由压制完成: taskId=${taskId} (log: ${result.logPath})`);
+    } catch (err) {
+      await pool.query(
+        "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
+        [err.message, taskId]
+      ).catch(() => {});
+      console.error(`[弹幕压制队列] 自由压制失败: taskId=${taskId}`, err.message);
+    } finally {
+      redis.sRem(QUEUE_PATHS_SET, videoPath).catch(() => {});
+      redis.sRem(QUEUE_PATHS_SET, outputPath).catch(() => {});
     }
   }
 
