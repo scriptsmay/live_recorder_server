@@ -18,11 +18,13 @@ services:
       MESSAGE_GOTIFY_PRIORITY: ${MESSAGE_GOTIFY_PRIORITY:-5}
       CRON_API_TOKEN: ${CRON_API_TOKEN:-}
       REPLAY_WORK_DIR: ${REPLAY_WORK_DIR:-/data/replay}
+      DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
     ports:
       - '11123:1123'
     volumes:
       - ../data/video_downloads:/data/video_downloads
       - ../data/danmaku_output:/data/danmaku_output
+      - ../data/danmaku_archive:/data/danmaku_archive
       - ../data/replay:/data/replay
       - ../data/biliup:/data/biliup
       - ../logs:/app/logs
