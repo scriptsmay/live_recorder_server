@@ -692,7 +692,7 @@ function basenameNoExt(filePath) {
  * POST /api/danmaku/free-burn
  * 创建自由压制任务（回放视频 + 录制弹幕 组合压制）
  */
-router.post('/free-burn', async (req, res) => {
+router.post('/danmaku/free-burn', async (req, res) => {
   try {
     const {
       source_type,
@@ -897,7 +897,7 @@ async function executeFreeBurn(taskId, videoPath, jsonlPath, offsetMs, width, he
  * GET /api/danmaku/free-burn/records
  * 查询自由压制任务列表
  */
-router.get('/free-burn/records', async (req, res) => {
+router.get('/danmaku/free-burn/records', async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);

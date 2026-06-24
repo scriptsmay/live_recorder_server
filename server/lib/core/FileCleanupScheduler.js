@@ -168,9 +168,9 @@ async function runAutoCleanup() {
 async function sendCleanupSuggestion() {
   try {
     // 全局开关：可通过 DB 设置关闭清理建议通知
-    const suggestionEnabled = await DataService.getSetting('file_cleanup_suggestion_notify', 'true');
+    const suggestionEnabled = await DataService.getSetting('file_cleanup_suggestion_notify', 'false');
     if (suggestionEnabled !== 'true') {
-      console.log('[文件管理定时] 清理建议通知已关闭（file_cleanup_suggestion_notify=false）');
+      // console.log('[文件管理定时] 清理建议通知已关闭（file_cleanup_suggestion_notify=false）');
       return;
     }
 

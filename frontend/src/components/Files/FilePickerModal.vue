@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { apiGet } from '@/utils/api'
+import { formatBytes } from '@/utils/lib'
 import type { ManagedFile } from '@/types/file-manage'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
@@ -53,19 +54,6 @@ interface CategoryEntry {
 const categoryEntries = ref<CategoryEntry[]>([])
 
 const categories = ref<string[]>([])
-
-// ---- 工具函数 ----
-function formatBytes(bytes: number | null): string {
-  if (bytes == null || bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
-}
-
-function formatTime(ts: string | null): string {
-  if (!ts) return '-'
-  return ts.replace('T', ' ').replace(/\.\d+Z?$/, '')
-}
 
 // ---- 数据加载 ----
 async function loadCategoryCounts() {
@@ -150,12 +138,16 @@ function switchCategory(cat: string) {
 }
 
 // ---- 选择 ----
-function selectFile(file: ManagedFile) {
+function selectFile(file: ManagedFile, confirm = false) {
+  if (confirm) {
+    selected.value = file
+    return
+  }
   selected.value = selected.value?.id === file.id ? null : file
 }
 
 function selectAndConfirm(file: ManagedFile) {
-  selectFile(file)
+  selectFile(file, true)
   confirmSelect()
 }
 
@@ -213,44 +205,48 @@ watch(
 
 <template>
   <Modal :visible="visible" :title="title" max-width="max-w-4xl" @update:visible="close">
-    <!-- 目录入口 -->
-    <div v-if="categoryEntries.length > 1" class="px-6 pt-4 pb-2 flex gap-2 flex-wrap">
-      <button
-        class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-        :class="
-          activeCategory === ''
-            ? 'bg-brand-600 text-white border-brand-600'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-        "
-        @click="switchCategory('')"
-      >
-        全部
-      </button>
-      <button
-        v-for="entry in categoryEntries"
-        :key="entry.key"
-        class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-        :class="
-          activeCategory === entry.key
-            ? 'bg-brand-600 text-white border-brand-600'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-        "
-        @click="switchCategory(entry.key)"
-      >
-        {{ entry.label }}
-        <span class="ml-1 text-xs opacity-70">({{ entry.count }})</span>
-      </button>
-    </div>
+    <div class="flex items-center gap-2 pt-2 pb-3 border-b border-gray-100">
+      <!-- 目录入口 -->
+      <div v-if="categoryEntries.length > 1" class="px-2 flex gap-2 flex-wrap">
+        <button
+          class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+          :class="
+            activeCategory === ''
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+          "
+          @click="switchCategory('')"
+        >
+          全部
+        </button>
+        <button
+          v-for="entry in categoryEntries"
+          :key="entry.key"
+          class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+          :class="
+            activeCategory === entry.key
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+          "
+          @click="switchCategory(entry.key)"
+        >
+          {{ entry.label }}
+          <span class="ml-1 text-xs opacity-70">({{ entry.count }})</span>
+        </button>
+      </div>
 
-    <!-- 搜索栏 -->
-    <div class="px-6 pt-2 pb-3 border-b border-gray-100">
-      <input
-        v-model="search"
-        type="text"
-        placeholder="搜索文件名..."
-        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-        @input="onSearchInput"
-      />
+      <!-- 搜索栏 -->
+      <div class="px-2 flex-1">
+        <input
+          id="searchKey"
+          v-model="search"
+          name="searchKey"
+          type="text"
+          placeholder="搜索文件名..."
+          class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+          @input="onSearchInput"
+        />
+      </div>
     </div>
 
     <!-- 文件列表 -->
@@ -295,7 +291,7 @@ watch(
             <td class="px-2 py-2 text-right text-xs text-gray-600">
               {{ formatBytes(file.file_size) }}
             </td>
-            <td class="px-2 py-2 text-xs">{{ formatTime(file.mtime) }}</td>
+            <td class="px-2 py-2 text-xs">{{ $formatTime(file.mtime) }}</td>
           </tr>
         </tbody>
       </table>
