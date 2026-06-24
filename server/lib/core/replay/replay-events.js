@@ -1,5 +1,7 @@
 const redis = require('../../../db/redis');
 
+// Fire-and-forget: log Redis publish failures instead of silently swallowing
+
 function buildReplayEvent(type, record, extra = {}) {
   return {
     type,
@@ -21,7 +23,9 @@ async function publishReplayEvent(type, record, extra = {}) {
 }
 
 function publishReplayEventFireAndForget(type, record, extra = {}) {
-  publishReplayEvent(type, record, extra).catch(() => {});
+  publishReplayEvent(type, record, extra).catch((err) => {
+    console.error(`[replay-events] Redis 发布失败 (${type}):`, err.message);
+  });
 }
 
 module.exports = {
