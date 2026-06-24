@@ -432,6 +432,12 @@ class FileManageService {
       conditions.push(`group_id = $${paramIdx}`);
       params.push(String(filters.session_id));
     }
+    // 文件名模糊搜索
+    if (filters.search) {
+      paramIdx++;
+      conditions.push(`file_name ILIKE $${paramIdx}`);
+      params.push(`%${filters.search}%`);
+    }
 
     const whereClause = conditions.join(' AND ');
 

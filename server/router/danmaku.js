@@ -614,23 +614,53 @@ router.post('/free-burn', async (req, res) => {
       source_type,
       source_id,
       selected_file_index = 0,
+      video_path,
       danmaku_session_id,
       manual_adjust_ms = 0,
       video_width = 1920,
       video_height = 1080,
     } = req.body;
 
-    if (!source_type || !source_id || !danmaku_session_id) {
-      return res.status(400).json({ status: 'Error', message: '缺少必要参数' });
+    if ((!source_type || !source_id) && !video_path) {
+      return res.status(400).json({ status: 'Error', message: '缺少必要参数：需要 video_path 或 source_type + source_id' });
     }
-    if (!['recording', 'replay'].includes(source_type)) {
+    if (!danmaku_session_id) {
+      return res.status(400).json({ status: 'Error', message: '缺少必要参数：danmaku_session_id' });
+    }
+    if (source_type && !['recording', 'replay'].includes(source_type)) {
       return res.status(400).json({ status: 'Error', message: 'source_type 无效' });
     }
 
     // 1. 解析视频路径
     let videoPath;
     let videoStartTime = null;
-    if (source_type === 'recording') {
+
+    if (video_path) {
+      // 新路径：FilePickerModal 直接传文件路径
+      videoPath = video_path;
+      // 从 managed_files 反查业务表获取 start_time
+      try {
+        const mf = await pool.query(
+          'SELECT source_table, source_id AS sid FROM managed_files WHERE file_path = $1',
+          [video_path]
+        );
+        if (mf.rows.length > 0) {
+          const { source_table, sid } = mf.rows[0];
+          if (source_table === 'replay_records') {
+            const r = await pool.query('SELECT start_time FROM replay_records WHERE id = $1', [sid]);
+            videoStartTime = r.rows[0]?.start_time;
+          } else if (source_table === 'recording_files') {
+            const r = await pool.query(
+              'SELECT rs.started_at FROM recording_sessions rs JOIN recording_files rf ON rf.session_id = rs.id WHERE rf.id = $1',
+              [sid]
+            );
+            videoStartTime = r.rows[0]?.started_at;
+          }
+        }
+      } catch (err) {
+        console.warn('[free-burn] 从 managed_files 反查 start_time 失败:', err.message);
+      }
+    } else if (source_type === 'recording') {
       const rec = await pool.query(
         'SELECT output_path, started_at FROM recordings WHERE id = $1',
         [source_id]

@@ -37,6 +37,7 @@ router.get('/files', async (req, res) => {
       start_date,
       end_date,
       session_id,
+      search,
       page,
       limit,
       sort,
@@ -53,6 +54,7 @@ router.get('/files', async (req, res) => {
     if (start_date) filters.start_date = start_date;
     if (end_date) filters.end_date = end_date;
     if (session_id) filters.session_id = session_id;
+    if (search) filters.search = search;
 
     const pagination = { page, limit, sort };
     const data = await FileManageService.getFileList(filters, pagination);

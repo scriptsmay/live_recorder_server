@@ -2,27 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
+import type { ManagedFile } from '@/types/file-manage'
+import FilePickerModal from '@/components/Files/FilePickerModal.vue'
 
 const toast = useToast()
 
 // ---- 数据源 ----
-interface RecordingOption {
-  id: number
-  room_name: string
-  started_at: string
-  output_path: string
-}
-
-interface ReplayOption {
-  id: number
-  principal_name: string
-  replay_id: string
-  final_file_paths: string
-  raw_file_path: string
-  start_time: string | null
-  duration: number | null
-}
-
 interface SessionOption {
   id: number
   room_name: string
@@ -47,8 +32,8 @@ interface FreeBurnRecord {
 
 // ---- 表单状态 ----
 const sourceType = ref<'recording' | 'replay'>('replay')
-const sourceId = ref<number | null>(null)
-const selectedFileIndex = ref(0)
+const selectedVideoFile = ref<ManagedFile | null>(null)
+const showVideoPicker = ref(false)
 const danmakuSessionId = ref<number | null>(null)
 const manualAdjustSec = ref(0)
 const videoWidth = ref(1920)
@@ -56,28 +41,12 @@ const videoHeight = ref(1080)
 const submitting = ref(false)
 
 // ---- 选项列表 ----
-const recordings = ref<RecordingOption[]>([])
-const replays = ref<ReplayOption[]>([])
 const sessions = ref<SessionOption[]>([])
 const records = ref<FreeBurnRecord[]>([])
 const recordsTotal = ref(0)
 const recordsPage = ref(1)
 
 // ---- 加载选项 ----
-async function loadRecordings() {
-  try {
-    const res = await apiGet<{ rows: RecordingOption[] }>('/api/recordings?status=completed&limit=100')
-    recordings.value = res.data?.rows ?? []
-  } catch { /* ignore */ }
-}
-
-async function loadReplays() {
-  try {
-    const res = await apiGet<{ data: ReplayOption[] }>('/api/replay/records?status=completed&limit=100')
-    replays.value = res.data?.data ?? res.data ?? []
-  } catch { /* ignore */ }
-}
-
 async function loadSessions() {
   try {
     const res = await apiGet<{ data: SessionOption[] }>('/api/danmaku-toolbox/sessions')
@@ -97,37 +66,38 @@ async function loadRecords() {
   } catch { /* ignore */ }
 }
 
-// ---- 选中的回放文件列表 ----
-const replayFiles = ref<string[]>([])
-const selectedReplay = ref<ReplayOption | null>(null)
+// ---- 文件选择 ----
+function onVideoFileSelect(file: ManagedFile) {
+  selectedVideoFile.value = file
+  showVideoPicker.value = false
+}
 
-function onReplaySelect() {
-  selectedReplay.value = replays.value.find((r) => r.id === sourceId.value) ?? null
-  if (selectedReplay.value) {
-    try {
-      replayFiles.value = JSON.parse(selectedReplay.value.final_file_paths || '[]')
-    } catch {
-      replayFiles.value = []
-    }
-  } else {
-    replayFiles.value = []
-  }
-  selectedFileIndex.value = 0
+function onSourceTypeChange(type: 'recording' | 'replay') {
+  sourceType.value = type
+  selectedVideoFile.value = null
+}
+
+// ---- 工具函数 ----
+function formatBytes(bytes: number | null): string {
+  if (bytes == null || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
 // ---- 提交 ----
 async function handleSubmit() {
-  if (!sourceId.value || !danmakuSessionId.value) {
-    toast.error('请选择视频来源和弹幕会话')
+  if (!selectedVideoFile.value || !danmakuSessionId.value) {
+    toast.error('请选择视频文件和弹幕会话')
     return
   }
 
   submitting.value = true
   try {
     const res = await apiPost<{ id: number; offset_ms: number }>('/api/danmaku/free-burn', {
+      video_path: selectedVideoFile.value.file_path,
       source_type: sourceType.value,
-      source_id: sourceId.value,
-      selected_file_index: selectedFileIndex.value,
+      source_id: selectedVideoFile.value.source_id,
       danmaku_session_id: danmakuSessionId.value,
       manual_adjust_ms: manualAdjustSec.value * 1000,
       video_width: videoWidth.value,
@@ -158,8 +128,6 @@ function basename(filePath: string) {
 
 // ---- 生命周期 ----
 onMounted(() => {
-  loadRecordings()
-  loadReplays()
   loadSessions()
   loadRecords()
 })
@@ -188,7 +156,7 @@ onMounted(() => {
                 :class="sourceType === 'replay'
                   ? 'bg-brand-600 text-white border-brand-600'
                   : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
-                @click="sourceType = 'replay'; sourceId = null; replayFiles = []"
+                @click="onSourceTypeChange('replay')"
               >
                 回放文件
               </button>
@@ -197,49 +165,32 @@ onMounted(() => {
                 :class="sourceType === 'recording'
                   ? 'bg-brand-600 text-white border-brand-600'
                   : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
-                @click="sourceType = 'recording'; sourceId = null"
+                @click="onSourceTypeChange('recording')"
               >
                 录制文件
               </button>
             </div>
           </div>
 
-          <!-- 选择视频 -->
-          <div v-if="sourceType === 'replay'">
-            <label class="block text-sm font-medium text-gray-700 mb-1">选择回放</label>
-            <select
-              v-model="sourceId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-              @change="onReplaySelect"
+          <!-- 选择视频文件 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">选择文件</label>
+            <button
+              class="w-full px-3 py-2 text-sm text-left border border-gray-300 rounded-lg hover:border-brand-400 hover:bg-brand-50 transition-colors flex items-center justify-between"
+              @click="showVideoPicker = true"
             >
-              <option :value="null" disabled>请选择回放记录</option>
-              <option v-for="r in replays" :key="r.id" :value="r.id">
-                {{ r.principal_name || r.replay_id }} — {{ r.start_time || '未知时间' }}
-              </option>
-            </select>
-            <div v-if="replayFiles.length > 1" class="mt-2">
-              <label class="block text-xs text-gray-500 mb-1">选择文件分段（共 {{ replayFiles.length }} 个）</label>
-              <select
-                v-model="selectedFileIndex"
-                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-              >
-                <option v-for="(fp, i) in replayFiles" :key="i" :value="i">
-                  #{{ i }} — {{ basename(fp) }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div v-else>
-            <label class="block text-sm font-medium text-gray-700 mb-1">选择录制文件</label>
-            <select
-              v-model="sourceId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-            >
-              <option :value="null" disabled>请选择录制文件</option>
-              <option v-for="r in recordings" :key="r.id" :value="r.id">
-                {{ r.room_name || `录制 #${r.id}` }} — {{ r.started_at }}
-              </option>
-            </select>
+              <template v-if="selectedVideoFile">
+                <span class="text-gray-900 font-medium truncate">
+                  {{ selectedVideoFile.file_name }}
+                </span>
+                <span class="text-gray-400 ml-2 shrink-0">
+                  {{ formatBytes(selectedVideoFile.file_size) }}
+                </span>
+              </template>
+              <template v-else>
+                <span class="text-gray-400">点击选择{{ sourceType === 'replay' ? '回放' : '录制' }}文件...</span>
+              </template>
+            </button>
           </div>
 
           <!-- 弹幕会话 -->
@@ -294,7 +245,7 @@ onMounted(() => {
           <!-- 提交 -->
           <button
             class="w-full px-4 py-2.5 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="submitting || !sourceId || !danmakuSessionId"
+            :disabled="submitting || !selectedVideoFile || !danmakuSessionId"
             @click="handleSubmit"
           >
             {{ submitting ? '提交中...' : '开始压制' }}
@@ -364,5 +315,15 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 文件选择 Modal -->
+    <FilePickerModal
+      v-model:visible="showVideoPicker"
+      :title="`选择${sourceType === 'replay' ? '回放' : '录制'}文件`"
+      :file-type="sourceType === 'replay' ? 'replay_final' : 'recording_file'"
+      :category="sourceType === 'replay' ? 'replay' : 'recording'"
+      :model-value="selectedVideoFile"
+      @select="onVideoFileSelect"
+    />
   </div>
 </template>
