@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 import { apiGet } from '@/utils/api'
-import type { ManagedFile } from '@/types/file-manage'
+import type { ManagedFile, FileCategory } from '@/types/file-manage'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
 
@@ -10,7 +10,7 @@ const props = withDefaults(
     visible: boolean
     title?: string
     fileType?: string | string[]
-    category?: string
+    category?: string | string[]
     modelValue?: ManagedFile | null
   }>(),
   {
@@ -33,8 +33,26 @@ const page = ref(1)
 const loading = ref(false)
 const search = ref('')
 const selected = ref<ManagedFile | null>(null)
+const activeCategory = ref<string>('')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+// ---- 目录入口配置 ----
+const CATEGORY_LABELS: Record<string, string> = {
+  recording: '直播录制',
+  replay: '回放文件',
+  danmaku: '弹幕文件',
+}
+
+interface CategoryEntry {
+  key: string
+  label: string
+  count: number
+}
+
+const categoryEntries = ref<CategoryEntry[]>([])
+
+const categories = ref<string[]>([])
 
 // ---- 工具函数 ----
 function formatBytes(bytes: number | null): string {
@@ -50,6 +68,33 @@ function formatTime(ts: string | null): string {
 }
 
 // ---- 数据加载 ----
+async function loadCategoryCounts() {
+  if (categories.value.length <= 1) {
+    categoryEntries.value = []
+    return
+  }
+  try {
+    const entries: CategoryEntry[] = []
+    for (const cat of categories.value) {
+      const params = new URLSearchParams({
+        category: cat,
+        status: 'active',
+        exists_on_disk: 'true',
+        limit: '1',
+      })
+      const res = await apiGet<{ total: number }>(`/api/files?${params}`)
+      entries.push({
+        key: cat,
+        label: CATEGORY_LABELS[cat] || cat,
+        count: res.total ?? 0,
+      })
+    }
+    categoryEntries.value = entries
+  } catch {
+    categoryEntries.value = []
+  }
+}
+
 async function loadFiles() {
   loading.value = true
   try {
@@ -61,10 +106,13 @@ async function loadFiles() {
       sort: 'mtime DESC',
     }
     if (props.fileType) {
-      params.type = Array.isArray(props.fileType) ? props.fileType[0] : props.fileType
+      const ft = Array.isArray(props.fileType) ? props.fileType[0] : props.fileType
+      if (ft) params.type = ft
     }
-    if (props.category) {
-      params.category = props.category
+    // category: 使用 activeCategory（多目录模式）或 props.category（单目录模式）
+    const cat = activeCategory.value || (Array.isArray(props.category) ? '' : props.category)
+    if (cat) {
+      params.category = cat
     }
     if (search.value.trim()) {
       params.search = search.value.trim()
@@ -92,6 +140,14 @@ function onSearchInput() {
   }, 300)
 }
 
+// ---- 目录切换 ----
+function switchCategory(cat: string) {
+  activeCategory.value = activeCategory.value === cat ? '' : cat
+  page.value = 1
+  selected.value = null
+  loadFiles()
+}
+
 // ---- 选择 ----
 function selectFile(file: ManagedFile) {
   selected.value = selected.value?.id === file.id ? null : file
@@ -113,15 +169,34 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') close()
 }
 
+// ---- 初始化 ----
+function initPicker() {
+  selected.value = props.modelValue ?? null
+  search.value = ''
+  page.value = 1
+  // 解析 categories
+  if (Array.isArray(props.category)) {
+    categories.value = props.category
+    activeCategory.value = '' // 默认显示全部
+  } else if (props.category) {
+    categories.value = [props.category]
+    activeCategory.value = props.category
+  } else {
+    categories.value = []
+    activeCategory.value = ''
+  }
+  loadFiles()
+  if (categories.value.length > 1) {
+    loadCategoryCounts()
+  }
+}
+
 // ---- 生命周期 ----
 watch(
   () => props.visible,
   (v) => {
     if (v) {
-      selected.value = props.modelValue ?? null
-      search.value = ''
-      page.value = 1
-      loadFiles()
+      initPicker()
       window.addEventListener('keydown', onKeydown)
     } else {
       window.removeEventListener('keydown', onKeydown)
@@ -132,8 +207,37 @@ watch(
 
 <template>
   <Modal :visible="visible" :title="title" max-width="max-w-4xl" @update:visible="close">
+    <!-- 目录入口 -->
+    <div v-if="categoryEntries.length > 1" class="px-6 pt-4 pb-2 flex gap-2 flex-wrap">
+      <button
+        class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+        :class="
+          activeCategory === ''
+            ? 'bg-brand-600 text-white border-brand-600'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+        "
+        @click="switchCategory('')"
+      >
+        全部
+      </button>
+      <button
+        v-for="entry in categoryEntries"
+        :key="entry.key"
+        class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+        :class="
+          activeCategory === entry.key
+            ? 'bg-brand-600 text-white border-brand-600'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+        "
+        @click="switchCategory(entry.key)"
+      >
+        {{ entry.label }}
+        <span class="ml-1 text-xs opacity-70">({{ entry.count }})</span>
+      </button>
+    </div>
+
     <!-- 搜索栏 -->
-    <div class="px-6 pt-4 pb-3 border-b border-gray-100">
+    <div class="px-6 pt-2 pb-3 border-b border-gray-100">
       <input
         v-model="search"
         type="text"
@@ -153,9 +257,9 @@ watch(
         <thead>
           <tr class="text-left text-xs text-gray-500 border-b border-gray-100">
             <th class="pb-2 font-medium">文件名</th>
+            <th class="pb-2 font-medium w-20">来源</th>
             <th class="pb-2 font-medium w-24 text-right">大小</th>
             <th class="pb-2 font-medium w-40">修改时间</th>
-            <th class="pb-2 font-medium w-20">状态</th>
           </tr>
         </thead>
         <tbody>
@@ -172,25 +276,18 @@ watch(
             @dblclick="selectFile(file); confirmSelect()"
           >
             <td class="py-2.5 pr-3">
-              <div class="font-medium text-gray-900 truncate max-w-[400px]" :title="file.file_path">
+              <div class="font-medium text-gray-900" :title="file.file_path">
                 {{ file.file_name || file.file_path }}
               </div>
-              <div class="text-xs text-gray-400 truncate max-w-[400px]">{{ file.file_path }}</div>
+              <div class="text-xs text-gray-400">{{ file.file_path }}</div>
+            </td>
+            <td class="py-2.5">
+              <span class="inline-block px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                {{ CATEGORY_LABELS[file.category] || file.category }}
+              </span>
             </td>
             <td class="py-2.5 text-right text-gray-600">{{ formatBytes(file.file_size) }}</td>
             <td class="py-2.5 text-gray-500">{{ formatTime(file.mtime) }}</td>
-            <td class="py-2.5">
-              <span
-                class="inline-block px-1.5 py-0.5 text-xs rounded-full"
-                :class="
-                  file.safe_to_delete
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                "
-              >
-                {{ file.safe_to_delete ? '可清理' : '受保护' }}
-              </span>
-            </td>
           </tr>
         </tbody>
       </table>

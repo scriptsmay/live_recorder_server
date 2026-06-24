@@ -31,7 +31,6 @@ interface FreeBurnRecord {
 }
 
 // ---- 表单状态 ----
-const sourceType = ref<'recording' | 'replay'>('replay')
 const selectedVideoFile = ref<ManagedFile | null>(null)
 const showVideoPicker = ref(false)
 const danmakuSessionId = ref<number | null>(null)
@@ -72,11 +71,6 @@ function onVideoFileSelect(file: ManagedFile) {
   showVideoPicker.value = false
 }
 
-function onSourceTypeChange(type: 'recording' | 'replay') {
-  sourceType.value = type
-  selectedVideoFile.value = null
-}
-
 // ---- 工具函数 ----
 function formatBytes(bytes: number | null): string {
   if (bytes == null || bytes === 0) return '0 B'
@@ -96,7 +90,7 @@ async function handleSubmit() {
   try {
     const res = await apiPost<{ id: number; offset_ms: number }>('/api/danmaku/free-burn', {
       video_path: selectedVideoFile.value.file_path,
-      source_type: sourceType.value,
+      source_type: selectedVideoFile.value.category === 'replay' ? 'replay' : 'recording',
       source_id: selectedVideoFile.value.source_id,
       danmaku_session_id: danmakuSessionId.value,
       manual_adjust_ms: manualAdjustSec.value * 1000,
@@ -147,34 +141,9 @@ onMounted(() => {
           <h2 class="text-sm font-semibold text-gray-900">创建压制任务</h2>
         </div>
         <div class="p-6 space-y-5">
-          <!-- 视频来源类型 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">视频来源</label>
-            <div class="flex gap-2">
-              <button
-                class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-                :class="sourceType === 'replay'
-                  ? 'bg-brand-600 text-white border-brand-600'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
-                @click="onSourceTypeChange('replay')"
-              >
-                回放文件
-              </button>
-              <button
-                class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
-                :class="sourceType === 'recording'
-                  ? 'bg-brand-600 text-white border-brand-600'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
-                @click="onSourceTypeChange('recording')"
-              >
-                录制文件
-              </button>
-            </div>
-          </div>
-
           <!-- 选择视频文件 -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">选择文件</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">视频文件</label>
             <button
               class="w-full px-3 py-2 text-sm text-left border border-gray-300 rounded-lg hover:border-brand-400 hover:bg-brand-50 transition-colors flex items-center justify-between"
               @click="showVideoPicker = true"
@@ -188,7 +157,7 @@ onMounted(() => {
                 </span>
               </template>
               <template v-else>
-                <span class="text-gray-400">点击选择{{ sourceType === 'replay' ? '回放' : '录制' }}文件...</span>
+                <span class="text-gray-400">点击选择视频文件...</span>
               </template>
             </button>
           </div>
@@ -316,12 +285,11 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 文件选择 Modal -->
+    <!-- 文件选择 Modal：同时展示录制和回放两个目录入口 -->
     <FilePickerModal
       v-model:visible="showVideoPicker"
-      :title="`选择${sourceType === 'replay' ? '回放' : '录制'}文件`"
-      :file-type="sourceType === 'replay' ? 'replay_final' : 'recording_file'"
-      :category="sourceType === 'replay' ? 'replay' : 'recording'"
+      title="选择视频文件"
+      :category="['recording', 'replay']"
       :model-value="selectedVideoFile"
       @select="onVideoFileSelect"
     />
