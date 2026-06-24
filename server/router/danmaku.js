@@ -886,4 +886,55 @@ router.get('/danmaku/free-burn/records', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/danmaku/free-burn/:id/stream
+ * 流式播放自由压制产物文件
+ */
+router.get('/danmaku/free-burn/:id/stream', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await pool.query('SELECT output_path FROM danmaku_free_burn_records WHERE id = $1', [id]);
+
+    if (record.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '记录不存在' });
+    }
+
+    const filePath = record.rows[0].output_path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'Error', message: '压制产物文件不存在' });
+    }
+
+    const stat = fs.statSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = { '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.flv': 'video/x-flv' };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+      });
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    console.error('[free-burn] 流式播放失败:', err.message);
+    res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
 module.exports = router;

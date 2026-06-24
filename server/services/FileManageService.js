@@ -70,6 +70,9 @@ class FileManageService {
       // 4. 弹幕压制输出 → danmaku_output
       await this._scanDanmakuOutputFiles(results);
 
+      // 4b. 自由压制输出 → danmaku_output
+      await this._scanFreeBurnOutputFiles(results);
+
       // 5. 弹幕归档 → danmaku_archive
       await this._scanDanmakuArchiveFiles(results);
 
@@ -264,6 +267,45 @@ class FileManageService {
             'danmaku',
             'danmaku_output',
             'danmaku_burn_records',
+            row.source_id,
+            row.session_id ? String(row.session_id) : null,
+            row.output_path,
+            path.basename(row.output_path),
+            ext,
+            'active',
+            true,
+            null,
+          ],
+        };
+      }
+    );
+  }
+
+  /** 扫描自由压制输出 → managed_files (category=danmaku, file_type=danmaku_output) */
+  static async _scanFreeBurnOutputFiles(results) {
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (file_path) DO UPDATE SET
+         safe_to_delete = EXCLUDED.safe_to_delete,
+         updated_at = NOW()`;
+
+    await this._upsertFromQuery(
+      results,
+      `SELECT dfbr.id AS source_id, dfbr.output_path, dfbr.danmaku_session_id AS session_id
+       FROM danmaku_free_burn_records dfbr
+       WHERE dfbr.output_path IS NOT NULL AND dfbr.output_path != ''
+         AND dfbr.status = 'completed'`,
+      [],
+      UPSERT_SQL,
+      (row) => {
+        const ext = path.extname(row.output_path).toLowerCase().replace('.', '');
+        return {
+          filePath: row.output_path,
+          params: [
+            'danmaku',
+            'danmaku_output',
+            'danmaku_free_burn_records',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
             row.output_path,
