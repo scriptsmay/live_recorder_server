@@ -275,6 +275,7 @@ class DanmakuBurnQueue {
         outputPath,
         force: true,
         timeoutMs: 60 * 60 * 1000,
+        sessionId: `free-${taskId}`,
       });
 
       if (!result.success) {
@@ -287,10 +288,12 @@ class DanmakuBurnQueue {
       );
       console.log(`[弹幕压制队列] 自由压制完成: taskId=${taskId} (log: ${result.logPath})`);
     } catch (err) {
-      await pool.query(
-        "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
-        [err.message, taskId]
-      ).catch(() => {});
+      await pool
+        .query(
+          "UPDATE danmaku_free_burn_records SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
+          [err.message, taskId]
+        )
+        .catch(() => {});
       console.error(`[弹幕压制队列] 自由压制失败: taskId=${taskId}`, err.message);
     } finally {
       redis.sRem(QUEUE_PATHS_SET, videoPath).catch(() => {});

@@ -326,54 +326,68 @@ onMounted(() => {
             :key="rec.id"
             class="px-6 py-3 text-sm hover:bg-gray-50 transition-colors"
           >
-            <div class="flex items-start justify-between gap-2">
+            <div class="flex">
               <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-gray-900">#{{ rec.id }}</span>
-                  <span
-                    class="inline-block px-1.5 py-0.5 text-xs font-medium rounded-full"
-                    :class="statusBadge(rec.status).cls"
-                  >
-                    {{ statusBadge(rec.status).text }}
-                  </span>
-                  <span class="text-xs text-gray-400">
-                    {{ rec.source_type === 'replay' ? '回放' : '录制' }} + 会话 #{{
-                      rec.danmaku_session_id
-                    }}
-                  </span>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-gray-900">#{{ rec.id }}</span>
+                    <span
+                      class="inline-block px-1.5 py-0.5 text-xs font-medium rounded-full"
+                      :class="statusBadge(rec.status).cls"
+                    >
+                      {{ statusBadge(rec.status).text }}
+                    </span>
+                    <span class="text-xs text-gray-400">
+                      {{ rec.source_type === 'replay' ? '回放文件' : '录制文件' }}-{{
+                        basename(rec.video_path)
+                      }}
+                      + 会话#{{ rec.danmaku_session_id }}弹幕
+                    </span>
+                  </div>
+                  <div class="text-xs text-gray-400 shrink-0">
+                    {{ $formatTime(rec.created_at) }}
+                  </div>
                 </div>
+
                 <div class="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
                   <span>偏移 {{ rec.offset_ms }}ms</span>
                   <span class="text-gray-200">·</span>
                   <span>手动偏移 {{ rec.manual_adjust_ms }}ms</span>
                   <span class="text-gray-200">·</span>
-                  <span>{{ basename(rec.video_path) }}</span>
-                  <span class="text-gray-200">·</span>
                   <span>结束时间 {{ $formatTime(rec.completed_at) }}</span>
                 </div>
-                <div v-if="rec.output_path" class="mt-1 flex items-center gap-2">
-                  <span class="text-xs text-gray-400">输出：{{ basename(rec.output_path) }}</span>
-                  <button
-                    class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-brand-600 bg-brand-50 rounded hover:bg-brand-100 transition-colors"
-                    @click="handlePlay(rec)"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                      />
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    播放
-                  </button>
+                <div class="mt-1 py-2 text-xs text-gray-600">
+                  <p>输入：{{ rec.video_path }}</p>
+                  <div v-if="rec.output_path" class="mt-1 flex items-center gap-2">
+                    <span class="text-xs">输出：{{ rec.output_path }}</span>
+                    <button
+                      class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-brand-600 bg-brand-50 rounded hover:bg-brand-100 transition-colors"
+                      @click="handlePlay(rec)"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                        />
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      播放
+                    </button>
+                  </div>
                 </div>
+
                 <div
                   v-if="rec.status === 'failed' && rec.error_message"
                   class="mt-0.5 text-xs text-red-500 truncate"
@@ -381,9 +395,6 @@ onMounted(() => {
                 >
                   {{ rec.error_message }}
                 </div>
-              </div>
-              <div class="text-xs text-gray-400 shrink-0">
-                {{ $formatTime(rec.created_at) }}
               </div>
             </div>
           </div>
@@ -439,13 +450,7 @@ onMounted(() => {
               </svg>
             </button>
           </div>
-          <video
-            controls
-            autoplay
-            class="w-full"
-            style="max-height: 70vh"
-            :src="playerSrc"
-          />
+          <video controls autoplay class="w-full" style="max-height: 70vh" :src="playerSrc" />
         </div>
       </div>
     </Teleport>
