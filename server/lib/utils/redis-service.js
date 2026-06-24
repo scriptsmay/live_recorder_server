@@ -132,6 +132,21 @@ class RedisService {
     return this.client.lRange(key, start, end);
   }
 
+  async sAdd(key, value) {
+    await this.connect();
+    return this.client.sAdd(key, value);
+  }
+
+  async sIsMember(key, value) {
+    await this.connect();
+    return this.client.sIsMember(key, value);
+  }
+
+  async sRem(key, value) {
+    await this.connect();
+    return this.client.sRem(key, value);
+  }
+
   async publish(channel, message) {
     await this.connect();
     return this.client.publish(channel, message);

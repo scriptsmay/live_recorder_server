@@ -19,6 +19,10 @@ const client = {
   rPop: (key) => redisService.rPop(key),
   lLen: (key) => redisService.lLen(key),
   lRange: (key, start, end) => redisService.lRange(key, start, end),
+  // 集合操作
+  sAdd: (key, value) => redisService.sAdd(key, value),
+  sRem: (key, value) => redisService.sRem(key, value),
+  sIsMember: (key, value) => redisService.sIsMember(key, value),
   // 发布订阅
   publish: (channel, message) => redisService.publish(channel, message),
 };

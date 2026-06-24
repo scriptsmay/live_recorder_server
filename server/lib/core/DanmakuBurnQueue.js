@@ -6,6 +6,7 @@ const burner = require('./danmaku-burner');
 const { SUPPORTED_TRANSCODE_EXT, getDanmakuOutputDir } = require('../../config/config');
 
 const QUEUE_KEY = 'danmaku_burn_queue';
+const QUEUE_PATHS_SET = 'danmaku_burn_queue_paths'; // 文件路径索引集
 const PROCESSING_KEY = 'danmaku_burn_processing_count';
 
 /**
@@ -74,6 +75,9 @@ class DanmakuBurnQueue {
       }
 
       await redis.lPush(QUEUE_KEY, JSON.stringify(taskData));
+      // 维护路径索引集，供 _isFileInRedisQueue 快速查询
+      await redis.sAdd(QUEUE_PATHS_SET, taskData.inputPath);
+      await redis.sAdd(QUEUE_PATHS_SET, taskData.outputPath);
       await this._createBurnRecord(taskData);
 
       console.log(
@@ -105,6 +109,9 @@ class DanmakuBurnQueue {
         await this.incrementProcessingCount();
 
         this.processTask(task).finally(() => {
+          // 清理路径索引集
+          redis.sRem(QUEUE_PATHS_SET, task.inputPath).catch(() => {});
+          redis.sRem(QUEUE_PATHS_SET, task.outputPath).catch(() => {});
           this.decrementProcessingCount();
           this.processQueue();
         });

@@ -13,8 +13,34 @@ const EVENT_LOOP_YIELD_INTERVAL = 10;
  *
  * 提供文件扫描、索引同步、安全校验、删除计划和执行删除等能力。
  */
+const SCAN_LOCK_KEY = 'file_manage_scan_lock';
+const SCAN_LOCK_TTL = 300; // 5 分钟自动过期，防止崩溃后锁残留
+
 class FileManageService {
   // ========== 扫描与索引 ==========
+
+  /**
+   * 通用批量 upsert managed_files 方法
+   * @param {object} results - 扫描计数器
+   * @param {string} selectSql - 数据源 SELECT 语句
+   * @param {Array} selectParams - SELECT 参数
+   * @param {string} upsertSql - INSERT ... ON CONFLICT 语句
+   * @param {function} mapRow - (row) => { params, filePath } | null（返回 null 跳过）
+   */
+  static async _upsertFromQuery(results, selectSql, selectParams, upsertSql, mapRow) {
+    const { rows } = await pool.query(selectSql, selectParams);
+    for (const row of rows) {
+      results.scanned++;
+      const mapped = mapRow(row);
+      if (!mapped) continue;
+      try {
+        await pool.query(upsertSql, mapped.params);
+        results.created++;
+      } catch (err) {
+        results.errors.push({ file: mapped.filePath || 'unknown', error: err.message });
+      }
+    }
+  }
 
   /**
    * 扫描所有业务目录，组合 DB 记录和磁盘状态，upsert 到 managed_files。
@@ -23,25 +49,35 @@ class FileManageService {
    * 避免与 scanRecordingFiles() 双扫描冲突。
    */
   static async scanAllFiles() {
+    // Redis 分布式锁，防止并发扫描
+    const acquired = await redis.set(SCAN_LOCK_KEY, '1', { NX: true, EX: SCAN_LOCK_TTL });
+    if (!acquired) {
+      throw new Error('文件扫描正在进行中，请稍后再试');
+    }
+
     const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
 
-    // 1. 录制文件 → recording_file
-    await this._scanRecordingFiles(results);
+    try {
+      // 1. 录制文件 → recording_file
+      await this._scanRecordingFiles(results);
 
-    // 2. HLS 目录 → hls_directory
-    await this._scanHlsDirectories(results);
+      // 2. HLS 目录 → hls_directory
+      await this._scanHlsDirectories(results);
 
-    // 3. 回放文件 → replay_raw / replay_cut / replay_fixed / replay_final
-    await this._scanReplayFiles(results);
+      // 3. 回放文件 → replay_raw / replay_cut / replay_fixed / replay_final
+      await this._scanReplayFiles(results);
 
-    // 4. 弹幕压制输出 → danmaku_output
-    await this._scanDanmakuOutputFiles(results);
+      // 4. 弹幕压制输出 → danmaku_output
+      await this._scanDanmakuOutputFiles(results);
 
-    // 5. 弹幕归档 → danmaku_archive
-    await this._scanDanmakuArchiveFiles(results);
+      // 5. 弹幕归档 → danmaku_archive
+      await this._scanDanmakuArchiveFiles(results);
 
-    // 6. 刷新磁盘状态（stat 已索引文件）
-    await this._refreshDiskStatus(results);
+      // 6. 刷新磁盘状态（stat 已索引文件）
+      await this._refreshDiskStatus(results);
+    } finally {
+      await redis.del(SCAN_LOCK_KEY).catch(() => {});
+    }
 
     console.log(
       `[FileManage] 扫描完成: scanned=${results.scanned}, created=${results.created}, updated=${results.updated}, missing=${results.missing}`
@@ -51,100 +87,102 @@ class FileManageService {
 
   /** 扫描 recording_files → managed_files (category=recording, file_type=recording_file) */
   static async _scanRecordingFiles(results) {
-    const { rows } = await pool.query(`
-      SELECT rf.id AS source_id, rf.file_path, rf.file_name, rf.file_size, rf.status,
-             rf.session_id, rf.room_url, rs.output_dir
-      FROM recording_files rf
-      LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
-      WHERE rf.status NOT IN ('deleted', 'missing')
-    `);
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, file_size, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (file_path) DO UPDATE SET
+         file_name = EXCLUDED.file_name,
+         extension = EXCLUDED.extension,
+         file_size = EXCLUDED.file_size,
+         status = CASE
+           WHEN managed_files.status IN ('deleting', 'deleted') THEN managed_files.status
+           ELSE EXCLUDED.status
+         END,
+         source_id = EXCLUDED.source_id,
+         group_id = EXCLUDED.group_id,
+         updated_at = NOW()`;
 
-    for (const row of rows) {
-      results.scanned++;
-      const ext = path.extname(row.file_path).toLowerCase().replace('.', '');
-      try {
-        await pool.query(
-          `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-            file_path, file_name, extension, file_size, status, safe_to_delete, delete_block_reason)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-           ON CONFLICT (file_path) DO UPDATE SET
-             file_name = EXCLUDED.file_name,
-             extension = EXCLUDED.extension,
-             file_size = EXCLUDED.file_size,
-             status = CASE
-               WHEN managed_files.status IN ('deleting', 'deleted') THEN managed_files.status
-               ELSE EXCLUDED.status
-             END,
-             source_id = EXCLUDED.source_id,
-             group_id = EXCLUDED.group_id,
-             updated_at = NOW()`,
-          [
-            'recording',
-            'recording_file',
-            'recording_files',
+    await this._upsertFromQuery(
+      results,
+      `SELECT rf.id AS source_id, rf.file_path, rf.file_name, rf.file_size, rf.status,
+              rf.session_id, rf.room_url, rs.output_dir
+       FROM recording_files rf
+       LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
+       WHERE rf.status NOT IN ('deleted', 'missing')`,
+      [],
+      UPSERT_SQL,
+      (row) => {
+        const ext = path.extname(row.file_path).toLowerCase().replace('.', '');
+        return {
+          filePath: row.file_path,
+          params: [
+            'recording', 'recording_file', 'recording_files',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.file_path,
-            row.file_name,
-            ext,
-            row.file_size,
+            row.file_path, row.file_name, ext, row.file_size,
             row.status === 'completed' ? 'active' : row.status,
-            row.status === 'completed' ? true : false,
+            row.status === 'completed',
             row.status !== 'completed' ? `recording_status_${row.status}` : null,
-          ]
-        );
-        results.created++;
-      } catch (err) {
-        results.errors.push({ file: row.file_path, error: err.message });
+          ],
+        };
       }
-    }
+    );
   }
 
   /** 扫描 HLS 目录 → managed_files (category=recording, file_type=hls_directory) */
   static async _scanHlsDirectories(results) {
-    const { rows } = await pool.query(`
-      SELECT rf.session_id, MIN(rf.hls_playlist_path) AS hls_playlist_path
-      FROM recording_files rf
-      WHERE rf.is_hls_ready = true
-        AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''
-        AND rf.session_id IS NOT NULL
-      GROUP BY rf.session_id
-    `);
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (file_path) DO UPDATE SET
+         group_id = EXCLUDED.group_id,
+         updated_at = NOW()`;
 
-    for (const row of rows) {
-      results.scanned++;
-      const hlsDir = path.dirname(row.hls_playlist_path);
-      try {
-        await pool.query(
-          `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-            file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (file_path) DO UPDATE SET
-             group_id = EXCLUDED.group_id,
-             updated_at = NOW()`,
-          [
-            'recording',
-            'hls_directory',
-            'recording_sessions',
+    await this._upsertFromQuery(
+      results,
+      `SELECT rf.session_id, MIN(rf.hls_playlist_path) AS hls_playlist_path
+       FROM recording_files rf
+       WHERE rf.is_hls_ready = true
+         AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''
+         AND rf.session_id IS NOT NULL
+       GROUP BY rf.session_id`,
+      [],
+      UPSERT_SQL,
+      (row) => {
+        const hlsDir = path.dirname(row.hls_playlist_path);
+        return {
+          filePath: hlsDir,
+          params: [
+            'recording', 'hls_directory', 'recording_sessions',
             row.session_id,
             row.session_id ? String(row.session_id) : null,
-            hlsDir,
-            path.basename(hlsDir),
-            '',
-            'active',
-            true,
-            null,
-          ]
-        );
-        results.created++;
-      } catch (err) {
-        results.errors.push({ file: hlsDir, error: err.message });
+            hlsDir, path.basename(hlsDir), '', 'active', true, null,
+          ],
+        };
       }
-    }
+    );
   }
 
   /** 扫描回放文件 → managed_files */
   static async _scanReplayFiles(results) {
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (file_path) DO UPDATE SET
+         file_name = EXCLUDED.file_name,
+         extension = EXCLUDED.extension,
+         safe_to_delete = EXCLUDED.safe_to_delete,
+         delete_block_reason = EXCLUDED.delete_block_reason,
+         updated_at = NOW()`;
+
+    const PATH_FIELDS = [
+      { field: 'raw_file_path', fileType: 'replay_raw' },
+      { field: 'cut_file_paths', fileType: 'replay_cut' },
+      { field: 'fixed_file_paths', fileType: 'replay_fixed' },
+      { field: 'final_file_paths', fileType: 'replay_final' },
+    ];
+
+    // 将每条 replay_record 展开为多条（每种路径类型一条）
     const { rows } = await pool.query(`
       SELECT id, principal_id, principal_name, raw_file_path, cut_file_paths,
              fixed_file_paths, final_file_paths, status
@@ -152,137 +190,101 @@ class FileManageService {
       WHERE status NOT IN ('pending', 'cancelled')
     `);
 
-    const pathFields = [
-      { field: 'raw_file_path', fileType: 'replay_raw' },
-      { field: 'cut_file_paths', fileType: 'replay_cut' },
-      { field: 'fixed_file_paths', fileType: 'replay_fixed' },
-      { field: 'final_file_paths', fileType: 'replay_final' },
-    ];
-
+    const expanded = [];
     for (const row of rows) {
-      for (const { field, fileType } of pathFields) {
+      for (const { field, fileType } of PATH_FIELDS) {
         const raw = row[field];
         if (!raw) continue;
-
-        const paths = this._parseJsonPaths(raw);
-        for (const filePath of paths) {
-          if (!filePath) continue;
-          results.scanned++;
-          const ext = path.extname(filePath).toLowerCase().replace('.', '');
-          const safeToDelete = ['completed', 'uploaded', 'backed_up', 'failed'].includes(row.status);
-          try {
-            await pool.query(
-              `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-                file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-               ON CONFLICT (file_path) DO UPDATE SET
-                 file_name = EXCLUDED.file_name,
-                 extension = EXCLUDED.extension,
-                 safe_to_delete = EXCLUDED.safe_to_delete,
-                 delete_block_reason = EXCLUDED.delete_block_reason,
-                 updated_at = NOW()`,
-              [
-                'replay',
-                fileType,
-                'replay_records',
-                row.id,
-                row.principal_id,
-                filePath,
-                path.basename(filePath),
-                ext,
-                'active',
-                safeToDelete,
-                !safeToDelete ? `replay_status_${row.status}` : null,
-              ]
-            );
-            results.created++;
-          } catch (err) {
-            results.errors.push({ file: filePath, error: err.message });
-          }
+        for (const fp of this._parseJsonPaths(raw)) {
+          if (!fp) continue;
+          expanded.push({ ...row, filePath: fp, fileType });
         }
+      }
+    }
+
+    for (const row of expanded) {
+      results.scanned++;
+      const ext = path.extname(row.filePath).toLowerCase().replace('.', '');
+      const safeToDelete = ['completed', 'uploaded', 'backed_up', 'failed'].includes(row.status);
+      try {
+        await pool.query(UPSERT_SQL, [
+          'replay', row.fileType, 'replay_records',
+          row.id, row.principal_id,
+          row.filePath, path.basename(row.filePath), ext,
+          'active', safeToDelete,
+          !safeToDelete ? `replay_status_${row.status}` : null,
+        ]);
+        results.created++;
+      } catch (err) {
+        results.errors.push({ file: row.filePath, error: err.message });
       }
     }
   }
 
   /** 扫描弹幕压制输出 → managed_files (category=danmaku, file_type=danmaku_output) */
   static async _scanDanmakuOutputFiles(results) {
-    const { rows } = await pool.query(`
-      SELECT dbr.id AS source_id, dbr.output_path, dbr.status, dbr.session_id
-      FROM danmaku_burn_records dbr
-      WHERE dbr.output_path IS NOT NULL AND dbr.output_path != ''
-        AND dbr.status = 'completed'
-    `);
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (file_path) DO UPDATE SET
+         safe_to_delete = EXCLUDED.safe_to_delete,
+         updated_at = NOW()`;
 
-    for (const row of rows) {
-      results.scanned++;
-      const ext = path.extname(row.output_path).toLowerCase().replace('.', '');
-      try {
-        await pool.query(
-          `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-            file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (file_path) DO UPDATE SET
-             safe_to_delete = EXCLUDED.safe_to_delete,
-             updated_at = NOW()`,
-          [
-            'danmaku',
-            'danmaku_output',
-            'danmaku_burn_records',
+    await this._upsertFromQuery(
+      results,
+      `SELECT dbr.id AS source_id, dbr.output_path, dbr.status, dbr.session_id
+       FROM danmaku_burn_records dbr
+       WHERE dbr.output_path IS NOT NULL AND dbr.output_path != ''
+         AND dbr.status = 'completed'`,
+      [],
+      UPSERT_SQL,
+      (row) => {
+        const ext = path.extname(row.output_path).toLowerCase().replace('.', '');
+        return {
+          filePath: row.output_path,
+          params: [
+            'danmaku', 'danmaku_output', 'danmaku_burn_records',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.output_path,
-            path.basename(row.output_path),
-            ext,
-            'active',
-            true,
-            null,
-          ]
-        );
-        results.created++;
-      } catch (err) {
-        results.errors.push({ file: row.output_path, error: err.message });
+            row.output_path, path.basename(row.output_path), ext,
+            'active', true, null,
+          ],
+        };
       }
-    }
+    );
   }
 
   /** 扫描弹幕归档 → managed_files (category=danmaku, file_type=danmaku_archive) */
   static async _scanDanmakuArchiveFiles(results) {
-    const { rows } = await pool.query(`
-      SELECT dcr.id AS source_id, dcr.raw_path, dcr.session_id, dcr.status
-      FROM danmaku_capture_records dcr
-      WHERE dcr.raw_path IS NOT NULL AND dcr.raw_path != ''
-    `);
+    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
+        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (file_path) DO UPDATE SET
+         status = EXCLUDED.status,
+         updated_at = NOW()`;
 
-    for (const row of rows) {
-      results.scanned++;
-      const ext = path.extname(row.raw_path).toLowerCase().replace('.', '');
-      try {
-        await pool.query(
-          `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-            file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (file_path) DO UPDATE SET
-             status = EXCLUDED.status,
-             updated_at = NOW()`,
-          [
-            'danmaku',
-            'danmaku_archive',
-            'danmaku_capture_records',
+    await this._upsertFromQuery(
+      results,
+      `SELECT dcr.id AS source_id, dcr.raw_path, dcr.session_id, dcr.status
+       FROM danmaku_capture_records dcr
+       WHERE dcr.raw_path IS NOT NULL AND dcr.raw_path != ''`,
+      [],
+      UPSERT_SQL,
+      (row) => {
+        const ext = path.extname(row.raw_path).toLowerCase().replace('.', '');
+        return {
+          filePath: row.raw_path,
+          params: [
+            'danmaku', 'danmaku_archive', 'danmaku_capture_records',
             row.source_id,
             row.session_id ? String(row.session_id) : null,
-            row.raw_path,
-            path.basename(row.raw_path),
-            ext,
-            'active',
-            false, // 弹幕归档默认不可清理
+            row.raw_path, path.basename(row.raw_path), ext,
+            'active', false, // 弹幕归档默认不可清理
             'danmaku_archive_protected',
-          ]
-        );
-        results.created++;
-      } catch (err) {
-        results.errors.push({ file: row.raw_path, error: err.message });
+          ],
+        };
       }
-    }
+    );
   }
 
   /** 刷新已索引文件的磁盘状态 */
@@ -1040,29 +1042,13 @@ class FileManageService {
     }
   }
 
-  /** 检查文件路径是否在 Redis 处理队列中 */
+  /** 检查文件路径是否在 Redis 处理队列中（通过路径索引集 O(1) 查询） */
   static async _isFileInRedisQueue(filePath) {
-    // 检查转码队列
-    const transcodeQueue = await redis.lRange('transcode_queue', 0, -1);
-    for (const item of transcodeQueue) {
-      try {
-        const parsed = JSON.parse(item);
-        if (parsed.original_path === filePath || parsed.transcoded_path === filePath) return true;
-      } catch {
-        // 忽略解析错误
-      }
-    }
+    const inTranscode = await redis.sIsMember('transcode_queue_paths', filePath);
+    if (inTranscode) return true;
 
-    // 检查弹幕压制队列
-    const burnQueue = await redis.lRange('danmaku_burn_queue', 0, -1);
-    for (const item of burnQueue) {
-      try {
-        const parsed = JSON.parse(item);
-        if (parsed.input_path === filePath || parsed.output_path === filePath) return true;
-      } catch {
-        // 忽略解析错误
-      }
-    }
+    const inBurn = await redis.sIsMember('danmaku_burn_queue_paths', filePath);
+    if (inBurn) return true;
 
     return false;
   }

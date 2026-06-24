@@ -6,6 +6,7 @@ const transcoder = require('./transcoder');
 const hlsGenerator = require('./hls-generator');
 
 const QUEUE_KEY = 'transcode_queue';
+const QUEUE_PATHS_SET = 'transcode_queue_paths'; // 文件路径索引集，用于快速检查文件是否在队列中
 const PROCESSING_KEY = 'transcode_processing_count';
 
 class TranscodeQueue {
@@ -60,6 +61,9 @@ class TranscodeQueue {
       }
 
       await redis.lPush(QUEUE_KEY, JSON.stringify(taskData));
+      // 维护路径索引集，供 _isFileInRedisQueue 快速查询
+      await redis.sAdd(QUEUE_PATHS_SET, taskData.videoPathToTrans);
+      if (taskData.mp4Path) await redis.sAdd(QUEUE_PATHS_SET, taskData.mp4Path);
       await this.createTranscodeRecord(taskData);
       const tag = taskData.force ? '[手动]' : '[自动]';
       console.log(`[转码队列] ${tag} 任务入队: ${path.basename(taskData.videoPathToTrans)}`);
@@ -134,6 +138,9 @@ class TranscodeQueue {
         const task = JSON.parse(taskStr);
         await this.incrementProcessingCount();
         this.processTask(task).finally(() => {
+          // 清理路径索引集
+          redis.sRem(QUEUE_PATHS_SET, task.videoPathToTrans).catch(() => {});
+          if (task.mp4Path) redis.sRem(QUEUE_PATHS_SET, task.mp4Path).catch(() => {});
           this.decrementProcessingCount();
           this.processQueue();
         });
