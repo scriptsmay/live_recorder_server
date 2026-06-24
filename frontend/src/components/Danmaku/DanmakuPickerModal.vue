@@ -187,21 +187,20 @@ watch(
 
 <template>
   <Modal :visible="visible" title="选择弹幕会话" max-width="max-w-5xl" @update:visible="close">
-    <!-- 搜索栏 -->
-    <div class="px-6 pt-4 pb-3 border-b border-gray-100">
-      <input
-        v-model="sessionSearch"
-        type="text"
-        placeholder="搜索主播名..."
-        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-        @input="onSessionSearchInput"
-      />
-    </div>
-
     <!-- 主内容区：左侧会话列表 + 右侧弹幕预览 -->
     <div class="flex min-h-[400px] max-h-[60vh]">
       <!-- 左侧：会话列表 -->
       <div class="w-full lg:w-1/2 border-r border-gray-100 flex flex-col">
+        <!-- 搜索栏 -->
+        <div class="px-4 py-3 border-b border-gray-100">
+          <input
+            v-model="sessionSearch"
+            type="text"
+            placeholder="搜索主播名..."
+            class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+            @input="onSessionSearchInput"
+          />
+        </div>
         <div class="flex-1 overflow-y-auto">
           <div v-if="sessionsLoading" class="py-12 text-center text-sm text-gray-400">
             加载中...
@@ -215,7 +214,7 @@ watch(
                 <th class="p-2 font-medium w-16">ID</th>
                 <th class="p-2 font-medium">主播</th>
                 <th class="p-2 font-medium w-20 text-right">弹幕</th>
-                <th class="p-2 font-medium w-48">时间</th>
+                <th class="p-2 font-medium w-48">开始时间</th>
               </tr>
             </thead>
             <tbody>
