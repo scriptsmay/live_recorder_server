@@ -31,7 +31,7 @@ function close() {
     <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="fixed inset-0 bg-black/40" @click="close" />
       <div
-        class="relative bg-white rounded-xl shadow-xl w-full mx-4 max-h-[80vh] flex flex-col"
+        class="relative bg-white rounded-xl shadow-xl w-full mx-4 max-h-[88vh] flex flex-col"
         :class="maxWidth"
       >
         <div

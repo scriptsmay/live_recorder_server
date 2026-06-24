@@ -121,6 +121,11 @@ async function loadRecords() {
   }
 }
 
+function nextPage() {
+  recordsPage.value += 1
+  loadRecords()
+}
+
 // ---- 提交 ----
 async function handleSubmit() {
   if (!selectedVideoFile.value || !selectedSession.value) {
@@ -312,7 +317,7 @@ onMounted(() => {
             :key="rec.id"
             class="px-6 py-3 hover:bg-gray-50 transition-colors"
           >
-            <div class="flex items-center justify-between gap-2">
+            <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-medium text-gray-900">#{{ rec.id }}</span>
@@ -331,17 +336,22 @@ onMounted(() => {
                 <div class="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
                   <span>偏移 {{ rec.offset_ms }}ms</span>
                   <span class="text-gray-200">·</span>
+                  <span>手动偏移 {{ rec.manual_adjust_ms }}ms</span>
+                  <span class="text-gray-200">·</span>
                   <span>{{ basename(rec.video_path) }}</span>
+                  <span class="text-gray-200">·</span>
+                  <span>结束时间 {{ $formatTime(rec.completed_at) }}</span>
                 </div>
                 <div
                   v-if="rec.status === 'failed' && rec.error_message"
                   class="mt-0.5 text-xs text-red-500 truncate"
+                  :title="rec.error_message"
                 >
                   {{ rec.error_message }}
                 </div>
               </div>
               <div class="text-xs text-gray-400 shrink-0">
-                {{ rec.completed_at || rec.created_at }}
+                {{ $formatTime(rec.created_at) }}
               </div>
             </div>
           </div>
@@ -353,10 +363,7 @@ onMounted(() => {
         >
           <button
             class="text-xs text-gray-500 hover:text-brand-600 transition-colors"
-            @click="
-              recordsPage++;
-              loadRecords()
-            "
+            @click="nextPage()"
           >
             加载更多 ({{ recordsTotal }} 条)
           </button>

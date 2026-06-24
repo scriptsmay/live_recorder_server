@@ -211,10 +211,10 @@ watch(
           <table v-else class="w-full text-sm">
             <thead>
               <tr class="text-left text-xs text-gray-500 border-b border-gray-100">
-                <th class="p-2 font-medium w-16">ID</th>
+                <th class="p-2 font-medium w-20 pl-4">ID</th>
                 <th class="p-2 font-medium">主播</th>
-                <th class="p-2 font-medium w-20 text-right">弹幕</th>
-                <th class="p-2 font-medium w-48">开始时间</th>
+                <th class="p-2 font-medium w-24 text-right">弹幕</th>
+                <th class="p-2 font-medium w-40">开始时间</th>
               </tr>
             </thead>
             <tbody>
@@ -229,7 +229,7 @@ watch(
                 "
                 @click="selectSession(session)"
               >
-                <td class="px-2 py-2 font-mono text-xs text-gray-500">#{{ session.id }}</td>
+                <td class="px-2 py-2 font-mono text-xs text-gray-500 pl-4">#{{ session.id }}</td>
                 <td class="px-2 py-2 font-medium">{{ session.room_name || '未知' }}</td>
                 <td class="px-2 py-2 text-right text-xs text-gray-600">
                   {{ session.danmaku_event_count }}

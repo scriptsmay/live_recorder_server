@@ -250,7 +250,7 @@ watch(
     </div>
 
     <!-- 文件列表 -->
-    <div class="px-6 py-2 min-h-[300px] max-h-[50vh] overflow-y-auto">
+    <div class="px-6 py-2 min-h-[300px] max-h-[60vh] overflow-y-auto">
       <div v-if="loading" class="py-12 text-center text-sm text-gray-400">加载中...</div>
       <div v-else-if="files.length === 0" class="py-12 text-center text-sm text-gray-400">
         暂无可用文件
