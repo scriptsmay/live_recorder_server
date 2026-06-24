@@ -135,14 +135,12 @@ class ReplayProcessQueue {
     }
 
     let principalAcquired = false;
-    let deferred = false;
     try {
       principalAcquired = await redis.set(principalLock, token, { NX: true, EX: LOCK_TTL_SECONDS });
       if (!principalAcquired) {
         console.log(`[回放队列] 主播 ${record.principal_id} 已有任务处理中，重新入队`);
         writeLog(logStream, `主播锁已存在，重新入队 principal=${record.principal_id}`);
         await redis.lPush(QUEUE_KEY, JSON.stringify(task));
-        deferred = true;
         return;
       }
 
@@ -172,8 +170,8 @@ class ReplayProcessQueue {
       const status = err.code === 'REPLAY_TASK_CANCELLED' ? 'cancelled' : 'failed';
       await ReplayService.updateRecordStatus(record.id, status, { error_message: err.message });
     } finally {
-      // 延迟入队的任务保留 record 锁，避免与重入队任务冲突
-      if (!deferred) await redis.del(recordLock).catch(() => {});
+      // 延迟入队的任务也需要释放 record 锁，否则重入队任务拿不到锁会被跳过
+      await redis.del(recordLock).catch(() => {});
       if (principalAcquired) await redis.del(principalLock).catch(() => {});
       this.activeTasks.delete(record.id);
       logger.destroy();

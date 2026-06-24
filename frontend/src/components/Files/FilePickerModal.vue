@@ -306,6 +306,7 @@ watch(
       <Pagination
         :current="page"
         :total="total"
+        :page-size="20"
         @change="
           (p: number) => {
             page = p

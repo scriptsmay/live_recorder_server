@@ -776,7 +776,7 @@ router.post('/free-burn', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '视频路径不安全或为空' });
     }
 
-    // 2. 解析弹幕 JSONL 路径
+    // 2. 解析弹幕 JSONL 路径（兼容新旧两种目录结构）
     const sessionDir = await pool.query(
       'SELECT output_dir FROM recording_sessions WHERE id = $1',
       [danmaku_session_id]
@@ -784,7 +784,9 @@ router.post('/free-burn', async (req, res) => {
     if (sessionDir.rows.length === 0 || !sessionDir.rows[0].output_dir) {
       return res.status(404).json({ status: 'Error', message: '弹幕会话不存在' });
     }
-    const jsonlPath = path.join(sessionDir.rows[0].output_dir, 'danmaku', 'danmaku.jsonl');
+    const newJsonlPath = path.join(sessionDir.rows[0].output_dir, 'danmaku', 'danmaku.jsonl');
+    const oldJsonlPath = path.join(sessionDir.rows[0].output_dir, 'danmaku.jsonl');
+    const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
     if (!fs.existsSync(jsonlPath)) {
       return res.status(404).json({ status: 'Error', message: '弹幕 JSONL 文件不存在' });
     }

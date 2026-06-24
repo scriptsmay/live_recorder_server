@@ -989,11 +989,12 @@ class FileManageService {
       return { type: 'danmaku_burning' };
     }
 
-    // 投稿中
-    const escapedPath = filePath.replace(/[%_]/g, '\\$&');
+    // 投稿中：精确匹配 JSON 数组中的路径，避免子串误匹配
     const uploadCheck = await pool.query(
-      `SELECT id FROM upload_records WHERE status IN ('pending', 'uploading') AND upload_files::text LIKE $1`,
-      [`%${escapedPath}%`]
+      `SELECT id FROM upload_records
+       WHERE status IN ('pending', 'uploading')
+         AND EXISTS (SELECT 1 FROM json_array_elements_text(upload_files::json) elem WHERE elem = $1)`,
+      [filePath]
     );
     if (uploadCheck.rows.length > 0) {
       return { type: 'uploading' };

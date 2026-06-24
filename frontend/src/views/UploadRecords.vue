@@ -289,7 +289,12 @@ onMounted(fetchRecords)
       </div>
 
       <div class="px-4 pb-4">
-        <Pagination :current="page" :total="total" @change="handlePageChange" />
+        <Pagination
+          :current="page"
+          :total="total"
+          :page-size="pageSize"
+          @change="handlePageChange"
+        />
       </div>
     </div>
 

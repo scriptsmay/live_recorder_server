@@ -215,7 +215,7 @@ watch(
                 <th class="p-2 font-medium w-16">ID</th>
                 <th class="p-2 font-medium">主播</th>
                 <th class="p-2 font-medium w-20 text-right">弹幕</th>
-                <th class="p-2 font-medium w-36">时间</th>
+                <th class="p-2 font-medium w-48">时间</th>
               </tr>
             </thead>
             <tbody>
@@ -291,18 +291,14 @@ watch(
             无弹幕数据
           </div>
           <div v-else class="space-y-1">
-            <div
-              v-for="(evt, i) in previewEvents"
-              :key="i"
-              class="text-sm leading-relaxed flex gap-2"
-            >
+            <div v-for="(evt, i) in previewEvents" :key="i" class="text-sm leading-relaxed">
               <span class="text-xs text-gray-400 font-mono shrink-0 w-14">{{
                 evt.ts_str || '--:--:--'
               }}</span>
-              <span class="shrink-0 text-xs font-medium text-gray-500">{{
+              <span class="shrink-0 px-2 text-xs font-medium text-orange-300">{{
                 evt.username || '匿名'
               }}</span>
-              <span class="text-gray-800 break-all">{{ evt.text }}</span>
+              <span class="text-gray-900 break-all">{{ evt.text }}</span>
             </div>
           </div>
         </div>

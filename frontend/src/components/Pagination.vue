@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{
-  current: number
-  total: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    current: number
+    total: number
+    pageSize?: number
+  }>(),
+  {
+    pageSize: 50,
+  },
+)
 
 const emit = defineEmits<{
   change: [page: number]
 }>()
 
-const totalPages = computed(() => Math.ceil(props.total / 50) || 1)
+const totalPages = computed(() => Math.ceil(props.total / props.pageSize) || 1)
 
 const pages = computed(() => {
   const max = 7

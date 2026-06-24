@@ -500,7 +500,12 @@ onMounted(loadData)
             </table>
           </div>
           <div class="px-4 pb-4">
-            <Pagination :current="page" :total="total" @change="handlePageChange" />
+            <Pagination
+              :current="page"
+              :total="total"
+              :page-size="100"
+              @change="handlePageChange"
+            />
           </div>
         </div>
       </div>

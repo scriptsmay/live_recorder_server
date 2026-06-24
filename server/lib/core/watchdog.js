@@ -519,11 +519,15 @@ async function checkSessionTranscode() {
     if (autoTranscode !== 'true') return;
 
     // 联合查询 recording_sessions 和 recording_files 表
+    // 只处理已完成的录制文件，排除已删除/缺失的文件
     const { rows: files } = await pool.query(
       `SELECT r.id AS session_id, r.room_url, r.ended_at, rf.id AS file_id, rf.file_path
        FROM recording_sessions r
        JOIN recording_files rf ON rf.session_id = r.id
-       WHERE r.status = 'completed' AND r.ended_at IS NOT NULL`
+       LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
+       WHERE r.status = 'completed' AND r.ended_at IS NOT NULL
+         AND rf.status = 'completed'
+         AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
     for (const file of files) {
       const filePath = file.file_path;
