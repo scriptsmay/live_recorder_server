@@ -32,12 +32,15 @@ class RecordingManager {
    * 注册会话的分段追踪
    * @param {number} sessionId
    * @param {number} sessionStartMs - Date.now() 时间戳
+   * @param {Object} [options]
+   * @param {string} [options.roomUrl] - 房间 URL，用于 recordSegment 时 INSERT recording_files
    */
-  registerSession(sessionId, sessionStartMs) {
+  registerSession(sessionId, sessionStartMs, { roomUrl = '' } = {}) {
     this.activeSegments.set(sessionId, {
       sessionStartMs,
       segments: [],
       lastHeartbeat: Date.now(),
+      roomUrl,
     });
   }
 
@@ -53,7 +56,7 @@ class RecordingManager {
   }
 
   /**
-   * 记录分段文件创建
+   * 记录分段文件创建，同时 INSERT recording_files 行（fire-and-forget）
    * @param {number} sessionId
    * @param {string} filePath - 分段文件路径
    * @param {number} elapsedMs - 当前时间相对于会话开始的毫秒数
@@ -69,6 +72,7 @@ class RecordingManager {
     }
 
     // 开始新分段
+    const segIndex = tracker.segments.length;
     tracker.segments.push({
       filePath,
       startMs: elapsedMs,
@@ -76,6 +80,19 @@ class RecordingManager {
     });
 
     tracker.lastHeartbeat = Date.now();
+
+    // 主动 INSERT recording_files，避免竞态条件（watchdog 可能尚未扫描到该文件）
+    const fileName = filePath.split('/').pop();
+    pool
+      .query(
+        `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status, started_at, segment_index, checked_at)
+         VALUES ($1, $2, $3, $4, 'recording', to_timestamp($5 / 1000.0), $6, NOW())
+         ON CONFLICT (file_path) DO NOTHING`,
+        [sessionId, tracker.roomUrl, filePath, fileName, tracker.sessionStartMs + elapsedMs, segIndex]
+      )
+      .catch((err) => {
+        console.warn(`[RecordingManager] recordSegment INSERT 失败: ${err.message}`);
+      });
   }
 
   /**
@@ -93,51 +110,18 @@ class RecordingManager {
       endMs: seg.endMs || null,
     }));
 
-    // 在清理 tracker 之前写入数据库
-    // 使用 upsert (INSERT ... ON CONFLICT) 避免竞态条件：
-    // 当 watchdog 还未 INSERT recording_files 行时，UPDATE 会匹配 0 行导致分段时间丢失
-    let totalAffected = 0;
+    // 写入分段时间（行已由 recordSegment() 保证存在）
     for (const seg of segments) {
-      const result = await pool.query(
+      await pool.query(
         `UPDATE recording_files
          SET segment_start_ms = $1, segment_end_ms = $2
          WHERE file_path = $3`,
         [seg.startMs, seg.endMs || 0, seg.filePath]
       );
-      totalAffected += result.rowCount;
-    }
-
-    // 如果有分段未匹配到（watchdog 还未 INSERT），尝试用 session_id 匹配兜底
-    if (totalAffected < segments.length && segments.length > 0) {
-      console.warn(
-        `[RecordingManager] ${segments.length - totalAffected} 个分段未匹配，尝试按 session_id 回填`
-      );
-      for (const seg of segments) {
-        // 跳过已匹配的（通过检查 DB 中该 file_path 是否已有时间）
-        const existing = await pool.query(
-          `SELECT segment_start_ms, segment_end_ms FROM recording_files WHERE file_path = $1`,
-          [seg.filePath]
-        );
-        if (existing.rows.length > 0 && existing.rows[0].segment_start_ms > 0) {
-          continue; // 已有有效时间，跳过
-        }
-        if (existing.rows.length === 0) {
-          // 文件行尚不存在，INSERT 一条带时间的记录（watchdog 后续会 ON CONFLICT UPDATE 补充其他字段）
-          await pool.query(
-            `INSERT INTO recording_files (session_id, file_path, segment_start_ms, segment_end_ms, status)
-             VALUES ($1, $2, $3, $4, 'recording')
-             ON CONFLICT (file_path) DO UPDATE SET
-               segment_start_ms = GREATEST(EXCLUDED.segment_start_ms, recording_files.segment_start_ms),
-               segment_end_ms = CASE WHEN EXCLUDED.segment_end_ms > 0 THEN EXCLUDED.segment_end_ms ELSE recording_files.segment_end_ms END`,
-            [sessionId, seg.filePath, seg.startMs, seg.endMs || 0]
-          );
-          totalAffected++;
-        }
-      }
     }
 
     if (segments.length > 0) {
-      console.log(`[RecordingManager] 分段时间写入: ${segments.length} 个分段, 匹配 ${totalAffected} 条记录`);
+      console.log(`[RecordingManager] 分段时间写入: ${segments.length} 个分段`);
     }
 
     // 清理 tracker

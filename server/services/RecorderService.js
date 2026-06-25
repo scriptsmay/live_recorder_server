@@ -755,7 +755,7 @@ class RecorderService {
 
       // 注册分段追踪
       const sessionStartMs = Date.now();
-      recordingManager.registerSession(sessionId, sessionStartMs);
+      recordingManager.registerSession(sessionId, sessionStartMs, { roomUrl: room.room_url });
 
       // 五、然后启动下载器模块的录制进程
       const { process: dlProcess, logPath } = recordingManager.startRecordingProcess({

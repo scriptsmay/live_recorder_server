@@ -264,14 +264,6 @@ async function scanActiveSegments() {
           continue;
         }
 
-        const segTime = recordingManager.getSegmentTime(session.session_id, fp);
-        let segmentStartMs = 0;
-        let segmentEndMs = 0;
-        if (segTime) {
-          segmentStartMs = segTime.startMs;
-          segmentEndMs = segTime.endMs || 0;
-        }
-
         // 探测分段时长（秒）
         let durationSec = 0;
         try {
@@ -285,22 +277,17 @@ async function scanActiveSegments() {
         );
         if (managedCheck.rows.length > 0) continue;
 
+        // segment times 已由 recordSegment() 写入，watchdog 只补充运行时数据
         await pool.query(
-          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, segment_start_ms, segment_end_ms, duration_seconds, checked_at)
-           VALUES ($1, $2, $3, $4, $5, 'completed', NOW(), NOW(), $6, $7, $8, $9, NOW())
+          `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, duration_seconds, checked_at)
+           VALUES ($1, $2, $3, $4, $5, 'completed', NOW(), NOW(), $6, $7, NOW())
            ON CONFLICT (file_path) DO UPDATE SET
-             segment_start_ms = CASE
-               WHEN recording_files.segment_start_ms > 0 THEN recording_files.segment_start_ms
-               ELSE EXCLUDED.segment_start_ms
-             END,
-             segment_end_ms = CASE
-               WHEN recording_files.segment_end_ms > 0 THEN recording_files.segment_end_ms
-               ELSE EXCLUDED.segment_end_ms
-             END,
              duration_seconds = EXCLUDED.duration_seconds,
              file_size = EXCLUDED.file_size,
+             status = 'completed',
+             ended_at = NOW(),
              checked_at = NOW()`,
-          [session.session_id, session.room_url, fp, f, stat.size, segIndex, segmentStartMs, segmentEndMs, durationSec]
+          [session.session_id, session.room_url, fp, f, stat.size, segIndex, durationSec]
         );
 
         await pool.query(
