@@ -19,8 +19,13 @@ export function timeAgo(time: string | number | Date) {
 /**
  * 统一时间格式化显示
  */
-export function formatTime(time: string | number | Date, format = 'YYYY-MM-DD HH:mm:ss') {
-  return dayjs(time).format(format)
+export function formatTime(
+  time: string | number | Date | null | undefined,
+  format = 'YYYY-MM-DD HH:mm:ss',
+  defaultText = '-',
+) {
+  if (!time) return defaultText
+  return dayjs(time).format(format) || defaultText
 }
 
 /**

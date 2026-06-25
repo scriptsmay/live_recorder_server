@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ManagedFile, FileType } from '@/types/file-manage'
-import { formatBytes } from '@/utils/lib'
+import { formatBytes, formatTime } from '@/utils/lib'
 
 const props = defineProps<{
   files: ManagedFile[]
@@ -25,11 +25,6 @@ const page = defineModel<number>('page', { default: 1 })
 const limit = defineModel<number>('limit', { default: 50 })
 
 const totalPages = computed(() => Math.ceil(total.value / limit.value))
-
-function formatTime(t: string | null): string {
-  if (!t) return '-'
-  return new Date(t).toLocaleString('zh-CN', { hour12: false })
-}
 
 const fileTypeLabels: Record<FileType, string> = {
   recording_file: '录制文件',

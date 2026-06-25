@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useFileStore } from '@/stores/file-manage'
-import { formatBytes } from '@/utils/lib'
+import { formatBytes, formatTime } from '@/utils/lib'
 import type { ManagedFile, FileType } from '@/types/file-manage'
 
 const props = defineProps<{
@@ -25,11 +25,6 @@ watch(
     }
   },
 )
-
-function formatTime(t: string | null): string {
-  if (!t) return '-'
-  return new Date(t).toLocaleString('zh-CN', { hour12: false })
-}
 
 const fileTypeLabels: Record<FileType, string> = {
   recording_file: '录制文件',
