@@ -94,6 +94,8 @@ class RecordingManager {
     }));
 
     // 在清理 tracker 之前写入数据库
+    // 使用 upsert (INSERT ... ON CONFLICT) 避免竞态条件：
+    // 当 watchdog 还未 INSERT recording_files 行时，UPDATE 会匹配 0 行导致分段时间丢失
     let totalAffected = 0;
     for (const seg of segments) {
       const result = await pool.query(
@@ -105,14 +107,37 @@ class RecordingManager {
       totalAffected += result.rowCount;
     }
 
+    // 如果有分段未匹配到（watchdog 还未 INSERT），尝试用 session_id 匹配兜底
+    if (totalAffected < segments.length && segments.length > 0) {
+      console.warn(
+        `[RecordingManager] ${segments.length - totalAffected} 个分段未匹配，尝试按 session_id 回填`
+      );
+      for (const seg of segments) {
+        // 跳过已匹配的（通过检查 DB 中该 file_path 是否已有时间）
+        const existing = await pool.query(
+          `SELECT segment_start_ms, segment_end_ms FROM recording_files WHERE file_path = $1`,
+          [seg.filePath]
+        );
+        if (existing.rows.length > 0 && existing.rows[0].segment_start_ms > 0) {
+          continue; // 已有有效时间，跳过
+        }
+        if (existing.rows.length === 0) {
+          // 文件行尚不存在，INSERT 一条带时间的记录（watchdog 后续会 ON CONFLICT UPDATE 补充其他字段）
+          await pool.query(
+            `INSERT INTO recording_files (session_id, file_path, segment_start_ms, segment_end_ms, status)
+             VALUES ($1, $2, $3, $4, 'recording')
+             ON CONFLICT (file_path) DO UPDATE SET
+               segment_start_ms = GREATEST(EXCLUDED.segment_start_ms, recording_files.segment_start_ms),
+               segment_end_ms = CASE WHEN EXCLUDED.segment_end_ms > 0 THEN EXCLUDED.segment_end_ms ELSE recording_files.segment_end_ms END`,
+            [sessionId, seg.filePath, seg.startMs, seg.endMs || 0]
+          );
+          totalAffected++;
+        }
+      }
+    }
+
     if (segments.length > 0) {
       console.log(`[RecordingManager] 分段时间写入: ${segments.length} 个分段, 匹配 ${totalAffected} 条记录`);
-      if (totalAffected < segments.length) {
-        console.warn(
-          `[RecordingManager] ${segments.length - totalAffected} 个分段未匹配到 recording_files 记录，` +
-            `将通过 segmentTimes 直接传递给 ASS 生成器`
-        );
-      }
     }
 
     // 清理 tracker

@@ -174,7 +174,7 @@ class DanmakuAssGenerator {
       }
 
       if (segStart === 0 && segEnd === Infinity) {
-        console.warn(`[弹幕] 分段 ${seg.id} 缺少时间信息，将包含所有弹幕`);
+        console.warn(`[弹幕] ⚠ 分段 ${seg.id} (${seg.file_path}) 缺少时间信息，将包含所有弹幕 — 这会导致分段数据重复！`);
       }
 
       const segDuration = segEnd - segStart;

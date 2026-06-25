@@ -536,25 +536,30 @@ class RecorderService {
           }
         }
 
-        // 为每个分段生成分段 ASS（包含 file_path 用于匹配 tracker 数据）
+        // 查询 recording_files 获取 id（用于回写 danmaku_ass_path），
+        // 但分段时间完全来自 tracker，不依赖 DB 中的 segment_start_ms/segment_end_ms
         const segments = await pool.query(
-          `SELECT id, segment_index, segment_start_ms, segment_end_ms, file_path FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
+          `SELECT id, file_path FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
           [sessionId]
         );
 
-        if (segments.rows.length > 0) {
+        if (segments.rows.length > 0 && segmentTimes.size > 0) {
           const segOutputDir = path.join(danmakuDir, 'segments');
           const segResults = await danmakuAssGenerator.generateSegmentAss({
             jsonlPath,
             outputDir: segOutputDir,
             segments: segments.rows,
-            segmentTimes: segmentTimes.size > 0 ? segmentTimes : null,
+            segmentTimes,
           });
 
           for (const seg of segResults) {
             await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
           }
           console.log(`[弹幕] 分段 ASS 生成完成: ${segResults.length} 个分段`);
+        } else if (segmentTimes.size === 0) {
+          console.warn(`[弹幕] tracker 数据为空，跳过分段 ASS 生成`);
+        } else {
+          console.warn(`[弹幕] recording_files 无记录（watchdog 尚未扫描），跳过分段 ASS 生成`);
         }
       } else {
         console.warn(`[弹幕] ASS 生成失败: ${assResult.error}`);

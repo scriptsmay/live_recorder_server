@@ -289,8 +289,14 @@ async function scanActiveSegments() {
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, segment_start_ms, segment_end_ms, duration_seconds, checked_at)
            VALUES ($1, $2, $3, $4, $5, 'completed', NOW(), NOW(), $6, $7, $8, $9, NOW())
            ON CONFLICT (file_path) DO UPDATE SET
-             segment_start_ms = EXCLUDED.segment_start_ms,
-             segment_end_ms = EXCLUDED.segment_end_ms,
+             segment_start_ms = CASE
+               WHEN recording_files.segment_start_ms > 0 THEN recording_files.segment_start_ms
+               ELSE EXCLUDED.segment_start_ms
+             END,
+             segment_end_ms = CASE
+               WHEN recording_files.segment_end_ms > 0 THEN recording_files.segment_end_ms
+               ELSE EXCLUDED.segment_end_ms
+             END,
              duration_seconds = EXCLUDED.duration_seconds,
              file_size = EXCLUDED.file_size,
              checked_at = NOW()`,
