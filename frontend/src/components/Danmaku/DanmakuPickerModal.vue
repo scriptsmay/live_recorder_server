@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { apiGet } from '@/utils/api'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
+import { formatTime } from '@/utils/lib'
 
 // ---- 类型 ----
 interface Session {
@@ -59,12 +60,6 @@ const previewSearch = ref('')
 const previewLoading = ref(false)
 
 let sessionSearchTimer: ReturnType<typeof setTimeout> | null = null
-
-// ---- 工具函数 ----
-function formatTime(ts: string | null): string {
-  if (!ts) return '-'
-  return ts.replace('T', ' ').replace(/\.\d+Z?$/, '')
-}
 
 // ---- 数据加载 ----
 async function loadSessions() {
@@ -235,7 +230,7 @@ watch(
                   {{ session.danmaku_event_count }}
                 </td>
                 <td class="px-2 py-2 text-xs text-gray-400">
-                  {{ formatTime(session.started_at) }}
+                  {{ session.started_at ? formatTime(session.started_at) : '-' }}
                 </td>
               </tr>
             </tbody>
