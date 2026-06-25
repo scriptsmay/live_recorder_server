@@ -21,11 +21,43 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if replay-cron files changed
+        id: check
+        run: |
+          # workflow_dispatch（手动触发）始终构建
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$PREV_TAG" HEAD -- \
+            docker/Dockerfile.replay-cron \
+            scripts/replay-cron.sh \
+            scripts/cron-entrypoint.sh \
+            scripts/sync-records.sh \
+            .github/workflows/replay-cron-image.yml)
+
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Docker Buildx
+        if: steps.check.outputs.changed == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to the Container registry
+        if: steps.check.outputs.changed == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -33,6 +65,7 @@ jobs:
           password: ${{ secrets.MY_TOKEN }}
 
       - name: Extract metadata
+        if: steps.check.outputs.changed == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -42,6 +75,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build and push Docker image
+        if: steps.check.outputs.changed == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
