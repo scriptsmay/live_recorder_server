@@ -67,8 +67,8 @@ class DanmakuAssGenerator {
         return { success: false, eventCount: 0, error: 'no_events' };
       }
 
-      // 只处理评论弹幕（第一版）
-      const comments = events.filter((e) => e.type === 'comment' && e.text);
+      // 只处理评论弹幕，过滤纯颜色码文本如 #9DCFFF
+      const comments = events.filter((e) => e.type === 'comment' && e.text && !this._isColorCode(e.text));
       if (comments.length === 0) {
         return { success: false, eventCount: 0, error: 'no_comments' };
       }
@@ -143,7 +143,7 @@ class DanmakuAssGenerator {
 
     // 一次性读取所有事件
     const allEvents = await this._readJsonl(jsonlPath);
-    const comments = allEvents.filter((e) => e.type === 'comment' && e.text);
+    const comments = allEvents.filter((e) => e.type === 'comment' && e.text && !this._isColorCode(e.text));
 
     // 应用时间偏移
     if (offsetMs !== 0) {
@@ -210,6 +210,15 @@ class DanmakuAssGenerator {
     }
 
     return results;
+  }
+
+  /**
+   * 检查文本是否为纯颜色码（如 #9DCFFF、#FFF）
+   * @param {string} text
+   * @returns {boolean}
+   */
+  _isColorCode(text) {
+    return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(text.trim());
   }
 
   /**
