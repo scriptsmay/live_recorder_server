@@ -6,7 +6,8 @@ import { useConfirm } from '@/utils/confirm'
 import { apiGet, ApiError } from '@/utils/api'
 import StatusCards from './danmaku-toolbox/StatusCards.vue'
 import SessionCard from './danmaku-toolbox/SessionCard.vue'
-import DanmakuSearchModal from './danmaku-toolbox/DanmakuSearchModal.vue'
+import DanmakuSearchPanel from '@/components/Danmaku/DanmakuSearchPanel.vue'
+import Modal from '@/components/Modal.vue'
 import UploadModal from './sessions/UploadModal.vue'
 import type { UploadTemplate } from '@/types/api'
 
@@ -25,7 +26,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 const searchModalVisible = ref(false)
 const searchModalSessionId = ref<number | null>(null)
 const searchModalRoomName = ref('')
-const searchModalRef = ref<InstanceType<typeof DanmakuSearchModal> | null>(null)
+const searchPanelRef = ref<InstanceType<typeof DanmakuSearchPanel> | null>(null)
 
 // 投稿弹窗
 const uploadModalOpen = ref(false)
@@ -125,7 +126,7 @@ function handleSearchDanmaku(sessionId: number, roomName: string) {
   searchModalSessionId.value = sessionId
   searchModalRoomName.value = roomName
   searchModalVisible.value = true
-  searchModalRef.value?.reset()
+  searchPanelRef.value?.reset()
 }
 
 async function fetchUploadTemplates() {
@@ -323,13 +324,27 @@ function handleRefreshAll() {
     </div>
 
     <!-- 弹幕搜索弹窗 -->
-    <DanmakuSearchModal
-      ref="searchModalRef"
+    <Modal
       :visible="searchModalVisible"
-      :session-id="searchModalSessionId"
-      :room-name="searchModalRoomName"
-      @close="searchModalVisible = false"
-    />
+      max-width="max-w-3xl"
+      @update:visible="searchModalVisible = $event"
+    >
+      <template #header>
+        <h3 class="text-lg font-semibold text-gray-900">
+          弹幕搜索
+          <span class="text-sm font-normal text-gray-500 ml-2">
+            #{{ searchModalSessionId }} {{ searchModalRoomName }}
+          </span>
+        </h3>
+      </template>
+      <div class="px-6 py-4">
+        <DanmakuSearchPanel
+          v-if="searchModalSessionId"
+          ref="searchPanelRef"
+          :session-id="searchModalSessionId"
+        />
+      </div>
+    </Modal>
 
     <!-- 投稿弹窗（弹幕工具箱：使用弹幕压制后视频） -->
     <UploadModal

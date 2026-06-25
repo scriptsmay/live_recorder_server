@@ -10,6 +10,7 @@ import { useRoute } from 'vue-router'
 import { apiGet, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { formatBytes } from '@/utils/lib'
+import DanmakuSearchPanel from '@/components/Danmaku/DanmakuSearchPanel.vue'
 
 const route = useRoute()
 const toast = useToast()
@@ -64,17 +65,6 @@ interface SessionDetail {
 const detail = ref<SessionDetail | null>(null)
 const loading = ref(false)
 const notFound = ref(false)
-
-// ---- Danmaku Search ----
-const searchKeyword = ref('')
-const searchResults = ref<
-  Array<{ ts_ms: number; ts_str: string; text: string; username: string; user_id: string }>
->([])
-const searchTotal = ref(0)
-const searchOffset = ref(0)
-const searchLimit = 50
-const searching = ref(false)
-const searchExecuted = ref(false)
 
 // ---- Computed ----
 const sessionStatusBadge = computed(() => {
@@ -146,13 +136,6 @@ function burnStatusBadge(status: string) {
   return map[status] || { text: status, cls: 'bg-gray-100 text-gray-500' }
 }
 
-function highlightKeyword(text: string, keyword: string): string {
-  if (!keyword) return text
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp('(' + escaped + ')', 'gi')
-  return text.replace(re, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>')
-}
-
 // ---- Data Fetching ----
 async function fetchDetail() {
   loading.value = true
@@ -169,55 +152,6 @@ async function fetchDetail() {
   } finally {
     loading.value = false
   }
-}
-
-async function searchDanmaku() {
-  searching.value = true
-  searchExecuted.value = true
-  try {
-    const params = new URLSearchParams({
-      session_id: sessionId.value,
-      keyword: searchKeyword.value,
-      limit: String(searchLimit),
-      offset: String(searchOffset.value),
-    })
-    // API 返回 { status, data: [...], total, offset, limit }
-    const res = await fetch('/api/danmaku/search?' + params.toString())
-    const json = await res.json()
-
-    if (!res.ok || json.status !== 'ok') {
-      toast.error('弹幕搜索失败: ' + (json.message || '未知错误'))
-      return
-    }
-
-    searchResults.value = json.data || []
-    searchTotal.value = json.total || 0
-  } catch (err) {
-    toast.error('弹幕搜索异常: ' + (err instanceof Error ? err.message : String(err)))
-  } finally {
-    searching.value = false
-  }
-}
-
-function handleSearch() {
-  searchOffset.value = 0
-  searchDanmaku()
-}
-
-function handleSearchKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') {
-    handleSearch()
-  }
-}
-
-function prevPage() {
-  searchOffset.value = Math.max(0, searchOffset.value - searchLimit)
-  searchDanmaku()
-}
-
-function nextPage() {
-  searchOffset.value += searchLimit
-  searchDanmaku()
 }
 
 function logFileUrl(logPath: string | null) {
@@ -341,10 +275,18 @@ onMounted(() => {
                 </div>
                 <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">JSONL 路径</dt>
-                  <dd class="text-gray-700">
+                  <dd class="text-gray-700 flex items-center gap-1.5">
                     <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{
                       detail.capture.raw_path || '-'
                     }}</code>
+                    <a
+                      v-if="detail.capture.raw_path"
+                      :href="`/api/danmaku/sessions/${sessionId}/raw`"
+                      download
+                      class="px-2 py-0.5 text-[11px] rounded border border-blue-300 text-blue-600 hover:bg-blue-50 transition-colors no-underline whitespace-nowrap"
+                    >
+                      下载
+                    </a>
                   </dd>
                 </div>
                 <div class="flex">
@@ -484,96 +426,11 @@ onMounted(() => {
 
       <!-- Danmaku Search Panel -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div
-          class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-wrap gap-2"
-        >
+        <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
           <span class="text-sm font-medium text-gray-700">弹幕搜索</span>
-          <div class="flex items-center gap-2">
-            <input
-              v-model="searchKeyword"
-              type="text"
-              class="px-3 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent w-60"
-              placeholder="搜索弹幕内容或用户名..."
-              @keydown="handleSearchKeydown"
-            />
-            <button
-              class="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-              @click="handleSearch"
-            >
-              搜索
-            </button>
-          </div>
         </div>
         <div class="p-4">
-          <!-- Searching -->
-          <div v-if="searching" class="text-center py-6">
-            <div
-              class="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"
-            />
-            <span class="text-xs text-gray-400">搜索中...</span>
-          </div>
-
-          <!-- Not yet searched -->
-          <p v-else-if="!searchExecuted" class="text-xs text-gray-400 text-center py-4">
-            输入关键词搜索弹幕
-          </p>
-
-          <!-- No results -->
-          <p v-else-if="searchResults.length === 0" class="text-xs text-gray-400 text-center py-4">
-            无匹配弹幕
-          </p>
-
-          <!-- Results -->
-          <template v-else>
-            <div class="mb-2 text-xs text-gray-400">
-              共 {{ searchTotal }} 条匹配 (显示 {{ searchOffset + 1 }}-{{
-                Math.min(searchOffset + searchResults.length, searchTotal)
-              }})
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-xs">
-                <thead>
-                  <tr class="bg-gray-50 border-b border-gray-100">
-                    <th class="text-left px-3 py-2 text-gray-500 font-medium w-24">时间</th>
-                    <th class="text-left px-3 py-2 text-gray-500 font-medium w-32">用户</th>
-                    <th class="text-left px-3 py-2 text-gray-500 font-medium">弹幕内容</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(d, idx) in searchResults"
-                    :key="idx"
-                    class="border-b border-gray-50 hover:bg-gray-50/50"
-                  >
-                    <td class="px-3 py-1.5 text-gray-500">{{ d.ts_str || '-' }}</td>
-                    <td class="px-3 py-1.5 text-gray-600">{{ d.username || '-' }}</td>
-                    <td
-                      class="px-3 py-1.5 text-gray-700"
-                      v-html="highlightKeyword(d.text, searchKeyword)"
-                    />
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Pagination -->
-            <div v-if="searchTotal > searchLimit" class="flex items-center gap-2 mt-3">
-              <button
-                v-if="searchOffset > 0"
-                class="px-3 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-                @click="prevPage"
-              >
-                上一页
-              </button>
-              <button
-                v-if="searchOffset + searchLimit < searchTotal"
-                class="px-3 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-                @click="nextPage"
-              >
-                下一页
-              </button>
-            </div>
-          </template>
+          <DanmakuSearchPanel :session-id="sessionId" />
         </div>
       </div>
     </div>

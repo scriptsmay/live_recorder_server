@@ -83,7 +83,6 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/danmaku/status' },
   { method: 'GET', path: '/danmaku/search' },
   { method: 'GET', path: '/danmaku-toolbox/sessions' },
-  { method: 'GET', path: '/danmaku-toolbox/sessions/:id/events' },
   { method: 'GET', path: '/danmaku/burn_output/:id/stream' },
   { method: 'POST', path: '/danmaku/free-burn' },
   { method: 'GET', path: '/danmaku/free-burn/records' },

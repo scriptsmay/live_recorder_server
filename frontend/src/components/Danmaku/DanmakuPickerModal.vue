@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { apiGet } from '@/utils/api'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
+import DanmakuSearchPanel from '@/components/Danmaku/DanmakuSearchPanel.vue'
 import { formatTime } from '@/utils/lib'
 
 // ---- 类型 ----
@@ -12,13 +13,6 @@ interface Session {
   danmaku_event_count: number
   started_at: string | null
   status: string
-}
-
-interface PreviewEvent {
-  ts_ms: number | null
-  ts_str: string
-  text: string
-  username: string
 }
 
 // ---- Props & Emits ----
@@ -52,12 +46,7 @@ const pagedSessions = computed(() => {
 })
 
 const selectedSession = ref<Session | null>(null)
-const previewEvents = ref<PreviewEvent[]>([])
-const previewTotal = ref(0)
-const previewOffset = ref(0)
-const previewLimit = ref(100)
-const previewSearch = ref('')
-const previewLoading = ref(false)
+const searchPanelRef = ref<InstanceType<typeof DanmakuSearchPanel> | null>(null)
 
 let sessionSearchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -79,43 +68,14 @@ async function loadSessions() {
   }
 }
 
-async function loadPreview() {
-  if (!selectedSession.value) return
-  previewLoading.value = true
-  try {
-    const params = new URLSearchParams({
-      limit: String(previewLimit.value),
-      offset: String(previewOffset.value),
-    })
-    if (previewSearch.value.trim()) {
-      params.set('search', previewSearch.value.trim())
-    }
-    const res = await apiGet<PreviewEvent[]>(
-      `/api/danmaku-toolbox/sessions/${selectedSession.value.id}/events?${params}`,
-    )
-    const body = res as unknown as { data: PreviewEvent[]; total: number }
-    previewEvents.value = body.data ?? []
-    previewTotal.value = body.total ?? 0
-  } catch {
-    previewEvents.value = []
-    previewTotal.value = 0
-  } finally {
-    previewLoading.value = false
-  }
-}
-
 // ---- 交互 ----
 function selectSession(session: Session) {
   if (selectedSession.value?.id === session.id) {
     selectedSession.value = null
-    previewEvents.value = []
-    previewTotal.value = 0
     return
   }
   selectedSession.value = session
-  previewSearch.value = ''
-  previewOffset.value = 0
-  loadPreview()
+  searchPanelRef.value?.reset()
 }
 
 function onSessionSearchInput() {
@@ -123,25 +83,8 @@ function onSessionSearchInput() {
   sessionSearchTimer = setTimeout(() => {
     sessionsPage.value = 1
     selectedSession.value = null
-    previewEvents.value = []
-    previewTotal.value = 0
     loadSessions()
   }, 300)
-}
-
-function onPreviewSearchInput() {
-  previewOffset.value = 0
-  loadPreview()
-}
-
-function previewNextPage() {
-  previewOffset.value += previewLimit.value
-  loadPreview()
-}
-
-function previewPrevPage() {
-  previewOffset.value = Math.max(0, previewOffset.value - previewLimit.value)
-  loadPreview()
 }
 
 function confirmSelect() {
@@ -167,10 +110,6 @@ watch(
       sessionSearch.value = ''
       sessionsPage.value = 1
       selectedSession.value = null
-      previewEvents.value = []
-      previewTotal.value = 0
-      previewSearch.value = ''
-      previewOffset.value = 0
       loadSessions()
       window.addEventListener('keydown', onKeydown)
     } else {
@@ -252,78 +191,21 @@ watch(
         </div>
       </div>
 
-      <!-- 右侧：弹幕预览 -->
+      <!-- 右侧：弹幕搜索 -->
       <div class="hidden lg:flex lg:w-1/2 flex-col">
-        <!-- 预览搜索 -->
-        <div class="px-4 py-3 border-b border-gray-100">
-          <input
-            v-model="previewSearch"
-            type="text"
-            placeholder="搜索弹幕内容..."
-            class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-            @input="onPreviewSearchInput"
-          />
-        </div>
-
-        <!-- 预览内容 -->
-        <div class="flex-1 overflow-y-auto px-4 py-3">
+        <div class="px-4 py-3 flex-1 overflow-y-auto">
           <div
             v-if="!selectedSession"
             class="flex items-center justify-center h-full text-sm text-gray-400"
           >
-            ← 点击左侧会话预览弹幕
+            ← 点击左侧会话搜索弹幕
           </div>
-          <div v-else-if="previewLoading" class="flex items-center justify-center h-full">
-            <div
-              class="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"
-            />
-          </div>
-          <div
-            v-else-if="previewEvents.length === 0"
-            class="flex items-center justify-center h-full text-sm text-gray-400"
-          >
-            无弹幕数据
-          </div>
-          <div v-else class="space-y-1">
-            <div v-for="(evt, i) in previewEvents" :key="i" class="text-sm leading-relaxed">
-              <span class="text-xs text-gray-400 font-mono shrink-0 w-14">{{
-                evt.ts_str || '--:--:--'
-              }}</span>
-              <span class="shrink-0 px-2 text-xs font-medium text-orange-300">{{
-                evt.username || '匿名'
-              }}</span>
-              <span class="text-gray-900 break-all">{{ evt.text }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 预览分页 -->
-        <div
-          v-if="previewTotal > previewLimit"
-          class="px-4 py-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500 shrink-0"
-        >
-          <span>
-            {{ previewOffset + 1 }}-{{
-              Math.min(previewOffset + previewEvents.length, previewTotal)
-            }}
-            / {{ previewTotal }}
-          </span>
-          <div class="flex gap-1">
-            <button
-              :disabled="previewOffset === 0"
-              class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
-              @click="previewPrevPage"
-            >
-              上一页
-            </button>
-            <button
-              :disabled="previewOffset + previewLimit >= previewTotal"
-              class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
-              @click="previewNextPage"
-            >
-              下一页
-            </button>
-          </div>
+          <DanmakuSearchPanel
+            v-else
+            ref="searchPanelRef"
+            :session-id="selectedSession.id"
+            compact
+          />
         </div>
       </div>
     </div>

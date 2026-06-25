@@ -5,7 +5,7 @@ const router = express.Router();
 const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
-const danmakuBurner = require('../lib/core/danmaku-burner');
+// const danmakuBurner = require('../lib/core/danmaku-burner');
 const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 const watchdog = require('../lib/core/watchdog');
 const DataService = require('../services/DataService');
@@ -353,7 +353,7 @@ router.get('/danmaku/status', async (req, res) => {
 
 /**
  * GET /api/danmaku/search
- * 搜索弹幕 JSONL 内容
+ * 搜索弹幕 JSONL 内容（SessionDanmaku / DanmakuToolbox / DanmakuPickerModal 共用）
  */
 router.get('/danmaku/search', async (req, res) => {
   try {
@@ -379,7 +379,7 @@ router.get('/danmaku/search', async (req, res) => {
     }
 
     // 流式读取 JSONL，筛选匹配项
-    const content = fs.readFileSync(jsonlPath, 'utf-8');
+    const content = await fs.promises.readFile(jsonlPath, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
 
     let allEvents = [];
@@ -399,7 +399,12 @@ router.get('/danmaku/search', async (req, res) => {
     if (kwLower) {
       allEvents = allEvents.filter((e) => {
         const username = e.username || e.user || '';
-        return e.text.toLowerCase().includes(kwLower) || username.toLowerCase().includes(kwLower);
+        const userId = e.user_id || e.userId || '';
+        return (
+          e.text.toLowerCase().includes(kwLower) ||
+          username.toLowerCase().includes(kwLower) ||
+          userId.toLowerCase().includes(kwLower)
+        );
       });
     }
 
@@ -411,7 +416,7 @@ router.get('/danmaku/search', async (req, res) => {
     res.json({
       status: 'ok',
       data: paged.map((e) => ({
-        ts_ms: e.ts_ms,
+        ...e,
         ts_str:
           e.ts_ms != null
             ? `${Math.floor(e.ts_ms / 3600000)
@@ -422,7 +427,6 @@ router.get('/danmaku/search', async (req, res) => {
                 .toString()
                 .padStart(2, '0')}`
             : '',
-        text: e.text,
         username: e.username || e.user || '',
         user_id: e.user_id || e.userId || '',
       })),
@@ -537,86 +541,6 @@ router.get('/danmaku-toolbox/sessions', async (req, res) => {
     res.json({ status: 'ok', data: unique });
   } catch (err) {
     console.error('[api] 弹幕工具箱会话列表查询失败:', err.message);
-    res.status(500).json({ status: 'Error', message: '查询失败' });
-  }
-});
-
-/**
- * GET /api/danmaku-toolbox/sessions/:id/events
- * 获取指定会话的弹幕事件列表（用于 DanmakuPickerModal 预览面板）
- */
-router.get('/danmaku-toolbox/sessions/:id/events', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { search, limit = 200, offset = 0 } = req.query;
-    const maxLimit = 200;
-
-    const session = await pool.query('SELECT output_dir FROM recording_sessions WHERE id = $1', [id]);
-    if (session.rows.length === 0 || !session.rows[0].output_dir) {
-      return res.json({ status: 'ok', data: [], total: 0 });
-    }
-
-    const sessionDir = session.rows[0].output_dir;
-    const danmakuDir = path.join(sessionDir, 'danmaku');
-    const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
-    const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
-    const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
-    if (!fs.existsSync(jsonlPath)) {
-      return res.json({ status: 'ok', data: [], total: 0 });
-    }
-
-    // 异步读取，避免阻塞事件循环
-    const content = await fs.promises.readFile(jsonlPath, 'utf-8');
-    const lines = content.split('\n').filter(Boolean);
-
-    let allEvents = [];
-    const kwLower = (search || '').toLowerCase();
-
-    for (const line of lines) {
-      try {
-        const event = JSON.parse(line);
-        if (event.type === 'comment' && event.text) {
-          if (kwLower) {
-            const username = event.username || event.user || '';
-            if (!event.text.toLowerCase().includes(kwLower) && !username.toLowerCase().includes(kwLower)) {
-              continue;
-            }
-          }
-          allEvents.push(event);
-        }
-      } catch {
-        /* skip malformed lines */
-      }
-    }
-
-    const total = allEvents.length;
-    const offsetNum = parseInt(offset, 10) || 0;
-    const limitNum = Math.min(parseInt(limit, 10) || 200, maxLimit);
-    const paged = allEvents.slice(offsetNum, offsetNum + limitNum);
-
-    res.json({
-      status: 'ok',
-      data: paged.map((e) => ({
-        ts_ms: e.ts_ms,
-        ts_str:
-          e.ts_ms != null
-            ? `${Math.floor(e.ts_ms / 3600000)
-                .toString()
-                .padStart(2, '0')}:${Math.floor((e.ts_ms % 3600000) / 60000)
-                .toString()
-                .padStart(2, '0')}:${Math.floor((e.ts_ms % 60000) / 1000)
-                .toString()
-                .padStart(2, '0')}`
-            : '',
-        text: e.text,
-        username: e.username || e.user || '',
-      })),
-      total,
-      offset: offsetNum,
-      limit: limitNum,
-    });
-  } catch (err) {
-    console.error('[api] 弹幕事件预览查询失败:', err.message);
     res.status(500).json({ status: 'Error', message: '查询失败' });
   }
 });
@@ -934,6 +858,35 @@ router.get('/danmaku/free-burn/:id/stream', async (req, res) => {
   } catch (err) {
     console.error('[free-burn] 流式播放失败:', err.message);
     res.status(500).json({ status: 'Error', message: '播放失败' });
+  }
+});
+
+/**
+ * GET /api/danmaku/sessions/:id/raw
+ * 下载弹幕原始 JSONL 文件
+ */
+router.get('/danmaku/sessions/:id/raw', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT raw_path FROM danmaku_capture_records WHERE session_id = $1 ORDER BY id DESC LIMIT 1',
+      [parseInt(id, 10)]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].raw_path) {
+      return res.status(404).json({ status: 'Error', message: '弹幕记录不存在' });
+    }
+
+    const filePath = result.rows[0].raw_path;
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'Error', message: 'JSONL 文件不存在' });
+    }
+
+    const fileName = path.basename(filePath);
+    res.download(filePath, fileName);
+  } catch (err) {
+    console.error('[api] JSONL 下载失败:', err.message);
+    res.status(500).json({ status: 'Error', message: '下载失败' });
   }
 });
 
