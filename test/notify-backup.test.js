@@ -26,7 +26,7 @@ describe('notification and backup fallbacks', () => {
     axios.post.mockResolvedValue({ status: 200 });
     const notify = require('../server/lib/core/notify');
 
-    await notify.send('标题', '内容');
+    await notify.send('test_event', '标题', '内容');
 
     expect(axios.post).toHaveBeenCalledWith(
       'https://gotify.example.com/message',
@@ -45,9 +45,40 @@ describe('notification and backup fallbacks', () => {
     );
   });
 
+  test('sends webhook notification when webhook is enabled in DB', async () => {
+    process.env.NODE_ENV = 'production';
+    const db = require('../server/db/index');
+    db.query.mockResolvedValue({
+      rows: [
+        { key: 'webhook_enabled', value: 'true' },
+        { key: 'webhook_url', value: 'https://hooks.example.com/notify' },
+      ],
+    });
+
+    const axios = require('axios');
+    axios.post.mockResolvedValue({ status: 200 });
+    const notify = require('../server/lib/core/notify');
+
+    await notify.send('test_event', '标题', '内容');
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://hooks.example.com/notify',
+      expect.objectContaining({
+        event: 'test_event',
+        title: '标题',
+        content: '内容',
+        source: 'k-recorder',
+      }),
+      expect.any(Object)
+    );
+  });
+
   test('replayPipelineComplete uses user-facing replay completion copy', async () => {
     process.env.NODE_ENV = 'production';
     process.env.MESSAGE_FEISHU_WEBHOOK = 'https://feishu.example.com/webhook';
+
+    const db = require('../server/db/index');
+    db.query.mockResolvedValue({ rows: [] });
 
     const axios = require('axios');
     axios.post.mockResolvedValue({ status: 200 });
