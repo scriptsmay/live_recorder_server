@@ -275,6 +275,8 @@ router.get('/upload_records/merged', async (req, res) => {
           ur.total_size,
           ur.template_id,
           ur.session_id,
+          ur.upload_files,
+          ur.output,
           r.room_name AS principal_name
         FROM upload_records ur
         LEFT JOIN recording_sessions rs ON ur.session_id = rs.id
@@ -295,6 +297,8 @@ router.get('/upload_records/merged', async (req, res) => {
           rur.total_size,
           rur.template_id,
           rur.replay_record_id AS session_id,
+          rur.upload_files,
+          rur.output,
           rr.principal_name
         FROM replay_upload_records rur
         LEFT JOIN replay_records rr ON rur.replay_record_id = rr.id

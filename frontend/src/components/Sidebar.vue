@@ -274,7 +274,7 @@ function hideTooltip() {
             :class="
               isInGroup(group) ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
             "
-            @click="!collapsed && toggleGroup(group.label)"
+            @click="collapsed && group.children?.length ? router.push(group.children[0].to) : toggleGroup(group.label)"
             @mouseenter="collapsed ? showTooltip($event, group.label) : undefined"
             @mouseleave="hideTooltip"
           >

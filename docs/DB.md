@@ -52,6 +52,20 @@
 
 ## 表结构
 
+### admin_users — 管理员账户
+
+后台登录的管理员账户。
+
+| 字段           | 类型                     | 约束            | 说明     |
+| -------------- | ------------------------ | --------------- | -------- |
+| id             | SERIAL                   | PRIMARY KEY     | 自增主键 |
+| username       | VARCHAR(50)              | UNIQUE NOT NULL | 用户名   |
+| password_hash  | VARCHAR(255)             | NOT NULL        | 密码哈希 |
+| created_at     | TIMESTAMP WITH TIME ZONE | DEFAULT NOW()   | 创建时间 |
+| updated_at     | TIMESTAMP WITH TIME ZONE | DEFAULT NOW()   | 更新时间 |
+
+**触发器：** `trg_admin_users_updated_at` — UPDATE 时自动设置 `updated_at = CURRENT_TIMESTAMP`
+
 ### rooms — 直播间
 
 记录直播间状态和配置。
@@ -90,6 +104,9 @@
 | total_size     | BIGINT        | DEFAULT 0                              | 总大小（字节）                                        |
 | output_dir     | VARCHAR(1024) | DEFAULT ''                             | 输出目录                                              |
 | caption        | VARCHAR(1024) | DEFAULT ''                             | 直播描述/备注                                         |
+| output_path    | VARCHAR(1024) | DEFAULT ''                             | 录制输出路径（覆盖 rooms 级别）                       |
+| cover_url      | VARCHAR(1024) | DEFAULT ''                             | 直播封面 URL                                          |
+| cover_path     | VARCHAR(1024) | DEFAULT ''                             | 封面本地缓存路径                                      |
 | retry_count    | INTEGER       | DEFAULT 0                              | 崩溃恢复重试次数                                      |
 | stream_url     | VARCHAR(1024) | DEFAULT ''                             | 实际直播流地址（用于重启后恢复 ffmpeg）               |
 | deleted_at     | TIMESTAMP     |                                        | 软删除时间                                            |
