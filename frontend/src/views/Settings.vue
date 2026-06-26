@@ -416,7 +416,7 @@ onMounted(fetchSettings)
           <h2 class="text-md font-semibold text-gray-900">{{ group.title }}</h2>
         </div>
         <div class="p-4">
-          <div :class="`grid grid-cols-1 gap-4 xl:grid-cols-${group.col || 3}`">
+          <div :class="`grid grid-cols-1 gap-4 lg:grid-cols-${group.col || 3}`">
             <div v-for="item in group.items" :key="item.key">
               <label :for="`set_${item.key}`" class="block text-sm font-medium text-gray-700 mb-1">
                 {{ item.label }}
