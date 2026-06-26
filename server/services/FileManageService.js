@@ -67,16 +67,10 @@ class FileManageService {
       // 3. 回放文件 → replay_raw / replay_cut / replay_fixed / replay_final
       await this._scanReplayFiles(results);
 
-      // 4. 弹幕压制输出 → danmaku_output
-      await this._scanDanmakuOutputFiles(results);
-
-      // 4b. 自由压制输出 → danmaku_output
-      await this._scanFreeBurnOutputFiles(results);
-
-      // 5. 弹幕归档 → danmaku_archive
+      // 4. 弹幕归档 → danmaku_archive
       await this._scanDanmakuArchiveFiles(results);
 
-      // 6. 刷新磁盘状态（stat 已索引文件）
+      // 5. 刷新磁盘状态（stat 已索引文件）
       await this._refreshDiskStatus(results);
     } finally {
       await redis.del(SCAN_LOCK_KEY).catch(() => {});
@@ -242,84 +236,6 @@ class FileManageService {
     }
   }
 
-  /** 扫描弹幕压制输出 → managed_files (category=danmaku, file_type=danmaku_output) */
-  static async _scanDanmakuOutputFiles(results) {
-    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       ON CONFLICT (file_path) DO UPDATE SET
-         safe_to_delete = EXCLUDED.safe_to_delete,
-         updated_at = NOW()`;
-
-    await this._upsertFromQuery(
-      results,
-      `SELECT dbr.id AS source_id, dbr.output_path, dbr.status, dbr.session_id
-       FROM danmaku_burn_records dbr
-       WHERE dbr.output_path IS NOT NULL AND dbr.output_path != ''
-         AND dbr.status = 'completed'`,
-      [],
-      UPSERT_SQL,
-      (row) => {
-        const ext = path.extname(row.output_path).toLowerCase().replace('.', '');
-        return {
-          filePath: row.output_path,
-          params: [
-            'danmaku',
-            'danmaku_output',
-            'danmaku_burn_records',
-            row.source_id,
-            row.session_id ? String(row.session_id) : null,
-            row.output_path,
-            path.basename(row.output_path),
-            ext,
-            'active',
-            true,
-            null,
-          ],
-        };
-      }
-    );
-  }
-
-  /** 扫描自由压制输出 → managed_files (category=danmaku, file_type=danmaku_output) */
-  static async _scanFreeBurnOutputFiles(results) {
-    const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       ON CONFLICT (file_path) DO UPDATE SET
-         safe_to_delete = EXCLUDED.safe_to_delete,
-         updated_at = NOW()`;
-
-    await this._upsertFromQuery(
-      results,
-      `SELECT dfbr.id AS source_id, dfbr.output_path, dfbr.danmaku_session_id AS session_id
-       FROM danmaku_free_burn_records dfbr
-       WHERE dfbr.output_path IS NOT NULL AND dfbr.output_path != ''
-         AND dfbr.status = 'completed'`,
-      [],
-      UPSERT_SQL,
-      (row) => {
-        const ext = path.extname(row.output_path).toLowerCase().replace('.', '');
-        return {
-          filePath: row.output_path,
-          params: [
-            'danmaku',
-            'danmaku_output',
-            'danmaku_free_burn_records',
-            row.source_id,
-            row.session_id ? String(row.session_id) : null,
-            row.output_path,
-            path.basename(row.output_path),
-            ext,
-            'active',
-            true,
-            null,
-          ],
-        };
-      }
-    );
-  }
-
   /** 扫描弹幕归档 → managed_files (category=danmaku, file_type=danmaku_archive) */
   static async _scanDanmakuArchiveFiles(results) {
     const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
@@ -361,7 +277,7 @@ class FileManageService {
   /** 刷新已索引文件的磁盘状态 */
   static async _refreshDiskStatus(results) {
     const { rows } = await pool.query(`
-      SELECT id, file_path, file_type FROM managed_files
+      SELECT id, file_path FROM managed_files
       WHERE status NOT IN ('deleting', 'deleted', 'missing')
     `);
 
@@ -369,13 +285,7 @@ class FileManageService {
     for (const row of rows) {
       idx++;
       try {
-        const stat = await fs.promises.stat(row.file_path);
-        await pool.query(
-          `UPDATE managed_files SET file_size = $1, mtime = $2, exists_on_disk = true, updated_at = NOW()
-           WHERE id = $3`,
-          [stat.size, stat.mtime, row.id]
-        );
-        results.updated++;
+        await fs.promises.access(row.file_path, fs.constants.F_OK);
       } catch (err) {
         if (err.code === 'ENOENT') {
           await pool.query(
@@ -385,8 +295,9 @@ class FileManageService {
           );
           results.missing++;
         } else {
-          // 非 ENOENT 错误（EACCES/ELOOP/EIO 等）记录警告，不改变文件状态
-          console.warn(`[FileManage] _refreshDiskStatus: stat failed for ${row.file_path}: ${err.code || err.message}`);
+          console.warn(
+            `[FileManage] _refreshDiskStatus: access failed for ${row.file_path}: ${err.code || err.message}`
+          );
         }
       }
       if (idx % EVENT_LOOP_YIELD_INTERVAL === 0) {
@@ -1043,18 +954,11 @@ class FileManageService {
       }
     }
 
-    if (source_table === 'danmaku_burn_records' && source_id) {
-      const dbrCheck = await pool.query(`SELECT status FROM danmaku_burn_records WHERE id = $1`, [source_id]);
-      if (dbrCheck.rows.length > 0 && !['completed', 'failed', 'skipped'].includes(dbrCheck.rows[0].status)) {
-        return { safe: false, reason: `danmaku_burn_status_${dbrCheck.rows[0].status}` };
-      }
-    }
-
     return { safe: true };
   }
 
   /**
-   * 检查文件是否属于活跃任务（录制/转码/压制/投稿）
+   * 检查文件是否属于活跃任务（录制/转码/投稿）
    * @param {string} filePath - 文件路径
    * @returns {Promise<{type: string}|null>} 活跃任务类型或 null
    */
@@ -1078,16 +982,6 @@ class FileManageService {
     );
     if (transcodeCheck.rows.length > 0) {
       return { type: 'transcoding' };
-    }
-
-    // 弹幕压制中
-    const burnCheck = await pool.query(
-      `SELECT id FROM danmaku_burn_records
-       WHERE (input_path = $1 OR output_path = $1) AND status IN ('queued', 'processing')`,
-      [filePath]
-    );
-    if (burnCheck.rows.length > 0) {
-      return { type: 'danmaku_burning' };
     }
 
     // 投稿中：精确匹配 JSON 数组中的路径，避免子串误匹配
@@ -1127,9 +1021,6 @@ class FileManageService {
   static async _isFileInRedisQueue(filePath) {
     const inTranscode = await redis.sIsMember('transcode_queue_paths', filePath);
     if (inTranscode) return true;
-
-    const inBurn = await redis.sIsMember('danmaku_burn_queue_paths', filePath);
-    if (inBurn) return true;
 
     return false;
   }
