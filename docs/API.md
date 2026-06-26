@@ -171,9 +171,7 @@ curl http://127.0.0.1:1123/api/health
 ```json
 {
   "status": "ok",
-  "data": [
-    { "name": "access.log", "size": 102400, "mtime": "2026-06-26T10:00:00.000Z" }
-  ]
+  "data": [{ "name": "access.log", "size": 102400, "mtime": "2026-06-26T10:00:00.000Z" }]
 }
 ```
 
@@ -384,8 +382,8 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 
 **请求体：**
 
-| 参数 | 类型   | 必填 | 说明                 |
-| ---- | ------ | ---- | -------------------- |
+| 参数 | 类型   | 必填 | 说明                                        |
+| ---- | ------ | ---- | ------------------------------------------- |
 | url  | string | 否   | 测试 URL，不传则使用 `settings.webhook_url` |
 
 **返回：**
@@ -1220,22 +1218,22 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **参数（Query）：**
 
-| 参数            | 类型    | 必填 | 说明                                              |
-| --------------- | ------- | ---- | ------------------------------------------------- |
-| type            | string  | 否   | 文件类型（如 `video`、`subtitle`）                |
-| category        | string  | 否   | 文件分类（如 `recording`、`hls`、`danmaku`）      |
-| status          | string  | 否   | 状态：`active` / `deleted` / `missing`            |
-| exists_on_disk  | boolean | 否   | 磁盘是否存在                                      |
-| safe_to_delete  | boolean | 否   | 是否可安全删除                                    |
-| ext             | string  | 否   | 扩展名筛选（如 `.mp4`、`.ts`）                    |
-| min_size        | integer | 否   | 最小文件大小（字节）                              |
-| start_date      | string  | 否   | 起始日期，格式 `YYYY-MM-DD`                       |
-| end_date        | string  | 否   | 结束日期，格式 `YYYY-MM-DD`                       |
-| session_id      | integer | 否   | 按会话 ID 筛选                                    |
-| search          | string  | 否   | 文件名搜索                                        |
-| page            | integer | 否   | 页码，默认 1                                      |
-| limit           | integer | 否   | 每页条数，默认 50                                 |
-| sort            | string  | 否   | 排序字段（如 `file_size`、`mtime`）               |
+| 参数           | 类型    | 必填 | 说明                                         |
+| -------------- | ------- | ---- | -------------------------------------------- |
+| type           | string  | 否   | 文件类型（如 `video`、`subtitle`）           |
+| category       | string  | 否   | 文件分类（如 `recording`、`hls`、`danmaku`） |
+| status         | string  | 否   | 状态：`active` / `deleted` / `missing`       |
+| exists_on_disk | boolean | 否   | 磁盘是否存在                                 |
+| safe_to_delete | boolean | 否   | 是否可安全删除                               |
+| ext            | string  | 否   | 扩展名筛选（如 `.mp4`、`.ts`）               |
+| min_size       | integer | 否   | 最小文件大小（字节）                         |
+| start_date     | string  | 否   | 起始日期，格式 `YYYY-MM-DD`                  |
+| end_date       | string  | 否   | 结束日期，格式 `YYYY-MM-DD`                  |
+| session_id     | integer | 否   | 按会话 ID 筛选                               |
+| search         | string  | 否   | 文件名搜索                                   |
+| page           | integer | 否   | 页码，默认 1                                 |
+| limit          | integer | 否   | 每页条数，默认 50                            |
+| sort           | string  | 否   | 排序字段（如 `file_size`、`mtime`）          |
 
 **返回：**
 
@@ -1295,10 +1293,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **请求体：**
 
-| 参数      | 类型     | 必填 | 说明                      |
-| --------- | -------- | ---- | ------------------------- |
-| file_ids  | number[] | 否   | 文件 ID 列表              |
-| filters   | object   | 否   | 筛选条件（同 GET /files） |
+| 参数     | 类型     | 必填 | 说明                      |
+| -------- | -------- | ---- | ------------------------- |
+| file_ids | number[] | 否   | 文件 ID 列表              |
+| filters  | object   | 否   | 筛选条件（同 GET /files） |
 
 > `file_ids` 和 `filters` 至少提供一个。`file_ids` 最多 200 个。
 
@@ -1309,9 +1307,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
   "status": "ok",
   "data": {
     "plan_id": "plan_abc123",
-    "files": [
-      { "id": 1, "file_name": "file.mp4", "file_size": 524288000, "safe_to_delete": true }
-    ],
+    "files": [{ "id": 1, "file_name": "file.mp4", "file_size": 524288000, "safe_to_delete": true }],
     "total_files": 1,
     "estimated_release_size": 524288000,
     "warnings": []
@@ -1325,10 +1321,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **请求体：**
 
-| 参数     | 类型    | 必填 | 说明                  |
-| -------- | ------- | ---- | --------------------- |
-| plan_id  | string  | 是   | 删除计划 ID           |
-| confirm  | boolean | 是   | 必须为 `true`         |
+| 参数    | 类型    | 必填 | 说明          |
+| ------- | ------- | ---- | ------------- |
+| plan_id | string  | 是   | 删除计划 ID   |
+| confirm | boolean | 是   | 必须为 `true` |
 
 **返回：**
 

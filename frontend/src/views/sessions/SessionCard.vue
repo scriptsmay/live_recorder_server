@@ -26,7 +26,6 @@ const toast = useToast()
 
 // ---- Local State ----
 const filesExpanded = ref(false)
-const filesLoaded = ref(false)
 const uploadRecords = ref<UploadRecord[]>([])
 
 // ---- Computed ----
