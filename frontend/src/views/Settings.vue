@@ -396,6 +396,26 @@ onMounted(fetchSettings)
         </button>
       </div>
     </div>
+    <!-- 通知测试结果 -->
+    <div
+      v-if="testResults.length > 0"
+      class="mb-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4"
+    >
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">测试结果</h3>
+      <div class="space-y-2">
+        <div v-for="r in testResults" :key="r.channel" class="flex items-center gap-3 text-sm">
+          <span class="w-5 h-5 flex items-center justify-center rounded-full text-xs">
+            {{ r.sent ? '✅' : r.enabled ? '⚠️' : '⚫' }}
+          </span>
+          <span class="text-gray-700 font-medium">{{ r.channel }}</span>
+          <span v-if="r.sent" class="text-green-600">发送成功</span>
+          <span v-else-if="r.enabled" class="text-yellow-600"
+            >已启用但发送失败{{ r.error ? `: ${r.error}` : '' }}</span
+          >
+          <span v-else class="text-gray-400">未启用</span>
+        </div>
+      </div>
+    </div>
 
     <!-- 加载中 -->
     <div v-if="loading" class="text-center py-12">
@@ -448,27 +468,6 @@ onMounted(fetchSettings)
               <p class="mt-1 text-xs text-gray-400">{{ item.desc }}</p>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 通知测试结果 -->
-    <div
-      v-if="testResults.length > 0"
-      class="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4"
-    >
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">测试结果</h3>
-      <div class="space-y-2">
-        <div v-for="r in testResults" :key="r.channel" class="flex items-center gap-3 text-sm">
-          <span class="w-5 h-5 flex items-center justify-center rounded-full text-xs">
-            {{ r.sent ? '✅' : r.enabled ? '⚠️' : '⚫' }}
-          </span>
-          <span class="text-gray-700 font-medium">{{ r.channel }}</span>
-          <span v-if="r.sent" class="text-green-600">发送成功</span>
-          <span v-else-if="r.enabled" class="text-yellow-600"
-            >已启用但发送失败{{ r.error ? `: ${r.error}` : '' }}</span
-          >
-          <span v-else class="text-gray-400">未启用</span>
         </div>
       </div>
     </div>
