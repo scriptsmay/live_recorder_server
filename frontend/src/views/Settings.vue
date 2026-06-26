@@ -26,6 +26,7 @@ interface SettingDef {
 interface SettingGroup {
   title: string
   items: SettingDef[]
+  col?: number
 }
 
 // ---- 通知测试状态 ----
@@ -57,11 +58,12 @@ async function testNotification() {
 const settingGroups: SettingGroup[] = [
   {
     title: '通知设置',
+    col: 12,
     items: [
       {
         key: 'webhook_enabled',
-        label: '自定义 Webhook',
-        desc: '启用后所有通知以统一 JSON 格式 POST 到自定义 URL',
+        label: '启用Webhook通知',
+        desc: '启用后所有通知以统一JSON格式POST到自定义URL，不启用默认降级使用环境变量中MESSAGE_相关定义',
         type: 'select',
         options: ['false', 'true'],
       },
@@ -269,7 +271,7 @@ const settingGroups: SettingGroup[] = [
     ],
   },
   {
-    title: '日志设置',
+    title: '文件管理',
     items: [
       {
         key: 'log_retention_days',
@@ -278,11 +280,6 @@ const settingGroups: SettingGroup[] = [
         type: 'number',
         attrs: { min: 1, max: 3650 },
       },
-    ],
-  },
-  {
-    title: '文件管理',
-    items: [
       {
         key: 'file_cleanup_enabled',
         label: '自动清理',
@@ -388,7 +385,7 @@ onMounted(fetchSettings)
           :disabled="testing || loading"
           @click="testNotification"
         >
-          {{ testing ? '测试中...' : '🔔 测试通知' }}
+          {{ testing ? '测试中...' : '🔔 测试Webhook通知' }}
         </button>
         <button
           class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -419,7 +416,7 @@ onMounted(fetchSettings)
           <h2 class="text-md font-semibold text-gray-900">{{ group.title }}</h2>
         </div>
         <div class="p-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div :class="`grid grid-cols-1 gap-4 xl:grid-cols-${group.col || 3}`">
             <div v-for="item in group.items" :key="item.key">
               <label :for="`set_${item.key}`" class="block text-sm font-medium text-gray-700 mb-1">
                 {{ item.label }}
