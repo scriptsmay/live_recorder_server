@@ -162,6 +162,21 @@ curl http://127.0.0.1:1123/api/health
 
 ## 日志查看
 
+### GET /api/logs/files
+
+列出 `logs/` 目录下的日志文件。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    { "name": "access.log", "size": 102400, "mtime": "2026-06-26T10:00:00.000Z" }
+  ]
+}
+```
+
 ### GET /api/logs/content
 
 读取指定日志文件尾部内容，用于 `/logs` 页面按需查看最近日志。
@@ -362,6 +377,29 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 | ------- | ------ | ---- | -------- |
 | title   | string | 是   | 消息标题 |
 | content | string | 否   | 消息内容 |
+
+### POST /api/notify/test_webhook
+
+测试 Webhook 通知配置。向已配置的 Webhook URL 发送一条测试消息。
+
+**请求体：**
+
+| 参数 | 类型   | 必填 | 说明                 |
+| ---- | ------ | ---- | -------------------- |
+| url  | string | 否   | 测试 URL，不传则使用 `settings.webhook_url` |
+
+**返回：**
+
+```json
+{ "status": "ok", "message": "Webhook 测试发送成功" }
+```
+
+**错误：**
+
+| 状态码 | 说明               |
+| ------ | ------------------ |
+| 400    | Webhook URL 未配置 |
+| 500    | 发送失败           |
 
 ---
 
@@ -1149,3 +1187,215 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 ### PUT /api/replay/principals/:principalId/settings
 
 更新主播级配置。允许字段：`upload_template_id`、`auto_upload`、`auto_backup`、`max_count_per_run`。
+
+---
+
+## 文件管理
+
+> 文件管理模块提供磁盘文件的安全删除能力。核心流程：查询文件列表 → 生成删除计划（dry-run）→ 确认执行异步删除 → 轮询任务进度。删除操作需要 `confirm: true` 二次确认，并通过审计日志记录所有操作。
+
+### GET /api/files/summary
+
+磁盘空间概览：各目录占用 + 总计 + 可清理预估。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "total_size": 107374182400,
+    "categories": {
+      "recording": { "count": 50, "size": 85899345920 },
+      "hls": { "count": 30, "size": 21474836480 }
+    },
+    "safe_to_delete_size": 10737418240
+  }
+}
+```
+
+### GET /api/files
+
+文件列表（分页、筛选）。
+
+**参数（Query）：**
+
+| 参数            | 类型    | 必填 | 说明                                              |
+| --------------- | ------- | ---- | ------------------------------------------------- |
+| type            | string  | 否   | 文件类型（如 `video`、`subtitle`）                |
+| category        | string  | 否   | 文件分类（如 `recording`、`hls`、`danmaku`）      |
+| status          | string  | 否   | 状态：`active` / `deleted` / `missing`            |
+| exists_on_disk  | boolean | 否   | 磁盘是否存在                                      |
+| safe_to_delete  | boolean | 否   | 是否可安全删除                                    |
+| ext             | string  | 否   | 扩展名筛选（如 `.mp4`、`.ts`）                    |
+| min_size        | integer | 否   | 最小文件大小（字节）                              |
+| start_date      | string  | 否   | 起始日期，格式 `YYYY-MM-DD`                       |
+| end_date        | string  | 否   | 结束日期，格式 `YYYY-MM-DD`                       |
+| session_id      | integer | 否   | 按会话 ID 筛选                                    |
+| search          | string  | 否   | 文件名搜索                                        |
+| page            | integer | 否   | 页码，默认 1                                      |
+| limit           | integer | 否   | 每页条数，默认 50                                 |
+| sort            | string  | 否   | 排序字段（如 `file_size`、`mtime`）               |
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "id": 1,
+      "category": "recording",
+      "file_type": "video",
+      "file_path": "/data/videos/session_42/file.mp4",
+      "file_name": "file.mp4",
+      "file_size": 524288000,
+      "exists_on_disk": true,
+      "safe_to_delete": true,
+      "mtime": "2026-06-20T10:00:00.000Z"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "limit": 50
+}
+```
+
+### GET /api/files/:id
+
+文件详情。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": 1,
+    "category": "recording",
+    "file_type": "video",
+    "source_table": "recording_files",
+    "source_id": 101,
+    "file_path": "/data/videos/session_42/file.mp4",
+    "file_name": "file.mp4",
+    "extension": ".mp4",
+    "file_size": 524288000,
+    "exists_on_disk": true,
+    "safe_to_delete": true,
+    "delete_block_reason": null,
+    "mtime": "2026-06-20T10:00:00.000Z",
+    "created_at": "2026-06-20T10:00:00.000Z"
+  }
+}
+```
+
+### POST /api/files/delete-plan
+
+生成删除计划（dry-run）。不实际删除文件，仅返回预估结果。
+
+**请求体：**
+
+| 参数      | 类型     | 必填 | 说明                      |
+| --------- | -------- | ---- | ------------------------- |
+| file_ids  | number[] | 否   | 文件 ID 列表              |
+| filters   | object   | 否   | 筛选条件（同 GET /files） |
+
+> `file_ids` 和 `filters` 至少提供一个。`file_ids` 最多 200 个。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "plan_id": "plan_abc123",
+    "files": [
+      { "id": 1, "file_name": "file.mp4", "file_size": 524288000, "safe_to_delete": true }
+    ],
+    "total_files": 1,
+    "estimated_release_size": 524288000,
+    "warnings": []
+  }
+}
+```
+
+### POST /api/files/delete
+
+执行异步删除。需要 `plan_id` + `confirm: true`。立即返回 `task_id`，前端通过 `GET /files/delete-tasks/:taskId` 轮询进度。
+
+**请求体：**
+
+| 参数     | 类型    | 必填 | 说明                  |
+| -------- | ------- | ---- | --------------------- |
+| plan_id  | string  | 是   | 删除计划 ID           |
+| confirm  | boolean | 是   | 必须为 `true`         |
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "task_id": "task_xyz789",
+    "status": "processing",
+    "total_files": 5,
+    "processed": 0
+  }
+}
+```
+
+### GET /api/files/delete-tasks/:taskId
+
+查询删除任务进度。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "task_id": "task_xyz789",
+    "status": "completed",
+    "total_files": 5,
+    "processed": 5,
+    "succeeded": 4,
+    "failed": 1,
+    "errors": [{ "file_id": 3, "error": "文件不存在" }]
+  }
+}
+```
+
+### POST /api/files/:id/delete
+
+单文件同步删除。直接删除指定文件并记录审计日志。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "file_id": 1,
+    "deleted": true,
+    "released_size": 524288000
+  }
+}
+```
+
+### POST /api/files/scan
+
+触发全量文件扫描。扫描所有已跟踪目录，同步磁盘状态到 `managed_files` 表。
+
+**返回：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "scanned": 150,
+    "added": 5,
+    "updated": 10,
+    "missing": 2
+  }
+}
+```

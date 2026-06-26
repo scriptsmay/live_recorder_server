@@ -156,25 +156,26 @@
 
 投稿参数模板，支持变量替换。
 
-| 字段                    | 类型          | 约束                                    | 说明                                                                                                                                                     |
-| ----------------------- | ------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                      | SERIAL        | PRIMARY KEY                             |                                                                                                                                                          |
-| name                    | VARCHAR(255)  | NOT NULL                                | 模板名称                                                                                                                                                 |
-| room_url                | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL | 关联直播间（可选）                                                                                                                                       |
-| title_template          | VARCHAR(1024) |                                         | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                                                             |
-| desc_template           | TEXT          |                                         | 简介模板                                                                                                                                                 |
-| tid                     | INTEGER       | DEFAULT 171                             | B站分区 ID                                                                                                                                               |
-| tags                    | VARCHAR(1024) |                                         | 标签，逗号分隔                                                                                                                                           |
-| copyright               | INTEGER       | DEFAULT 2                               | 1-自制 2-转载                                                                                                                                            |
-| source                  | VARCHAR(1024) | DEFAULT `{room_url}`                    | 转载来源（支持模板变量）                                                                                                                                 |
-| cover                   | VARCHAR(1024) |                                         | 封面路径                                                                                                                                                 |
-| is_only_self            | INTEGER       | DEFAULT 0                               | 仅自己可见，0-关闭 1-开启                                                                                                                                |
-| cookies_path            | VARCHAR(1024) |                                         | biliup 账户文件绝对路径（必填）                                                                                                                          |
-| dtime                   | INTEGER       | DEFAULT 0                               | 延迟发布时间，10 位 Unix 时间戳                                                                                                                          |
-| after_upload            | VARCHAR(20)   | DEFAULT 'none'                          | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件；未配置 `NAS_*` 时备份类动作会跳过 |
-| created_at / updated_at | TIMESTAMP     |                                         |                                                                                                                                                          |
+| 字段                    | 类型          | 约束           | 说明                                                                                                                                                     |
+| ----------------------- | ------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                      | SERIAL        | PRIMARY KEY    |                                                                                                                                                          |
+| name                    | VARCHAR(255)  | NOT NULL       | 模板名称                                                                                                                                                 |
+| title_template          | VARCHAR(1024) |                | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                                                             |
+| desc_template           | TEXT          |                | 简介模板                                                                                                                                                 |
+| tid                     | INTEGER       | DEFAULT 171    | B站分区 ID                                                                                                                                               |
+| tags                    | VARCHAR(1024) |                | 标签，逗号分隔                                                                                                                                           |
+| copyright               | INTEGER       | DEFAULT 2      | 1-自制 2-转载                                                                                                                                            |
+| source                  | VARCHAR(1024) | DEFAULT ''     | 转载来源（支持模板变量）                                                                                                                                 |
+| cover                   | VARCHAR(1024) |                | 封面路径                                                                                                                                                 |
+| is_only_self            | INTEGER       | DEFAULT 0      | 仅自己可见，0-关闭 1-开启                                                                                                                                |
+| cookies_path            | VARCHAR(1024) |                | biliup 账户文件绝对路径（必填）                                                                                                                          |
+| dtime                   | INTEGER       | DEFAULT 0      | 延迟发布时间，10 位 Unix 时间戳                                                                                                                          |
+| after_upload            | VARCHAR(20)   | DEFAULT 'none' | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件；未配置 `NAS_*` 时备份类动作会跳过 |
+| created_at / updated_at | TIMESTAMP     |                |                                                                                                                                                          |
 
-**模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}` `{H}` `{M}` `{D}` `{duration_mins}`
+> **v1.7.0 变更**：`room_url` 列已删除。模板不再与特定直播间绑定，改为由 `rooms.upload_template_id` 反向引用。
+
+**模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}` `{H}` `{M}` `{D}` `{duration}` `{duration_mins}` `{duration_hour}`
 
 ### upload_records — 投稿记录
 
@@ -194,6 +195,7 @@
 | file_count                             | INTEGER      |                             | 文件数                                   |
 | total_size                             | BIGINT       |                             | 总大小                                   |
 | bv_id                                  | VARCHAR(50)  | DEFAULT ''                  | B站 BV 号，投稿成功后从输出中提取        |
+| upload_files                           | TEXT         | DEFAULT '[]'                | 投稿文件路径列表（JSON 数组）            |
 | started_at / completed_at / created_at | TIMESTAMP    |                             |                                          |
 
 ### transcode_records — 转码记录
@@ -228,36 +230,56 @@ KV 结构的全局配置表。
 
 **默认设置项：**
 
-| 键                           | 默认值             | 说明                                                                   |
-| ---------------------------- | ------------------ | ---------------------------------------------------------------------- |
-| `pool_size`                  | `3`                | 下载线程池大小，限制最大同时录制数                                     |
-| `watchdog_interval`          | `30`               | 看门狗检查间隔（秒）                                                   |
-| `watchdog_timeout`           | `60`               | 录制状态检查超时（秒），超过则标记为完成                               |
-| `filtering_threshold`        | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                           |
-| `delay`                      | `60`               | 下播延迟检测（秒）                                                     |
-| `submit_api`                 | ``                 | biliup --submit 选项，留空为自动                                       |
-| `lines`                      | ``                 | 上传线路，留空为自动                                                   |
-| `threads`                    | `3`                | 单文件并发上传数                                                       |
-| `pool2_size`                 | `3`                | 上传线程池大小                                                         |
-| `max_upload_limit`           | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`             |
-| `max_resume_retries`         | `3`                | 会话崩溃后最大恢复重试次数                                             |
-| `auto_transcode`             | `true`             | 是否自动转码 FLV 到 MP4                                                |
-| `transcode_delete_originals` | `true`             | 转码后是否删除原 FLV 文件                                              |
-| `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                               |
-| `log_retention_days`         | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件   |
-| `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                                   |
-| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（v1.7.0 已废弃）                                    |
-| `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                               |
-| `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                               |
-| `danmaku_font_size`          | `32`               | ASS 字体大小                                                           |
-| `danmaku_opacity`            | `0.75`             | ASS 弹幕不透明度                                                       |
-| `replay_enabled`             | `true`             | 是否启用回放工具箱                                                     |
-| `replay_work_dir`            | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR` |
-| `replay_queue_concurrency`   | `1`                | 回放队列并发数（当前强制最大 1）                                       |
-| `replay_cron_enabled`        | `false`            | 是否启用回放定时任务                                                   |
-| `replay_cron_expr`           | `0 3 * * *`        | 回放定时任务表达式                                                     |
-| `replay_auto_upload`         | `false`            | 回放处理完成后是否自动投稿                                             |
-| `replay_max_count_per_run`   | `1`                | 单次主播回放批处理默认数量                                             |
+| 键                               | 默认值              | 说明                                                                |
+| -------------------------------- | ------------------- | ------------------------------------------------------------------- |
+| `pool_size`                      | `3`                 | 下载线程池大小，限制最大同时录制数                                  |
+| `watchdog_interval`              | `30`                | 看门狗检查间隔（秒）                                                |
+| `watchdog_timeout`               | `60`                | 录制状态检查超时（秒），超过则标记为完成                            |
+| `filtering_threshold`            | `10`                | 碎片过滤阈值（MB），小于此大小的文件将被过滤                        |
+| `delay`                          | `60`                | 下播延迟检测（秒）                                                  |
+| `submit_api`                     | ``                  | biliup --submit 选项，留空为自动                                    |
+| `lines`                          | ``                  | 上传线路，留空为自动                                                |
+| `threads`                        | `3`                 | 单文件并发上传数                                                    |
+| `pool2_size`                     | `3`                 | 上传线程池大小                                                      |
+| `max_upload_limit`               | `99`                | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`          |
+| `max_resume_retries`             | `3`                 | 会话崩溃后最大恢复重试次数                                          |
+| `auto_transcode`                 | `true`              | 是否自动转码 FLV 到 MP4                                             |
+| `transcode_delete_originals`     | `true`              | 转码后是否删除原 FLV 文件                                           |
+| `transcode_concurrency`          | `3`                 | 转码队列并发数，控制同时处理的转码任务数                            |
+| `auto_generate_hls`              | `true`              | 是否自动生成 HLS 播放文件                                           |
+| `hls_enabled`                    | `true`              | 是否启用 HLS 播放功能                                               |
+| `hls_segment_duration`           | `10`                | HLS 分片时长（秒）                                                  |
+| `hls_cleanup_days`               | `30`                | HLS 文件自动清理天数                                                |
+| `log_retention_days`             | `30`                | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件 |
+| `kuaishou_danmaku_enabled`       | `false`             | 是否启用快手弹幕采集                                                |
+| `danmaku_burn_concurrency`       | `1`                 | 弹幕压制队列并发数（v1.7.0 已废弃，v1.8.0 移除）                   |
+| `danmaku_density_per_second`     | `15`                | ASS 字幕每秒最大弹幕密度                                            |
+| `danmaku_font_family`            | `Noto Sans CJK SC`  | ASS 字体                                                            |
+| `danmaku_font_size`              | `38`                | ASS 字体大小                                                        |
+| `danmaku_opacity`                | `0.88`              | ASS 弹幕不透明度                                                    |
+| `danmaku_outline_colour`         | `000000`            | ASS 弹幕描边颜色                                                    |
+| `danmaku_outline_width`          | `2`                 | ASS 弹幕描边宽度                                                    |
+| `replay_enabled`                 | `true`              | 是否启用回放工具箱                                                  |
+| `replay_work_dir`                | `/data/replay`      | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR` |
+| `replay_queue_concurrency`       | `1`                 | 回放队列并发数（当前强制最大 1）                                    |
+| `replay_cron_enabled`            | `false`             | 是否启用回放定时任务                                                |
+| `replay_cron_expr`               | `0 3 * * *`         | 回放定时任务表达式                                                  |
+| `replay_auto_upload`             | `false`             | 回放处理完成后是否自动投稿                                          |
+| `replay_max_count_per_run`       | `1`                 | 单次主播回放批处理默认数量                                          |
+| `file_cleanup_enabled`           | `false`             | 是否启用文件自动清理                                                |
+| `file_cleanup_retention_days`    | `30`                | 文件清理保留天数                                                    |
+| `file_cleanup_categories`        | ``                  | 清理的文件类别，逗号分隔                                            |
+| `file_cleanup_watermark_warn`    | `80`                | 磁盘空间告警阈值（%）                                               |
+| `file_cleanup_watermark_critical`| `90`                | 磁盘空间严重告警阈值（%）                                          |
+| `file_cleanup_suggestion_notify` | `false`             | 是否发送文件清理建议通知                                            |
+| `webhook_enabled`                | `false`             | 是否启用 Webhook 通知                                               |
+| `webhook_url`                    | ``                  | Webhook 推送 URL                                                    |
+| `feishu_webhook_enabled`         | `false`             | 是否启用飞书通知（v1.7.0 细化，原 `MESSAGE_FEISHU_WEBHOOK` 环境变量仍兼容） |
+| `feishu_webhook_url`             | ``                  | 飞书 Webhook URL                                                    |
+| `gotify_enabled`                 | `false`             | 是否启用 Gotify 通知                                                |
+| `gotify_server`                  | ``                  | Gotify 服务地址                                                     |
+| `gotify_token`                   | ``                  | Gotify app token                                                    |
+| `gotify_priority`                | `5`                 | Gotify 优先级                                                       |
 
 ---
 
@@ -419,6 +441,101 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 | started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
 | completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
 | created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
+
+---
+
+### danmaku_free_burn_records — 弹幕自由压制记录（v1.7.0 已废弃）
+
+> **已废弃**：v1.7.0 移除弹幕压制功能后，此表不再写入新数据。计划在 v1.8.0 中通过 `DROP TABLE` 彻底删除。
+
+**记录自由压制任务（非会话绑定的弹幕压制）。** 与 `danmaku_burn_records` 不同，此表支持任意视频 + 弹幕组合压制。
+
+| 字段              | 类型          | 约束             | 说明                              |
+| ----------------- | ------------- | ---------------- | --------------------------------- |
+| id                | SERIAL        | PRIMARY KEY      | 自增主键                          |
+| source_type       | VARCHAR(20)   | NOT NULL         | 来源类型                          |
+| source_id         | INTEGER       | NOT NULL         | 来源 ID                           |
+| danmaku_session_id| INTEGER       | NOT NULL         | 弹幕采集会话 ID                   |
+| video_path        | VARCHAR(1024) | NOT NULL         | 输入视频路径                      |
+| jsonl_path        | VARCHAR(1024) | NOT NULL         | 弹幕 JSONL 数据路径               |
+| offset_ms         | INTEGER       | DEFAULT 0        | 时间偏移（毫秒）                  |
+| manual_adjust_ms  | INTEGER       | DEFAULT 0        | 手动调整偏移（毫秒）              |
+| status            | VARCHAR(20)   | DEFAULT 'pending' | `pending` / `processing` / `completed` / `failed` |
+| output_path       | VARCHAR(1024) | DEFAULT ''       | 压制输出视频路径                  |
+| error_message     | TEXT          | DEFAULT ''       | 失败时的错误信息                  |
+| log_path          | VARCHAR(1024) | DEFAULT ''       | FFmpeg 压制日志路径               |
+| started_at        | TIMESTAMP     |                  | 开始时间                          |
+| completed_at      | TIMESTAMP     |                  | 完成/失败时间                     |
+| created_at        | TIMESTAMP     | DEFAULT NOW()    | 创建时间                          |
+
+---
+
+### managed_files — 文件管理索引
+
+**文件管理模块的核心索引表。** 由文件扫描服务定期同步磁盘文件状态，用于安全删除决策和磁盘空间管理。
+
+| 字段              | 类型          | 约束           | 说明                                                         |
+| ----------------- | ------------- | -------------- | ------------------------------------------------------------ |
+| id                | SERIAL        | PRIMARY KEY    | 自增主键                                                     |
+| category          | VARCHAR(20)   | NOT NULL       | 文件分类（如 `recording`、`hls`、`danmaku`、`replay`）       |
+| file_type         | VARCHAR(30)   | NOT NULL       | 文件类型（如 `video`、`subtitle`、`playlist`、`data`）       |
+| source_table      | VARCHAR(50)   | NOT NULL       | 来源表名（如 `recording_files`、`replay_records`）           |
+| source_id         | INTEGER       |                | 来源记录 ID                                                  |
+| group_id          | VARCHAR(100)  |                | 分组标识（如会话 ID）                                        |
+| file_path         | VARCHAR(1024) | NOT NULL UNIQUE| 文件绝对路径                                                 |
+| file_name         | VARCHAR(512)  | NOT NULL       | 文件名                                                       |
+| extension         | VARCHAR(20)   |                | 文件扩展名                                                   |
+| file_size         | BIGINT        |                | 文件大小（字节）                                             |
+| mtime             | TIMESTAMP     |                | 文件最后修改时间                                             |
+| exists_on_disk    | BOOLEAN       | DEFAULT TRUE   | 磁盘上是否仍然存在                                           |
+| status            | VARCHAR(20)   | DEFAULT 'active' | 状态：`active` / `deleted` / `missing`                     |
+| safe_to_delete    | BOOLEAN       | DEFAULT FALSE  | 是否可安全删除                                               |
+| delete_block_reason| VARCHAR(100) |                | 不可删除原因说明                                             |
+| created_at        | TIMESTAMP     | DEFAULT NOW()  | 创建时间                                                     |
+| updated_at        | TIMESTAMP     | DEFAULT NOW()  | 更新时间（触发器自动维护）                                   |
+| deleted_at        | TIMESTAMP     |                | 删除时间                                                     |
+
+**索引：**
+
+| 索引名                              | 字段                           | 说明                 |
+| ----------------------------------- | ------------------------------ | -------------------- |
+| `idx_managed_files_category_type_status` | `(category, file_type, status)` | 分类/类型/状态联合查询 |
+| `idx_managed_files_safe_size`       | `(safe_to_delete, file_size DESC)` | 可删除文件按大小排序 |
+| `idx_managed_files_mtime`           | `(mtime DESC)`                 | 按修改时间排序       |
+| `idx_managed_files_source`          | `(source_table, source_id)`    | 来源关联查询         |
+
+**触发器：** `trg_managed_files_updated_at` — UPDATE 时自动设置 `updated_at = CURRENT_TIMESTAMP`
+
+---
+
+### file_delete_audit_logs — 文件删除审计日志
+
+**记录所有文件删除操作的审计日志。** 包含删除前后的大小估算和实际释放空间。
+
+| 字段                  | 类型          | 约束          | 说明                                |
+| --------------------- | ------------- | ------------- | ----------------------------------- |
+| id                    | SERIAL        | PRIMARY KEY   | 自增主键                            |
+| file_id               | INTEGER       |               | 关联 `managed_files.id`             |
+| file_path             | VARCHAR(1024) |               | 被删除文件路径                      |
+| file_size             | BIGINT        |               | 文件大小                            |
+| category              | VARCHAR(20)   |               | 文件分类                            |
+| source_table          | VARCHAR(50)   |               | 来源表名                            |
+| source_id             | INTEGER       |               | 来源记录 ID                         |
+| operator              | VARCHAR(100)  |               | 操作人                              |
+| deleted_by            | VARCHAR(20)   |               | 删除方式（如 `user`、`system`）     |
+| action                | VARCHAR(20)   |               | 操作类型（如 `delete`、`cleanup`）  |
+| result                | VARCHAR(20)   |               | 操作结果（如 `success`、`failed`）  |
+| estimated_release_size| BIGINT        |               | 预估释放空间                        |
+| actual_release_size   | BIGINT        |               | 实际释放空间                        |
+| error_message         | TEXT          |               | 失败时的错误信息                    |
+| created_at            | TIMESTAMP     | DEFAULT NOW() | 创建时间                            |
+
+**索引：**
+
+| 索引名                                    | 字段              | 说明             |
+| ----------------------------------------- | ----------------- | ---------------- |
+| `idx_file_delete_audit_logs_file_id`      | `(file_id)`       | 按文件 ID 查询   |
+| `idx_file_delete_audit_logs_created_at`   | `(created_at DESC)` | 按时间倒序查询 |
 
 ---
 
