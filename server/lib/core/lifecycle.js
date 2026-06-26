@@ -5,19 +5,12 @@ const fileCleanupScheduler = require('./FileCleanupScheduler');
 const { pollingManager } = require('./polling');
 const RecorderService = require('../../services/RecorderService');
 const transcodeQueue = require('./TranscodeQueue');
-const danmakuBurnQueue = require('./DanmakuBurnQueue');
 const replayProcessQueue = require('./ReplayProcessQueue');
 const { ensureAdminCredentials } = require('./auth-init');
 const { getAccessLogStream, getServerLogStream } = require('./logger');
 const LogCleanupService = require('../../services/LogCleanupService');
-const { getDanmakuOutputDir } = require('../../config/config');
-const path = require('path');
 
 const logCleanupService = new LogCleanupService();
-const danmakuLogCleanupService = new LogCleanupService({
-  logsDir: path.join(getDanmakuOutputDir(), 'logs'),
-  protectedFiles: [],
-});
 
 async function bootstrap(app, port) {
   try {
@@ -32,10 +25,7 @@ async function bootstrap(app, port) {
     await RecorderService.cleanupStaleRecordings();
     await logCleanupService.cleanup();
     logCleanupService.start();
-    await danmakuLogCleanupService.cleanup();
-    danmakuLogCleanupService.start();
     await transcodeQueue.init();
-    await danmakuBurnQueue.init();
     await replayProcessQueue.init();
     watchdog.start();
     fileCleanupScheduler.start();
@@ -60,7 +50,6 @@ async function gracefulShutdown(signal) {
     await pollingManager.stop();
     fileCleanupScheduler.stop();
     logCleanupService.stop();
-    danmakuLogCleanupService.stop();
 
     const serverLogStream = getServerLogStream();
     if (serverLogStream) {

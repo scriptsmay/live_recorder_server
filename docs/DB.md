@@ -42,8 +42,8 @@
 | 录制任务锁 | `active_task:{roomKey}`         | 24 小时 | 防止重复录制，替代内存 Map         |
 | 转码队列   | `transcode_queue`               | 无      | Redis LIST，转码任务 FIFO 队列     |
 | 转码并发   | `transcode_processing_count`    | 无      | 当前处理中转码任务计数             |
-| 压制队列   | `danmaku_burn_queue`            | 无      | Redis LIST，弹幕压制任务 FIFO 队列 |
-| 压制并发   | `danmaku_burn_processing_count` | 无      | 当前处理中压制任务计数             |
+| 压制队列   | `danmaku_burn_queue`            | 无      | Redis LIST，弹幕压制任务 FIFO 队列（v1.7.0 已废弃） |
+| 压制并发   | `danmaku_burn_processing_count` | 无      | 当前处理中压制任务计数（v1.7.0 已废弃）             |
 
 - 直播间写操作（创建/更新/删除/暂停/恢复/停止）后自动清除对应缓存
 - 应用启动时自动清理残留的录制任务锁
@@ -246,7 +246,7 @@ KV 结构的全局配置表。
 | `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                               |
 | `log_retention_days`         | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件   |
 | `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                                   |
-| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（强制最大 1）                                       |
+| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（v1.7.0 已废弃）                                       |
 | `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                               |
 | `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                               |
 | `danmaku_font_size`          | `32`               | ASS 字体大小                                                           |
@@ -290,7 +290,9 @@ KV 结构的全局配置表。
 
 ---
 
-### danmaku_burn_records — 弹幕压制记录
+### danmaku_burn_records — 弹幕压制记录（v1.7.0 已废弃）
+
+> **已废弃**：v1.7.0 移除弹幕压制功能后，此表不再写入新数据。计划在 v1.8.0 中通过 `DROP TABLE` 彻底删除。现有数据仍可读取用于历史查询。
 
 **记录每个分段的弹幕压制（FFmpeg 渲染）任务。** 每个 `recording_file_id` 最多一条记录（UNIQUE 约束）。压制产物输出到独立的 `DANMAKU_OUTPUT_DIR` 目录（默认 `VIDEO_DOWNLOAD_DIR/../danmaku_output`），与录制文件物理隔离。
 

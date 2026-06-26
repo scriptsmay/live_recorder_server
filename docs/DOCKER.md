@@ -28,7 +28,6 @@
 ```text
 /srv/nas-data/videos/live_records/
 ├── downloads/                  # 直播录制文件
-├── danmaku_output/             # 弹幕压制产物
 └── replay/                     # 回放工作目录
 ```
 
@@ -127,7 +126,6 @@ CRON_API_TOKEN=<生成一个随机长字符串>
 | 宿主机路径                                      | 容器路径                | 说明          |
 | ----------------------------------------------- | ----------------------- | ------------- |
 | `/srv/nas-data/videos/live_records/downloads`      | `/data/video_downloads` | 直播录制文件  |
-| `/srv/nas-data/videos/live_records/danmaku_output` | `/data/danmaku_output`  | 弹幕压制产物  |
 | `/srv/nas-data/videos/live_records/replay`         | `/data/replay`          | 回放工作目录  |
 | `./data/biliup`                                 | `/data/biliup`          | biliup 登录态 |
 | `./logs`                                        | `/app/logs`             | 应用日志      |
@@ -139,7 +137,7 @@ CRON_API_TOKEN=<生成一个随机长字符串>
 | 组件       | 说明                                       |
 | ---------- | ------------------------------------------ |
 | Node.js 22 | 运行时                                     |
-| FFmpeg     | 录制、转码、弹幕压制（BtbN n7.1 静态构建） |
+| FFmpeg     | 录制、转码（BtbN n7.1 静态构建）             |
 | mkvmerge   | 视频切片（mkvtoolnix）                     |
 | yt-dlp     | 回放下载（通过 uv tool 安装）              |
 | biliup     | B 站投稿（通过 uv tool 安装）              |

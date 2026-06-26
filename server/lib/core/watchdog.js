@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { SUPPORTED_EXT_REGEX, SUPPORTED_TRANSCODE_EXT, isDanmakuBurnFile } = require('../../config/config');
+const { SUPPORTED_EXT_REGEX, SUPPORTED_TRANSCODE_EXT } = require('../../config/config');
 const pool = require('../../db/index');
 const DataService = require('../../services/DataService');
 const UploadService = require('../../services/UploadService');
@@ -10,11 +10,8 @@ const { scanRecordingFiles } = require('./scan-files');
 const transcodeQueue = require('./TranscodeQueue');
 const hlsGenerator = require('./hls-generator');
 // const recordingManager = require('./RecordingManager');
-const danmakuAssGenerator = require('./danmaku/DanmakuAssGenerator');
 
 let watchdogTimer = null;
-// 看门狗内 ASS 补生成互斥锁，防止同一 session 被多轮看门狗重入
-const _assProcessingSessions = new Set();
 
 // 文件稳定性阈值判断，20秒内无新增
 const STABILITY_MS = 20000;
@@ -88,7 +85,6 @@ async function checkStaleRecordings() {
                 !f.startsWith('.segments_')
               )
                 continue;
-              if (isDanmakuBurnFile(f)) continue;
               const stat = fs.statSync(path.join(outputDir, f));
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
@@ -212,8 +208,6 @@ async function scanActiveSegments() {
 
       for (const f of uniqueFiles) {
         if (!videoRe.test(f)) continue;
-        // 排除弹幕压制产物，避免重复计入会话统计和投稿文件
-        if (isDanmakuBurnFile(f)) continue;
 
         const fp = path.join(dir, f);
 
@@ -350,7 +344,6 @@ async function cleanupFragmentFiles() {
           const fp = path.join(sessionDir, entry.name);
 
           if (!SUPPORTED_EXT_REGEX.test(path.extname(fp))) continue;
-          if (isDanmakuBurnFile(entry.name)) continue;
 
           let size;
           try {
@@ -589,141 +582,6 @@ async function checkSessionHLS() {
 }
 
 /**
- * 检查已完成的会话中是否有缺少分段 ASS 字幕的录制文件，并补充生成。
- *
- * 该函数主要处理以下场景：
- * - 看门狗 scanActiveSegments / scanRecordingFiles 补入的视频文件
- *   在正常流程 _handleDanmakuFinish 执行之后才进入 recording_files，
- *   导致其 danmaku_ass_path 为空。
- *
- * 竞态安全策略：
- * 1. 只处理 completed / interrupted 会话，不与录制中的 _handleDanmakuFinish 竞争
- * 2. 进程内 Set 互斥锁，防止同一 session 被多轮看门狗重入
- * 3. 写入前 double-check DB 中 danmaku_ass_path 是否已填充 + 磁盘文件是否已存在
- *
- * @returns {Promise<void>} 无返回值，错误会在内部捕获并打印日志
- */
-async function checkSessionAss() {
-  try {
-    const autoAss = await DataService.getSetting('auto_generate_ass', 'true');
-    if (autoAss !== 'true') return;
-
-    // 查询已结束会话的录制文件，后续按磁盘确定性路径过滤缺少 ASS 的分段
-    const { rows: files } = await pool.query(
-      `SELECT rf.id, rf.file_path, rf.session_id, rf.segment_index,
-              rf.segment_start_ms, rf.segment_end_ms, rf.danmaku_ass_path,
-              rs.output_dir
-       FROM recording_files rf
-       JOIN recording_sessions rs ON rf.session_id = rs.id
-       LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
-       WHERE rs.status IN ('completed', 'interrupted')
-         AND rf.status = 'completed'
-         AND rf.file_path IS NOT NULL
-         AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
-    );
-
-    if (files.length === 0) return;
-
-    // 按 session 分组
-    const sessionMap = new Map();
-    for (const file of files) {
-      // 跳过正在被本轮看门狗处理的 session（防重入）
-      if (_assProcessingSessions.has(file.session_id)) continue;
-      if (!file.output_dir) continue;
-
-      const deterministicAss = path.join(file.output_dir, 'danmaku', 'segments', `${file.id}.ass`);
-      const indexedAss = path.join(file.output_dir, 'danmaku', 'segments', `${file.segment_index}.ass`);
-      const hasAss =
-        (file.danmaku_ass_path && fs.existsSync(file.danmaku_ass_path)) ||
-        fs.existsSync(deterministicAss) ||
-        fs.existsSync(indexedAss);
-      if (hasAss) continue;
-
-      if (!sessionMap.has(file.session_id)) {
-        sessionMap.set(file.session_id, []);
-      }
-      sessionMap.get(file.session_id).push(file);
-    }
-
-    for (const [sessionId, sessionFiles] of sessionMap) {
-      _assProcessingSessions.add(sessionId);
-      try {
-        const outputDir = sessionFiles[0].output_dir;
-        if (!outputDir) continue;
-
-        const danmakuDir = path.join(outputDir, 'danmaku');
-        // 优先新路径，兼容旧路径
-        const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
-        const oldJsonlPath = path.join(outputDir, 'danmaku.jsonl');
-        const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
-
-        if (!fs.existsSync(jsonlPath)) {
-          // 无 danmaku.jsonl，跳过
-          continue;
-        }
-
-        // 查询所有需要补 ASS 的分段（含本轮未命中文件列表的、之前遗漏的）
-        const segments = await pool.query(
-          `SELECT id, segment_index, segment_start_ms, segment_end_ms, danmaku_ass_path
-           FROM recording_files
-           WHERE session_id = $1
-             AND status = 'completed'
-           ORDER BY id ASC`,
-          [sessionId]
-        );
-
-        // 过滤掉已被其他流程填充的记录（double-check 竞态保护）
-        const pendingSegments = [];
-        for (const seg of segments.rows) {
-          const recheck = await pool.query(`SELECT danmaku_ass_path FROM recording_files WHERE id = $1`, [seg.id]);
-          const existing = recheck.rows[0]?.danmaku_ass_path;
-          const deterministicAss = path.join(outputDir, 'danmaku', 'segments', `${seg.id}.ass`);
-          const indexedAss = path.join(outputDir, 'danmaku', 'segments', `${seg.segment_index}.ass`);
-          if (
-            (existing && existing.length > 0 && fs.existsSync(existing)) ||
-            fs.existsSync(deterministicAss) ||
-            fs.existsSync(indexedAss)
-          ) {
-            continue;
-          }
-          pendingSegments.push(seg);
-        }
-
-        if (pendingSegments.length === 0) continue;
-
-        const segOutputDir = path.join(danmakuDir, 'segments');
-        const segResults = await danmakuAssGenerator.generateSegmentAss({
-          jsonlPath,
-          outputDir: segOutputDir,
-          segments: pendingSegments,
-        });
-
-        let updated = 0;
-        for (const seg of segResults) {
-          // 仅在 DB 仍为空时才更新，避免覆盖其他流程的结果
-          const current = await pool.query(`SELECT danmaku_ass_path FROM recording_files WHERE id = $1`, [seg.id]);
-          const curPath = current.rows[0]?.danmaku_ass_path;
-          if (curPath && curPath.length > 0) continue;
-
-          await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
-          updated++;
-        }
-
-        if (updated > 0) {
-          console.log(`[看门狗][ASS] 会话 ${sessionId}: 补充生成 ${updated} 个分段的 ASS 字幕`);
-        }
-      } catch (err) {
-        console.error(`[看门狗][ASS] 会话 ${sessionId} 补生成失败:`, err.message);
-      } finally {
-        _assProcessingSessions.delete(sessionId);
-      }
-    }
-  } catch (err) {
-    console.error('[看门狗][ASS] 检查补生成失败:', err.message);
-  }
-}
-
-/**
  * 执行文件扫描任务，检查录制文件的关联状态和孤立状态。
  * 扫描完成后会在控制台输出统计结果，若发生错误则记录错误信息。
  *
@@ -753,11 +611,10 @@ async function runFileScan() {
  * 4. 清理碎片文件。
  * 5. 同步缺失文件状态。
  * 6. 完成超时的中断会话。
- * 7. 补充生成缺失的分段 ASS 字幕。
- * 8. 执行自动转码队列。
- * 9. 执行自动 HLS 生成。
- * 10. 扫描待自动投稿的文件。
- * 11. 设置定时器以指定的间隔再次执行本函数。
+ * 7. 执行自动转码队列。
+ * 8. 执行自动 HLS 生成。
+ * 9. 扫描待自动投稿的文件。
+ * 10. 设置定时器以指定的间隔再次执行本函数。
  *
  * @returns {Promise<void>} 无返回值，错误会在内部捕获并打印日志
  */
@@ -770,7 +627,6 @@ async function runWatchdog() {
     await cleanupFragmentFiles();
     await syncMissingFiles();
     await finalizeInterruptedSessions();
-    await checkSessionAss();
     await checkSessionTranscode();
     await checkSessionHLS();
     await UploadService.scanPendingAutoUpload();
@@ -897,6 +753,5 @@ module.exports = {
   cleanupFragmentFiles,
   syncMissingFiles,
   finalizeInterruptedSessions,
-  checkSessionAss,
   backfillSegmentTimes,
 };

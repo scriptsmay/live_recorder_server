@@ -48,11 +48,6 @@ const defaultPolling: DashboardPolling = {
 
 const defaultDanmaku: DashboardDanmaku = {
   active_captures: 0,
-  burn_queue: {
-    queue_length: 0,
-    processing: 0,
-    concurrency: 0,
-  },
 }
 
 const defaultSummary: DashboardSummary = {
@@ -114,10 +109,7 @@ const statCards = computed<StatCard[]>(() => [
     label: '弹幕状态',
     value: hasDanmaku.value ? String(danmaku.value.active_captures) : '--',
     sublines: hasDanmaku.value
-      ? [
-          `采集 ${danmaku.value.active_captures}`,
-          `压制等待 ${danmaku.value.burn_queue.queue_length} / 处理中 ${danmaku.value.burn_queue.processing}`,
-        ]
+      ? [`采集 ${danmaku.value.active_captures}`]
       : [],
     gradient: 'from-cyan-500 to-cyan-600',
     accent: 'text-cyan-100',

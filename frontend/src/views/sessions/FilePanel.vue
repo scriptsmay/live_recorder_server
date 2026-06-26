@@ -3,7 +3,7 @@
  * FilePanel - 录制文件列表（懒加载）
  *
  * 首次展开时从 API 获取文件列表，展示为表格
- * 支持播放按钮（原始文件和弹幕压制版）
+ * 支持播放按钮（原始文件）
  */
 import { ref, watch } from 'vue'
 import Hls from 'hls.js'
@@ -64,17 +64,6 @@ watch(
   },
 )
 
-const fileStatusBadge = (status: string) => {
-  switch (status) {
-    case 'completed':
-      return { text: '完成', cls: 'bg-green-100 text-green-700' }
-    case 'recording':
-      return { text: '录制中', cls: 'bg-blue-100 text-blue-700' }
-    default:
-      return { text: status || '-', cls: 'bg-gray-100 text-gray-500' }
-  }
-}
-
 function getFileName(fp: string) {
   return fp ? fp.split('/').pop() || '' : ''
 }
@@ -97,12 +86,6 @@ async function handlePlay(file: RecordingFile) {
   }
 
   playerSrc.value = `/api/recordings/${file.id}/stream`
-}
-
-async function handlePlayDanmaku(file: RecordingFile) {
-  playerTitle.value = getFileName(file.file_path) + ' (弹幕版)'
-  playerSrc.value = `/api/recordings/${file.id}/stream?type=danmaku`
-  playerVisible.value = true
 }
 
 function openHlsPlayer(src: string) {
@@ -187,9 +170,6 @@ function closePlayer() {
             <th class="py-1.5 pr-3 font-medium">文件路径</th>
             <th class="py-1.5 pr-3 font-medium">大小</th>
             <th class="py-1.5 pr-3 font-medium">HLS</th>
-            <th class="py-1.5 pr-3 font-medium">弹幕</th>
-            <th class="py-1.5 pr-3 font-medium">状态</th>
-            <th class="py-1.5 font-medium">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -214,50 +194,6 @@ function closePlayer() {
               >
                 {{ file.is_hls_ready ? '就绪' : '未生成' }}
               </span>
-            </td>
-            <td class="py-1.5 pr-3">
-              <span
-                v-if="file.is_danmaku_burned"
-                class="px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-                >已压制</span
-              >
-              <span
-                v-else-if="file.danmaku_ass_exists"
-                class="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"
-                >ASS</span
-              >
-              <span
-                v-else
-                class="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500"
-                >无</span
-              >
-            </td>
-            <td class="py-1.5 pr-3">
-              <span
-                class="px-1.5 py-0.5 rounded text-xs font-medium"
-                :class="fileStatusBadge(file.status).cls"
-                >{{ fileStatusBadge(file.status).text }}</span
-              >
-            </td>
-            <td class="py-1.5 whitespace-nowrap">
-              <template v-if="file.file_exists">
-                <button
-                  class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors mr-1"
-                  title="播放"
-                  @click="handlePlay(file)"
-                >
-                  &#9654;
-                </button>
-                <button
-                  v-if="file.is_danmaku_burned"
-                  class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
-                  title="播放弹幕压制版"
-                  @click="handlePlayDanmaku(file)"
-                >
-                  &#9654;弹幕
-                </button>
-              </template>
-              <span v-else class="text-gray-400">已删除</span>
             </td>
           </tr>
         </tbody>

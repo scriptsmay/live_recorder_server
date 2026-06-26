@@ -36,13 +36,6 @@ const isDone = computed(
 
 const hasSuccessUpload = computed(() => uploadRecords.value.some((u) => u.status === 'success'))
 
-const burnProgress = computed(() => {
-  const total = props.session.danmaku_burn_total || 0
-  const completed = props.session.danmaku_burn_completed || 0
-  if (total <= 0 || completed >= total) return null
-  return Math.round((completed / total) * 100)
-})
-
 const sessionBadge = computed(() => {
   const s = props.session
   switch (s.status) {
@@ -74,19 +67,6 @@ const danmakuBadge = computed(() => {
     default:
       return { text: '\u2014', cls: 'bg-gray-100 text-gray-500' }
   }
-})
-
-const burnBadge = computed(() => {
-  const s = props.session
-  const total = s.danmaku_burn_total || 0
-  const completed = s.danmaku_burn_completed || 0
-  const failed = s.danmaku_burn_failed || 0
-  if (total <= 0) return { text: '\u2014', cls: 'bg-gray-100 text-gray-500' }
-  if (failed > 0)
-    return { text: `${completed}/${total} (${failed}失败)`, cls: 'bg-red-100 text-red-600' }
-  if (completed === total)
-    return { text: `完成 ${completed}/${total}`, cls: 'bg-green-100 text-green-700' }
-  return { text: `进行中 ${completed}/${total}`, cls: 'bg-blue-100 text-blue-700' }
 })
 
 const truncatedStreamUrl = computed(() => {
@@ -351,16 +331,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Burn Progress Bar -->
-        <div v-if="burnProgress !== null" class="mt-3">
-          <div class="h-1.5 rounded-full bg-gray-200 overflow-hidden">
-            <div
-              class="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
-              :style="{ width: burnProgress + '%' }"
-            />
-          </div>
-          <span class="text-xs text-gray-400 mt-1 block">{{ burnProgress }}% 完成</span>
-        </div>
+
 
         <!-- Right Actions -->
         <div class="flex items-center flex-wrap gap-1.5 mt-3 pt-2 border-t border-gray-100">

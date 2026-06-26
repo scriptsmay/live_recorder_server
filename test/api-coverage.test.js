@@ -75,18 +75,10 @@ const EXPECTED_APIS = [
   // ===== danmaku.js =====
   { method: 'GET', path: '/sessions/:id/danmaku-page' },
   { method: 'POST', path: '/danmaku/batch' },
-  { method: 'POST', path: '/sessions/:id/danmaku/ass' },
-  { method: 'POST', path: '/sessions/:id/danmaku/burn' },
   { method: 'GET', path: '/danmaku_capture_records' },
-  { method: 'GET', path: '/danmaku_burn_records' },
-  { method: 'DELETE', path: '/danmaku_burn_records/:id' },
   { method: 'GET', path: '/danmaku/status' },
   { method: 'GET', path: '/danmaku/search' },
   { method: 'GET', path: '/danmaku-toolbox/sessions' },
-  { method: 'GET', path: '/danmaku/burn_output/:id/stream' },
-  { method: 'POST', path: '/danmaku/free-burn' },
-  { method: 'GET', path: '/danmaku/free-burn/records' },
-  { method: 'GET', path: '/danmaku/free-burn/:id/stream' },
 
   // ===== transcode.js =====
   { method: 'GET', path: '/transcode_records' },

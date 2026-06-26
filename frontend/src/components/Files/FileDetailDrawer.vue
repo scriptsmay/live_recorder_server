@@ -42,7 +42,6 @@ const fileTypeLabels: Record<FileType, string> = {
 const activeTaskLabels: Record<string, string> = {
   recording: '录制中',
   transcoding: '转码中',
-  danmaku_burning: '弹幕压制中',
   uploading: '投稿中',
 }
 

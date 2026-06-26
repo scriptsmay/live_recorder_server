@@ -425,6 +425,7 @@ async function runMigration() {
       )
     `);
 
+    // TODO: drop in v1.8.0 (danmaku burn moved to danmaku-tool)
     await client.query(`
       CREATE TABLE IF NOT EXISTS danmaku_burn_records (
         id SERIAL PRIMARY KEY,
@@ -519,6 +520,7 @@ async function runMigration() {
       ['hls_cleanup_days', '30'],
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
+      // TODO: remove in v1.8.0 (danmaku burn moved to danmaku-tool)
       ['danmaku_burn_concurrency', '1'],
       ['danmaku_density_per_second', '15'],
       ['danmaku_font_family', 'Noto Sans CJK SC'],
@@ -566,6 +568,7 @@ async function runMigration() {
         ON replay_upload_records(started_at DESC);
     `);
 
+    // TODO: drop in v1.8.0 (free burn moved to independent tool)
     // 弹幕自由压制记录表
     await client.query(`
       CREATE TABLE IF NOT EXISTS danmaku_free_burn_records (

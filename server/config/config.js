@@ -8,17 +8,6 @@ const SITE_URL = envs.SITE_URL || `http://localhost:${envs.PORT || 1123}/`;
 const SUPPORTED_EXT_REGEX = /\.(flv|ts|mp4)$/i;
 const SUPPORTED_TRANSCODE_EXT = /\.(flv|ts)$/i;
 
-// 弹幕压制产物后缀，用于在文件扫描时排除，避免被误当作录制分段计入统计或投稿
-const DANMAKU_BURN_SUFFIX = '_danmaku.mp4';
-function isDanmakuBurnFile(filename) {
-  return filename.toLowerCase().endsWith(DANMAKU_BURN_SUFFIX);
-}
-
-// 弹幕压制产物独立输出目录
-function getDanmakuOutputDir() {
-  return envs.DANMAKU_OUTPUT_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'danmaku_output');
-}
-
 function getReplayWorkDir() {
   return envs.REPLAY_WORK_DIR || path.join(path.dirname(envs.VIDEO_DOWNLOAD_DIR || '.'), 'replay');
 }
@@ -38,9 +27,6 @@ module.exports = {
   VIDEO_TYPES: '(flv|mp4|ts)',
   SUPPORTED_EXT_REGEX,
   SUPPORTED_TRANSCODE_EXT,
-  DANMAKU_BURN_SUFFIX,
-  isDanmakuBurnFile,
-  getDanmakuOutputDir,
   getReplayWorkDir,
   getLogsDir,
 };

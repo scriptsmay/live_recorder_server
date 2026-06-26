@@ -225,13 +225,6 @@ const settingGroups: SettingGroup[] = [
         options: ['false', 'true'],
       },
       {
-        key: 'danmaku_burn_concurrency',
-        label: '弹幕压制并发',
-        desc: '弹幕压制队列最大并发数，8G内存NAS建议固定为 1',
-        type: 'number',
-        attrs: { min: 1, max: 1 },
-      },
-      {
         key: 'danmaku_density_per_second',
         label: '每秒弹幕上限',
         desc: 'ASS 生成时每秒最多渲染的弹幕数，超出部分丢弃',

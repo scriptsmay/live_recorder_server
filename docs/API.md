@@ -124,12 +124,7 @@ curl http://127.0.0.1:1123/api/health
       "concurrency": 3
     },
     "danmaku": {
-      "active_captures": 1,
-      "burn_queue": {
-        "queue_length": 0,
-        "processing": 1,
-        "concurrency": 1
-      }
+      "active_captures": 1
     },
     "polling": {
       "total_polled": 8,
@@ -533,10 +528,6 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
 数据源：`recording_files` 表
 
 **查询参数：**
-
-| 参数   | 类型   | 说明                                                                                                |
-| ------ | ------ | --------------------------------------------------------------------------------------------------- |
-| `type` | string | 可选。传 `danmaku` 时返回弹幕压制版文件（`danmaku_burn_path`），默认返回原始录制文件（`file_path`） |
 
 **返回：**
 
@@ -1005,66 +996,6 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ---
 
-### POST /api/sessions/:id/danmaku/ass
-
-手动重新生成会话的 ASS 字幕文件（含会话级和分段级）。
-
-**请求体（可选）：**
-
-| 字段          | 类型   | 说明                   |
-| ------------- | ------ | ---------------------- |
-| `videoWidth`  | number | 视频宽度，默认 1920    |
-| `videoHeight` | number | 视频高度，默认 1080    |
-| `offsetMs`    | number | 时间偏移（ms），默认 0 |
-
-**返回：**
-
-```json
-{
-  "status": "ok",
-  "data": {
-    "ass_path": "/data/videos/room1/session1/danmaku/danmaku.ass",
-    "event_count": 1234,
-    "segments": [
-      {
-        "id": 123,
-        "assPath": "/data/videos/room1/session1/danmaku/segments/123.ass",
-        "eventCount": 120
-      }
-    ]
-  }
-}
-```
-
-分段级 ASS 文件使用 `recording_files.id` 命名：
-`{session.output_dir}/danmaku/segments/{recording_file_id}.ass`。接口会同时回填
-`recording_files.danmaku_ass_path` 以兼容旧流程；查询接口优先检查旧字段，随后检查确定性路径。
-
----
-
-### POST /api/sessions/:id/danmaku/burn
-
-将会话的所有可压制分段加入弹幕压制队列。
-
-**请求体（可选）：**
-
-| 字段     | 类型    | 说明                                |
-| -------- | ------- | ----------------------------------- |
-| `force`  | boolean | 是否强制覆盖已有产物，默认 false    |
-| `useQsv` | boolean | 是否使用 Intel QSV 加速，默认 false |
-
-**返回：**
-
-```json
-{
-  "status": "ok",
-  "message": "已加入 3 个分段到弹幕压制队列",
-  "enqueued": 3
-}
-```
-
----
-
 ### GET /api/danmaku/status
 
 获取当前弹幕采集和压制队列的实时状态。
@@ -1075,12 +1006,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 {
   "status": "ok",
   "data": {
-    "active_captures": { "count": 1 },
-    "burn_queue": {
-      "queue_length": 2,
-      "processing": 1,
-      "concurrency": 1
-    }
+    "active_captures": { "count": 1 }
   }
 }
 ```
@@ -1115,48 +1041,9 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ---
 
-### GET /api/danmaku_burn_records
-
-查询弹幕压制记录。
-
-**查询参数：**
-
-| 参数         | 类型   | 说明       |
-| ------------ | ------ | ---------- |
-| `session_id` | number | 按会话筛选 |
-| `status`     | string | 按状态筛选 |
-
----
-
-### DELETE /api/danmaku_burn_records/:id
-
-删除压制记录。
-
-**查询参数：**
-
-| 参数          | 类型    | 说明                             |
-| ------------- | ------- | -------------------------------- |
-| `delete_file` | boolean | 是否同时删除产物文件，默认 false |
-
----
-
-### GET /api/danmaku/burn_output/:id/stream
-
-流式播放弹幕压制产物文件。支持 HTTP Range 请求（拖拽播放）。
-
-**路径参数：**
-
-| 参数 | 说明                    |
-| ---- | ----------------------- |
-| `id` | danmaku_burn_records.id |
-
-**返回：** 视频流（`video/mp4`）
-
----
-
 ### GET /api/danmaku-toolbox/sessions
 
-获取有弹幕数据的会话列表（弹幕工具箱页面专用），仅返回存在弹幕采集记录的会话，含压制汇总统计。
+获取有弹幕数据的会话列表（弹幕工具箱页面专用），仅返回存在弹幕采集记录的会话。
 
 `started_at` 为标准 ISO 8601 时间字符串，前端展示时应使用统一时间格式化工具，不要直接裁剪字符串。
 
@@ -1171,9 +1058,6 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
       "room_name": "KSG小屿",
       "danmaku_status": "completed",
       "danmaku_event_count": 5678,
-      "danmaku_burn_total": 3,
-      "danmaku_burn_completed": 3,
-      "danmaku_burn_failed": 0,
       "ass_segment_count": 3,
       "has_ass_ready": true
     }

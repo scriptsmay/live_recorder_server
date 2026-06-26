@@ -14,7 +14,6 @@ const props = defineProps<{
   open: boolean
   sessionId: number | null
   templates: UploadTemplate[]
-  uploadSource?: 'original' | 'danmaku'
 }>()
 
 const emit = defineEmits<{
@@ -72,7 +71,6 @@ async function handleSubmit() {
       `/api/sessions/${props.sessionId}/upload`,
       {
         template_id: parseInt(selectedTemplateId.value, 10),
-        upload_source: props.uploadSource || 'original',
       },
     )
     if (res.status !== 'ok') {

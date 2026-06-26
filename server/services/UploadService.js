@@ -149,10 +149,9 @@ class UploadService {
    * @param {string} [tmpl.cover] - 封面图片路径
    * @param {number} [tmpl.dtime] - 定时发布时间
    * @param {string} [tmpl.after_upload] - 上传后处理配置
-   * @param {string} [uploadSource='original'] - 投稿文件来源：'original'=源视频，'danmaku'=弹幕压制后的视频
    * @returns {Promise<void>}
    */
-  static async executeUpload(session, tmpl, uploadSource = 'original') {
+  static async executeUpload(session, tmpl) {
     let message;
     if (await this.isSessionDeleted(session.id)) {
       message = `[投稿] 会话 ${session.id} 已被删除，跳过执行`;
@@ -171,27 +170,15 @@ class UploadService {
     const tags = this.renderTemplate(tmpl.tags || '', vars);
     const source = this.renderTemplate(tmpl.source || '{room_url}', vars);
 
-    // 根据 uploadSource 选择投稿文件来源
+    // 查询会话的录制文件
     let files = [];
-    if (uploadSource === 'danmaku') {
-      // 使用弹幕压制后的视频文件
-      const burnRecs = await pool.query(
-        `SELECT output_path FROM danmaku_burn_records
-         WHERE session_id = $1 AND status = 'completed' AND output_path IS NOT NULL AND output_path != ''
-         ORDER BY recording_file_id`,
-        [session.id]
-      );
-      files = burnRecs.rows.map((r) => r.output_path).filter(Boolean);
-    } else {
-      // 使用源视频文件（默认行为）
-      const recs = await pool.query(
-        `SELECT DISTINCT ON (file_path) * FROM recording_files
-         WHERE session_id = $1 AND status IN ('completed', 'interrupted')
-         ORDER BY file_path`,
-        [session.id]
-      );
-      files = recs.rows.map((r) => r.file_path).filter(Boolean);
-    }
+    const recs = await pool.query(
+      `SELECT DISTINCT ON (file_path) * FROM recording_files
+       WHERE session_id = $1 AND status IN ('completed', 'interrupted')
+       ORDER BY file_path`,
+      [session.id]
+    );
+    files = recs.rows.map((r) => r.file_path).filter(Boolean);
 
     // 读取碎片大小阈值
     const thresholdValue = await DataService.getSetting('filtering_threshold', '10');

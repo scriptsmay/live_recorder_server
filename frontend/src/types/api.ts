@@ -66,9 +66,6 @@ export interface RecordingSession {
   danmaku_status: string
   danmaku_event_count: number
   danmaku_error: string | null
-  danmaku_burn_total: number
-  danmaku_burn_completed: number
-  danmaku_burn_failed: number
   created_at: string
 }
 
@@ -90,8 +87,6 @@ export interface RecordingFile {
   status: string
   file_exists: boolean
   is_hls_ready: boolean
-  is_danmaku_burned: boolean
-  danmaku_ass_exists: boolean
   created_at: string
 }
 
@@ -165,18 +160,6 @@ export interface TranscodeRecord {
   started_at: string | null
   completed_at: string | null
   created_at: string
-}
-
-export interface BurnRecord {
-  id: number
-  recording_file_id: number
-  session_id: number
-  status: string
-  output_path: string
-  video_path: string
-  room_url: string
-  enqueued_at: string
-  completed_at: string | null
 }
 
 // ====== 回放工具箱 ======
@@ -315,11 +298,6 @@ export interface ActiveRecording {
 
 export interface DashboardDanmaku {
   active_captures: number
-  burn_queue: {
-    queue_length: number
-    processing: number
-    concurrency: number
-  }
 }
 
 export interface DashboardPolling {

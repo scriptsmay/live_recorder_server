@@ -45,15 +45,14 @@ function makeFile(overrides = {}) {
 }
 
 // helper：mock validateFileSafety 所需的全部查询
-// isFileInActiveTask: 4 queries (recording, transcode, burn, upload)
+// isFileInActiveTask: 3 queries (recording, transcode, upload)
 // + validateFileSafety 内部的 session check (1 query, source_table=recording_files)
 // + recording_files status check (1 query)
-// 共 6 次 pool.query
+// 共 5 次 pool.query
 function mockSafetyQueries(times = 1) {
   for (let i = 0; i < times; i++) {
     pool.query.mockResolvedValueOnce({ rows: [] }); // isFileInActiveTask: recording
     pool.query.mockResolvedValueOnce({ rows: [] }); // isFileInActiveTask: transcode
-    pool.query.mockResolvedValueOnce({ rows: [] }); // isFileInActiveTask: burn
     pool.query.mockResolvedValueOnce({ rows: [] }); // isFileInActiveTask: upload
     pool.query.mockResolvedValueOnce({ rows: [] }); // validateFileSafety: session check
     pool.query.mockResolvedValueOnce({ rows: [{ status: 'completed' }] }); // validateFileSafety: recording_files status
@@ -249,7 +248,6 @@ describe('validateFileSafety', () => {
     pool.query
       .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: recording
       .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: transcode
-      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: burn
       .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: upload
       .mockResolvedValueOnce({ rows: [] }) // session check
       .mockResolvedValueOnce({ rows: [{ status: 'recording' }] }); // recording_files status → 非 completed

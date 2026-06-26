@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 转码 & 压制 - 查看转码队列与历史
+ * 转码 - 查看转码队列与历史
  * 从 transcode.ejs 迁移
  */
 import { ref, computed, onMounted } from 'vue'
@@ -25,26 +25,10 @@ interface TranscodeRow {
   completed_at: string | null
 }
 
-interface BurnRow {
-  id: number
-  ass_path: string
-  output_path: string
-  status: string
-  error: string | null
-  session_id: number
-  recording_file_id: number
-  segment_index: number | null
-  room_url: string
-  enqueued_at: string
-  completed_at: string | null
-}
-
 const records = ref<TranscodeRow[]>([])
-const burnRecords = ref<BurnRow[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(true)
-const typeFilter = ref('all')
 
 function fileName(fp: string | null) {
   if (!fp) return '-'
@@ -55,46 +39,27 @@ function fileName(fp: string | null) {
 const transcodeActive = computed(
   () => records.value.filter((r) => r.status === 'processing' || r.status === 'queued').length,
 )
-const burnActive = computed(
-  () => burnRecords.value.filter((b) => b.status === 'processing' || b.status === 'queued').length,
-)
 const queuedCount = computed(
-  () =>
-    records.value.filter((r) => r.status === 'queued').length +
-    burnRecords.value.filter((b) => b.status === 'queued').length,
+  () => records.value.filter((r) => r.status === 'queued').length,
 )
 const completedCount = computed(
-  () =>
-    records.value.filter((r) => r.status === 'completed').length +
-    burnRecords.value.filter((b) => b.status === 'completed').length,
+  () => records.value.filter((r) => r.status === 'completed').length,
 )
 const failedCount = computed(
-  () =>
-    records.value.filter((r) => r.status === 'failed').length +
-    burnRecords.value.filter((b) => b.status === 'failed').length,
+  () => records.value.filter((r) => r.status === 'failed').length,
 )
 
 // Active tasks
 const activeTranscodes = computed(() =>
   records.value.filter((r) => r.status === 'processing' || r.status === 'queued'),
 )
-const activeBurns = computed(() =>
-  burnRecords.value.filter((b) => b.status === 'processing' || b.status === 'queued'),
-)
 
 // History (non-active)
-const historyTranscodes = computed(() => {
-  if (typeFilter.value === 'burn') return []
-  return records.value.filter((r) => r.status !== 'queued' && r.status !== 'processing')
-})
-const historyBurns = computed(() => {
-  if (typeFilter.value === 'transcode') return []
-  return burnRecords.value.filter((b) => b.status !== 'queued' && b.status !== 'processing')
-})
-
-const hasHistory = computed(
-  () => historyTranscodes.value.length > 0 || historyBurns.value.length > 0,
+const historyTranscodes = computed(() =>
+  records.value.filter((r) => r.status !== 'queued' && r.status !== 'processing'),
 )
+
+const hasHistory = computed(() => historyTranscodes.value.length > 0)
 
 function historyStatusStyle(status: string) {
   if (status === 'completed') return 'text-green-700 bg-green-50'
@@ -109,20 +74,12 @@ function historyStatusLabel(status: string) {
 async function loadData() {
   loading.value = true
   try {
-    const [tcRes, burnRes] = await Promise.all([
-      apiGet<{ rows: TranscodeRow[]; total: number } | TranscodeRow[]>(
-        `/api/transcode_records?limit=100&page=${page.value}`,
-      ),
-      apiGet<{ rows: BurnRow[] } | BurnRow[]>('/api/danmaku_burn_records?limit=100').catch(() => ({
-        data: [],
-      })),
-    ])
+    const tcRes = await apiGet<{ rows: TranscodeRow[]; total: number } | TranscodeRow[]>(
+      `/api/transcode_records?limit=100&page=${page.value}`,
+    )
     const tcData = tcRes.data
     records.value = Array.isArray(tcData) ? tcData : (tcData.rows ?? [])
     total.value = Array.isArray(tcData) ? tcData.length : (tcData.total ?? records.value.length)
-
-    const burnData = burnRes.data
-    burnRecords.value = Array.isArray(burnData) ? burnData : (burnData.rows ?? [])
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : '加载失败')
   } finally {
@@ -133,10 +90,6 @@ async function loadData() {
 function handlePageChange(p: number) {
   page.value = p
   loadData()
-}
-
-function setFilter(type: string) {
-  typeFilter.value = type
 }
 
 async function deleteTranscode(id: number) {
@@ -151,37 +104,21 @@ async function deleteTranscode(id: number) {
   }
 }
 
-async function deleteBurn(id: number) {
-  const ok = await confirm('确定删除此压制记录吗？')
-  if (!ok) return
-  try {
-    await apiDelete(`/api/danmaku_burn_records/${id}`)
-    toast.success('已删除')
-    loadData()
-  } catch (err) {
-    toast.error(err instanceof ApiError ? err.message : '删除失败')
-  }
-}
-
 onMounted(loadData)
 </script>
 
 <template>
   <div>
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">转码 & 压制</h1>
-      <p class="text-sm text-gray-500 mt-1">视频转码与弹幕压制任务队列</p>
+      <h1 class="text-2xl font-bold text-gray-900">转码</h1>
+      <p class="text-sm text-gray-500 mt-1">视频转码任务队列</p>
     </div>
 
     <!-- Overview stats bar -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
       <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
         <div class="text-2xl font-bold text-amber-600">{{ transcodeActive }}</div>
         <div class="text-xs text-gray-500 mt-1">转码中</div>
-      </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
-        <div class="text-2xl font-bold text-blue-600">{{ burnActive }}</div>
-        <div class="text-xs text-gray-500 mt-1">压制中</div>
       </div>
       <div class="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
         <div class="text-2xl font-bold text-purple-600">{{ queuedCount }}</div>
@@ -207,7 +144,7 @@ onMounted(loadData)
 
     <template v-else>
       <!-- Active tasks section -->
-      <div v-if="activeTranscodes.length > 0 || activeBurns.length > 0" class="mb-6">
+      <div v-if="activeTranscodes.length > 0" class="mb-6">
         <h2 class="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
             <path
@@ -269,60 +206,6 @@ onMounted(loadData)
               </div>
             </div>
           </div>
-
-          <!-- Burn active cards -->
-          <div
-            v-for="b in activeBurns"
-            :key="'burn-' + b.id"
-            class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex"
-          >
-            <div class="w-1 bg-blue-500 shrink-0" />
-            <div class="flex-1 p-4 flex items-start justify-between gap-4">
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap mb-1">
-                  <span class="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700"
-                    >压制</span
-                  >
-                  <span
-                    class="px-2 py-0.5 text-xs font-medium rounded"
-                    :class="
-                      b.status === 'processing'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-yellow-100 text-yellow-700'
-                    "
-                  >
-                    {{ b.status === 'processing' ? '压制中' : '排队中' }}
-                  </span>
-                  <span class="text-xs text-gray-400 font-mono">#{{ b.id }}</span>
-                </div>
-                <div class="text-sm">
-                  <span class="text-gray-600">会话</span>
-                  <router-link :to="'/sessions'" class="text-brand-600 hover:underline ml-1">
-                    #{{ b.session_id }}
-                  </router-link>
-                  <span class="text-gray-400 ml-2 text-xs">分段 {{ b.segment_index ?? '-' }}</span>
-                </div>
-                <div class="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                  <code class="truncate max-w-[180px]" :title="b.ass_path">{{
-                    fileName(b.ass_path)
-                  }}</code>
-                  <span class="text-gray-300">→</span>
-                  <code class="truncate max-w-[180px]" :title="b.output_path">{{
-                    fileName(b.output_path)
-                  }}</code>
-                </div>
-                <p v-if="b.error" class="text-xs text-red-500 mt-1 truncate">{{ b.error }}</p>
-              </div>
-              <div class="flex flex-col gap-1.5 shrink-0">
-                <button
-                  class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                  @click="deleteBurn(b.id)"
-                >
-                  删除
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -342,35 +225,12 @@ onMounted(loadData)
           历史记录
         </h2>
 
-        <!-- Type filter -->
-        <div class="flex items-center gap-2 mb-3">
-          <span class="text-sm text-gray-500 shrink-0">类型：</span>
-          <button
-            v-for="opt in [
-              { value: 'all', label: '全部' },
-              { value: 'transcode', label: '转码记录' },
-              { value: 'burn', label: '弹幕压制' },
-            ]"
-            :key="opt.value"
-            class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
-            :class="
-              typeFilter === opt.value
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            "
-            @click="setFilter(opt.value)"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-
         <!-- History table -->
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">类型</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500 w-16">ID</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500">会话 / 直播间</th>
                   <th class="px-4 py-3 text-left font-medium text-gray-500">原文件</th>
@@ -383,7 +243,7 @@ onMounted(loadData)
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr v-if="!hasHistory">
-                  <td colspan="9" class="px-4 py-12 text-center text-gray-400">暂无历史记录</td>
+                  <td colspan="8" class="px-4 py-12 text-center text-gray-400">暂无历史记录</td>
                 </tr>
 
                 <!-- Transcode rows -->
@@ -392,12 +252,6 @@ onMounted(loadData)
                   :key="'htc-' + r.id"
                   class="hover:bg-gray-50 transition-colors"
                 >
-                  <td class="px-4 py-3">
-                    <span
-                      class="px-1.5 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-700"
-                      >转码</span
-                    >
-                  </td>
                   <td class="px-4 py-3 font-mono text-xs text-gray-400">#{{ r.id }}</td>
                   <td class="px-4 py-3">
                     <div v-if="r.room_name" class="text-sm text-gray-700">{{ r.room_name }}</div>
@@ -432,65 +286,6 @@ onMounted(loadData)
                     <button
                       class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
                       @click="deleteTranscode(r.id)"
-                    >
-                      删除
-                    </button>
-                  </td>
-                </tr>
-
-                <!-- Burn rows -->
-                <tr
-                  v-for="b in historyBurns"
-                  :key="'hburn-' + b.id"
-                  class="hover:bg-gray-50 transition-colors"
-                >
-                  <td class="px-4 py-3">
-                    <span
-                      class="px-1.5 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700"
-                      >压制</span
-                    >
-                  </td>
-                  <td class="px-4 py-3 font-mono text-xs text-gray-400">#{{ b.id }}</td>
-                  <td class="px-4 py-3">
-                    <router-link :to="'/sessions'" class="text-sm text-brand-600 hover:underline">
-                      {{ b.session_id }}
-                    </router-link>
-                    <span v-if="b.segment_index != null" class="text-xs text-gray-400 ml-1">
-                      #{{ b.segment_index }}
-                    </span>
-                    <div v-if="b.room_url" class="text-xs text-gray-400 truncate max-w-[150px]">
-                      {{ b.room_url }}
-                    </div>
-                  </td>
-                  <td
-                    class="px-4 py-3 text-xs text-gray-500 break-all max-w-[180px]"
-                    :title="b.ass_path"
-                  >
-                    {{ fileName(b.ass_path) }}
-                  </td>
-                  <td
-                    class="px-4 py-3 text-xs text-gray-500 break-all max-w-[180px]"
-                    :title="b.output_path"
-                  >
-                    {{ fileName(b.output_path) }}
-                  </td>
-                  <td class="px-4 py-3">
-                    <span
-                      class="px-2 py-0.5 text-xs font-medium rounded"
-                      :class="historyStatusStyle(b.status)"
-                    >
-                      {{ historyStatusLabel(b.status) }}
-                    </span>
-                    <div v-if="b.error" class="text-xs text-red-400 mt-0.5 truncate max-w-[100px]">
-                      {{ b.error }}
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(b.enqueued_at) }}</td>
-                  <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(b.completed_at) }}</td>
-                  <td class="px-4 py-3 text-right">
-                    <button
-                      class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                      @click="deleteBurn(b.id)"
                     >
                       删除
                     </button>

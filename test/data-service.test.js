@@ -85,7 +85,7 @@ describe('DataService.getRecordingFiles', () => {
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('rf.session_id = $1'), [18]);
   });
 
-  test('按录制文件 id 解析确定性分段 ASS 路径', async () => {
+  test('按录制文件 id 返回 file_exists 字段', async () => {
     pool.query
       .mockResolvedValueOnce({
         rows: [
@@ -93,8 +93,6 @@ describe('DataService.getRecordingFiles', () => {
             id: 42,
             session_id: 18,
             file_path: '/tmp/video.ts',
-            session_output_dir: '/tmp/session-18',
-            danmaku_ass_path: '',
           },
         ],
       })
@@ -104,8 +102,7 @@ describe('DataService.getRecordingFiles', () => {
 
     const { rows } = await DataService.getRecordingFiles({ session_id: 18 });
 
-    expect(rows[0].danmaku_ass_exists).toBe(true);
-    expect(rows[0].danmaku_ass_path).toBe('/tmp/session-18/danmaku/segments/42.ass');
+    expect(rows[0].file_exists).toBe(true);
   });
 });
 
@@ -129,8 +126,7 @@ describe('DataService.getSessionDetail', () => {
       })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [null] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [null] });
 
     const detail = await DataService.getSessionDetail(52);
 

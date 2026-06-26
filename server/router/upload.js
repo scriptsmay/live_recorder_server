@@ -182,12 +182,11 @@ router.post('/biliup/renew', async (req, res) => {
 
 /**
  * 指定会话指定模板ID投稿
- * 支持 upload_source 参数：'original'(默认)=源视频，'danmaku'=弹幕压制后的视频
  */
 router.post('/sessions/:id/upload', async (req, res) => {
   try {
     const { id } = req.params;
-    const { template_id, upload_source } = req.body;
+    const { template_id } = req.body;
     if (!template_id) {
       return res.status(400).json({ status: 'Error', message: '缺少 template_id' });
     }
@@ -209,7 +208,7 @@ router.post('/sessions/:id/upload', async (req, res) => {
     }
 
     const sessionData = session.rows[0];
-    const result = await UploadService.executeUpload(sessionData, tmpl.rows[0], upload_source || 'original');
+    const result = await UploadService.executeUpload(sessionData, tmpl.rows[0]);
     if (result.error) {
       return res.json({ status: 'Error', message: result.message });
     }

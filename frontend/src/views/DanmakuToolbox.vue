@@ -1,26 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDanmakuToolboxStore, type ToolboxSession } from '@/stores/danmaku-toolbox'
 import { useToast } from '@/utils/toast'
-import { useConfirm } from '@/utils/confirm'
-import { apiGet, ApiError } from '@/utils/api'
-import StatusCards from './danmaku-toolbox/StatusCards.vue'
-import SessionCard from './danmaku-toolbox/SessionCard.vue'
 import DanmakuSearchPanel from '@/components/Danmaku/DanmakuSearchPanel.vue'
 import Modal from '@/components/Modal.vue'
-import UploadModal from './sessions/UploadModal.vue'
-import type { UploadTemplate } from '@/types/api'
 
 const store = useDanmakuToolboxStore()
 const toast = useToast()
-const { confirm } = useConfirm()
 
 // ---- 本地状态 ----
 const currentFilter = ref('all')
 const searchKeyword = ref('')
-const selectedSessions = ref<Set<number>>(new Set())
-const templates = ref<UploadTemplate[]>([])
-let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // 搜索弹窗
 const searchModalVisible = ref(false)
@@ -28,17 +18,10 @@ const searchModalSessionId = ref<number | null>(null)
 const searchModalRoomName = ref('')
 const searchPanelRef = ref<InstanceType<typeof DanmakuSearchPanel> | null>(null)
 
-// 投稿弹窗
-const uploadModalOpen = ref(false)
-const uploadSessionId = ref<number | null>(null)
-
 // ---- 筛选逻辑 ----
 const filterOptions = [
   { value: 'all', label: '全部' },
   { value: 'has_data', label: '有数据' },
-  { value: 'ass_ready', label: 'ASS 就绪' },
-  { value: 'burned', label: '已压制' },
-  { value: 'unburned', label: '未压制' },
 ]
 
 const filteredSessions = computed<ToolboxSession[]>(() => {
@@ -46,14 +29,6 @@ const filteredSessions = computed<ToolboxSession[]>(() => {
 
   if (currentFilter.value === 'has_data') {
     list = list.filter((s) => s.danmaku_event_count > 0)
-  } else if (currentFilter.value === 'ass_ready') {
-    list = list.filter((s) => s.has_ass_ready)
-  } else if (currentFilter.value === 'burned') {
-    list = list.filter((s) => s.danmaku_burn_completed > 0)
-  } else if (currentFilter.value === 'unburned') {
-    list = list.filter(
-      (s) => s.has_ass_ready && (s.danmaku_burn_completed || 0) < (s.ass_segment_count || 0),
-    )
   }
 
   const kw = searchKeyword.value.trim().toLowerCase()
@@ -69,59 +44,12 @@ const filteredSessions = computed<ToolboxSession[]>(() => {
   return list
 })
 
-const selectedCount = computed(() => selectedSessions.value.size)
-
 // ---- 生命周期 ----
 onMounted(async () => {
-  await Promise.all([store.fetchSessions(), store.fetchQueueStatus(), fetchUploadTemplates()])
-  pollTimer = setInterval(() => {
-    store.fetchQueueStatus()
-  }, 15000)
+  await store.fetchSessions()
 })
-
-onUnmounted(() => {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-})
-
-// ---- 选择管理 ----
-function toggleSelect(sessionId: number) {
-  const next = new Set(selectedSessions.value)
-  if (next.has(sessionId)) {
-    next.delete(sessionId)
-  } else {
-    next.add(sessionId)
-  }
-  selectedSessions.value = next
-}
 
 // ---- 操作 ----
-async function handleGenerateAss(sessionId: number) {
-  const ok = await confirm('生成ASS文件需要一定时间，确认继续？')
-  if (!ok) return
-  const success = await store.generateAss(sessionId)
-  if (success) {
-    setTimeout(() => store.fetchSessions(), 1000)
-  }
-}
-
-async function handleBurnSession(sessionId: number, force: boolean) {
-  const msg = force
-    ? '确认强制重新压制此会话？（将覆盖已有产物）'
-    : '确认将此会话全部可压制分段加入弹幕压制队列？'
-  const ok = await confirm(msg)
-  if (!ok) return
-  const success = await store.burnSession(sessionId, force)
-  if (success) {
-    setTimeout(() => {
-      store.fetchSessions()
-      store.fetchQueueStatus()
-    }, 1000)
-  }
-}
-
 function handleSearchDanmaku(sessionId: number, roomName: string) {
   searchModalSessionId.value = sessionId
   searchModalRoomName.value = roomName
@@ -129,65 +57,19 @@ function handleSearchDanmaku(sessionId: number, roomName: string) {
   searchPanelRef.value?.reset()
 }
 
-async function fetchUploadTemplates() {
-  try {
-    const res = await apiGet<UploadTemplate[]>('/api/upload_templates')
-    templates.value = res.data || []
-  } catch (err) {
-    toast.error('加载投稿模板失败: ' + (err instanceof ApiError ? err.message : String(err)))
-  }
-}
-
-function handleUpload(sessionId: number) {
-  uploadSessionId.value = sessionId
-  uploadModalOpen.value = true
-}
-
-function handleUploadSubmitted(message: string) {
-  toast.success(message || '投稿任务已提交')
-  uploadModalOpen.value = false
-}
-
-function handleUploadError(message: string) {
-  toast.error('投稿失败: ' + message)
-}
-
-async function handleBatchBurn() {
-  if (selectedSessions.value.size === 0) return
-  const ok = await confirm(`确认将 ${selectedSessions.value.size} 个会话加入弹幕压制队列？`)
-  if (!ok) return
-
-  let totalEnqueued = 0
-  for (const sid of selectedSessions.value) {
-    const result = await store.burnSession(sid)
-    if (result) totalEnqueued++
-  }
-  toast.success(`批量入队完成: ${totalEnqueued} 个会话`)
-  selectedSessions.value = new Set()
-  setTimeout(() => {
-    store.fetchSessions()
-    store.fetchQueueStatus()
-  }, 1000)
-}
-
-async function handleBatchAss() {
-  if (selectedSessions.value.size === 0) return
-  const ok = await confirm(`确认为 ${selectedSessions.value.size} 个会话重新生成ASS？`)
-  if (!ok) return
-
-  let success = 0
-  for (const sid of selectedSessions.value) {
-    const result = await store.generateAss(sid)
-    if (result) success++
-  }
-  toast.success(`批量 ASS 生成完成: ${success}/${selectedSessions.value.size}`)
-  setTimeout(() => store.fetchSessions(), 1000)
-}
-
 function handleRefreshAll() {
   store.fetchSessions()
-  store.fetchQueueStatus()
   toast.info('已刷新')
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 </script>
 
@@ -197,50 +79,15 @@ function handleRefreshAll() {
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">弹幕工具箱</h1>
-        <p class="text-sm text-gray-500 mt-1">
-          弹幕压制管理：会话筛选、批量压制、状态监控、产物管理
-        </p>
+        <p class="text-sm text-gray-500 mt-1">弹幕数据管理：会话筛选、弹幕搜索</p>
       </div>
-      <div class="flex items-center gap-2">
-        <router-link
-          to="/danmaku-free-burn"
-          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
-        >
-          自由压制
-        </router-link>
-        <button
-          class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-          @click="handleRefreshAll"
-        >
-          刷新
-        </button>
-      </div>
+      <button
+        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+        @click="handleRefreshAll"
+      >
+        刷新
+      </button>
     </div>
-
-    <!-- 增加一个提示区域 -->
-    <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
-      <div class="text-sm text-gray-500 text-sm">
-        <span class="font-bold text-md">关于操作的说明：</span>
-        <p class="block mt-1">
-          <strong>生成ASS</strong
-          >：根据弹幕jsonl数据文件，结合会话的视频文件生成对应的字幕文件，这里会将字幕样式一起写入ASS文件中。
-        </p>
-        <p class="block mt-1">
-          <strong>压制视频</strong>：压制视频就是执行 ffmpeg 转码命令将字幕文件通过
-          <code>-vf subtitles='xxx.ass'</code>
-          命令输出mp4文件。如果已有压制视频文件，则跳过操作。
-        </p>
-        <p class="block mt-1"><strong>强制重压</strong>：无视已有压制视频，重新生成新视频。</p>
-      </div>
-    </div>
-
-    <!-- 状态卡片 -->
-    <StatusCards
-      :active-captures="store.queueStatus?.active_captures?.count ?? 0"
-      :queue-length="store.queueStatus?.burn_queue?.queue_length ?? 0"
-      :processing="store.queueStatus?.burn_queue?.processing ?? 0"
-      :session-count="store.sessions.length"
-    />
 
     <!-- 筛选条 -->
     <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
@@ -273,25 +120,6 @@ function handleRefreshAll() {
       </div>
     </div>
 
-    <!-- 批量操作栏 -->
-    <div class="flex items-center gap-2 mb-4 flex-wrap">
-      <button
-        class="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="selectedCount === 0"
-        @click="handleBatchBurn"
-      >
-        批量压制
-      </button>
-      <button
-        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="selectedCount === 0"
-        @click="handleBatchAss"
-      >
-        批量生成 ASS
-      </button>
-      <span class="text-sm text-gray-500">已选 {{ selectedCount }} 个会话</span>
-    </div>
-
     <!-- 会话列表 -->
     <div>
       <div v-if="store.loading && store.sessions.length === 0" class="text-center py-12">
@@ -308,19 +136,41 @@ function handleRefreshAll() {
         <p class="text-sm text-gray-400">无匹配的弹幕会话</p>
       </div>
 
-      <template v-else>
-        <SessionCard
+      <div v-else class="space-y-3">
+        <div
           v-for="session in filteredSessions"
           :key="session.id"
-          :session="session"
-          :selected="selectedSessions.has(session.id)"
-          @toggle-select="toggleSelect"
-          @generate-ass="handleGenerateAss"
-          @burn-session="handleBurnSession"
-          @search-danmaku="handleSearchDanmaku"
-          @upload="handleUpload"
-        />
-      </template>
+          class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow"
+        >
+          <div class="flex items-start gap-3">
+            <!-- 会话信息 -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-semibold text-gray-900 truncate">
+                  {{ session.room_name || session.room_url }}
+                </span>
+                <span class="text-xs text-gray-400">#{{ session.id }}</span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                <span>弹幕: {{ session.danmaku_event_count }} 条</span>
+                <span>{{ formatDate(session.started_at) }}</span>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                class="px-2.5 py-1 text-xs font-medium rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                :disabled="session.danmaku_event_count === 0"
+                @click="handleSearchDanmaku(session.id, session.room_name || '')"
+              >
+                搜索弹幕
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 弹幕搜索弹窗 -->
@@ -345,16 +195,5 @@ function handleRefreshAll() {
         />
       </div>
     </Modal>
-
-    <!-- 投稿弹窗（弹幕工具箱：使用弹幕压制后视频） -->
-    <UploadModal
-      :open="uploadModalOpen"
-      :session-id="uploadSessionId"
-      :templates="templates"
-      upload-source="danmaku"
-      @close="uploadModalOpen = false"
-      @submitted="handleUploadSubmitted"
-      @error="handleUploadError"
-    />
   </div>
 </template>

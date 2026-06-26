@@ -1,7 +1,6 @@
 const path = require('path');
 const fs = require('fs');
 const pool = require('../../db/index');
-const { isDanmakuBurnFile } = require('../../config/config');
 
 /**
  * 扫描录像文件目录的冷却时间（5分钟）
@@ -72,7 +71,7 @@ async function scanRecordingFiles(force = false) {
         walkDir(fp);
         continue;
       }
-      if (/\.(mp4|flv|ts|mkv|avi|mov)$/i.test(entry.name) && !isDanmakuBurnFile(entry.name)) diskFiles.add(fp);
+      if (/\.(mp4|flv|ts|mkv|avi|mov)$/i.test(entry.name)) diskFiles.add(fp);
     }
   };
   walkDir(VIDEO_DOWNLOAD_DIR);

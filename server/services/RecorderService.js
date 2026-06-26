@@ -12,8 +12,7 @@ const notify = require('../lib/core/notify');
 const DataService = require('./DataService');
 const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
-const danmakuAssGenerator = require('../lib/core/danmaku/DanmakuAssGenerator');
-const { SUPPORTED_EXT_REGEX, isDanmakuBurnFile } = require('../config/config');
+const { SUPPORTED_EXT_REGEX } = require('../config/config');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -319,7 +318,7 @@ class RecorderService {
         code,
       });
 
-      // 停止弹幕采集并生成 ASS
+      // 停止弹幕采集
       await this._handleDanmakuFinish(sessionId, room.room_url, trackerSegments);
 
       if (sessionId) {
@@ -407,7 +406,6 @@ class RecorderService {
           for (const name of entries) {
             const fp = path.join(sessRow.output_dir, name);
             if (!SUPPORTED_EXT_REGEX.test(name)) continue;
-            if (isDanmakuBurnFile(name)) continue;
 
             let stat;
             try {
@@ -464,13 +462,13 @@ class RecorderService {
   }
 
   /**
-   * 处理弹幕录制结束：停止采集、生成 ASS、触发自动压制
+   * 处理弹幕录制结束：停止采集、保留 JSONL 数据
    *
    * @param {number|string} sessionId - 录制会话 ID
    * @param {string} roomUrl - 房间 URL
    * @param {Array} [trackerSegments] - 从 RecordingManager tracker 获取的分段时间数据
    */
-  static async _handleDanmakuFinish(sessionId, roomUrl, trackerSegments = []) {
+  static async _handleDanmakuFinish(sessionId, roomUrl, _trackerSegments = []) {
     try {
       // 停止弹幕采集
       const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl);
@@ -499,71 +497,12 @@ class RecorderService {
 
       console.log(`[弹幕] 会话 ${sessionId} 采集停止: ${eventCount} 条事件, capture_id=${captureId}`);
 
-      // 获取会话目录
-      const session = await pool.query(`SELECT output_dir FROM recording_sessions WHERE id = $1`, [sessionId]);
-      if (session.rows.length === 0) return;
-
-      const sessionDir = session.rows[0].output_dir;
-      const danmakuDir = path.join(sessionDir, 'danmaku');
-      // 优先使用新路径，兼容旧路径
-      const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
-      const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
-      const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
-      const assPath = path.join(danmakuDir, 'danmaku.ass');
-
-      if (!fs.existsSync(jsonlPath)) return;
-
-      // 生成会话级 ASS
-      const assResult = await danmakuAssGenerator.generateFromJsonl({
-        jsonlPath,
-        assPath,
-      });
-
-      if (assResult.success) {
-        console.log(`[弹幕] ASS 生成成功: ${assPath}, ${assResult.eventCount} 条`);
-
-        // 更新采集记录
-        await pool.query(`UPDATE danmaku_capture_records SET ass_path = $1 WHERE session_id = $2`, [
-          assPath,
-          sessionId,
-        ]);
-
-        // 构建分段时间 Map（从 tracker 直接获取，不依赖 recording_files 的 DB 状态）
-        const segmentTimes = new Map();
-        for (const seg of trackerSegments) {
-          if (seg.filePath) {
-            segmentTimes.set(seg.filePath, { startMs: seg.startMs, endMs: seg.endMs });
-          }
-        }
-
-        // 查询 recording_files 获取 id（用于回写 danmaku_ass_path），
-        // 但分段时间完全来自 tracker，不依赖 DB 中的 segment_start_ms/segment_end_ms
-        const segments = await pool.query(
-          `SELECT id, file_path FROM recording_files WHERE session_id = $1 ORDER BY id ASC`,
-          [sessionId]
-        );
-
-        if (segments.rows.length > 0 && segmentTimes.size > 0) {
-          const segOutputDir = path.join(danmakuDir, 'segments');
-          const segResults = await danmakuAssGenerator.generateSegmentAss({
-            jsonlPath,
-            outputDir: segOutputDir,
-            segments: segments.rows,
-            segmentTimes,
-          });
-
-          for (const seg of segResults) {
-            await pool.query(`UPDATE recording_files SET danmaku_ass_path = $1 WHERE id = $2`, [seg.assPath, seg.id]);
-          }
-          console.log(`[弹幕] 分段 ASS 生成完成: ${segResults.length} 个分段`);
-        } else if (segmentTimes.size === 0) {
-          console.warn(`[弹幕] tracker 数据为空，跳过分段 ASS 生成`);
-        } else {
-          console.warn(`[弹幕] recording_files 无记录（watchdog 尚未扫描），跳过分段 ASS 生成`);
-        }
-      } else {
-        console.warn(`[弹幕] ASS 生成失败: ${assResult.error}`);
-      }
+      // 更新采集记录状态为 completed
+      await pool.query(
+        `UPDATE danmaku_capture_records SET status = 'completed', ended_at = NOW(), event_count = $1
+         WHERE id = $2`,
+        [eventCount, captureId]
+      );
     } catch (err) {
       console.error('[弹幕] 处理弹幕结束失败:', err.message);
     }

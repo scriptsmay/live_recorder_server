@@ -3,7 +3,7 @@
  * SessionDanmaku - 会话弹幕详情页
  *
  * 从 EJS session-danmaku.ejs 迁移而来
- * 功能：会话信息、弹幕录制状态、分段文件压制状态、弹幕搜索
+ * 功能：会话信息、弹幕录制状态、弹幕搜索
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -33,22 +33,10 @@ interface SessionDetail {
     status: string
     event_count: number
     raw_path: string
-    ass_path: string
     started_at: string | null
     ended_at: string | null
     error: string | null
   } | null
-  burnRecords: Array<{
-    id: number
-    recording_file_id: number
-    session_id: number
-    segment_index: number
-    status: string
-    output_path: string
-    error: string | null
-    log_path: string | null
-    video_path: string | null
-  }>
   files: Array<{
     id: number
     file_path: string
@@ -56,8 +44,6 @@ interface SessionDetail {
     segment_index: number
     segment_start_ms: number | null
     segment_end_ms: number | null
-    danmaku_ass_exists: boolean
-    danmaku_ass_path: string | null
     file_exists: boolean
   }>
 }
@@ -121,21 +107,6 @@ function fileName(filePath: string | null) {
   return filePath.split('/').pop() || '-'
 }
 
-function burnRecordForFile(fileId: number) {
-  return detail.value?.burnRecords.find((b) => b.recording_file_id === fileId)
-}
-
-function burnStatusBadge(status: string) {
-  const map: Record<string, { text: string; cls: string }> = {
-    queued: { text: '排队中', cls: 'bg-gray-100 text-gray-500' },
-    processing: { text: '压制中', cls: 'bg-blue-100 text-blue-700' },
-    completed: { text: '已完成', cls: 'bg-green-100 text-green-700' },
-    failed: { text: '失败', cls: 'bg-red-100 text-red-700' },
-    skipped: { text: '跳过', cls: 'bg-yellow-100 text-yellow-700' },
-  }
-  return map[status] || { text: status, cls: 'bg-gray-100 text-gray-500' }
-}
-
 // ---- Data Fetching ----
 async function fetchDetail() {
   loading.value = true
@@ -152,12 +123,6 @@ async function fetchDetail() {
   } finally {
     loading.value = false
   }
-}
-
-function logFileUrl(logPath: string | null) {
-  if (!logPath) return ''
-  const name = encodeURIComponent(logPath.split('/').pop() || '')
-  return `/logs?file=${name}`
 }
 
 onMounted(() => {
@@ -290,14 +255,6 @@ onMounted(() => {
                   </dd>
                 </div>
                 <div class="flex">
-                  <dt class="text-gray-400 w-20 shrink-0">ASS 路径</dt>
-                  <dd class="text-gray-700">
-                    <code class="text-xs bg-gray-50 px-1.5 py-0.5 rounded break-all">{{
-                      detail.capture.ass_path || '-'
-                    }}</code>
-                  </dd>
-                </div>
-                <div class="flex">
                   <dt class="text-gray-400 w-20 shrink-0">开始采集</dt>
                   <dd class="text-gray-700">{{ $formatTime(detail.capture.started_at) }}</dd>
                 </div>
@@ -318,10 +275,10 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Files & Burn Status Table -->
+      <!-- Files Table -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-5">
         <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
-          <span class="text-sm font-medium text-gray-700">分段文件 &amp; 压制状态</span>
+          <span class="text-sm font-medium text-gray-700">分段文件</span>
         </div>
         <div v-if="detail.files.length === 0" class="p-6 text-center">
           <p class="text-xs text-gray-400">无分段文件</p>
@@ -334,9 +291,6 @@ onMounted(() => {
                 <th class="text-left px-3 py-2 text-gray-500 font-medium">文件名</th>
                 <th class="text-left px-3 py-2 text-gray-500 font-medium">大小</th>
                 <th class="text-left px-3 py-2 text-gray-500 font-medium">分段时间</th>
-                <th class="text-left px-3 py-2 text-gray-500 font-medium">弹幕 ASS</th>
-                <th class="text-left px-3 py-2 text-gray-500 font-medium">压制状态</th>
-                <th class="text-left px-3 py-2 text-gray-500 font-medium">状态</th>
               </tr>
             </thead>
             <tbody>
@@ -350,73 +304,6 @@ onMounted(() => {
                 <td class="px-3 py-2 text-gray-600">{{ formatBytes(f.file_size) }}</td>
                 <td class="px-3 py-2 text-gray-500">
                   {{ formatSegmentTime(f.segment_start_ms, f.segment_end_ms) }}
-                </td>
-                <td class="px-3 py-2">
-                  <span
-                    v-if="f.danmaku_ass_exists"
-                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700"
-                  >
-                    ASS 就绪
-                  </span>
-                  <span
-                    v-else-if="f.danmaku_ass_path"
-                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700"
-                  >
-                    ASS 缺失
-                  </span>
-                  <span
-                    v-else
-                    class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"
-                  >
-                    &mdash;
-                  </span>
-                </td>
-                <td class="px-3 py-2">
-                  <template v-if="burnRecordForFile(f.id)">
-                    <span
-                      class="text-xs font-medium px-2 py-0.5 rounded-full"
-                      :class="burnStatusBadge(burnRecordForFile(f.id)!.status).cls"
-                      :title="burnRecordForFile(f.id)!.error || ''"
-                    >
-                      {{ burnStatusBadge(burnRecordForFile(f.id)!.status).text }}
-                    </span>
-                  </template>
-                  <template v-else>
-                    <span
-                      class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"
-                      >未压制</span
-                    >
-                  </template>
-                </td>
-                <td class="px-3 py-2">
-                  <template v-if="burnRecordForFile(f.id)">
-                    <span
-                      v-if="burnRecordForFile(f.id)!.status === 'completed'"
-                      class="text-green-600"
-                    >
-                      &#10004; 已压制
-                    </span>
-                    <span
-                      v-else-if="burnRecordForFile(f.id)!.status === 'failed'"
-                      class="text-red-600"
-                      :title="burnRecordForFile(f.id)!.error || ''"
-                    >
-                      &#10008; 失败
-                    </span>
-                    <span v-else class="text-gray-400">
-                      {{ burnRecordForFile(f.id)!.status }}
-                    </span>
-                    <a
-                      v-if="burnRecordForFile(f.id)!.log_path"
-                      :href="logFileUrl(burnRecordForFile(f.id)!.log_path)"
-                      target="_blank"
-                      class="ml-1.5 px-1.5 py-0.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-gray-50 no-underline"
-                      :title="burnRecordForFile(f.id)!.log_path || undefined"
-                    >
-                      日志
-                    </a>
-                  </template>
-                  <span v-else class="text-gray-400">&mdash;</span>
                 </td>
               </tr>
             </tbody>

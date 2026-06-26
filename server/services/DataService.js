@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 
@@ -229,21 +228,6 @@ class DataService {
     return result.rows;
   }
 
-  static _resolveSegmentAssPath(sessionOutputDir, file) {
-    if (file.danmaku_ass_path && fs.existsSync(file.danmaku_ass_path)) {
-      return file.danmaku_ass_path;
-    }
-
-    if (!sessionOutputDir || file.id == null) return null;
-
-    const paths = [path.join(sessionOutputDir, 'danmaku', 'segments', `${file.id}.ass`)];
-    if (file.segment_index != null && file.segment_index !== file.id) {
-      paths.push(path.join(sessionOutputDir, 'danmaku', 'segments', `${file.segment_index}.ass`));
-    }
-
-    return paths.find((assPath) => fs.existsSync(assPath)) || null;
-  }
-
   static _normalizeFileSegmentTimes(files) {
     let accumulatedMs = 0;
 
@@ -287,7 +271,7 @@ class DataService {
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     // danmaku_capture_records 使用子查询取每个 session 最新的一条，避免一对多 JOIN 导致行扇出
-    let sql = `SELECT s.*, rm.id as room_id, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error, dbr.total as danmaku_burn_total, dbr.completed_count as danmaku_burn_completed, dbr.failed_count as danmaku_burn_failed FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id LEFT JOIN (SELECT session_id, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed_count, COUNT(*) FILTER (WHERE status = 'failed') as failed_count FROM danmaku_burn_records GROUP BY session_id) dbr ON s.id = dbr.session_id${where} ORDER BY s.id DESC`;
+    let sql = `SELECT s.*, rm.id as room_id, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.ass_path as danmaku_ass_path, dcr.error as danmaku_error FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id${where} ORDER BY s.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
@@ -317,18 +301,14 @@ class DataService {
   }
 
   /**
-   * 获取会话详情（含弹幕录制、压制记录、分段文件）
+   * 获取会话详情（含弹幕录制、分段文件）
    */
   static async getSessionDetail(sessionId) {
     const sid = parseInt(sessionId, 10);
 
-    const [sessionRes, captureRes, burnRes, filesRes, roomRes] = await Promise.all([
+    const [sessionRes, captureRes, filesRes, roomRes] = await Promise.all([
       pool.query('SELECT * FROM recording_sessions WHERE id = $1', [sid]),
       pool.query('SELECT * FROM danmaku_capture_records WHERE session_id = $1 ORDER BY id DESC LIMIT 1', [sid]),
-      pool.query(
-        'SELECT dbr.*, rf.file_path as video_path FROM danmaku_burn_records dbr LEFT JOIN recording_files rf ON dbr.recording_file_id = rf.id WHERE dbr.session_id = $1 ORDER BY dbr.segment_index',
-        [sid]
-      ),
       pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id ASC', [sid]),
       pool.query(
         'SELECT rm.* FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url WHERE s.id = $1',
@@ -340,12 +320,9 @@ class DataService {
     if (!session) return null;
 
     const files = this._normalizeFileSegmentTimes(filesRes.rows).map((f) => {
-      const assPath = this._resolveSegmentAssPath(session.output_dir, f);
       return {
         ...f,
         file_exists: f.file_path ? fs.existsSync(f.file_path) : false,
-        danmaku_ass_path: assPath || f.danmaku_ass_path,
-        danmaku_ass_exists: Boolean(assPath),
       };
     });
 
@@ -378,7 +355,6 @@ class DataService {
       session,
       room: roomRes.rows[0] || null,
       capture,
-      burnRecords: burnRes.rows,
       files,
     };
   }
@@ -479,9 +455,6 @@ class DataService {
    * @returns {Promise<Object>} 包含录制文件列表和总数的对象
    * @returns {Array} return.rows - 录制文件记录数组，每条记录额外包含文件存在性检查字段
    * @returns {boolean} return.rows[].file_exists - 主录制文件是否存在
-   * @returns {boolean} return.rows[].is_danmaku_burned - 弹幕是否已完成烧录
-   * @returns {boolean} return.rows[].danmaku_burn_exists - 烧录后的弹幕文件是否存在
-   * @returns {boolean} return.rows[].danmaku_ass_exists - 原始ASS弹幕文件是否存在
    * @returns {number} return.total - 符合条件的总记录数
    */
   static async getRecordingFiles(options = {}) {
@@ -509,12 +482,10 @@ class DataService {
       params.push(room_url);
     }
 
-    // 基础查询SQL，关联房间、会话和弹幕烧录记录表
-    let sql = `SELECT rf.*, rm.room_name,  rs.output_dir as session_output_dir, dbr.status AS burn_status, dbr.output_path AS danmaku_burn_path
+    // 基础查询SQL，关联房间表
+    let sql = `SELECT rf.*, rm.room_name
         FROM recording_files rf
-        LEFT JOIN rooms rm ON rf.room_url = rm.room_url
-        LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
-        LEFT JOIN danmaku_burn_records dbr ON dbr.recording_file_id = rf.id`;
+        LEFT JOIN rooms rm ON rf.room_url = rm.room_url`;
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
 
@@ -546,14 +517,9 @@ class DataService {
 
     return {
       rows: result.rows.map((rec) => {
-        const assPath = this._resolveSegmentAssPath(rec.session_output_dir, rec);
         return {
           ...rec,
-          danmaku_ass_path: assPath || rec.danmaku_ass_path,
           file_exists: rec.file_path ? fs.existsSync(rec.file_path) : false,
-          is_danmaku_burned: rec.burn_status === 'completed',
-          danmaku_burn_exists: rec.danmaku_burn_path ? fs.existsSync(rec.danmaku_burn_path) : false,
-          danmaku_ass_exists: Boolean(assPath),
         };
       }),
       total: parseInt(countResult.rows[0].count, 10),

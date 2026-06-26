@@ -12,7 +12,6 @@ const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
-const danmakuBurnQueue = require('../lib/core/DanmakuBurnQueue');
 const replayProcessQueue = require('../lib/core/ReplayProcessQueue');
 const pollingManager = require('../lib/core/polling/PollingManager');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
@@ -272,10 +271,8 @@ router.get('/dashboard/status', async (req, res) => {
     const transcodeProcessing = await transcodeQueue.getCurrentProcessingCount();
     const transcodeConcurrency = transcodeQueue.concurrency;
 
-    // 弹幕采集与压制队列状态
+    // 弹幕采集状态
     const danmakuActiveStats = danmakuRecorder.getActiveStats();
-    const danmakuBurnQueueLength = await danmakuBurnQueue.getQueueLength();
-    const danmakuBurnProcessing = await danmakuBurnQueue.getCurrentProcessingCount();
     const replayQueueStatus = await replayProcessQueue.getStatus();
 
     const todayStart = dayjs().startOf('day').toISOString();
@@ -309,11 +306,6 @@ router.get('/dashboard/status', async (req, res) => {
           active_captures: Array.isArray(danmakuActiveStats)
             ? danmakuActiveStats.length
             : danmakuActiveStats?.count || 0,
-          burn_queue: {
-            queue_length: danmakuBurnQueueLength,
-            processing: danmakuBurnProcessing,
-            concurrency: danmakuBurnQueue.concurrency,
-          },
         },
         replay: replayQueueStatus,
         polling: {
@@ -465,13 +457,8 @@ router.get('/api-doc', (req, res) => {
 router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
-    const type = req.query.type; // 'danmaku' 时返回弹幕压制版
 
-    const sql =
-      type === 'danmaku'
-        ? "SELECT dbr.output_path AS file_path FROM danmaku_burn_records dbr WHERE dbr.recording_file_id = $1 AND dbr.status = 'completed'"
-        : 'SELECT file_path FROM recording_files WHERE id = $1';
-    const fileResult = await pool.query(sql, [id]);
+    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
     const filePath = fileResult.rows[0]?.file_path;
 
     if (!filePath) {
