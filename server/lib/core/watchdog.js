@@ -9,7 +9,7 @@ const { getActiveDownloader } = require('./downloaders/DownloaderFactory');
 const { scanRecordingFiles } = require('./scan-files');
 const transcodeQueue = require('./TranscodeQueue');
 const hlsGenerator = require('./hls-generator');
-const recordingManager = require('./RecordingManager');
+// const recordingManager = require('./RecordingManager');
 const danmakuAssGenerator = require('./danmaku/DanmakuAssGenerator');
 
 let watchdogTimer = null;
