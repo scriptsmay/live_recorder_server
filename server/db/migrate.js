@@ -539,6 +539,14 @@ async function runMigration() {
       ['file_cleanup_watermark_warn', '80'],
       ['file_cleanup_watermark_critical', '90'],
       ['file_cleanup_suggestion_notify', 'false'],
+      ['webhook_enabled', 'false'],
+      ['webhook_url', ''],
+      ['feishu_webhook_enabled', 'false'],
+      ['feishu_webhook_url', ''],
+      ['gotify_enabled', 'false'],
+      ['gotify_server', ''],
+      ['gotify_token', ''],
+      ['gotify_priority', '5'],
     ];
     for (const [key, value] of defaultSettings) {
       await client.query(

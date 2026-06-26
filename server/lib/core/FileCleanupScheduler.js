@@ -84,7 +84,7 @@ async function runCleanupCheck() {
     // 2. 磁盘水位检查
     const watermark = await checkDiskWatermark();
     if (watermark && watermark.level !== 'ok') {
-      await send('磁盘空间告警', watermark.message);
+      await send('disk_watermark', '磁盘空间告警', watermark.message);
       console.log(`[文件管理定时] ${watermark.message}`);
     }
 
@@ -154,14 +154,14 @@ async function runAutoCleanup() {
 
     if (totalDeleted > 0 || totalFailed > 0) {
       const msg = `🗑️ 自动清理完成: 删除 ${totalDeleted} 个文件, 失败 ${totalFailed}, 释放 ${formatBytes(totalReleased)}`;
-      await send('文件管理 - 自动清理', msg);
+      await send('file_cleanup', '文件管理 - 自动清理', msg);
       console.log(`[自动清理] ${msg}`);
     } else {
       console.log('[自动清理] 无可清理文件');
     }
   } catch (err) {
     console.error('[自动清理] 失败:', err.message);
-    await send('文件管理 - 自动清理失败', err.message);
+    await send('file_cleanup_failed', '文件管理 - 自动清理失败', err.message);
   }
 }
 
@@ -200,7 +200,7 @@ async function sendCleanupSuggestion() {
     lines.push('');
     lines.push('💡 可在「文件管理 → 清理规则」页面执行批量清理');
 
-    await send('文件管理 - 清理建议', lines.join('\n'));
+    await send('file_cleanup_suggestion', '文件管理 - 清理建议', lines.join('\n'));
     console.log('[文件管理定时] 清理建议通知已发送');
   } catch (err) {
     console.error('[文件管理定时] 建议通知失败:', err.message);

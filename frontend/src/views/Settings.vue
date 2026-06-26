@@ -7,7 +7,7 @@
  *   PUT  /api/settings  body: { key: value, ... }
  */
 import { reactive, ref, onMounted } from 'vue'
-import { apiGet, apiPut, ApiError } from '@/utils/api'
+import { apiGet, apiPost, apiPut, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import type { SettingItem } from '@/types/api'
 
@@ -28,8 +28,51 @@ interface SettingGroup {
   items: SettingDef[]
 }
 
+// ---- 通知测试状态 ----
+const testing = ref(false)
+const testResults = ref<{ channel: string; enabled: boolean; sent?: boolean; error?: string }[]>([])
+
+async function testNotification() {
+  testing.value = true
+  testResults.value = []
+  try {
+    const res = await apiPost<{ channel: string; enabled: boolean; sent?: boolean; error?: string }[]>(
+      '/api/notify/test_webhook'
+    )
+    testResults.value = res.data || []
+    const anySent = testResults.value.some((r) => r.sent)
+    if (anySent) {
+      toast.success('测试通知已发送，请检查各渠道')
+    } else {
+      toast.warning('所有渠道均未发送，请检查配置')
+    }
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : '测试通知发送失败')
+  } finally {
+    testing.value = false
+  }
+}
+
 // ---- 完整设置分组（与 settings.ejs 保持一致） ----
 const settingGroups: SettingGroup[] = [
+  {
+    title: '通知设置',
+    items: [
+      {
+        key: 'webhook_enabled',
+        label: '自定义 Webhook',
+        desc: '启用后所有通知以统一 JSON 格式 POST 到自定义 URL',
+        type: 'select',
+        options: ['false', 'true'],
+      },
+      {
+        key: 'webhook_url',
+        label: 'Webhook URL',
+        desc: '自定义 Webhook POST 目标地址',
+        type: 'text',
+      },
+    ],
+  },
   {
     title: '录制设置',
     items: [
@@ -346,13 +389,22 @@ onMounted(fetchSettings)
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-900">全局设置</h1>
-      <button
-        class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="saving || loading"
-        @click="saveSettings"
-      >
-        {{ saving ? '保存中...' : '保存设置' }}
-      </button>
+      <div class="flex items-center gap-3">
+        <button
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="testing || loading"
+          @click="testNotification"
+        >
+          {{ testing ? '测试中...' : '🔔 测试通知' }}
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="saving || loading"
+          @click="saveSettings"
+        >
+          {{ saving ? '保存中...' : '保存设置' }}
+        </button>
+      </div>
     </div>
 
     <!-- 加载中 -->
@@ -406,6 +458,29 @@ onMounted(fetchSettings)
               <p class="mt-1 text-xs text-gray-400">{{ item.desc }}</p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 通知测试结果 -->
+    <div
+      v-if="testResults.length > 0"
+      class="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4"
+    >
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">测试结果</h3>
+      <div class="space-y-2">
+        <div
+          v-for="r in testResults"
+          :key="r.channel"
+          class="flex items-center gap-3 text-sm"
+        >
+          <span class="w-5 h-5 flex items-center justify-center rounded-full text-xs">
+            {{ r.sent ? '✅' : r.enabled ? '⚠️' : '⚫' }}
+          </span>
+          <span class="text-gray-700 font-medium">{{ r.channel }}</span>
+          <span v-if="r.sent" class="text-green-600">发送成功</span>
+          <span v-else-if="r.enabled" class="text-yellow-600">已启用但发送失败{{ r.error ? `: ${r.error}` : '' }}</span>
+          <span v-else class="text-gray-400">未启用</span>
         </div>
       </div>
     </div>
