@@ -595,7 +595,9 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_free_burn_created ON danmaku_free_burn_records(created_at DESC);
     `);
 
-    await client.query(`ALTER TABLE danmaku_free_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''`);
+    await client.query(
+      `ALTER TABLE danmaku_free_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''`
+    );
 
     // ========== 文件管理模块表 ==========
 

@@ -36,12 +36,12 @@
 
 ### 缓存策略
 
-| 用途       | Key 模式                        | TTL     | 说明                               |
-| ---------- | ------------------------------- | ------- | ---------------------------------- |
-| 直播间缓存 | `room:{room_url}`               | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询  |
-| 录制任务锁 | `active_task:{roomKey}`         | 24 小时 | 防止重复录制，替代内存 Map         |
-| 转码队列   | `transcode_queue`               | 无      | Redis LIST，转码任务 FIFO 队列     |
-| 转码并发   | `transcode_processing_count`    | 无      | 当前处理中转码任务计数             |
+| 用途       | Key 模式                        | TTL     | 说明                                                |
+| ---------- | ------------------------------- | ------- | --------------------------------------------------- |
+| 直播间缓存 | `room:{room_url}`               | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询                   |
+| 录制任务锁 | `active_task:{roomKey}`         | 24 小时 | 防止重复录制，替代内存 Map                          |
+| 转码队列   | `transcode_queue`               | 无      | Redis LIST，转码任务 FIFO 队列                      |
+| 转码并发   | `transcode_processing_count`    | 无      | 当前处理中转码任务计数                              |
 | 压制队列   | `danmaku_burn_queue`            | 无      | Redis LIST，弹幕压制任务 FIFO 队列（v1.7.0 已废弃） |
 | 压制并发   | `danmaku_burn_processing_count` | 无      | 当前处理中压制任务计数（v1.7.0 已废弃）             |
 
@@ -246,7 +246,7 @@ KV 结构的全局配置表。
 | `transcode_concurrency`      | `3`                | 转码队列并发数，控制同时处理的转码任务数                               |
 | `log_retention_days`         | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件   |
 | `kuaishou_danmaku_enabled`   | `false`            | 是否启用快手弹幕采集                                                   |
-| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（v1.7.0 已废弃）                                       |
+| `danmaku_burn_concurrency`   | `1`                | 弹幕压制队列并发数（v1.7.0 已废弃）                                    |
 | `danmaku_density_per_second` | `20`               | ASS 字幕每秒最大弹幕密度                                               |
 | `danmaku_font_family`        | `Noto Sans CJK SC` | ASS 字体                                                               |
 | `danmaku_font_size`          | `32`               | ASS 字体大小                                                           |

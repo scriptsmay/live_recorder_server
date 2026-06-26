@@ -8,14 +8,16 @@ async function getNotifySettings() {
   try {
     const pool = require('../../db/index');
     const keys = [
-      'feishu_webhook_enabled', 'feishu_webhook_url',
-      'gotify_enabled', 'gotify_server', 'gotify_token', 'gotify_priority',
-      'webhook_enabled', 'webhook_url',
+      'feishu_webhook_enabled',
+      'feishu_webhook_url',
+      'gotify_enabled',
+      'gotify_server',
+      'gotify_token',
+      'gotify_priority',
+      'webhook_enabled',
+      'webhook_url',
     ];
-    const { rows } = await pool.query(
-      `SELECT key, value FROM settings WHERE key = ANY($1)`,
-      [keys]
-    );
+    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key = ANY($1)`, [keys]);
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   } catch (_) {
     return {};
@@ -28,7 +30,7 @@ async function sendFeishu(title, content, text, settings) {
   const dbUrl = (s.feishu_webhook_url || '').trim();
   const envUrl = config.MESSAGE_FEISHU_WEBHOOK || process.env.MESSAGE_FEISHU_WEBHOOK || '';
   // DB 启用时用 DB URL；否则回退到环境变量（向后兼容）
-  const webhookUrl = dbEnabled ? (dbUrl || envUrl) : envUrl;
+  const webhookUrl = dbEnabled ? dbUrl || envUrl : envUrl;
   if (!webhookUrl) return false;
   await axios.post(
     webhookUrl,
@@ -49,13 +51,13 @@ async function sendGotify(title, content, settings) {
   const envServer = config.MESSAGE_GOTIFY_SERVER || process.env.MESSAGE_GOTIFY_SERVER || '';
   const envToken = config.MESSAGE_GOTIFY_TOKEN || process.env.MESSAGE_GOTIFY_TOKEN || '';
   // DB 启用时用 DB 值；否则回退到环境变量（向后兼容）
-  const server = dbEnabled ? (dbServer || envServer) : envServer;
-  const token = dbEnabled ? (dbToken || envToken) : envToken;
+  const server = dbEnabled ? dbServer || envServer : envServer;
+  const token = dbEnabled ? dbToken || envToken : envToken;
   if (!server || !token) return false;
 
   const priorityRaw = dbEnabled
-    ? (s.gotify_priority || config.MESSAGE_GOTIFY_PRIORITY || process.env.MESSAGE_GOTIFY_PRIORITY)
-    : (config.MESSAGE_GOTIFY_PRIORITY || process.env.MESSAGE_GOTIFY_PRIORITY);
+    ? s.gotify_priority || config.MESSAGE_GOTIFY_PRIORITY || process.env.MESSAGE_GOTIFY_PRIORITY
+    : config.MESSAGE_GOTIFY_PRIORITY || process.env.MESSAGE_GOTIFY_PRIORITY;
   const priority = parseInt(priorityRaw, 10);
   const url = `${server.replace(/\/$/, '')}/message`;
   await axios.post(
@@ -152,12 +154,20 @@ async function recordingComplete(roomName, fileCount, totalMB, sessionId, roomUr
 
 async function uploadStart(roomName, tmplName, fileCount, roomUrl) {
   if (!(await shouldNotify(roomUrl))) return;
-  send('upload_start', '📤 开始投稿', `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`);
+  send(
+    'upload_start',
+    '📤 开始投稿',
+    `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`
+  );
 }
 
 async function uploadComplete(roomName, title, bvId, roomUrl) {
   if (!(await shouldNotify(roomUrl))) return;
-  send('upload_complete', '✅ 投稿完成', `直播间：${roomName || '未知'}\n标题：${title || '未知'}\nBV号：${bvId || '无'}`);
+  send(
+    'upload_complete',
+    '✅ 投稿完成',
+    `直播间：${roomName || '未知'}\n标题：${title || '未知'}\nBV号：${bvId || '无'}`
+  );
 }
 
 async function uploadFailed(roomName, tmplName, title, error, roomUrl) {
@@ -171,12 +181,20 @@ async function uploadFailed(roomName, tmplName, title, error, roomUrl) {
 
 async function backupStart(roomName, tmplName, fileCount, roomUrl) {
   if (!(await shouldNotify(roomUrl))) return;
-  send('backup_start', '📤 开始NAS备份', `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`);
+  send(
+    'backup_start',
+    '📤 开始NAS备份',
+    `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`
+  );
 }
 
 async function backupComplete(roomName, tmplName, fileCount, roomUrl) {
   if (!(await shouldNotify(roomUrl))) return;
-  send('backup_complete', '✅ NAS备份完成', `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`);
+  send(
+    'backup_complete',
+    '✅ NAS备份完成',
+    `直播间：${roomName || '未知'}\n模板：${tmplName || '未知'}\n文件：${fileCount} 个`
+  );
 }
 
 async function backupFailed(roomName, tmplName, fileCount, error, roomUrl) {
@@ -236,7 +254,11 @@ async function replayCliComplete(principalName, total, success, failed) {
       ].join('\n')
     );
   } else {
-    send('replay_cli_complete', '✅ 回放批量处理完成', [`主播：${principalName || '未知'}`, `共 ${total} 条回放全部处理成功`].join('\n'));
+    send(
+      'replay_cli_complete',
+      '✅ 回放批量处理完成',
+      [`主播：${principalName || '未知'}`, `共 ${total} 条回放全部处理成功`].join('\n')
+    );
   }
 }
 
@@ -252,7 +274,11 @@ async function replayCliActionComplete(roomName, action, recordId, success, erro
   const actionName = actionNames[action] || action;
 
   if (success) {
-    send('replay_cli_action_complete', '✅ 回放处理完成', `主播：${roomName || '未知'}\n操作：${actionName}\n记录ID：${recordId}`);
+    send(
+      'replay_cli_action_complete',
+      '✅ 回放处理完成',
+      `主播：${roomName || '未知'}\n操作：${actionName}\n记录ID：${recordId}`
+    );
   } else {
     send(
       'replay_cli_action_failed',

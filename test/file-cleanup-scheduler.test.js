@@ -67,8 +67,16 @@ describe('runCleanupCheck', () => {
 
     await runCleanupCheck();
 
-    expect(send).toHaveBeenCalledWith('file_cleanup_suggestion', '文件管理 - 清理建议', expect.stringContaining('总占用:'));
-    expect(send).toHaveBeenCalledWith('file_cleanup_suggestion', '文件管理 - 清理建议', expect.stringContaining('可清理:'));
+    expect(send).toHaveBeenCalledWith(
+      'file_cleanup_suggestion',
+      '文件管理 - 清理建议',
+      expect.stringContaining('总占用:')
+    );
+    expect(send).toHaveBeenCalledWith(
+      'file_cleanup_suggestion',
+      '文件管理 - 清理建议',
+      expect.stringContaining('可清理:')
+    );
 
     childProcess.execSync = origExecSync;
     process.env.NODE_ENV = origNodeEnv;
