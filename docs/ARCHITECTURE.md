@@ -656,10 +656,12 @@ server/router/rooms.js (新增/修改房间)
 
 ### 通知
 
-- 通知通道：飞书 webhook、Gotify。
+- 通知通道：飞书 webhook、Gotify、自定义 Webhook（v1.7.0 新增）。
 - 未配置通知参数时静默跳过对应通道。
 - Gotify 使用 `MESSAGE_GOTIFY_SERVER`、`MESSAGE_GOTIFY_TOKEN`、
   `MESSAGE_GOTIFY_PRIORITY`。
+- Webhook 通过前端设置页配置 `webhook_enabled` 和 `webhook_url`，所有通知事件同步 POST JSON。
+- 飞书和 Gotify 支持通过 `settings` 表的 `feishu_webhook_enabled`/`gotify_enabled` 开关独立控制。
 - 回放队列每个处理步骤完成后发送「直播回放处理完成」通知；通知异常只写入
   `logs/replay_{recordId}.log`，不阻断后续步骤。
 
