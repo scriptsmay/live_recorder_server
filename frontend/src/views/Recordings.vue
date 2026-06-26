@@ -5,7 +5,6 @@
  */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Hls from 'hls.js'
 import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
 import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
@@ -46,7 +45,7 @@ const playerVisible = ref(false)
 const playerSrc = ref('')
 const playerTitle = ref('视频播放')
 const videoRef = ref<HTMLVideoElement | null>(null)
-let hlsPlayer: Hls | null = null
+let hlsPlayer: InstanceType<typeof import('hls.js').default> | null = null
 const currentRoomFilter = computed(() => (route.query.room_url as string) || '')
 
 async function loadData() {
@@ -113,9 +112,11 @@ async function handlePlay(rec: RecordingRow) {
   playerSrc.value = `/api/recordings/${rec.id}/stream`
 }
 
-function openHlsPlayer(src: string) {
+async function openHlsPlayer(src: string) {
   const video = videoRef.value
   if (!video) return
+
+  const { default: Hls } = await import('hls.js')
 
   closeHlsPlayer()
 

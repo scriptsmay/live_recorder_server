@@ -35,12 +35,22 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       // 所有静态资源内联阈值 (bytes)，小于此值的资源会被内联到 JS/CSS
       assetsInlineLimit: 4096,
+      chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
           // 静态资源分类存放
           assetFileNames: 'assets/[name]-[hash][extname]',
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
+          manualChunks(id: string) {
+            if (id.includes('node_modules/hls.js')) return 'hls'
+            if (
+              id.includes('node_modules/vue') ||
+              id.includes('node_modules/pinia') ||
+              id.includes('node_modules/@vue')
+            )
+              return 'vendor'
+          },
         },
       },
     },
