@@ -265,7 +265,7 @@ onMounted(async () => {
         <!-- Left Actions -->
         <div class="flex items-center flex-wrap gap-1.5 mt-3 pt-2 border-t border-gray-100">
           <button
-            class="px-2.5 py-1 text-xs font-medium rounded-md border transition-colors"
+            class="flex items-center px-2.5 py-1 text-xs font-medium rounded-md border transition-colors"
             :class="
               filesExpanded
                 ? 'border-brand-300 text-brand-700 bg-brand-50'
@@ -273,14 +273,54 @@ onMounted(async () => {
             "
             @click="filesExpanded = !filesExpanded"
           >
-            文件
+            <span>文件</span>
+            <svg
+              v-if="!filesExpanded"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              class="size-3"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+
+            <svg
+              v-else
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              class="size-3"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+                clip-rule="evenodd"
+              />
+            </svg>
           </button>
           <a
             :href="logFileUrl"
             target="_blank"
-            class="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors no-underline"
+            class="flex items-center px-2.5 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors no-underline"
           >
-            日志
+            <span>日志</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              class="size-4"
+            >
+              <path
+                d="M6.22 8.72a.75.75 0 0 0 1.06 1.06l5.22-5.22v1.69a.75.75 0 0 0 1.5 0v-3.5a.75.75 0 0 0-.75-.75h-3.5a.75.75 0 0 0 0 1.5h1.69L6.22 8.72Z"
+              />
+              <path
+                d="M3.5 6.75c0-.69.56-1.25 1.25-1.25H7A.75.75 0 0 0 7 4H4.75A2.75 2.75 0 0 0 2 6.75v4.5A2.75 2.75 0 0 0 4.75 14h4.5A2.75 2.75 0 0 0 12 11.25V9a.75.75 0 0 0-1.5 0v2.25c0 .69-.56 1.25-1.25 1.25h-4.5c-.69 0-1.25-.56-1.25-1.25v-4.5Z"
+              />
+            </svg>
           </a>
           <button
             v-if="isDone && !hasSuccessUpload"
@@ -336,11 +376,6 @@ onMounted(async () => {
     </div>
 
     <!-- Collapsible File Panel (lazy loaded) -->
-    <FilePanel
-      v-if="filesExpanded"
-      :session-id="session.id"
-      :loaded="filesLoaded"
-      @loaded="filesLoaded = true"
-    />
+    <FilePanel v-if="filesExpanded" :session-id="session.id" />
   </div>
 </template>

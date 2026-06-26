@@ -13,7 +13,7 @@ import type { RecordingFile } from '@/types/api'
 
 const props = defineProps<{
   sessionId: number
-  loaded: boolean
+  loaded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -68,6 +68,10 @@ function getFileName(fp: string) {
 }
 
 async function handlePlay(file: RecordingFile) {
+  if (!file.is_hls_ready) {
+    toast.error('HLS 未就绪，请稍后再试')
+    return
+  }
   playerTitle.value = getFileName(file.file_path) || '视频播放'
   playerSrc.value = ''
   playerVisible.value = true
@@ -148,7 +152,7 @@ function closePlayer() {
 </script>
 
 <template>
-  <div class="border-t border-gray-200 bg-gray-50 px-4 py-3">
+  <div class="border-t border-gray-200 bg-mist-50 px-4 py-3">
     <!-- Loading State -->
     <div v-if="loading" class="flex items-center gap-2 py-4 justify-center">
       <div
@@ -199,6 +203,7 @@ function closePlayer() {
             </td>
             <td class="py-1.5 pr-3">
               <button
+                v-if="file.is_hls_ready"
                 class="px-1.5 py-0.5 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
                 @click="handlePlay(file)"
               >

@@ -172,20 +172,19 @@ onMounted(fetchRecords)
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500">ID</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">来源</th>
+              <th class="px-4 py-3 text-center font-medium text-gray-500 w-20">来源</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">关联</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">标题</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">投稿文件</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">状态</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">BV号</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">开始时间</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">结束时间</th>
-              <th class="px-4 py-3 text-right font-medium text-gray-500">操作</th>
+              <th class="px-4 py-3 text-center font-medium text-gray-500 w-20">状态</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 w-26">BV号</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 w-44">操作时间</th>
+              <th class="px-4 py-3 text-right font-medium text-gray-500 w-50">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="records.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
+              <td colspan="9" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
             </tr>
             <tr
               v-for="r in records"
@@ -193,7 +192,7 @@ onMounted(fetchRecords)
               class="hover:bg-gray-50 transition-colors"
             >
               <td class="px-4 py-3 text-gray-900 font-medium">{{ r.id }}</td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 text-center">
                 <span
                   class="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
                   :class="
@@ -223,7 +222,7 @@ onMounted(fetchRecords)
                 </button>
                 <span class="text-xs text-gray-400 ml-1">[{{ formatSize(r.total_size) }}]</span>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 text-center">
                 <span
                   class="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
                   :class="statusBadge(r.status).cls"
@@ -243,12 +242,15 @@ onMounted(fetchRecords)
                 </a>
                 <span v-else class="text-gray-400">-</span>
               </td>
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ $formatTime(r.started_at) }}</td>
               <td class="px-4 py-3 text-gray-500 text-xs">
-                {{ r.completed_at ? $formatTime(r.completed_at) : '-' }}
+                {{ $formatTime(r.started_at) }}<br />{{
+                  r.completed_at
+                    ? '完成: ' + $formatTime(r.completed_at, { format: 'HH:mm:ss' })
+                    : ''
+                }}
               </td>
               <td class="px-4 py-3 text-right">
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex items-center justify-end gap-1">
                   <a
                     :href="`/logs?file=${encodeURIComponent('biliup_' + r.id + '.log')}`"
                     target="_blank"
@@ -273,7 +275,7 @@ onMounted(fetchRecords)
                     class="px-2.5 py-1 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
                     @click="showDetail(r)"
                   >
-                    查看输出
+                    输出
                   </button>
                   <button
                     class="px-2.5 py-1 text-xs font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
