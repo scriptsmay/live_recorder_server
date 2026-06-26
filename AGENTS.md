@@ -145,7 +145,6 @@ npm run lint && npm run format && npm run test
 - `GET /api/danmaku/status` —— 获取弹幕采集和压制队列状态
 - `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
 - `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件、压制记录）
-- `GET /api/danmaku-toolbox/sessions` —— 获取有弹幕数据的会话列表（工具箱专用）
 - `GET /api/danmaku/burn_output/:id/stream` —— 流式播放压制产物文件
 
 ### 投稿
@@ -168,7 +167,6 @@ npm run lint && npm run format && npm run test
 - `/sessions/:id/danmaku` —— 弹幕详情（会话信息、分段压制状态、弹幕搜索）
 - `/recordings` —— 录制文件
 - `/transcode` —— 转码记录
-- `/danmaku-toolbox` —— 弹幕工具箱（会话筛选、批量压制、状态监控、产物管理）
 - `/templates` —— 投稿模板管理
 - `/upload-records` —— 投稿记录（注：EJS 旧路径为 `/upload_records`）
 - `/settings` —— 全局设置

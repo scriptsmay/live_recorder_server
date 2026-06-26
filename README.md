@@ -193,7 +193,6 @@ docker compose --env-file ../.env \
 │   │   ├── stores/                 ← Pinia 状态管理
 │   │   │   ├── app.ts              ← 全局状态
 │   │   │   ├── auth.ts             ← 登录认证状态
-│   │   │   ├── danmaku-toolbox.ts  ← 弹幕工具箱状态
 │   │   │   └── replay-toolbox.ts   ← 回放工具箱状态
 │   │   ├── components/             ← 通用组件（Layout/Navbar/Modal/Toast/Pagination 等）
 │   │   ├── components/replay/      ← 回放工具箱原子组件（7 个）

@@ -50,12 +50,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '转码记录' },
   },
   {
-    path: '/danmaku-toolbox',
-    name: 'DanmakuToolbox',
-    component: () => import('@/views/DanmakuToolbox.vue'),
-    meta: { title: '弹幕工具箱' },
-  },
-  {
     path: '/replay-toolbox',
     name: 'ReplayToolbox',
     component: () => import('@/views/ReplayToolbox.vue'),

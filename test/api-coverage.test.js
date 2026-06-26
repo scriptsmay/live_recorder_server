@@ -78,7 +78,6 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/danmaku_capture_records' },
   { method: 'GET', path: '/danmaku/status' },
   { method: 'GET', path: '/danmaku/search' },
-  { method: 'GET', path: '/danmaku-toolbox/sessions' },
 
   // ===== transcode.js =====
   { method: 'GET', path: '/transcode_records' },

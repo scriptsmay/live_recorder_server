@@ -201,63 +201,6 @@ router.get('/danmaku/search', async (req, res) => {
 });
 
 /**
- * GET /api/danmaku-toolbox/sessions
- * 获取有弹幕数据的会话列表（工具箱专用）
- */
-router.get('/danmaku-toolbox/sessions', async (req, res) => {
-  try {
-    const { search } = req.query;
-    const searchClause = search ? `AND rm.room_name ILIKE $1` : '';
-    const params = search ? [`%${search}%`] : [];
-
-    const sql = `
-      SELECT s.id, s.room_url, s.status, s.started_at, s.ended_at, s.total_segments, s.total_size,
-             rm.room_name,
-             dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.error as danmaku_error,
-             dcr.raw_path as danmaku_raw_path
-      FROM recording_sessions s
-      LEFT JOIN rooms rm ON s.room_url = rm.room_url
-      INNER JOIN danmaku_capture_records dcr ON s.id = dcr.session_id
-      WHERE s.deleted_at IS NULL ${searchClause}
-      ORDER BY s.id DESC
-      LIMIT 500
-    `;
-
-    const result = await pool.query(sql, params);
-
-    // 从 JSONL 文件修正弹幕条数
-    await Promise.all(
-      result.rows.map((row) => {
-        if (row.danmaku_raw_path && fs.existsSync(row.danmaku_raw_path)) {
-          return fs.promises
-            .readFile(row.danmaku_raw_path, 'utf-8')
-            .then((content) => {
-              row.danmaku_event_count = content.split('\n').filter(Boolean).length;
-            })
-            .catch(() => {});
-        }
-        return Promise.resolve();
-      })
-    );
-
-    // 去重：INNER JOIN 可能因多条 capture_records 产生重复
-    const seen = new Set();
-    const unique = [];
-    for (const row of result.rows) {
-      if (!seen.has(row.id)) {
-        seen.add(row.id);
-        unique.push(row);
-      }
-    }
-
-    res.json({ status: 'ok', data: unique });
-  } catch (err) {
-    console.error('[api] 弹幕工具箱会话列表查询失败:', err.message);
-    res.status(500).json({ status: 'Error', message: '查询失败' });
-  }
-});
-
-/**
  * GET /api/danmaku/sessions/:id/raw
  * 下载弹幕原始 JSONL 文件
  */

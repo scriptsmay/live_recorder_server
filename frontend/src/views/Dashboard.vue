@@ -113,7 +113,6 @@ const statCards = computed<StatCard[]>(() => [
     accent: 'text-cyan-100',
     iconPath:
       'M7.5 8.25h9m-9 3H12m-7.5 3.75V5.25A2.25 2.25 0 0 1 6.75 3h10.5a2.25 2.25 0 0 1 2.25 2.25v6.75a2.25 2.25 0 0 1-2.25 2.25H9.75L4.5 18Z',
-    to: '/danmaku-toolbox',
   },
   {
     label: '今日录制',

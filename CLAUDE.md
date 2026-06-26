@@ -73,7 +73,7 @@ Chrome Extension (danmaku)
 - `frontend/src/views/` — Page components (Dashboard, Rooms, Sessions, SessionDanmaku, Recordings, Transcode, DanmakuToolbox, Templates, UploadRecords, Settings, Logs)
 - `frontend/src/components/` — Shared components (Layout, Navbar, Pagination, ToastContainer, ConfirmDialog)
 - `frontend/src/utils/api.ts` — Unified fetch wrapper (apiGet/apiPost/apiPut/apiDelete)
-- `frontend/src/stores/` — Pinia stores (app, danmaku-toolbox)
+- `frontend/src/stores/` — Pinia stores (app)
 - Dev: `cd frontend && npm run dev` (port 5173, proxies `/api` and `/hls` to backend on 3001)
 - Build: `cd frontend && npm run build` → outputs to `public/frontend/`, served by `server/router/spa.js` as SPA fallback
 

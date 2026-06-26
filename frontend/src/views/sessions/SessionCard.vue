@@ -321,17 +321,7 @@ onMounted(async () => {
               >
             </div>
           </div>
-          <div>
-            <span class="text-gray-400">压制状态</span>
-            <div class="mt-0.5">
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="burnBadge.cls">{{
-                burnBadge.text
-              }}</span>
-            </div>
-          </div>
         </div>
-
-
 
         <!-- Right Actions -->
         <div class="flex items-center flex-wrap gap-1.5 mt-3 pt-2 border-t border-gray-100">
@@ -339,14 +329,7 @@ onMounted(async () => {
             :to="`/sessions/${session.id}/danmaku`"
             class="px-2.5 py-1 text-xs font-medium rounded-md border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors no-underline"
           >
-            详情
-          </router-link>
-          <router-link
-            to="/danmaku-toolbox"
-            class="px-2.5 py-1 text-xs font-medium rounded-md border border-green-300 text-green-700 hover:bg-green-50 transition-colors no-underline"
-            title="在弹幕工具箱中管理压制"
-          >
-            工具箱
+            弹幕详情
           </router-link>
         </div>
       </div>

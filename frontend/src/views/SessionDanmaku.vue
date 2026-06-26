@@ -164,12 +164,6 @@ onMounted(() => {
             返回列表
           </router-link>
         </div>
-        <router-link
-          to="/danmaku-toolbox"
-          class="px-3 py-1.5 text-xs font-medium rounded-md border border-green-300 text-green-700 hover:bg-green-50 transition-colors no-underline"
-        >
-          弹幕工具箱 &rarr;
-        </router-link>
       </div>
 
       <!-- Two-Column Info Cards -->

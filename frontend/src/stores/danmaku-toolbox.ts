@@ -32,21 +32,21 @@ export interface DanmakuSearchResult {
 export const useDanmakuToolboxStore = defineStore('danmaku-toolbox', () => {
   const toast = useToast()
 
-  const sessions = ref<ToolboxSession[]>([])
+  // const sessions = ref<ToolboxSession[]>([])
   const loading = ref(false)
 
-  /** 加载会话列表 */
-  async function fetchSessions() {
-    loading.value = true
-    try {
-      const res = await apiGet<ToolboxSession[]>('/api/danmaku-toolbox/sessions')
-      sessions.value = res.data ?? []
-    } catch (err) {
-      toast.error('加载会话列表失败: ' + (err instanceof Error ? err.message : '未知错误'))
-    } finally {
-      loading.value = false
-    }
-  }
+  // /** 加载会话列表 */
+  // async function fetchSessions() {
+  //   loading.value = true
+  //   try {
+  //     const res = await apiGet<ToolboxSession[]>('/api/danmaku-toolbox/sessions')
+  //     sessions.value = res.data ?? []
+  //   } catch (err) {
+  //     toast.error('加载会话列表失败: ' + (err instanceof Error ? err.message : '未知错误'))
+  //   } finally {
+  //     loading.value = false
+  //   }
+  // }
 
   /** 搜索弹幕 */
   async function searchDanmaku(
@@ -61,18 +61,27 @@ export const useDanmakuToolboxStore = defineStore('danmaku-toolbox', () => {
       limit: String(limit),
       offset: String(offset),
     })
-    const res = await apiGet<DanmakuSearchResult[]>(`/api/danmaku/search?${params}`)
+    try {
+      const res = await apiGet<DanmakuSearchResult[]>(`/api/danmaku/search?${params}`)
+      return {
+        results: res.data ?? [],
+        total: (res as unknown as { total: number }).total ?? 0,
+        limit,
+      }
+    } catch (err) {
+      toast.error('搜索弹幕失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    }
     return {
-      results: res.data ?? [],
-      total: (res as unknown as { total: number }).total ?? 0,
+      results: [],
+      total: 0,
       limit,
     }
   }
 
   return {
-    sessions,
+    // sessions,
     loading,
-    fetchSessions,
+    // fetchSessions,
     searchDanmaku,
   }
 })
