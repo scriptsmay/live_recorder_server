@@ -201,7 +201,6 @@ docker compose --env-file ../.env \
 │   │   │   ├── Rooms.vue           ← 直播间管理
 │   │   │   ├── Recordings.vue      ← 录制管理
 │   │   │   ├── Sessions.vue        ← 录制会话
-│   │   │   ├── DanmakuToolbox.vue  ← 弹幕工具箱
 │   │   │   ├── ReplayToolbox.vue   ← 回放工具箱
 │   │   │   ├── Transcode.vue       ← 转码管理
 │   │   │   ├── Settings.vue        ← 全局设置
@@ -251,7 +250,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 
 **目录隔离**：弹幕数据存放在 `会话目录/danmaku/` 子目录，压制产物输出到独立的 `DANMAKU_OUTPUT_DIR/`，与录制文件完全隔离。
 
-**操作入口**：所有弹幕操作（生成 ASS、批量压制、产物管理）统一在「弹幕工具箱」页面（`/danmaku-toolbox`）完成，录制会话页面仅提供只读状态展示。
+**操作入口**：录制会话页面提供弹幕只读状态展示和搜索功能，压制功能已移除。
 
 ## 回放工具箱功能架构
 

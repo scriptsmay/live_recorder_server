@@ -38,8 +38,7 @@ frontend/
 │   │   └── index.ts              # Vue Router 路由表（10 页面，懒加载，自动设置标题）
 │   │
 │   ├── stores/
-│   │   ├── app.ts                # 全局 store：版本、健康状态、侧栏折叠
-│   │   └── danmaku-toolbox.ts    # 弹幕工具箱专用 store
+│   │   └── app.ts                # 全局 store：版本、健康状态、侧栏折叠
 │   │
 │   ├── types/
 │   │   └── api.ts                # API 响应类型定义（Room、Session、Recording 等全部接口）
@@ -68,12 +67,6 @@ frontend/
 │       │   └── UploadModal.vue   # 上传弹窗：模板选择 + 确认提交
 │       ├── Recordings.vue        # 录制文件：房间筛选、视频播放、转码/删除
 │       ├── Transcode.vue         # 转码记录：概览统计条、活跃任务卡片、历史表格
-│       ├── DanmakuToolbox.vue    # 弹幕工具箱：搜索会话、分段管理
-│       ├── danmaku-toolbox/
-│       │   ├── DanmakuSearchModal.vue  # 弹幕搜索弹窗
-│       │   ├── SegmentsPanel.vue       # 分段管理面板
-│       │   ├── SessionCard.vue         # 弹幕工具箱会话卡片
-│       │   └── StatusCards.vue         # 状态卡片组
 │       ├── Templates.vue         # 投稿模板：CRUD 表格、12 字段表单、Cookie 刷新
 │       ├── UploadRecords.vue     # 投稿记录：分页表格、输出/文件弹窗
 │       ├── Settings.vue          # 系统设置：分组卡片、批量保存
@@ -133,7 +126,7 @@ Vue Router 使用 `createWebHistory` 模式，路由表定义在 `src/router/ind
 - 未迁移的路由继续走原有 EJS 渲染逻辑
 - API 路由（`/api/*`）、HLS 流（`/hls/*`）、SSE 流不受影响
 
-当前全部 10 个页面均已迁移到 Vue，`spaRoutes` 列表包含：`/dashboard`、`/rooms`、`/sessions`、`/recordings`、`/transcode`、`/danmaku-toolbox`、`/templates`、`/upload-records`、`/settings`、`/logs`。
+当前全部 9 个页面均已迁移到 Vue，`spaRoutes` 列表包含：`/dashboard`、`/rooms`、`/sessions`、`/recordings`、`/transcode`、`/templates`、`/upload-records`、`/settings`、`/logs`。
 
 ### API 请求封装
 
@@ -164,7 +157,6 @@ try {
 使用 Pinia Composition API 风格定义 store：
 
 - `stores/app.ts` — 全局应用状态：`appVersion`（从 `/api/health` 获取）、`isHealthy`、`sidebarCollapsed`
-- `stores/danmaku-toolbox.ts` — 弹幕工具箱的专用状态（搜索条件、结果、分段数据等）
 
 大部分页面的列表数据和表单状态使用组件内 `ref` 管理，仅在跨页面共享的场景下使用 Pinia store。
 
@@ -215,12 +207,6 @@ try {
 ### Transcode（转码记录）
 
 转码任务监控页面：顶部概览统计条（总数、处理中、成功、失败），活跃任务以卡片形式展示（进度条 + 取消按钮），历史记录表格支持按类型筛选（全部/转码/烧录）和分页。
-
-### DanmakuToolbox（弹幕工具箱）
-
-弹幕搜索与管理工具：通过搜索弹窗定位会话，查看和管理弹幕分段数据。
-
-子组件：`danmaku-toolbox/DanmakuSearchModal.vue`、`danmaku-toolbox/SegmentsPanel.vue`、`danmaku-toolbox/SessionCard.vue`、`danmaku-toolbox/StatusCards.vue`。
 
 ### Templates（投稿模板）
 

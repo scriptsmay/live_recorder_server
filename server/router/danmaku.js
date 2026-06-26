@@ -113,7 +113,7 @@ router.get('/danmaku/status', async (req, res) => {
 
 /**
  * GET /api/danmaku/search
- * 搜索弹幕 JSONL 内容（SessionDanmaku / DanmakuToolbox / DanmakuPickerModal 共用）
+ * 搜索弹幕 JSONL 内容（SessionDanmaku / DanmakuPickerModal 共用）
  */
 router.get('/danmaku/search', async (req, res) => {
   try {

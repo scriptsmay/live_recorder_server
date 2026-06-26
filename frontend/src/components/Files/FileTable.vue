@@ -125,7 +125,6 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
           </th>
           <th class="px-3 py-3">文件名</th>
           <th class="px-3 py-3">类型</th>
-          <th class="px-3 py-3 text-right">大小</th>
           <th class="px-3 py-3">状态</th>
           <th class="px-3 py-3">可删除</th>
           <th class="px-3 py-3">最近修改</th>
@@ -159,9 +158,6 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
             <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
               {{ fileTypeLabels[file.file_type] || file.file_type }}
             </span>
-          </td>
-          <td class="px-3 py-3 text-right text-gray-700 font-mono text-xs">
-            {{ formatBytes(file.file_size) }}
           </td>
           <td class="px-3 py-3">
             <span

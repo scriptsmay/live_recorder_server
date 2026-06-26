@@ -70,7 +70,7 @@ Chrome Extension (danmaku)
 
 - `frontend/` — Vue 3 + Vite + Tailwind CSS v4 + TypeScript
 - `frontend/src/router/index.ts` — Vue Router (history mode), all pages migrated from EJS
-- `frontend/src/views/` — Page components (Dashboard, Rooms, Sessions, SessionDanmaku, Recordings, Transcode, DanmakuToolbox, Templates, UploadRecords, Settings, Logs)
+- `frontend/src/views/` — Page components (Dashboard, Rooms, Sessions, SessionDanmaku, Recordings, Transcode, Templates, UploadRecords, Settings, Logs)
 - `frontend/src/components/` — Shared components (Layout, Navbar, Pagination, ToastContainer, ConfirmDialog)
 - `frontend/src/utils/api.ts` — Unified fetch wrapper (apiGet/apiPost/apiPut/apiDelete)
 - `frontend/src/stores/` — Pinia stores (app)

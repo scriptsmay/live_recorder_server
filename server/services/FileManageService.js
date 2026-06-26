@@ -476,6 +476,18 @@ class FileManageService {
     // 活跃任务检查
     const activeTask = await this.isFileInActiveTask(file.file_path);
 
+    // 更新文件大小
+    if (file.exists_on_disk && !file.file_size) {
+      try {
+        const stat = await fs.promises.stat(file.file_path);
+        file.file_size = stat.size;
+        await pool.query(`UPDATE managed_files SET file_size = $1 WHERE id = $2`, [stat.size, id]);
+        console.log(`Updated file size for ${file.file_path}: ${file.file_size}`);
+      } catch (err) {
+        file.file_size = null;
+      }
+    }
+
     // 审计日志
     const auditResult = await pool.query(
       `SELECT id, action, result, operator, deleted_by, created_at, error_message
