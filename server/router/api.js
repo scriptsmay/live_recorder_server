@@ -93,7 +93,6 @@ router.post('/notify/test_webhook', async (req, res) => {
   try {
     const { testNotify } = require('../lib/core/notify');
     const results = await testNotify();
-    const anySent = results.some((r) => r.sent);
     res.json({ status: 'ok', data: results });
   } catch (error) {
     console.error('[api] 测试通知失败:', error);

@@ -78,7 +78,18 @@ describe('notification and backup fallbacks', () => {
     process.env.MESSAGE_FEISHU_WEBHOOK = 'https://feishu.example.com/webhook';
 
     const db = require('../server/db/index');
-    db.query.mockResolvedValue({ rows: [] });
+    db.query.mockResolvedValue({
+      rows: [
+        { key: 'feishu_webhook_enabled', value: 'false' },
+        { key: 'feishu_webhook_url', value: '' },
+        { key: 'gotify_enabled', value: 'false' },
+        { key: 'gotify_server', value: '' },
+        { key: 'gotify_token', value: '' },
+        { key: 'gotify_priority', value: '' },
+        { key: 'webhook_enabled', value: 'false' },
+        { key: 'webhook_url', value: '' },
+      ],
+    });
 
     const axios = require('axios');
     axios.post.mockResolvedValue({ status: 200 });
@@ -88,6 +99,8 @@ describe('notification and backup fallbacks', () => {
       status: 'downloaded',
       raw_file_path: '/tmp/replay/a.mp4',
     });
+    // send() is fire-and-forget; give it time to complete
+    await new Promise((r) => setTimeout(r, 50));
 
     expect(axios.post).toHaveBeenCalledWith(
       'https://feishu.example.com/webhook',

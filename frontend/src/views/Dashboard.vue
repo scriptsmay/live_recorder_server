@@ -108,9 +108,7 @@ const statCards = computed<StatCard[]>(() => [
   {
     label: '弹幕状态',
     value: hasDanmaku.value ? String(danmaku.value.active_captures) : '--',
-    sublines: hasDanmaku.value
-      ? [`采集 ${danmaku.value.active_captures}`]
-      : [],
+    sublines: hasDanmaku.value ? [`采集 ${danmaku.value.active_captures}`] : [],
     gradient: 'from-cyan-500 to-cyan-600',
     accent: 'text-cyan-100',
     iconPath:

@@ -36,9 +36,9 @@ async function testNotification() {
   testing.value = true
   testResults.value = []
   try {
-    const res = await apiPost<{ channel: string; enabled: boolean; sent?: boolean; error?: string }[]>(
-      '/api/notify/test_webhook'
-    )
+    const res = await apiPost<
+      { channel: string; enabled: boolean; sent?: boolean; error?: string }[]
+    >('/api/notify/test_webhook')
     testResults.value = res.data || []
     const anySent = testResults.value.some((r) => r.sent)
     if (anySent) {
@@ -462,17 +462,15 @@ onMounted(fetchSettings)
     >
       <h3 class="text-sm font-semibold text-gray-700 mb-3">测试结果</h3>
       <div class="space-y-2">
-        <div
-          v-for="r in testResults"
-          :key="r.channel"
-          class="flex items-center gap-3 text-sm"
-        >
+        <div v-for="r in testResults" :key="r.channel" class="flex items-center gap-3 text-sm">
           <span class="w-5 h-5 flex items-center justify-center rounded-full text-xs">
             {{ r.sent ? '✅' : r.enabled ? '⚠️' : '⚫' }}
           </span>
           <span class="text-gray-700 font-medium">{{ r.channel }}</span>
           <span v-if="r.sent" class="text-green-600">发送成功</span>
-          <span v-else-if="r.enabled" class="text-yellow-600">已启用但发送失败{{ r.error ? `: ${r.error}` : '' }}</span>
+          <span v-else-if="r.enabled" class="text-yellow-600"
+            >已启用但发送失败{{ r.error ? `: ${r.error}` : '' }}</span
+          >
           <span v-else class="text-gray-400">未启用</span>
         </div>
       </div>

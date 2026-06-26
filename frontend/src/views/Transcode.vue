@@ -39,15 +39,9 @@ function fileName(fp: string | null) {
 const transcodeActive = computed(
   () => records.value.filter((r) => r.status === 'processing' || r.status === 'queued').length,
 )
-const queuedCount = computed(
-  () => records.value.filter((r) => r.status === 'queued').length,
-)
-const completedCount = computed(
-  () => records.value.filter((r) => r.status === 'completed').length,
-)
-const failedCount = computed(
-  () => records.value.filter((r) => r.status === 'failed').length,
-)
+const queuedCount = computed(() => records.value.filter((r) => r.status === 'queued').length)
+const completedCount = computed(() => records.value.filter((r) => r.status === 'completed').length)
+const failedCount = computed(() => records.value.filter((r) => r.status === 'failed').length)
 
 // Active tasks
 const activeTranscodes = computed(() =>

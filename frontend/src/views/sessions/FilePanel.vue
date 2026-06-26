@@ -170,6 +170,7 @@ function closePlayer() {
             <th class="py-1.5 pr-3 font-medium">文件路径</th>
             <th class="py-1.5 pr-3 font-medium">大小</th>
             <th class="py-1.5 pr-3 font-medium">HLS</th>
+            <th class="py-1.5 pr-3 font-medium">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -194,6 +195,14 @@ function closePlayer() {
               >
                 {{ file.is_hls_ready ? '就绪' : '未生成' }}
               </span>
+            </td>
+            <td class="py-1.5 pr-3">
+              <button
+                class="px-1.5 py-0.5 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
+                @click="handlePlay(file)"
+              >
+                播放
+              </button>
             </td>
           </tr>
         </tbody>

@@ -67,8 +67,8 @@ describe('runCleanupCheck', () => {
 
     await runCleanupCheck();
 
-    expect(send).toHaveBeenCalledWith('文件管理 - 清理建议', expect.stringContaining('总占用:'));
-    expect(send).toHaveBeenCalledWith('文件管理 - 清理建议', expect.stringContaining('可清理:'));
+    expect(send).toHaveBeenCalledWith('file_cleanup_suggestion', '文件管理 - 清理建议', expect.stringContaining('总占用:'));
+    expect(send).toHaveBeenCalledWith('file_cleanup_suggestion', '文件管理 - 清理建议', expect.stringContaining('可清理:'));
 
     childProcess.execSync = origExecSync;
     process.env.NODE_ENV = origNodeEnv;
@@ -116,7 +116,7 @@ describe('runCleanupCheck', () => {
       'auto-scheduler'
     );
     expect(FileManageService.executeDelete).toHaveBeenCalledWith('test-plan-id', 'auto-scheduler');
-    expect(send).toHaveBeenCalledWith('文件管理 - 自动清理', expect.stringContaining('删除 5 个文件'));
+    expect(send).toHaveBeenCalledWith('file_cleanup', '文件管理 - 自动清理', expect.stringContaining('删除 5 个文件'));
 
     childProcess.execSync = origExecSync;
   });
@@ -140,7 +140,7 @@ describe('runCleanupCheck', () => {
 
     await runCleanupCheck();
 
-    expect(send).toHaveBeenCalledWith('磁盘空间告警', expect.stringContaining('紧急'));
+    expect(send).toHaveBeenCalledWith('disk_watermark', '磁盘空间告警', expect.stringContaining('紧急'));
 
     childProcess.execSync = origExecSync;
   });
