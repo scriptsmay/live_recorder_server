@@ -60,6 +60,13 @@ function statusBadge(status: string): Badge {
   }
 }
 
+function getLogsPath(record: UploadRecord) {
+  if (record.source === 'replay') {
+    return `/logs?file=${encodeURIComponent('biliup_replay_' + record.id + '.log')}`
+  }
+  return `/logs?file=${encodeURIComponent('biliup_' + record.id + '.log')}`
+}
+
 // ---- 数据加载 ----
 async function fetchRecords() {
   loading.value = true
@@ -252,7 +259,7 @@ onMounted(fetchRecords)
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1">
                   <a
-                    :href="`/logs?file=${encodeURIComponent('biliup_' + r.id + '.log')}`"
+                    :href="getLogsPath(r)"
                     target="_blank"
                     class="flex items-center justify-end px-2.5 py-1 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
                   >
