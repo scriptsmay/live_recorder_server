@@ -440,6 +440,8 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 
 记录回放工具箱调用 biliup 投稿的执行结果，与普通录制投稿记录隔离。
 
+约束：`idx_replay_upload_one_uploading` 限制同一 `replay_record_id` 同时只能有一条 `status='uploading'` 投稿记录。历史上同一回放可能已有多条 `success`，因此成功记录的重复拦截由 `ReplayUploadService` 在创建新投稿前检查。
+
 | 字段             | 类型         | 约束                                         | 说明                                           |
 | ---------------- | ------------ | -------------------------------------------- | ---------------------------------------------- |
 | id               | SERIAL       | PRIMARY KEY                                  | 自增主键                                       |

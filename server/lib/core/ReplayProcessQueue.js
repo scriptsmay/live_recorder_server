@@ -13,7 +13,9 @@ const QUEUE_KEY = 'replay_process_queue';
 const PROCESSING_KEY = 'replay_process_processing_count';
 const RECORD_LOCK_PREFIX = 'replay:lock:record:';
 const PRINCIPAL_LOCK_PREFIX = 'replay:lock:principal:';
+const QUEUED_LOCK_PREFIX = 'replay:queued:record:';
 const LOCK_TTL_SECONDS = 6 * 60 * 60;
+const QUEUED_TTL_SECONDS = 24 * 60 * 60;
 
 function safeParseJson(value, fallback) {
   if (!value) return fallback;
@@ -59,9 +61,46 @@ class ReplayProcessQueue {
     if (!taskData || !taskData.replayRecordId) {
       throw new Error('缺少 replayRecordId');
     }
-    await redis.lPush(QUEUE_KEY, JSON.stringify(taskData));
+    const recordId = parseInt(taskData.replayRecordId, 10);
+    if (!Number.isFinite(recordId)) {
+      throw new Error('无效 replayRecordId');
+    }
+
+    if (this.activeTasks.has(recordId)) {
+      return { ...taskData, replayRecordId: recordId, skipped: true, reason: 'active' };
+    }
+
+    const recordLock = `${RECORD_LOCK_PREFIX}${recordId}`;
+    if (await redis.get(recordLock).catch(() => null)) {
+      return { ...taskData, replayRecordId: recordId, skipped: true, reason: 'processing' };
+    }
+
+    const blockingUpload = await ReplayUploadService.getBlockingUploadRecord(recordId).catch(() => null);
+    if (blockingUpload && (blockingUpload.status === 'uploading' || !taskData.force)) {
+      return {
+        ...taskData,
+        replayRecordId: recordId,
+        skipped: true,
+        reason: `upload_${blockingUpload.status}`,
+        upload_record_id: blockingUpload.id,
+      };
+    }
+
+    const queuedLock = `${QUEUED_LOCK_PREFIX}${recordId}`;
+    const token = `${process.pid}:${Date.now()}`;
+    const queued = await redis.set(queuedLock, token, { NX: true, EX: QUEUED_TTL_SECONDS }).catch(() => null);
+    if (!queued) {
+      return { ...taskData, replayRecordId: recordId, skipped: true, reason: 'queued' };
+    }
+
+    try {
+      await redis.lPush(QUEUE_KEY, JSON.stringify({ ...taskData, replayRecordId: recordId }));
+    } catch (err) {
+      await redis.del(queuedLock).catch(() => {});
+      throw err;
+    }
     this.processQueue();
-    return taskData;
+    return { ...taskData, replayRecordId: recordId, skipped: false };
   }
 
   async enqueuePrincipal({ principalId, count = 1, skipCompleted = true, dryRun = false }) {
@@ -77,13 +116,17 @@ class ReplayProcessQueue {
     if (dryRun) {
       return { dry_run: true, enqueued: 0, candidates };
     }
+    let enqueued = 0;
+    let skipped = 0;
     for (const record of candidates) {
-      await this.enqueue({
+      const result = await this.enqueue({
         replayRecordId: record.id,
         action: 'all',
       });
+      if (result.skipped) skipped += 1;
+      else enqueued += 1;
     }
-    return { enqueued: candidates.length };
+    return { enqueued, skipped };
   }
 
   async processQueue() {
@@ -115,6 +158,7 @@ class ReplayProcessQueue {
   async processTask(task) {
     const record = await ReplayService.getRecord(task.replayRecordId);
     if (!record) return;
+    const queuedLock = `${QUEUED_LOCK_PREFIX}${record.id}`;
 
     const logger = createProcLog('replay', record.id);
     const logStream = logger.stream;
@@ -130,6 +174,7 @@ class ReplayProcessQueue {
     if (!recordAcquired) {
       console.log(`[回放队列] 记录 ${record.id} 已在处理中，跳过`);
       writeLog(logStream, '记录锁已存在，跳过处理');
+      await redis.del(queuedLock).catch(() => {});
       logger.destroy();
       return;
     }
@@ -171,6 +216,7 @@ class ReplayProcessQueue {
       await ReplayService.updateRecordStatus(record.id, status, { error_message: err.message });
     } finally {
       // 延迟入队的任务也需要释放 record 锁，否则重入队任务拿不到锁会被跳过
+      await redis.del(queuedLock).catch(() => {});
       await redis.del(recordLock).catch(() => {});
       if (principalAcquired) await redis.del(principalLock).catch(() => {});
       this.activeTasks.delete(record.id);
@@ -298,9 +344,15 @@ class ReplayProcessQueue {
           logStream
         );
       } else if (step === 'upload') {
-        const result = await ReplayUploadService.executeUpload(current.id);
+        const result = await ReplayUploadService.executeUpload(current.id, {
+          force: Boolean(options.force),
+        });
         this.throwIfCancelled(runtime);
         if (result.error) throw new Error(result.message);
+        if (result.skipped) {
+          writeLog(logStream, `步骤跳过: upload ${result.message || ''}`);
+          continue;
+        }
         writeLog(logStream, `步骤完成: upload upload_record_id=${result.upload_record_id || ''}`);
         this.notifyPipelineComplete(
           current,

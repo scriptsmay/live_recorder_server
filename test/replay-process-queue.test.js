@@ -30,6 +30,7 @@ jest.mock('../server/lib/core/replay/video-processor', () => ({
 
 jest.mock('../server/lib/core/replay/ReplayUploadService', () => ({
   executeUpload: jest.fn(),
+  getBlockingUploadRecord: jest.fn(),
 }));
 
 jest.mock('fs', () => {
@@ -45,12 +46,16 @@ const redis = require('../server/db/redis');
 const pool = require('../server/db/index');
 const ReplayService = require('../server/services/ReplayService');
 const videoProcessor = require('../server/lib/core/replay/video-processor');
+const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
 const replayQueue = require('../server/lib/core/ReplayProcessQueue');
 
 beforeEach(() => {
   jest.clearAllMocks();
   fs.statSync.mockImplementation(() => ({ isFile: () => true }));
   redis.keys.mockResolvedValue([]);
+  redis.get.mockResolvedValue(null);
+  redis.set.mockResolvedValue('OK');
+  ReplayUploadService.getBlockingUploadRecord.mockResolvedValue(null);
   replayQueue.isRunning = false;
   replayQueue.concurrency = 1;
   replayQueue.activeTasks.clear();
@@ -69,14 +74,53 @@ describe('ReplayProcessQueue', () => {
 
   test('enqueue 写入 Redis 队列', async () => {
     redis.lPush.mockResolvedValue(1);
-    redis.get.mockResolvedValue('1');
 
     await replayQueue.enqueue({ replayRecordId: 10, action: 'extract' });
 
+    expect(redis.set).toHaveBeenCalledWith('replay:queued:record:10', expect.any(String), { NX: true, EX: 86400 });
     expect(redis.lPush).toHaveBeenCalledWith(
       'replay_process_queue',
       JSON.stringify({ replayRecordId: 10, action: 'extract' })
     );
+  });
+
+  test('enqueue 已在队列中时跳过重复入队', async () => {
+    redis.set.mockResolvedValueOnce(null);
+
+    const result = await replayQueue.enqueue({ replayRecordId: 10, action: 'all' });
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe('queued');
+    expect(redis.lPush).not.toHaveBeenCalled();
+  });
+
+  test('enqueue 已有上传中记录时跳过重复入队', async () => {
+    ReplayUploadService.getBlockingUploadRecord.mockResolvedValueOnce({ id: 7, status: 'uploading' });
+
+    const result = await replayQueue.enqueue({ replayRecordId: 10, action: 'all' });
+
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toBe('upload_uploading');
+    expect(redis.lPush).not.toHaveBeenCalled();
+  });
+
+  test('enqueuePrincipal 返回实际入队和跳过数量', async () => {
+    ReplayService.listRecords.mockResolvedValue({
+      rows: [
+        { id: 10, status: 'pending' },
+        { id: 11, status: 'completed' },
+        { id: 12, status: 'pending' },
+      ],
+      total: 3,
+    });
+    ReplayUploadService.getBlockingUploadRecord
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 9, status: 'uploading' });
+
+    const result = await replayQueue.enqueuePrincipal({ principalId: 'abc', count: 3 });
+
+    expect(result).toEqual({ enqueued: 1, skipped: 1 });
+    expect(redis.lPush).toHaveBeenCalledTimes(1);
   });
 
   test('processTask 获取不到记录时直接返回', async () => {
@@ -177,7 +221,6 @@ describe('ReplayProcessQueue', () => {
       finalFilePaths: ['/tmp/a_fixed.mp4'],
     });
 
-    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
     ReplayUploadService.executeUpload.mockResolvedValue({ success: true });
 
     ReplayService.updateRecordStatus.mockImplementation((id, status, fields) => {
@@ -207,7 +250,6 @@ describe('ReplayProcessQueue', () => {
       throw new Error('ENOENT');
     });
 
-    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
     ReplayUploadService.executeUpload.mockResolvedValue({ error: false, upload_record_id: 1 });
 
     await replayQueue.runAction(record, 'all');
@@ -215,7 +257,7 @@ describe('ReplayProcessQueue', () => {
     expect(videoProcessor.extract).not.toHaveBeenCalled();
     expect(videoProcessor.download).not.toHaveBeenCalled();
     expect(videoProcessor.cut).not.toHaveBeenCalled();
-    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10);
+    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10, { force: false });
   });
 
   test('runAction all force=true 从头执行并传递 force 给下载步骤', async () => {
@@ -229,7 +271,6 @@ describe('ReplayProcessQueue', () => {
     videoProcessor.extract.mockResolvedValue({ success: true, m3u8Url: 'https://example.com/new.m3u8' });
     videoProcessor.download.mockResolvedValue({ success: true, rawFilePath: '/tmp/a.mp4', fileSize: 1024 });
     videoProcessor.cut.mockResolvedValue({ success: true, cutFilePaths: ['/tmp/a_part.mkv'] });
-    const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
     ReplayUploadService.executeUpload.mockResolvedValue({ error: false, upload_record_id: 1 });
     ReplayService.updateRecordStatus.mockImplementation((id, status, fields) =>
       Promise.resolve({ ...record, id, status, ...fields })
@@ -246,7 +287,7 @@ describe('ReplayProcessQueue', () => {
       expect.objectContaining({ force: true })
     );
     expect(videoProcessor.cut).toHaveBeenCalled();
-    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10);
+    expect(ReplayUploadService.executeUpload).toHaveBeenCalledWith(10, { force: true });
   });
 
   test('enqueue 缺少 replayRecordId 时抛出错误', async () => {

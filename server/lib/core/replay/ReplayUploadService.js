@@ -73,6 +73,19 @@ async function getReplayRecordForUpload(replayRecordId) {
 }
 
 class ReplayUploadService {
+  static async getBlockingUploadRecord(replayRecordId) {
+    const result = await pool.query(
+      `SELECT id, status, bv_id
+       FROM replay_upload_records
+       WHERE replay_record_id = $1
+         AND status IN ('uploading', 'success')
+       ORDER BY CASE WHEN status = 'uploading' THEN 0 ELSE 1 END, id DESC
+       LIMIT 1`,
+      [replayRecordId]
+    );
+    return result.rows[0] || null;
+  }
+
   static async getUploadPreview(replayRecordId) {
     const record = await getReplayRecordForUpload(replayRecordId);
     if (!record) {
@@ -110,10 +123,27 @@ class ReplayUploadService {
     };
   }
 
-  static async executeUpload(replayRecordId) {
+  static async executeUpload(replayRecordId, options = {}) {
     const record = await getReplayRecordForUpload(replayRecordId);
     if (!record) {
       return { error: true, message: '回放记录不存在' };
+    }
+
+    const force = Boolean(options.force);
+    const blockingUpload = await this.getBlockingUploadRecord(record.id);
+    if (blockingUpload && (blockingUpload.status === 'uploading' || !force)) {
+      const message =
+        blockingUpload.status === 'uploading'
+          ? '回放投稿已在上传中，跳过重复投稿'
+          : '回放已有成功投稿记录，跳过重复投稿';
+      return {
+        error: false,
+        skipped: true,
+        message,
+        upload_record_id: blockingUpload.id,
+        upload_status: blockingUpload.status,
+        bv_id: blockingUpload.bv_id || '',
+      };
     }
 
     const settingsResult = await pool.query(
@@ -157,13 +187,31 @@ class ReplayUploadService {
       }
     }, 0);
 
-    const uploadRecord = await pool.query(
-      `INSERT INTO replay_upload_records
-       (replay_record_id, template_id, template_name, title, status, file_count, total_size, upload_files)
-       VALUES ($1,$2,$3,$4,'uploading',$5,$6,$7)
-       RETURNING id`,
-      [record.id, tmpl.id, tmpl.name || '', title, files.length, totalSize, JSON.stringify(files)]
-    );
+    let uploadRecord;
+    try {
+      uploadRecord = await pool.query(
+        `INSERT INTO replay_upload_records
+         (replay_record_id, template_id, template_name, title, status, file_count, total_size, upload_files)
+         VALUES ($1,$2,$3,$4,'uploading',$5,$6,$7)
+         RETURNING id`,
+        [record.id, tmpl.id, tmpl.name || '', title, files.length, totalSize, JSON.stringify(files)]
+      );
+    } catch (err) {
+      if (err.code === '23505') {
+        const existing = await this.getBlockingUploadRecord(record.id);
+        if (existing) {
+          return {
+            error: false,
+            skipped: true,
+            message: '回放投稿已在上传中，跳过重复投稿',
+            upload_record_id: existing.id,
+            upload_status: existing.status,
+            bv_id: existing.bv_id || '',
+          };
+        }
+      }
+      throw err;
+    }
     const uploadRecordId = uploadRecord.rows[0].id;
 
     const displayName = resolveDisplayName(record);

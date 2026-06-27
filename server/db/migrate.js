@@ -291,6 +291,12 @@ async function runMigration() {
     `);
 
     await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_replay_upload_one_uploading
+        ON replay_upload_records(replay_record_id)
+        WHERE replay_record_id IS NOT NULL AND status = 'uploading'
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS recording_files (
         id            SERIAL PRIMARY KEY,
         session_id    INTEGER REFERENCES recording_sessions(id) ON DELETE SET NULL,

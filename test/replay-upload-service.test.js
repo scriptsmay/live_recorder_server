@@ -47,6 +47,7 @@ describe('ReplayUploadService', () => {
   test('executeUpload 未配置模板时返回错误', async () => {
     pool.query
       .mockResolvedValueOnce({ rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
     const result = await ReplayUploadService.executeUpload(1);
     expect(result.error).toBe(true);
@@ -56,6 +57,7 @@ describe('ReplayUploadService', () => {
   test('executeUpload 模板不存在时返回错误', async () => {
     pool.query
       .mockResolvedValueOnce({ rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ value: '99' }] })
       .mockResolvedValueOnce({ rows: [] });
     const result = await ReplayUploadService.executeUpload(1);
@@ -68,6 +70,7 @@ describe('ReplayUploadService', () => {
       .mockResolvedValueOnce({
         rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test', principal_name: '主播', final_file_paths: '[]' }],
       })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ value: '1' }] })
       .mockResolvedValueOnce({
         rows: [{ id: 1, name: '模板A', title_template: '{principal_name}', cookies_path: '/tmp/c' }],
@@ -97,6 +100,7 @@ describe('ReplayUploadService', () => {
           },
         ],
       })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ value: '1' }] })
       .mockResolvedValueOnce({
         rows: [{ id: 1, name: '模板A', title_template: '{principal_name}', cookies_path: '/tmp/c' }],
@@ -109,6 +113,52 @@ describe('ReplayUploadService', () => {
     expect(result.error).toBe(false);
     expect(result.upload_record_id).toBe(10);
     expect(notify.uploadStart).toHaveBeenCalledWith('配置主播', '模板A', 1, 'http://test');
+  });
+
+  test('executeUpload 已有上传中记录时跳过重复投稿', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test', final_file_paths: '["/tmp/a.mp4"]' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 11, status: 'uploading', bv_id: '' }] });
+
+    const result = await ReplayUploadService.executeUpload(1);
+
+    expect(result.error).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.upload_record_id).toBe(11);
+    expect(notify.uploadStart).not.toHaveBeenCalled();
+  });
+
+  test('executeUpload 已有成功记录时默认跳过，force=true 允许重投', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test', final_file_paths: '["/tmp/a.mp4"]' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 11, status: 'success', bv_id: 'BV123' }] });
+
+    const skipped = await ReplayUploadService.executeUpload(1);
+
+    expect(skipped.skipped).toBe(true);
+    expect(skipped.bv_id).toBe('BV123');
+
+    pool.query.mockReset();
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 1, principal_id: 'abc', play_url: 'http://test', final_file_paths: '["/tmp/a.mp4"]' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 11, status: 'success', bv_id: 'BV123' }] })
+      .mockResolvedValueOnce({ rows: [{ value: '1' }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 1, name: '模板A', title_template: '{principal_name}', cookies_path: '/tmp/c' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 12 }] });
+    jest.spyOn(ReplayUploadService, '_runUpload').mockResolvedValue(undefined);
+
+    const forced = await ReplayUploadService.executeUpload(1, { force: true });
+
+    expect(forced.error).toBe(false);
+    expect(forced.upload_record_id).toBe(12);
   });
 
   test('getUploadPreview 返回渲染后的投稿预览并截断简介', async () => {
@@ -269,6 +319,7 @@ describe('ReplayUploadService', () => {
           },
         ],
       })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ value: '1' }] })
       .mockResolvedValueOnce({
         rows: [{ id: 1, name: '模板', title_template: '{principal_name}', cookies_path: '/tmp/c' }],
