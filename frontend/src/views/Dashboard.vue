@@ -193,7 +193,7 @@ function toggleRefresh() {
   }
 }
 
-function formatDuration(d: string | null | undefined): string {
+function formatDurationTillNow(d: string | null | undefined): string {
   if (!d) return '-'
   const target = new Date(d)
   if (isNaN(target.getTime())) return '-'
@@ -395,7 +395,7 @@ onUnmounted(() => {
                     {{ $formatTime(rec.started_at) }}
                   </td>
                   <td class="px-4 py-2.5 text-gray-500 text-xs">
-                    {{ formatDuration(rec.started_at) }}
+                    {{ formatDurationTillNow(rec.started_at) }}
                   </td>
                 </tr>
               </template>

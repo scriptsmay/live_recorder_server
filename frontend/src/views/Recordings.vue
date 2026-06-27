@@ -90,6 +90,9 @@ function getFileName(fp: string) {
 const TRANSCODE_EXT = /\.(ts|flv|m2ts)$/i
 
 async function handlePlay(rec: RecordingRow) {
+  if (!rec.is_hls_ready) {
+    return toast.error('HLS 未就绪，无法预览ts视频文件')
+  }
   playerTitle.value = getFileName(rec.file_path) || '视频播放'
   playerSrc.value = ''
   playerVisible.value = true

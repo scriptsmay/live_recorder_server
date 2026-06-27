@@ -20,7 +20,7 @@ const typeIcons: Record<string, string> = {
 
 <template>
   <Teleport to="body">
-    <div class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm" aria-live="polite">
+    <div class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm" aria-live="polite">
       <TransitionGroup name="toast">
         <div
           v-for="toast in toasts"

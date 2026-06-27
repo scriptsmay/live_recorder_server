@@ -54,10 +54,13 @@ const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.page
 const activeRecordIds = computed(
   () => new Set((store.taskStatus?.active ?? []).map((task) => task.record_id)),
 )
-const selectedCount = computed(() => selectedRecordIds.value.size)
 
 function clearSelection() {
   selectedRecordIds.value = new Set()
+}
+
+function handleBatchMode(active: boolean) {
+  if (!active) clearSelection()
 }
 
 function handleToggleSelect(recordId: number, selected: boolean) {
@@ -197,33 +200,6 @@ async function handlePageChange(delta: number) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-2 ml-auto">
-        <input
-          v-model.number="batchCount"
-          type="number"
-          min="1"
-          max="20"
-          class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-        />
-        <button
-          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-          :disabled="store.busy"
-          @click="handleBatchAll()"
-        >
-          批量全流程
-        </button>
-        <button
-          v-if="selectedCount > 0"
-          class="px-3 py-1.5 text-sm font-medium text-white rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
-          :disabled="store.busy"
-          @click="handleMarkSelectedCompleted()"
-        >
-          标记已完成<span v-if="selectedCount">（{{ selectedCount }}）</span>
-        </button>
-      </div>
-    </div>
-
     <ReplayFilterBar
       v-model:status-filter="statusFilter"
       v-model:date-from="store.dateFrom"
@@ -242,12 +218,16 @@ async function handlePageChange(delta: number) {
       :busy="store.busy"
       :active-record-ids="activeRecordIds"
       :selected-record-ids="selectedRecordIds"
+      v-model:batch-count="batchCount"
       @show-detail="selectedRecord = $event"
       @action="handleAction"
       @cancel="handleCancel"
       @page-change="handlePageChange"
       @toggle-select="handleToggleSelect"
       @toggle-select-all="handleToggleSelectAll"
+      @batch-mode="handleBatchMode"
+      @batch-all="handleBatchAll"
+      @mark-selected-completed="handleMarkSelectedCompleted"
     />
 
     <ReplayRecordDetail

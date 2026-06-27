@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ReplayRecord } from '@/types/api'
+import { formatBytes, displayDuration } from '@/utils/lib'
 import ReplayStatusBadge from './ReplayStatusBadge.vue'
 
 defineProps<{
@@ -9,24 +10,6 @@ defineProps<{
 const emit = defineEmits<{
   close: []
 }>()
-
-function displayDuration(seconds: number | null | undefined) {
-  if (!seconds) return '-'
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60)
-    return `${hours}h ${minutes % 60}m`
-  }
-  return `${minutes}m ${rest}s`
-}
-
-function displaySize(bytes: number | null | undefined) {
-  if (!bytes) return '-'
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${Math.round(bytes / 1024)} KB`
-}
 
 function parseJsonField(value: string | null): string[] {
   if (!value) return []
@@ -74,7 +57,7 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">大小</dt>
-          <dd class="text-gray-900">{{ displaySize(record.file_size) }}</dd>
+          <dd class="text-gray-900">{{ formatBytes(record.file_size) }}</dd>
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">分辨率</dt>
@@ -118,7 +101,7 @@ function parseJsonField(value: string | null): string[] {
         </div>
         <div class="flex gap-2">
           <dt class="text-gray-500 w-28 shrink-0">切割文件</dt>
-          <dd class="text-gray-900 break-all">
+          <dd class="text-gray-600 text-xs break-all">
             <template v-if="parseJsonField(record.cut_file_paths).length > 0">
               <div v-for="(f, i) in parseJsonField(record.cut_file_paths)" :key="i" class="text-xs">
                 {{ f }}

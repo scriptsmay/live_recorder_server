@@ -47,3 +47,14 @@ export function formatBytes(bytes: number | string | null | undefined): string {
   }
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
+
+export function displayDuration(seconds: number | null | undefined) {
+  if (!seconds) return '-'
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    return `${hours}h ${minutes % 60}m`
+  }
+  return `${minutes}m ${rest}s`
+}
