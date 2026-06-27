@@ -408,11 +408,6 @@ router.delete('/recordings/:id', async (req, res) => {
         } catch (err) {
           console.warn(`[api] 删除文件失败: ${file.file_path}`, err.message);
         }
-
-        // 同时删除 recordings 表中的对应记录
-        try {
-          await pool.query('DELETE FROM recordings WHERE file_path = $1', [file.file_path]);
-        } catch (_) {}
       }
 
       // 删除 HLS 目录

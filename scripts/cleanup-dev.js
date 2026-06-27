@@ -189,12 +189,17 @@ async function cleanup() {
       console.log('  └─ recording_files 已为空');
     }
 
-    // 清空 recordings 表
-    const recordings = await d.query('DELETE FROM recordings RETURNING id');
-    if (recordings.rowCount > 0) {
-      console.log(`  └─ 清空 recordings: ${recordings.rowCount} 条`);
+    // recordings 是历史废弃表，新库可能已删除。
+    const recordingsExists = await d.query(`SELECT to_regclass('public.recordings') AS table_name`);
+    if (recordingsExists.rows[0]?.table_name) {
+      const recordings = await d.query('DELETE FROM recordings RETURNING id');
+      if (recordings.rowCount > 0) {
+        console.log(`  └─ 清空 recordings: ${recordings.rowCount} 条`);
+      } else {
+        console.log('  └─ recordings 已为空');
+      }
     } else {
-      console.log('  └─ recordings 已为空');
+      console.log('  └─ recordings 表不存在，跳过');
     }
 
     // 清空 recording_sessions 表

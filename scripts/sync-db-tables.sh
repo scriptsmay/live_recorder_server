@@ -28,7 +28,6 @@ ALL_TABLES_ORDERED=(
   "recording_sessions:录制会话"
   "replay_records:回放记录"
   "replay_settings:回放设置"
-  "recordings:录制文件（旧）"
   "recording_files:录制文件"
   "transcode_records:转码记录"
   "danmaku_capture_records:弹幕采集记录"

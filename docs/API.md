@@ -544,7 +544,6 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 1. 删除 `file_path` 对应的主文件（.ts/.flv/.mp4 等）
 2. 若 `is_hls_ready` 为 true，删除 `hls_playlist_path` 所在目录（含所有分片）
-3. 同步清理 `recordings` 表中的对应记录
 
 **示例：**
 

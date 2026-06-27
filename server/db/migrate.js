@@ -68,6 +68,8 @@ async function runMigration() {
       EXECUTE FUNCTION admin_users_set_updated_at()
     `);
 
+    // ========== rooms ==========
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS rooms (
         id SERIAL PRIMARY KEY,
@@ -78,26 +80,17 @@ async function runMigration() {
         output_path VARCHAR(1024) DEFAULT '',
         ffmpeg_pid INTEGER,
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TIMESTAMP DEFAULT NOW(),
+        segment_duration INTEGER DEFAULT 0,
+        notification_enabled BOOLEAN DEFAULT TRUE,
+        monitoring_enabled BOOLEAN DEFAULT TRUE,
+        polling_enabled BOOLEAN DEFAULT FALSE,
+        polling_platform VARCHAR(50) DEFAULT NULL,
+        polling_interval INTEGER DEFAULT 60
       )
     `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS recordings (
-        id SERIAL PRIMARY KEY,
-        room_url VARCHAR(512) REFERENCES rooms(room_url) ON DELETE CASCADE,
-        file_path VARCHAR(1024) DEFAULT '',
-        file_size BIGINT DEFAULT 0,
-        duration_seconds INTEGER DEFAULT 0,
-        started_at TIMESTAMP DEFAULT NOW(),
-        ended_at TIMESTAMP,
-        status VARCHAR(20) DEFAULT 'recording'
-      )
-    `);
-
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS segment_duration INTEGER DEFAULT 0
-    `);
+    // ========== recording_sessions ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS recording_sessions (
@@ -109,61 +102,23 @@ async function runMigration() {
         total_segments INTEGER DEFAULT 0,
         total_size BIGINT DEFAULT 0,
         output_dir VARCHAR(1024) DEFAULT '',
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        caption VARCHAR(1024) DEFAULT '',
+        deleted_at TIMESTAMP,
+        retry_count INTEGER DEFAULT 0,
+        stream_url VARCHAR(1024) DEFAULT '',
+        output_path VARCHAR(1024) DEFAULT '',
+        cover_url VARCHAR(1024) DEFAULT '',
+        cover_path VARCHAR(1024) DEFAULT ''
       )
     `);
 
-    await client.query(`
-      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS session_id INTEGER REFERENCES recording_sessions(id) ON DELETE SET NULL
-    `);
-
-    await client.query(`
-      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS segment_index INTEGER DEFAULT 0
-    `);
-
-    await client.query(`
-      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS is_hls_ready BOOLEAN DEFAULT FALSE
-    `);
-    await client.query(`
-      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS hls_playlist_path VARCHAR(1024) DEFAULT ''
-    `);
-    await client.query(`
-      ALTER TABLE recordings ADD COLUMN IF NOT EXISTS hls_generated_at TIMESTAMP
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS caption VARCHAR(1024) DEFAULT ''
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS stream_url VARCHAR(1024) DEFAULT ''
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS output_path VARCHAR(1024) DEFAULT ''
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS cover_url VARCHAR(1024) DEFAULT ''
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_sessions ADD COLUMN IF NOT EXISTS cover_path VARCHAR(1024) DEFAULT ''
-    `);
+    // ========== upload_templates ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS upload_templates (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL DEFAULT '',
-        room_url VARCHAR(512) REFERENCES rooms(room_url) ON DELETE SET NULL,
         title_template VARCHAR(1024) NOT NULL DEFAULT '{room_name} 直播录像 {date}',
         desc_template TEXT DEFAULT '',
         tid INTEGER DEFAULT 171,
@@ -175,15 +130,17 @@ async function runMigration() {
         cookies_path VARCHAR(1024) DEFAULT '',
         dtime INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TIMESTAMP DEFAULT NOW(),
+        after_upload VARCHAR(20) DEFAULT 'none'
       )
     `);
 
-    await client.query(`ALTER TABLE upload_templates DROP COLUMN IF EXISTS line`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS is_only_self INTEGER DEFAULT 0`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS cookies_path VARCHAR(1024) DEFAULT ''`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS dtime INTEGER DEFAULT 0`);
-    await client.query(`ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS after_upload VARCHAR(20) DEFAULT 'none'`);
+    // rooms.upload_template_id 需要在 upload_templates 创建后才能添加 FK
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS upload_template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL
+    `);
+
+    // ========== upload_records ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS upload_records (
@@ -201,11 +158,12 @@ async function runMigration() {
         bv_id VARCHAR(50) DEFAULT '',
         started_at TIMESTAMP DEFAULT NOW(),
         completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        upload_files TEXT DEFAULT '[]'
       )
     `);
-    await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS bv_id VARCHAR(50) DEFAULT ''`);
-    await client.query(`ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS upload_files TEXT DEFAULT '[]'`);
+
+    // ========== replay_records ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS replay_records (
@@ -251,9 +209,7 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_replay_records_start_time ON replay_records(principal_id, start_time DESC)
     `);
 
-    await client.query(`ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
-    await client.query(`ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS poster TEXT DEFAULT ''`);
-    await client.query(`ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS resolution VARCHAR(50) DEFAULT ''`);
+    // ========== replay_settings ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS replay_settings (
@@ -264,6 +220,8 @@ async function runMigration() {
         PRIMARY KEY (key, principal_id)
       )
     `);
+
+    // ========== replay_upload_records ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS replay_upload_records (
@@ -296,6 +254,8 @@ async function runMigration() {
         WHERE replay_record_id IS NOT NULL AND status = 'uploading'
     `);
 
+    // ========== recording_files ==========
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS recording_files (
         id            SERIAL PRIMARY KEY,
@@ -308,10 +268,21 @@ async function runMigration() {
         started_at    TIMESTAMP DEFAULT NOW(),
         completed_at  TIMESTAMP,
         checked_at    TIMESTAMP DEFAULT NOW(),
-        created_at    TIMESTAMP DEFAULT NOW()
+        created_at    TIMESTAMP DEFAULT NOW(),
+        ended_at TIMESTAMP,
+        segment_index INTEGER DEFAULT 0,
+        duration_seconds INTEGER DEFAULT 0,
+        is_hls_ready BOOLEAN DEFAULT FALSE,
+        hls_playlist_path VARCHAR(1024) DEFAULT '',
+        hls_generated_at TIMESTAMP,
+        segment_start_ms INTEGER DEFAULT 0,
+        segment_end_ms INTEGER DEFAULT 0,
+        danmaku_ass_path VARCHAR(1024) DEFAULT ''
       )
     `);
-    // 添加唯一约束防止 recording_files / recordings 重复
+    // recordings 表已废弃，数据已迁移至 recording_files，清理残留
+    await client.query(`DROP TABLE IF EXISTS recordings`);
+
     await client.query(`
       DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recording_files_file_path_key') THEN
@@ -319,66 +290,17 @@ async function runMigration() {
         END IF;
       END $$;
     `);
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recordings_file_path_key') THEN
-          ALTER TABLE recordings ADD CONSTRAINT recordings_file_path_key UNIQUE (file_path);
-        END IF;
-      END $$;
-    `);
 
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS notification_enabled BOOLEAN DEFAULT TRUE
-    `);
+    // danmaku_ass_path 已迁移到弹幕文件系统的确定性路径，不再写入 recording_files
+    // 保留列以兼容历史数据及 watchdog/RecorderService 中的引用，DROP 推迟到发布后 1 个月（见下方 deferred migration）
 
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS monitoring_enabled BOOLEAN DEFAULT TRUE
-    `);
+    // ========== 推迟执行：recording_files 弹幕字段 DROP ==========
+    // 以下 migration 推迟到发布后至少 1 个月执行，确保无回滚需求后再取消注释
+    // -- await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
+    // -- 回滚 SQL（如需要，手动执行）：
+    // -- ALTER TABLE recording_files ADD COLUMN danmaku_ass_path VARCHAR(1024) DEFAULT '';
 
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS upload_template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL
-    `);
-
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_enabled BOOLEAN DEFAULT FALSE
-    `);
-
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_platform VARCHAR(50) DEFAULT NULL
-    `);
-
-    await client.query(`
-      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS polling_interval INTEGER DEFAULT 60
-    `);
-
-    // 移除不再使用的字段
-    await client.query(`ALTER TABLE rooms DROP COLUMN IF EXISTS last_polled_at`);
-    await client.query(`ALTER TABLE rooms DROP COLUMN IF EXISTS last_live_status`);
-
-    await client.query(`
-      ALTER TABLE upload_templates DROP COLUMN IF EXISTS room_url
-    `);
-
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS is_hls_ready BOOLEAN DEFAULT FALSE
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_playlist_path VARCHAR(1024) DEFAULT ''
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_generated_at TIMESTAMP
-    `);
-
-    // 添加 recordings 表缺少的字段到 recording_files 表
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_index INTEGER DEFAULT 0
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS duration_seconds INTEGER DEFAULT 0
-    `);
+    // ========== settings ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -389,6 +311,8 @@ async function runMigration() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+
+    // ========== transcode_records ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS transcode_records (
@@ -449,33 +373,10 @@ async function runMigration() {
         enqueued_at TIMESTAMP DEFAULT NOW(),
         started_at TIMESTAMP,
         completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        session_ass_path VARCHAR(1024) DEFAULT '',
+        jsonl_path VARCHAR(1024) DEFAULT ''
       )
-    `);
-
-    // recording_files 弹幕相关字段
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_start_ms INTEGER DEFAULT 0
-    `);
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS segment_end_ms INTEGER DEFAULT 0
-    `);
-    // danmaku_ass_path 已迁移到弹幕文件系统的确定性路径，不再写入 recording_files
-    // 保留列以兼容历史数据及 watchdog/RecorderService 中的引用，DROP 推迟到发布后 1 个月（见下方 deferred migration）
-    await client.query(`
-      ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS danmaku_ass_path VARCHAR(1024) DEFAULT ''
-    `);
-
-    await client.query(`
-      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''
-    `);
-
-    // danmaku_burn_records 新增字段：会话级 ASS 路径和 JSONL 路径
-    await client.query(`
-      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS session_ass_path VARCHAR(1024) DEFAULT ''
-    `);
-    await client.query(`
-      ALTER TABLE danmaku_burn_records ADD COLUMN IF NOT EXISTS jsonl_path VARCHAR(1024) DEFAULT ''
     `);
 
     // ========== 弹幕 settings 清理 ==========
@@ -484,26 +385,6 @@ async function runMigration() {
     await client.query(`
       DELETE FROM settings WHERE key IN ('auto_burn_danmaku', 'prefer_danmaku_burned_video', 'danmaku_preserve_clean_video')
     `);
-
-    // 弹幕压制视觉稳定性默认值升级：仅更新仍停留在旧默认值的配置，避免覆盖用户自定义。
-    const danmakuVisualDefaultUpgrades = [
-      ['danmaku_density_per_second', '20', '15'],
-      ['danmaku_font_size', '32', '38'],
-      ['danmaku_font_size', '40', '38'],
-      ['danmaku_opacity', '1.0', '0.88'],
-      ['danmaku_opacity', '1', '0.88'],
-      ['danmaku_outline_width', '2.8', '2'],
-      ['danmaku_outline_width', '3', '2'],
-    ];
-    for (const [key, oldValue, newValue] of danmakuVisualDefaultUpgrades) {
-      await client.query(`UPDATE settings SET value = $3 WHERE key = $1 AND value = $2`, [key, oldValue, newValue]);
-    }
-
-    // ========== 推迟执行：recording_files 弹幕字段 DROP ==========
-    // 以下 migration 推迟到发布后至少 1 个月执行，确保无回滚需求后再取消注释
-    // -- await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
-    // -- 回滚 SQL（如需要，手动执行）：
-    // -- ALTER TABLE recording_files ADD COLUMN danmaku_ass_path VARCHAR(1024) DEFAULT '';
 
     const defaultSettings = [
       ['pool_size', '3'],
@@ -526,14 +407,6 @@ async function runMigration() {
       ['hls_cleanup_days', '30'],
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
-      // TODO: remove in v1.8.0 (danmaku burn moved to danmaku-tool)
-      ['danmaku_burn_concurrency', '1'],
-      ['danmaku_density_per_second', '15'],
-      ['danmaku_font_family', 'Noto Sans CJK SC'],
-      ['danmaku_font_size', '38'],
-      ['danmaku_opacity', '0.88'],
-      ['danmaku_outline_colour', '000000'],
-      ['danmaku_outline_width', '2'],
       ['replay_enabled', 'true'],
       ['replay_work_dir', '/data/replay'],
       ['replay_queue_concurrency', '1'],
@@ -591,7 +464,8 @@ async function runMigration() {
         error_message TEXT DEFAULT '',
         started_at TIMESTAMP,
         completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        log_path VARCHAR(1024) DEFAULT ''
       );
     `);
     await client.query(`
@@ -601,22 +475,18 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_free_burn_created ON danmaku_free_burn_records(created_at DESC);
     `);
 
-    await client.query(
-      `ALTER TABLE danmaku_free_burn_records ADD COLUMN IF NOT EXISTS log_path VARCHAR(1024) DEFAULT ''`
-    );
-
     // ========== 文件管理模块表 ==========
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS managed_files (
         id SERIAL PRIMARY KEY,
-        category VARCHAR(20),
-        file_type VARCHAR(30),
-        source_table VARCHAR(50),
+        category VARCHAR(20) NOT NULL DEFAULT 'unknown',
+        file_type VARCHAR(30) NOT NULL DEFAULT 'unknown',
+        source_table VARCHAR(50) NOT NULL DEFAULT 'unknown',
         source_id INTEGER,
         group_id VARCHAR(100),
         file_path VARCHAR(1024) NOT NULL,
-        file_name VARCHAR(512),
+        file_name VARCHAR(512) NOT NULL DEFAULT '',
         extension VARCHAR(20),
         file_size BIGINT,
         mtime TIMESTAMP,

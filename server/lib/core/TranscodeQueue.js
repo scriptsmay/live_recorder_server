@@ -245,11 +245,6 @@ class TranscodeQueue {
         `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`,
         [mp4Path, path.basename(mp4Path), outputSize, videoPathToTrans]
       );
-      await pool.query(`UPDATE recordings SET file_path = $1, file_size = $2 WHERE file_path = $3`, [
-        mp4Path,
-        outputSize,
-        videoPathToTrans,
-      ]);
     } catch (err) {
       console.error('[转码队列] 更新数据库失败:', err.message);
     }
