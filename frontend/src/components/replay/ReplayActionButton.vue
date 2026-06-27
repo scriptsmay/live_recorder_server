@@ -103,7 +103,7 @@ function handleCancel() {
 }
 
 function gotoLog() {
-  const url = `/logs?file=${encodeURIComponent('biliup_replay_' + props.recordId + '.log')}`
+  const url = `/logs?file=${encodeURIComponent('replay_' + props.recordId + '.log')}`
   window.open(url, '_blank')
 }
 
