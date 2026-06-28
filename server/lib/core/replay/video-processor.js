@@ -139,7 +139,7 @@ async function cut(record, options = {}) {
         '-f',
         'segment',
         '-segment_time',
-        '3540',
+        '3600',
         '-segment_start_number',
         '1',
         '-reset_timestamps',
