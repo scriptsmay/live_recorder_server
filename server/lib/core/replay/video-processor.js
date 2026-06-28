@@ -118,7 +118,7 @@ async function cut(record, options = {}) {
   }
 
   const outputPath = ensureInside(videoSubDir, path.join(videoSubDir, 'p.mkv'));
-  const result = await runCommand('mkvmerge', ['-o', outputPath, '--split', 'duration:00:59:00', rawPath], {
+  const result = await runCommand('mkvmerge', ['-o', outputPath, '--split', 'duration:01:00:00', rawPath], {
     cwd: workDir,
     logStream: options.logStream,
     onProcessStart: options.onProcessStart,
