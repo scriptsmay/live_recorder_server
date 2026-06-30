@@ -423,6 +423,12 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 
 若记录已有 `m3u8_url` 则直接跳过提取。浏览器方案会顺带回填 `duration` 字段。
 
+远端 `records` 增量同步只在 `ReplayService.updateRecordStatus()` 更新 `duration` 时发布
+`replay_record_projection_changed` 事件。`sync-records.sh` 收到记录 ID 后重新查询本地
+`replay_records`，将 `duration` 写入远端，并用 `start_time - duration` 派生
+`start_live_time` / `start_live_time_text`。`resolution`、状态流转和投稿完成不再单独发布
+远端 records 同步事件。
+
 ### replay_settings — 主播级回放配置
 
 覆盖全局回放默认配置。

@@ -4,7 +4,6 @@ const pool = require('../../../db/index');
 const notify = require('../notify');
 const biliup = require('../biliup');
 const UploadService = require('../../../services/UploadService');
-const { publishReplayEventFireAndForget } = require('./replay-events');
 
 function formatDuration(seconds) {
   const total = parseInt(seconds, 10) || 0;
@@ -255,16 +254,9 @@ class ReplayUploadService {
            WHERE id=$4`,
           [cmdStr, result.output, result.bvId, uploadRecordId]
         );
-        const {
-          rows: [updatedRecord],
-        } = await pool.query(
-          `UPDATE replay_records SET status='completed', bv_id=$1, uploaded_at=NOW(), completed_at=NOW(), updated_at=NOW() WHERE id=$2 RETURNING *`,
+        await pool.query(
+          `UPDATE replay_records SET status='completed', bv_id=$1, uploaded_at=NOW(), completed_at=NOW(), updated_at=NOW() WHERE id=$2`,
           [result.bvId, record.id]
-        );
-
-        publishReplayEventFireAndForget(
-          'replay_completed',
-          updatedRecord || { ...record, status: 'completed', bv_id: result.bvId }
         );
 
         const displayName = resolveDisplayName(record);

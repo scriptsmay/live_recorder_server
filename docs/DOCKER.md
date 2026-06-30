@@ -204,6 +204,13 @@ biliup --help
 
 启用：在 `.env` 中设置 `SYNC_CRON_ENABLED=true`，填写 `SUPABASE_URL`。测试阶段默认写入 `test_records` 表，上线时改 `REMOTE_TABLE=records`。
 
+`replay_cron` 容器同时监听 `REDIS_PUBLISH_CHANNEL`。后端仅在回放记录的
+`duration` 更新时发布 `replay_record_projection_changed` 事件，监听器解析事件中的
+`record_id` 并执行 `sync-records.sh --ids <record_id>`。该事件用于更新远端
+`records.duration` 以及由 `start_time - duration` 派生的
+`start_live_time` / `start_live_time_text`；回放状态流转、投稿完成和分辨率更新不再单独触发
+远端 records 同步。
+
 ## 数据库备份
 
 PostgreSQL 备份：

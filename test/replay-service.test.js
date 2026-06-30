@@ -146,7 +146,7 @@ describe('ReplayService', () => {
     expect(sql).toContain('file_size');
   });
 
-  test('updateRecordStatus 更新 duration 或 resolution 时发布元数据同步事件', async () => {
+  test('updateRecordStatus 更新 duration 时发布 records 投影同步事件', async () => {
     const row = { id: 5, status: 'downloaded', duration: 3600, resolution: '1920x1080' };
     pool.query.mockResolvedValueOnce({ rows: [row] });
 
@@ -155,9 +155,20 @@ describe('ReplayService', () => {
       resolution: '1920x1080',
     });
 
-    expect(publishReplayEventFireAndForget).toHaveBeenCalledWith('replay_metadata_updated', row, {
-      changed_fields: ['duration', 'resolution'],
+    expect(publishReplayEventFireAndForget).toHaveBeenCalledWith('replay_record_projection_changed', row, {
+      changed_fields: ['duration'],
     });
+  });
+
+  test('updateRecordStatus 仅更新非 duration 字段时不发布 records 投影同步事件', async () => {
+    const row = { id: 5, status: 'downloaded', resolution: '1920x1080' };
+    pool.query.mockResolvedValueOnce({ rows: [row] });
+
+    await ReplayService.updateRecordStatus(5, 'downloaded', {
+      resolution: '1920x1080',
+    });
+
+    expect(publishReplayEventFireAndForget).not.toHaveBeenCalled();
   });
 
   test('markRecordsCompleted 批量标记完成并返回缺失 ID', async () => {
@@ -173,9 +184,7 @@ describe('ReplayService', () => {
     expect(result.updated).toHaveLength(2);
     expect(result.missing_ids).toEqual([999]);
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining("status = 'completed'"), [[5, 6, 999]]);
-    expect(publishReplayEventFireAndForget).toHaveBeenCalledTimes(2);
-    expect(publishReplayEventFireAndForget).toHaveBeenCalledWith('replay_completed', { id: 5, status: 'completed' });
-    expect(publishReplayEventFireAndForget).toHaveBeenCalledWith('replay_completed', { id: 6, status: 'completed' });
+    expect(publishReplayEventFireAndForget).not.toHaveBeenCalled();
   });
 
   test('listRecords 支持 date_from 和 date_to 筛选', async () => {
