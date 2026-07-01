@@ -476,6 +476,68 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 ---
 
+### GET /api/sessions
+
+查询录制会话列表。支持分页、按房间和状态筛选。
+
+每条会话记录包含关联的投稿记录（`upload_records` 字段），无需单独请求投稿 API。
+
+**参数（Query）：**
+
+| 参数     | 类型    | 必填 | 说明                                                                 |
+| -------- | ------- | ---- | -------------------------------------------------------------------- |
+| page     | integer | 否   | 页码，默认 1                                                         |
+| limit    | integer | 否   | 每页条数，默认 20                                                    |
+| room_url | string  | 否   | 按房间 URL 筛选                                                      |
+| room_id  | integer | 否   | 按房间 ID 筛选                                                       |
+| status   | string  | 否   | 按状态筛选：`recording` / `completed` / `interrupted`               |
+
+**响应结构：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "rows": [
+      {
+        "id": 25,
+        "room_url": "https://live.example.com/room1",
+        "room_name": "主播名",
+        "status": "completed",
+        "started_at": "2026-05-14T14:30:22Z",
+        "ended_at": "2026-05-14T17:30:22Z",
+        "total_segments": 3,
+        "total_size": 524288000,
+        "danmaku_status": "completed",
+        "danmaku_event_count": 1200,
+        "upload_records": [
+          { "id": 1, "session_id": 25, "status": "success", "bv_id": "BV1xx" }
+        ]
+      }
+    ],
+    "total": 150
+  }
+}
+```
+
+**`upload_records` 字段说明：**
+
+| 字段        | 类型          | 说明                       |
+| ----------- | ------------- | -------------------------- |
+| id          | integer       | 投稿记录 ID                |
+| session_id  | integer       | 关联的录制会话 ID          |
+| status      | string        | 投稿状态：success/failed 等 |
+| bv_id       | string \| null | Bilibili BV 号             |
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/sessions?page=1&limit=10
+curl http://127.0.0.1:1123/api/sessions?status=completed&room_id=3
+```
+
+---
+
 ### GET /api/sessions/:id
 
 查询录制会话详情（包含该会话的所有文件记录，以 `recording_files` 表为数据源）。
@@ -936,7 +998,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ### GET /api/transcode_records
 
-查询转码记录列表。
+查询转码记录列表。支持分页。
 
 **参数（Query）：**
 
@@ -944,6 +1006,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | ------ | ------- | ---- | ------------------------------------------------------------ |
 | status | string  | 否   | 按状态筛选：`queued` / `processing` / `completed` / `failed` |
 | limit  | integer | 否   | 返回记录数量，默认 100                                       |
+| page   | integer | 否   | 页码，默认 1。传 `page` 时启用分页（LIMIT + OFFSET）        |
 
 **返回字段说明：**
 
@@ -959,11 +1022,21 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | completed_at    | datetime | 完成转码时间                             |
 | room_name       | string   | 关联的直播间名称                         |
 
+**响应结构：**
+
+```json
+{
+  "status": "ok",
+  "data": [ ... ],
+  "total": 150
+}
+```
+
 **示例：**
 
 ```bash
 curl http://127.0.0.1:1123/api/transcode_records
-curl http://127.0.0.1:1123/api/transcode_records?status=completed
+curl http://127.0.0.1:1123/api/transcode_records?status=completed&page=2&limit=20
 ```
 
 ---
@@ -1179,7 +1252,43 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ### GET /api/replay/principals/:principalId/uploads
 
-查询主播最近回放投稿记录。
+查询主播回放投稿记录。支持分页。
+
+**参数（Query）：**
+
+| 参数       | 类型    | 必填 | 说明                   |
+| ---------- | ------- | ---- | ---------------------- |
+| page       | integer | 否   | 页码，默认 1           |
+| page_size  | integer | 否   | 每页条数，默认 20，上限 100 |
+
+**响应结构：**
+
+```json
+{
+  "status": "ok",
+  "data": [ ... ],
+  "total": 80,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+**`data` 字段说明：**
+
+| 字段               | 类型          | 说明                       |
+| ------------------ | ------------- | -------------------------- |
+| id                 | integer       | 投稿记录 ID                |
+| replay_record_id   | integer       | 关联的回放记录 ID          |
+| status             | string        | 投稿状态                   |
+| bv_id              | string \| null | Bilibili BV 号             |
+| title              | string        | 投稿标题                   |
+| created_at         | datetime      | 创建时间                   |
+
+**示例：**
+
+```bash
+curl http://127.0.0.1:1123/api/replay/principals/kuaishou_123/uploads?page=1&page_size=20
+```
 
 ### GET /api/replay/principals/:principalId/settings
 
