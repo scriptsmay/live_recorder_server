@@ -289,8 +289,27 @@ class DataService {
       params.slice(0, params.length - (page ? 2 : 1))
     );
 
+    // 批量加载投稿记录，消除前端 N+1 请求
+    const rows = result.rows;
+    if (rows.length > 0) {
+      const sessionIds = rows.map((r) => r.id);
+      const uploadResult = await pool.query(
+        `SELECT id, session_id, status, bv_id FROM upload_records WHERE session_id = ANY($1) ORDER BY id DESC`,
+        [sessionIds]
+      );
+      // 按 session_id 分组
+      const uploadMap = {};
+      for (const u of uploadResult.rows) {
+        if (!uploadMap[u.session_id]) uploadMap[u.session_id] = [];
+        uploadMap[u.session_id].push(u);
+      }
+      for (const row of rows) {
+        row.upload_records = uploadMap[row.id] || [];
+      }
+    }
+
     return {
-      rows: result.rows,
+      rows,
       total: parseInt(countResult.rows[0].count, 10),
     };
   }

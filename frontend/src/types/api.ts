@@ -67,6 +67,7 @@ export interface RecordingSession {
   danmaku_event_count: number
   danmaku_error: string | null
   burn_status: string | null
+  upload_records?: SessionUpload[]
   created_at: string
 }
 

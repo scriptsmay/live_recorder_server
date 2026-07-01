@@ -5,12 +5,11 @@
  * 双栏布局：左栏直播录制信息，右栏弹幕信息
  * 支持展开文件列表（懒加载）、查看投稿记录、删除、投稿
  */
-import { ref, computed, onMounted } from 'vue'
-import { apiGet } from '@/utils/api'
+import { ref, computed } from 'vue'
 import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import FilePanel from './FilePanel.vue'
-import type { RecordingSession, UploadRecord, UploadTemplate } from '@/types/api'
+import type { RecordingSession, UploadTemplate } from '@/types/api'
 
 const props = defineProps<{
   session: RecordingSession
@@ -26,9 +25,10 @@ const toast = useToast()
 
 // ---- Local State ----
 const filesExpanded = ref(false)
-const uploadRecords = ref<UploadRecord[]>([])
 
 // ---- Computed ----
+const uploadRecords = computed(() => props.session.upload_records ?? [])
+
 const isDone = computed(
   () => props.session.status === 'completed' || props.session.status === 'interrupted',
 )
@@ -146,19 +146,6 @@ async function copyStreamUrl() {
   //   toast.error('复制失败')
   // }
 }
-
-// ---- Lifecycle ----
-onMounted(async () => {
-  // Fetch upload records for this session
-  try {
-    const res = await apiGet<{ rows: UploadRecord[]; total: number }>(
-      `/api/upload_records?session_id=${props.session.id}`,
-    )
-    uploadRecords.value = res.data?.rows || []
-  } catch {
-    // silently ignore
-  }
-})
 </script>
 
 <template>
