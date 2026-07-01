@@ -57,7 +57,7 @@ async function testNotification() {
 // ---- 完整设置分组（与 settings.ejs 保持一致） ----
 const settingGroups: SettingGroup[] = [
   {
-    title: '通知设置',
+    title: '系统设置',
     col: 12,
     items: [
       {
@@ -121,11 +121,11 @@ const settingGroups: SettingGroup[] = [
         attrs: { min: 0, max: 3600 },
       },
       {
-        key: 'max_resume_retries',
-        label: '会话恢复重试次数',
-        desc: '服务器启动时自动恢复录制会话的最大重试次数，默认 3',
-        type: 'number',
-        attrs: { min: 0, max: 20 },
+        key: 'kuaishou_danmaku_enabled',
+        label: '启用弹幕录制',
+        desc: '是否在快手直播录制时同时采集弹幕数据',
+        type: 'select',
+        options: ['false', 'true'],
       },
     ],
   },
@@ -213,60 +213,6 @@ const settingGroups: SettingGroup[] = [
         desc: '超过此天数的 HLS 文件将被自动清理，设为 0 则不清理',
         type: 'number',
         attrs: { min: 0, max: 365 },
-      },
-    ],
-  },
-  {
-    title: '弹幕设置',
-    items: [
-      {
-        key: 'kuaishou_danmaku_enabled',
-        label: '启用弹幕录制',
-        desc: '是否在快手直播录制时同时采集弹幕数据',
-        type: 'select',
-        options: ['false', 'true'],
-      },
-      {
-        key: 'danmaku_density_per_second',
-        label: '每秒弹幕上限',
-        desc: 'ASS 生成时每秒最多渲染的弹幕数，超出部分丢弃',
-        type: 'number',
-        attrs: { min: 5, max: 100 },
-      },
-      {
-        key: 'danmaku_font_family',
-        label: '弹幕字体',
-        desc: 'ASS 渲染使用的字体名称',
-        type: 'select',
-        options: ['Noto Sans CJK SC', 'Noto Sans CJK SC Medium', 'Source Han Sans SC Medium'],
-      },
-      {
-        key: 'danmaku_font_size',
-        label: '弹幕字号（1080p）',
-        desc: '1080p 分辨率下的默认字号',
-        type: 'number',
-        attrs: { min: 16, max: 64 },
-      },
-      {
-        key: 'danmaku_opacity',
-        label: '弹幕不透明度',
-        desc: '0-1 之间，0 完全透明，1 完全不透明',
-        type: 'number',
-        attrs: { min: 0, max: 1, step: 0.05 },
-      },
-      {
-        key: 'danmaku_outline_colour',
-        label: '描边颜色',
-        desc: '6 位 RGB 十六进制，如 000000（黑）、FFFFFF（白）',
-        type: 'text',
-        attrs: { maxlength: 6, pattern: '[0-9A-Fa-f]{6}' },
-      },
-      {
-        key: 'danmaku_outline_width',
-        label: '描边宽度',
-        desc: '描边像素宽度，0 为无描边',
-        type: 'number',
-        attrs: { min: 0, max: 5 },
       },
     ],
   },

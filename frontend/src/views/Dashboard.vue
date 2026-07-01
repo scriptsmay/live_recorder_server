@@ -125,6 +125,7 @@ const statCards = computed<StatCard[]>(() => [
       hasSummary.value && summary.value.interrupted_today > 0
         ? `中断 ${summary.value.interrupted_today}`
         : undefined,
+    to: '/sessions',
   },
   {
     label: '今日投稿',
@@ -145,7 +146,7 @@ const statCards = computed<StatCard[]>(() => [
     gradient: 'from-purple-500 to-purple-600',
     accent: 'text-purple-100',
     iconPath: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
-    to: '/replay',
+    to: '/replay-toolbox',
   },
   {
     label: '今日回放',
@@ -155,7 +156,7 @@ const statCards = computed<StatCard[]>(() => [
     accent: 'text-emerald-100',
     iconPath:
       'M5.25 5.653c0-.856.917-1.402 1.669-.981l11.662 6.847a1.121 1.121 0 0 1 0 1.948l-11.662 6.847a1.121 1.121 0 0 1-1.669-.981V5.653Z',
-    to: '/sessions?tab=replay',
+    to: '/replay-toolbox',
   },
 ])
 
