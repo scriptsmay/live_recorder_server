@@ -204,6 +204,10 @@ describe('DataService dashboard helpers', () => {
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('UNION ALL'), [5]);
     expect(pool.query.mock.calls[0][0]).toContain('LEFT JOIN rooms rm ON rs.room_url = rm.room_url');
     expect(pool.query.mock.calls[0][0]).toContain('LEFT JOIN recording_files rf ON rf.file_path = tr.original_path');
+    expect(pool.query.mock.calls[0][0]).toContain("'replay_completed'");
+    expect(pool.query.mock.calls[0][0]).toContain("'replay_failed'");
+    expect(pool.query.mock.calls[0][0]).toContain('FROM replay_records rr');
+    expect(pool.query.mock.calls[0][0]).toContain("'/replay-toolbox'");
   });
 
   test('统计直播间总数', async () => {

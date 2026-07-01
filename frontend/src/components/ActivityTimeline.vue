@@ -28,6 +28,8 @@ const typeMeta: Record<ActivityItem['type'], { dot: string; label: string }> = {
   upload_failed: { dot: 'bg-red-500', label: '投稿失败' },
   transcode_completed: { dot: 'bg-blue-500', label: '转码完成' },
   transcode_failed: { dot: 'bg-red-500', label: '转码失败' },
+  replay_completed: { dot: 'bg-purple-500', label: '回放完成' },
+  replay_failed: { dot: 'bg-red-500', label: '回放失败' },
 }
 
 function metaOf(type: ActivityItem['type']) {

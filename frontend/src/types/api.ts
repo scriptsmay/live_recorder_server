@@ -329,6 +329,8 @@ export interface ActivityItem {
     | 'upload_failed'
     | 'transcode_completed'
     | 'transcode_failed'
+    | 'replay_completed'
+    | 'replay_failed'
   title: string
   detail: string
   timestamp: string

@@ -217,11 +217,35 @@ class DataService {
                 tr.completed_at AS timestamp,
                 '/transcode' AS link
          FROM transcode_records tr
-         LEFT JOIN recording_files rf ON rf.file_path = tr.original_path
-         WHERE tr.status IN ('completed', 'failed') AND tr.completed_at IS NOT NULL
-       ) activities
-       ORDER BY timestamp DESC
-       LIMIT $1`,
+        LEFT JOIN recording_files rf ON rf.file_path = tr.original_path
+        WHERE tr.status IN ('completed', 'failed') AND tr.completed_at IS NOT NULL
+        UNION ALL
+        SELECT 'replay_completed' AS type,
+               COALESCE(NULLIF(rs.value, ''), NULLIF(rr.principal_name, ''), rr.principal_id, 'unknown') || ' 回放完成' AS title,
+               COALESCE(NULLIF(rr.bv_id, ''),
+                        CASE WHEN rr.file_size > 0 THEN pg_size_pretty(rr.file_size::bigint)
+                             ELSE '已完成' END) AS detail,
+               rr.completed_at AS timestamp,
+               '/replay-toolbox' AS link
+        FROM replay_records rr
+        LEFT JOIN replay_settings rs
+          ON rs.principal_id = rr.principal_id
+         AND rs.key = 'principal_name'
+        WHERE rr.status = 'completed' AND rr.completed_at IS NOT NULL
+        UNION ALL
+        SELECT 'replay_failed' AS type,
+               COALESCE(NULLIF(rs.value, ''), NULLIF(rr.principal_name, ''), rr.principal_id, 'unknown') || ' 回放失败' AS title,
+               LEFT(COALESCE(NULLIF(rr.error_message, ''), '处理失败'), 80) AS detail,
+               COALESCE(rr.completed_at, rr.updated_at) AS timestamp,
+               '/replay-toolbox' AS link
+        FROM replay_records rr
+        LEFT JOIN replay_settings rs
+          ON rs.principal_id = rr.principal_id
+         AND rs.key = 'principal_name'
+        WHERE rr.status = 'failed'
+      ) activities
+        ORDER BY timestamp DESC
+        LIMIT $1`,
       [parseInt(limit, 10) || 10]
     );
 
