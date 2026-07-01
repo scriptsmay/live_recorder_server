@@ -1,10 +1,12 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const API_BASE_URL = env.API_BASE_URL || 'http://localhost:3001'
   // 开发环境使用 '/'，生产环境使用 '/frontend/'
   const base = mode === 'development' ? '/' : '/frontend/'
   return {
@@ -20,11 +22,11 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': {
-          target: 'http://localhost:3001',
+          target: API_BASE_URL,
           changeOrigin: true,
         },
         '/hls': {
-          target: 'http://localhost:3001',
+          target: API_BASE_URL,
           changeOrigin: true,
         },
       },

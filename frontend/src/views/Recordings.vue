@@ -55,7 +55,7 @@ async function loadData() {
     const params = new URLSearchParams()
     if (roomFilter.value) params.set('room_url', roomFilter.value)
     params.set('page', String(page.value))
-    params.set('limit', '50')
+    params.set('limit', '10')
     const qs = params.toString() ? `?${params.toString()}` : ''
     const [recRes, roomRes] = await Promise.all([
       apiGet<{ rows: RecordingRow[]; total: number }>(`/api/recording_files${qs}`),
@@ -208,14 +208,20 @@ function statusStyle(status: string) {
     recording: 'bg-blue-100 text-blue-700',
     interrupted: 'bg-red-100 text-red-700',
     deleted: 'bg-stone-100 text-stone-500',
+    missing: 'bg-gray-100 text-gray-500',
   }
   return statusStyleMap[status] || 'bg-gray-100 text-gray-600'
 }
 
 function statusLabel(status: string) {
   return (
-    { completed: '已完成', recording: '录制中', interrupted: '中断', deleted: '已删除' }[status] ||
-    status
+    {
+      completed: '已完成',
+      recording: '录制中',
+      interrupted: '中断',
+      deleted: '已删除',
+      missing: '已丢失',
+    }[status] || status
   )
 }
 
@@ -288,11 +294,9 @@ watch(
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-16">ID</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">直播间</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">会话</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500">直播间会话</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">文件路径</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-30">大小</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">HLS</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-24">状态</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-40">开始时间</th>
               <th class="px-4 py-3 text-right font-medium text-gray-500 w-50">操作</th>
@@ -302,17 +306,9 @@ watch(
             <tr v-for="rec in recordings" :key="rec.id" class="hover:bg-gray-50 transition-colors">
               <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ rec.id }}</td>
               <td class="px-4 py-3">
-                <div class="font-medium text-gray-900">{{ rec.room_name || '-' }}</div>
-                <a
-                  v-if="rec.room_url"
-                  :href="rec.room_url"
-                  target="_blank"
-                  class="text-xs text-gray-400 hover:text-brand-500 block"
-                >
-                  {{ rec.room_url }}
-                </a>
-              </td>
-              <td class="px-4 py-3">
+                <span class="font-medium text-gray-900 min-w-[60px]">
+                  {{ rec.room_name || '-' }}
+                </span>
                 <router-link
                   v-if="rec.session_id"
                   :to="'/sessions'"
@@ -320,10 +316,9 @@ watch(
                 >
                   #{{ rec.session_id }}
                 </router-link>
-                <span v-else class="text-gray-400">-</span>
               </td>
               <td
-                class="px-4 py-3 text-xs text-gray-500 break-all max-w-[250px]"
+                class="px-4 py-3 text-xs text-gray-500 break-all min-w-[200px] max-w-[250px]"
                 :title="rec.file_path"
               >
                 {{ rec.file_path || '-' }}
@@ -331,21 +326,7 @@ watch(
               <td class="px-4 py-3 text-xs text-gray-500">{{ formatBytes(rec.file_size) }}</td>
               <td class="px-4 py-3">
                 <span
-                  v-if="rec.is_hls_ready"
-                  class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700"
-                >
-                  就绪
-                </span>
-                <span
-                  v-else
-                  class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500"
-                >
-                  未生成
-                </span>
-              </td>
-              <td class="px-4 py-3">
-                <span
-                  class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                  class="inline-block px-2 py-0.5 rounded-full text-xs font-medium min-w-[50px] text-center"
                   :class="statusStyle(rec.status)"
                 >
                   {{ statusLabel(rec.status) }}
@@ -357,7 +338,7 @@ watch(
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
-                    v-if="rec.status === 'completed' && rec.file_path"
+                    v-if="rec.status === 'completed' && rec.file_path && rec.is_hls_ready"
                     class="px-2 py-1 text-xs rounded border border-sky-300 text-sky-600 hover:bg-sky-50 transition-colors"
                     title="播放"
                     @click="handlePlay(rec)"

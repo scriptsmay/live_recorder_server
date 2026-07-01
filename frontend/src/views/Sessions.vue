@@ -8,6 +8,7 @@
  * - 投稿弹窗（由 UploadModal 管理）
  */
 import { ref, computed, watch, onMounted } from 'vue'
+import dayjs from 'dayjs'
 import { useRoute, useRouter } from 'vue-router'
 import { apiGet, apiDelete, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
@@ -32,6 +33,8 @@ const loading = ref(false)
 // ---- Filters ----
 const statusFilter = ref('all')
 const currentPage = ref(1)
+const dateFrom = ref('')
+const dateTo = ref('')
 
 const currentRoomId = computed(() => (route.query.room_id as string) || '')
 
@@ -54,6 +57,36 @@ const statusCounts = computed(() => {
 const filteredSessions = computed(() => {
   if (statusFilter.value === 'all') return sessions.value
   return sessions.value.filter((s) => s.status === statusFilter.value)
+})
+
+const groupedSessions = computed(() => {
+  const groups = new Map<string, RecordingSession[]>()
+
+  for (const session of filteredSessions.value) {
+    const key = dayjs(session.started_at).isValid()
+      ? dayjs(session.started_at).format('YYYY-MM-DD')
+      : 'unknown'
+    const list = groups.get(key) ?? []
+    list.push(session)
+    groups.set(key, list)
+  }
+
+  return Array.from(groups.entries()).map(([date, items]) => {
+    let label = '未知日期'
+
+    if (date !== 'unknown') {
+      const current = dayjs(date)
+      if (current.isSame(dayjs(), 'day')) {
+        label = `今天 ${date}`
+      } else if (current.isSame(dayjs().subtract(1, 'day'), 'day')) {
+        label = `昨天 ${date}`
+      } else {
+        label = current.format('YYYY年MM月DD日')
+      }
+    }
+
+    return { date, label, items }
+  })
 })
 
 // ---- Upload Modal ----
@@ -90,6 +123,9 @@ async function fetchSessions() {
       }
     }
 
+    if (dateFrom.value) params.set('date_from', dateFrom.value)
+    if (dateTo.value) params.set('date_to', dateTo.value)
+
     const res = await apiGet<{ rows: RecordingSession[]; total: number }>(
       '/api/sessions?' + params.toString(),
     )
@@ -113,6 +149,11 @@ watch(
   },
 )
 
+watch([dateFrom, dateTo], () => {
+  currentPage.value = 1
+  fetchSessions()
+})
+
 // Initialize: load rooms/templates first, then sessions
 onMounted(async () => {
   await fetchRoomsAndTemplates()
@@ -129,6 +170,11 @@ function selectRoom(roomId: string) {
 function handlePageChange(page: number) {
   currentPage.value = page
   fetchSessions()
+}
+
+function clearDateFilter() {
+  dateFrom.value = ''
+  dateTo.value = ''
 }
 
 async function handleDeleteSession(sessionId: number) {
@@ -200,6 +246,30 @@ function handleUploadError(message: string) {
         </div>
       </div>
 
+      <div class="mb-4">
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="text-sm text-gray-500 shrink-0">日期：</span>
+          <input
+            v-model="dateFrom"
+            type="date"
+            class="h-8 rounded-lg border border-gray-300 px-2.5 text-xs text-gray-700"
+          />
+          <span class="text-xs text-gray-400">至</span>
+          <input
+            v-model="dateTo"
+            type="date"
+            class="h-8 rounded-lg border border-gray-300 px-2.5 text-xs text-gray-700"
+          />
+          <button
+            v-if="dateFrom || dateTo"
+            class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+            @click="clearDateFilter"
+          >
+            清除
+          </button>
+        </div>
+      </div>
+
       <!-- Room Filter Bar -->
       <div v-if="rooms.length > 0" class="">
         <div class="flex items-center flex-wrap gap-2">
@@ -260,14 +330,22 @@ function handleUploadError(message: string) {
 
       <!-- Cards -->
       <template v-else>
-        <SessionCard
-          v-for="session in filteredSessions"
-          :key="session.id"
-          :session="session"
-          :templates="templates"
-          @delete-session="handleDeleteSession"
-          @upload="handleUpload"
-        />
+        <section v-for="group in groupedSessions" :key="group.date" class="mb-5 last:mb-0">
+          <div class="flex items-center gap-3 mb-3 px-1">
+            <h2 class="text-sm font-semibold text-gray-900">{{ group.label }}</h2>
+            <span class="text-xs text-gray-400">{{ group.items.length }} 条会话</span>
+            <div class="h-px bg-gray-200 flex-1" />
+          </div>
+
+          <SessionCard
+            v-for="session in group.items"
+            :key="session.id"
+            :session="session"
+            :templates="templates"
+            @delete-session="handleDeleteSession"
+            @upload="handleUpload"
+          />
+        </section>
       </template>
     </div>
 

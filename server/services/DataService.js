@@ -276,7 +276,7 @@ class DataService {
   }
 
   static async getSessions(options = {}) {
-    const { room_url, room_id, status, limit = 50, page } = options;
+    const { room_url, room_id, status, date_from, date_to, limit = 50, page } = options;
     const conditions = ['s.deleted_at IS NULL'];
     const params = [];
 
@@ -291,6 +291,14 @@ class DataService {
     if (status) {
       conditions.push(`s.status = $${params.length + 1}`);
       params.push(status);
+    }
+    if (date_from) {
+      conditions.push(`s.started_at >= $${params.length + 1}`);
+      params.push(`${date_from} 00:00:00`);
+    }
+    if (date_to) {
+      conditions.push(`s.started_at < ($${params.length + 1}::date + INTERVAL '1 day')`);
+      params.push(date_to);
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';

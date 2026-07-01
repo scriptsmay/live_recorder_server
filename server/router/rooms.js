@@ -276,10 +276,12 @@ router.post('/rooms/:id/stop', async (req, res) => {
 
 router.get('/sessions', async (req, res) => {
   try {
-    const { room_url, status, page = 1, limit = 20 } = req.query;
+    const { room_url, status, date_from, date_to, page = 1, limit = 20 } = req.query;
     const data = await DataService.getSessions({
       room_url,
       status,
+      date_from,
+      date_to,
       page,
       limit,
     });
