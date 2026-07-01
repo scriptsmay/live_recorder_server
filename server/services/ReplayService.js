@@ -270,17 +270,29 @@ class ReplayService {
   }
 
   static async listUploads(principalId, options = {}) {
-    const limit = Math.min(parsePositiveInt(options.limit, 50), 100);
+    const page = parsePositiveInt(options.page, 1);
+    const pageSize = Math.min(parsePositiveInt(options.page_size || options.limit, 20), 100);
     const result = await pool.query(
       `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id
        FROM replay_upload_records rur
        LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
        WHERE rr.principal_id = $1
        ORDER BY rur.id DESC
-       LIMIT $2`,
-      [principalId, limit]
+       LIMIT $2 OFFSET $3`,
+      [principalId, pageSize, (page - 1) * pageSize]
     );
-    return result.rows;
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM replay_upload_records rur
+       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
+       WHERE rr.principal_id = $1`,
+      [principalId]
+    );
+    return {
+      rows: result.rows,
+      total: parseInt(countResult.rows[0]?.count || '0', 10),
+      page,
+      page_size: pageSize,
+    };
   }
 
   static async getSettings(principalId) {

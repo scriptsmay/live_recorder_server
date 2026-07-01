@@ -79,7 +79,7 @@ async function fetchSessions() {
   try {
     const params = new URLSearchParams()
     params.set('page', String(currentPage.value))
-    params.set('limit', '50')
+    params.set('limit', '10')
 
     // Room filter: convert room_id (from URL) to room_url (for API)
     const roomId = currentRoomId.value

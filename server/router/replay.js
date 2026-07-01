@@ -119,7 +119,7 @@ router.get('/replay/records/:id/upload-preview', async (req, res) => {
 router.get('/replay/principals/:principalId/uploads', async (req, res) => {
   try {
     const data = await ReplayService.listUploads(req.params.principalId, req.query);
-    res.json({ status: 'ok', data });
+    res.json({ status: 'ok', data: data.rows, total: data.total, page: data.page, page_size: data.page_size });
   } catch (err) {
     console.error('[replay] 投稿记录查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询回放投稿记录失败' });

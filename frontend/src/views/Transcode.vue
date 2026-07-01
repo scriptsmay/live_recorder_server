@@ -68,12 +68,11 @@ function historyStatusLabel(status: string) {
 async function loadData() {
   loading.value = true
   try {
-    const tcRes = await apiGet<{ rows: TranscodeRow[]; total: number } | TranscodeRow[]>(
+    const tcRes = await apiGet<TranscodeRow[]>(
       `/api/transcode_records?limit=100&page=${page.value}`,
     )
-    const tcData = tcRes.data
-    records.value = Array.isArray(tcData) ? tcData : (tcData.rows ?? [])
-    total.value = Array.isArray(tcData) ? tcData.length : (tcData.total ?? records.value.length)
+    records.value = tcRes.data ?? []
+    total.value = tcRes.total ?? 0
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : '加载失败')
   } finally {

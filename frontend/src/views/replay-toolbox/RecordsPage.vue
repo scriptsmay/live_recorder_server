@@ -89,7 +89,7 @@ onMounted(async () => {
   store.selectedPrincipalId = principalId.value
   await Promise.all([
     store.fetchRecords({ status: statusFilter.value, page: 1 }),
-    store.fetchUploads(),
+    store.fetchUploads({ page: 1 }),
     store.fetchTaskStatus(),
   ])
 })
@@ -210,6 +210,7 @@ async function handlePageChange(delta: number) {
     />
 
     <ReplayRecordTable
+      v-model:batch-count="batchCount"
       :records="store.records"
       :loading="store.loadingRecords"
       :page="store.page"
@@ -218,7 +219,6 @@ async function handlePageChange(delta: number) {
       :busy="store.busy"
       :active-record-ids="activeRecordIds"
       :selected-record-ids="selectedRecordIds"
-      v-model:batch-count="batchCount"
       @show-detail="selectedRecord = $event"
       @action="handleAction"
       @cancel="handleCancel"

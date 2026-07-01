@@ -5,12 +5,13 @@ const DataService = require('../services/DataService');
 
 router.get('/transcode_records', async (req, res) => {
   try {
-    const { status, limit = 100 } = req.query;
+    const { status, limit = 100, page } = req.query;
     const data = await DataService.getTranscodeRecords({
       status,
       limit,
+      page,
     });
-    res.json({ status: 'ok', data });
+    res.json({ status: 'ok', data: data.rows, total: data.total });
   } catch (err) {
     console.error('[transcode_records] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });

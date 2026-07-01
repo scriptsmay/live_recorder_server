@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import type { ReplayUploadRecord } from '@/types/api'
+import Pagination from '@/components/Pagination.vue'
 
 defineProps<{
   uploads: ReplayUploadRecord[]
   loading: boolean
+  uploadPage: number
+  uploadTotal: number
+  uploadPageSize: number
+}>()
+
+const emit = defineEmits<{
+  uploadPageChange: [page: number]
 }>()
 </script>
 
@@ -45,6 +53,14 @@ defineProps<{
           </tr>
         </tbody>
       </table>
+    </div>
+    <div class="px-4 pb-4">
+      <Pagination
+        :current="uploadPage"
+        :total="uploadTotal"
+        :page-size="uploadPageSize"
+        @change="emit('uploadPageChange', $event)"
+      />
     </div>
   </div>
 </template>

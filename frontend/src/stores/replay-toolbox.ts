@@ -23,6 +23,9 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
   const total = ref(0)
   const page = ref(1)
   const pageSize = ref(20)
+  const uploadTotal = ref(0)
+  const uploadPage = ref(1)
+  const uploadPageSize = ref(20)
   const dateFrom = ref('')
   const dateTo = ref('')
   const loadingPrincipals = ref(false)
@@ -90,19 +93,34 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     }
   }
 
-  async function fetchUploads() {
+  async function fetchUploads(options: { page?: number } = {}) {
     if (!selectedPrincipalId.value) {
       uploads.value = []
+      uploadTotal.value = 0
       return
     }
     loadingUploads.value = true
     try {
+      const nextPage = options.page ?? uploadPage.value
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        page_size: String(uploadPageSize.value),
+      })
       const res = await apiGet<ReplayUploadRecord[]>(
-        `/api/replay/principals/${encodeURIComponent(selectedPrincipalId.value)}/uploads`,
+        `/api/replay/principals/${encodeURIComponent(selectedPrincipalId.value)}/uploads?${params}`,
       )
-      uploads.value = res.data ?? []
+      const body = res as unknown as {
+        data?: ReplayUploadRecord[]
+        total?: number
+        page?: number
+        page_size?: number
+      }
+      uploads.value = body.data ?? []
+      uploadTotal.value = body.total ?? uploads.value.length
+      uploadPage.value = nextPage
     } catch (err) {
       uploads.value = []
+      uploadTotal.value = 0
       toast.error('加载投稿记录失败: ' + getErrorMessage(err))
     } finally {
       loadingUploads.value = false
@@ -136,7 +154,12 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
   async function selectPrincipal(principalId: string, status = 'all') {
     selectedPrincipalId.value = principalId
     page.value = 1
-    await Promise.all([fetchRecords({ status, page: 1 }), fetchUploads(), fetchSettings()])
+    uploadPage.value = 1
+    await Promise.all([
+      fetchRecords({ status, page: 1 }),
+      fetchUploads({ page: 1 }),
+      fetchSettings(),
+    ])
   }
 
   async function syncRecords(count: number, dryRun = false) {
@@ -272,6 +295,9 @@ export const useReplayToolboxStore = defineStore('replay-toolbox', () => {
     total,
     page,
     pageSize,
+    uploadTotal,
+    uploadPage,
+    uploadPageSize,
     loadingPrincipals,
     loadingRecords,
     loadingUploads,
