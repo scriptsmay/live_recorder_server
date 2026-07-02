@@ -46,23 +46,10 @@ const statusTabs = [
 ]
 
 // ---- Computed ----
-const statusCounts = computed(() => {
-  const counts: Record<string, number> = { recording: 0, completed: 0, interrupted: 0 }
-  for (const s of sessions.value) {
-    if (s.status in counts) counts[s.status]++
-  }
-  return counts
-})
-
-const filteredSessions = computed(() => {
-  if (statusFilter.value === 'all') return sessions.value
-  return sessions.value.filter((s) => s.status === statusFilter.value)
-})
-
 const groupedSessions = computed(() => {
   const groups = new Map<string, RecordingSession[]>()
 
-  for (const session of filteredSessions.value) {
+  for (const session of sessions.value) {
     const key = dayjs(session.started_at).isValid()
       ? dayjs(session.started_at).format('YYYY-MM-DD')
       : 'unknown'
@@ -125,6 +112,7 @@ async function fetchSessions() {
 
     if (dateFrom.value) params.set('date_from', dateFrom.value)
     if (dateTo.value) params.set('date_to', dateTo.value)
+    if (statusFilter.value !== 'all') params.set('status', statusFilter.value)
 
     const res = await apiGet<{ rows: RecordingSession[]; total: number }>(
       '/api/sessions?' + params.toString(),
@@ -150,6 +138,11 @@ watch(
 )
 
 watch([dateFrom, dateTo], () => {
+  currentPage.value = 1
+  fetchSessions()
+})
+
+watch(statusFilter, () => {
   currentPage.value = 1
   fetchSessions()
 })
@@ -239,9 +232,6 @@ function handleUploadError(message: string) {
               }"
             />
             {{ tab.label }}
-            <span v-if="tab.value !== 'all'" class="ml-0.5 opacity-70"
-              >({{ statusCounts[tab.value] || 0 }})</span
-            >
           </button>
         </div>
       </div>
@@ -314,7 +304,7 @@ function handleUploadError(message: string) {
 
       <!-- Empty -->
       <div
-        v-else-if="filteredSessions.length === 0"
+        v-else-if="sessions.length === 0"
         class="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm"
       >
         <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 16 16">
@@ -350,7 +340,7 @@ function handleUploadError(message: string) {
     </div>
 
     <!-- Pagination -->
-    <Pagination v-if="total > 0" :current="currentPage" :total="total" @change="handlePageChange" />
+    <Pagination v-if="total > 0" :current="currentPage" :total="total" :page-size="10" @change="handlePageChange" />
 
     <!-- Upload Modal -->
     <UploadModal

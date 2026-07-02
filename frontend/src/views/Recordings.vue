@@ -371,7 +371,7 @@ watch(
 
       <!-- 分页 -->
       <div class="px-4 py-3 border-t border-gray-200">
-        <Pagination :current="page" :total="total" @change="handlePageChange" />
+        <Pagination :current="page" :total="total" :page-size="10" @change="handlePageChange" />
       </div>
     </div>
 
