@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 const { resolveAndValidate } = require('../lib/utils/path-safety');
+const { getDirectoryStats } = require('../lib/utils/directory-stats');
 
 const DELETE_PLAN_TTL = 600; // 10 分钟
 const EVENT_LOOP_YIELD_INTERVAL = 10;
@@ -134,42 +135,71 @@ class FileManageService {
   /** 扫描 HLS 目录 → managed_files (category=recording, file_type=hls_directory) */
   static async _scanHlsDirectories(results) {
     const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        file_path, file_name, extension, file_size, mtime, exists_on_disk,
+        status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (file_path) DO UPDATE SET
+         source_table = EXCLUDED.source_table,
+         source_id = EXCLUDED.source_id,
          group_id = EXCLUDED.group_id,
+         file_size = EXCLUDED.file_size,
+         mtime = EXCLUDED.mtime,
+         exists_on_disk = EXCLUDED.exists_on_disk,
+         status = EXCLUDED.status,
+         safe_to_delete = EXCLUDED.safe_to_delete,
+         delete_block_reason = EXCLUDED.delete_block_reason,
+         deleted_at = NULL,
          updated_at = NOW()`;
 
-    await this._upsertFromQuery(
-      results,
-      `SELECT rf.session_id, MIN(rf.hls_playlist_path) AS hls_playlist_path
-       FROM recording_files rf
-       WHERE rf.is_hls_ready = true
-         AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''
-         AND rf.session_id IS NOT NULL
-       GROUP BY rf.session_id`,
-      [],
-      UPSERT_SQL,
-      (row) => {
-        const hlsDir = path.dirname(row.hls_playlist_path);
-        return {
-          filePath: hlsDir,
-          params: [
-            'recording',
-            'hls_directory',
-            'recording_sessions',
-            row.session_id,
-            row.session_id ? String(row.session_id) : null,
-            hlsDir,
-            path.basename(hlsDir),
-            '',
-            'active',
-            true,
-            null,
-          ],
-        };
-      }
+    // Remove the legacy one-row-per-session index before rebuilding exact
+    // recording_files associations.
+    await pool.query(
+      `DELETE FROM managed_files
+       WHERE file_type = 'hls_directory' AND source_table = 'recording_sessions'`
     );
+
+    const { rows } = await pool.query(
+      `SELECT rf.id AS source_id, rf.session_id, rf.hls_playlist_path, rf.hls_generated_at
+       FROM recording_files rf
+       WHERE rf.hls_status = 'ready'
+         AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''`
+    );
+
+    for (const row of rows) {
+      results.scanned++;
+      const hlsDir = path.dirname(row.hls_playlist_path);
+      try {
+        let stats;
+        let existsOnDisk = true;
+        try {
+          stats = await getDirectoryStats(hlsDir);
+        } catch (err) {
+          if (err.code !== 'ENOENT') throw err;
+          existsOnDisk = false;
+          stats = { size: 0, mtime: row.hls_generated_at || null };
+        }
+
+        await pool.query(UPSERT_SQL, [
+          'recording',
+          'hls_directory',
+          'recording_files',
+          row.source_id,
+          row.session_id ? String(row.session_id) : null,
+          hlsDir,
+          path.basename(hlsDir),
+          '',
+          stats.size,
+          stats.mtime,
+          existsOnDisk,
+          existsOnDisk ? 'active' : 'missing',
+          existsOnDisk,
+          existsOnDisk ? null : 'file_not_found',
+        ]);
+        results.created++;
+      } catch (err) {
+        results.errors.push({ file: hlsDir, error: err.message });
+      }
+    }
   }
 
   /** 扫描回放文件 → managed_files */
@@ -480,8 +510,9 @@ class FileManageService {
     if (file.exists_on_disk && !file.file_size) {
       try {
         const stat = await fs.promises.stat(file.file_path);
-        file.file_size = stat.size;
-        await pool.query(`UPDATE managed_files SET file_size = $1 WHERE id = $2`, [stat.size, id]);
+        const size = stat.isDirectory() ? (await getDirectoryStats(file.file_path)).size : stat.size;
+        file.file_size = size;
+        await pool.query(`UPDATE managed_files SET file_size = $1 WHERE id = $2`, [size, id]);
         console.log(`Updated file size for ${file.file_path}: ${file.file_size}`);
       } catch (err) {
         file.file_size = null;
@@ -730,6 +761,17 @@ class FileManageService {
   static async _deleteSingleFile(item, operator) {
     const { file_id, file_path, file_size, category, file_type, source_table, source_id } = item;
     const result = { file_id, file_path, result: null, error: null, actual_release_size: 0 };
+
+    if (file_type === 'hls_directory' && source_table === 'recording_files' && source_id) {
+      const hlsCleanupService = require('./HLSCleanupService');
+      const hlsResult = await hlsCleanupService.deleteForRecording(source_id, 'user', operator);
+      return {
+        ...result,
+        ...hlsResult,
+        file_id,
+        file_path,
+      };
+    }
 
     // 获取 advisory lock
     await pool.query(`SELECT pg_advisory_lock($1)`, [file_id]);

@@ -258,6 +258,25 @@ DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
       close handler)             启动清理时追踪
 ```
 
+### HLS 生命周期与保留期清理
+
+HLS 使用独立于原始录制文件 `status` 的 `recording_files.hls_status`：
+
+```text
+pending -> generating -> ready -> deleting -> expired / deleted
+                         -> missing
+generating -> failed
+```
+
+- 看门狗仅为 `pending` 自动生成；播放列表意外缺失时标记 `missing`，不自动重建。
+- 手动生成可将 `expired`、`deleted`、`missing`、`failed` 恢复为 `ready`。
+- `HLSCleanupService` 在启动 5 分钟后首次运行，之后每 24 小时读取一次
+  `hls_cleanup_days`；`0` 表示禁用，且不受 `file_cleanup_enabled` 控制。
+- 用户删除和保留期删除使用同一服务：advisory lock → `deleting` → 递归统计大小 →
+  删除目录 → 事务同步 `recording_files`、`managed_files` 和审计日志。
+- 每个录制分段的 HLS 目录独立索引，`managed_files.source_id` 精确指向
+  `recording_files.id`，同一会话可对应多条 HLS 记录。
+
 ### 分片追踪时序
 
 ```text

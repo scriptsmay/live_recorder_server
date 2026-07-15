@@ -170,6 +170,8 @@ docker compose --env-file ../.env \
 │   │   └── notify.js               ← 通知服务（飞书 / Gotify）
 │   ├── services/                   ← 业务服务层
 │   │   ├── DataService.js          ← 公共数据查询（rooms/sessions/settings/files）
+│   │   ├── FileManageService.js    ← 文件索引、删除计划与安全校验
+│   │   ├── HLSCleanupService.js    ← HLS 保留期调度与一致性删除
 │   │   ├── RecorderService.js      ← 录制服务（启动/停止/会话完成处理）
 │   │   ├── RoomService.js          ← 直播间管理（CRUD、暂停/恢复）
 │   │   ├── UploadService.js        ← 投稿服务（biliup 调用）
@@ -225,7 +227,7 @@ docker compose --env-file ../.env \
 │   └── todo/                       ← 开发计划文档
 ├── public/                         ← 静态文件
 ├── logs/                           ← 应用日志
-└── test/                           ← Jest 测试（380+ 个用例）
+└── test/                           ← Jest 测试（370+ 个用例）
 ```
 
 ## 弹幕功能架构

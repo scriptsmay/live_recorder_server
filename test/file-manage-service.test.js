@@ -12,11 +12,19 @@ jest.mock('../server/lib/utils/path-safety', () => ({
   resolveAndValidate: jest.fn(),
   ALLOWLIST_ROOTS: ['/data/video_downloads', '/data/replay'],
 }));
+jest.mock('../server/lib/utils/directory-stats', () => ({
+  getDirectoryStats: jest.fn(),
+}));
+jest.mock('../server/services/HLSCleanupService', () => ({
+  deleteForRecording: jest.fn(),
+}));
 
 const fs = require('fs');
 const pool = require('../server/db/index');
 const redis = require('../server/db/redis');
 const { resolveAndValidate } = require('../server/lib/utils/path-safety');
+const { getDirectoryStats } = require('../server/lib/utils/directory-stats');
+const hlsCleanupService = require('../server/services/HLSCleanupService');
 const FileManageService = require('../server/services/FileManageService');
 
 // helper：构造 managed_files 行
@@ -71,6 +79,8 @@ beforeEach(() => {
   redis.sIsMember.mockResolvedValue(false);
   resolveAndValidate.mockReset();
   resolveAndValidate.mockResolvedValue({ valid: true, resolvedPath: '/data/video_downloads/room1/session1/video.mp4' });
+  getDirectoryStats.mockReset();
+  hlsCleanupService.deleteForRecording.mockReset();
 });
 
 // ========== getFileList ==========
@@ -116,6 +126,43 @@ describe('getFileSummary', () => {
     expect(summary.total_size).toBe(8000);
     expect(summary.safe_to_delete_size).toBe(2000);
     expect(summary.groups).toHaveLength(2);
+  });
+});
+
+describe('_scanHlsDirectories', () => {
+  test('同一会话的多个 HLS 目录分别索引并记录真实大小', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    pool.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            source_id: 101,
+            session_id: 20,
+            hls_playlist_path: '/data/video_downloads/20/hls_a/playlist.m3u8',
+            hls_generated_at: new Date('2026-07-01T00:00:00Z'),
+          },
+          {
+            source_id: 102,
+            session_id: 20,
+            hls_playlist_path: '/data/video_downloads/20/hls_b/playlist.m3u8',
+            hls_generated_at: new Date('2026-07-02T00:00:00Z'),
+          },
+        ],
+      })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+    getDirectoryStats
+      .mockResolvedValueOnce({ size: 111, mtime: new Date('2026-07-01T01:00:00Z') })
+      .mockResolvedValueOnce({ size: 222, mtime: new Date('2026-07-02T01:00:00Z') });
+
+    await FileManageService._scanHlsDirectories(results);
+
+    expect(results.scanned).toBe(2);
+    expect(results.created).toBe(2);
+    const upserts = pool.query.mock.calls.filter((call) => call[0].includes('INSERT INTO managed_files'));
+    expect(upserts).toHaveLength(2);
+    expect(upserts[0][1]).toEqual(expect.arrayContaining(['recording_files', 101, 111]));
+    expect(upserts[1][1]).toEqual(expect.arrayContaining(['recording_files', 102, 222]));
   });
 });
 
@@ -676,24 +723,16 @@ describe('_deleteSingleFile', () => {
     FileManageService.validateFileSafety.mockRestore();
   });
 
-  test('HLS 目录 — 使用 fs.promises.rm recursive 删除', async () => {
+  test('HLS 目录 — 委托统一 HLS 删除服务', async () => {
     const file = makeFile({
       file_type: 'hls_directory',
       file_path: '/data/video_downloads/room1/session1/hls',
     });
-    const client = mockClient();
-
-    pool.query.mockResolvedValueOnce({ rows: [{}] }); // advisory lock
-    pool.query.mockResolvedValueOnce({ rows: [file] }); // SELECT managed_files
-    jest.spyOn(FileManageService, 'validateFileSafety').mockResolvedValueOnce({ safe: true });
-    pool.query.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE deleting
-
-    fs.promises.stat = jest.fn().mockResolvedValue({ isDirectory: () => true });
-    fs.promises.rm = jest.fn().mockResolvedValue(undefined);
-    fs.promises.unlink = jest.fn(); // 预设为 mock，验证不被调用
-
-    pool.connect.mockResolvedValueOnce(client);
-    pool.query.mockResolvedValueOnce({ rows: [{}] }); // advisory unlock
+    hlsCleanupService.deleteForRecording.mockResolvedValue({
+      result: 'success',
+      actual_release_size: 1024,
+      hls_status: 'deleted',
+    });
 
     const result = await FileManageService._deleteSingleFile(
       {
@@ -709,13 +748,7 @@ describe('_deleteSingleFile', () => {
     );
 
     expect(result.result).toBe('success');
-    expect(fs.promises.rm).toHaveBeenCalledWith(file.file_path, {
-      recursive: true,
-      force: true,
-    });
-    expect(fs.promises.unlink).not.toHaveBeenCalled();
-
-    FileManageService.validateFileSafety.mockRestore();
+    expect(hlsCleanupService.deleteForRecording).toHaveBeenCalledWith(100, 'user', 'user');
   });
 
   test('recording_files 源表同步更新为 deleted', async () => {

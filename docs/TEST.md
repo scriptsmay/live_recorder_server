@@ -25,6 +25,11 @@ test/
 ├── replay-integration.test.js       # 回放模块集成测试
 ├── replay-process-queue.test.js     # 回放处理队列测试
 ├── replay-cleanup.test.js           # 回放清理测试
+├── hls-generator.test.js            # HLS 生成生命周期测试
+├── hls-cleanup-service.test.js      # HLS 保留期与一致性删除测试
+├── watchdog-hls.test.js             # 看门狗 HLS 状态过滤测试
+├── directory-stats.test.js          # 目录递归大小统计测试
+├── file-manage-service.test.js      # 文件索引、安全校验与删除测试
 ├── danmaku-burner.test.js           # 弹幕压制测试
 ├── danmaku-burn-queue.test.js       # 弹幕压制队列测试
 ├── polling-kuaishou.test.js         # 快手轮询测试

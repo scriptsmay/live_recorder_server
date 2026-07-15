@@ -138,6 +138,8 @@
 | is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                                                                                                                                               |
 | hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                                                                                                                                             |
 | hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                                                                                                                                                 |
+| hls_status        | VARCHAR(20)   | NOT NULL DEFAULT 'pending'                     | HLS 生命周期状态，见下                                                                                                                                       |
+| hls_deleted_at    | TIMESTAMP     |                                                | HLS 因保留期或用户操作被删除的时间                                                                                                                           |
 | segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）                                                                                                                                         |
 | segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）                                                                                                                                         |
 | danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 兼容字段。分段级 ASS 文件以确定性路径 `{session.output_dir}/danmaku/segments/{recording_files.id}.ass` 为准，生成接口会回填该列以兼容历史流程，DROP 推迟执行 |
@@ -155,6 +157,20 @@
 扫描：    orphaned                        （磁盘有文件但无记录）
           missing                         （DB 有记录但磁盘无文件）
 ```
+
+**HLS 状态流转：**
+
+```text
+pending -> generating -> ready -> deleting -> expired
+                         |                   -> deleted
+                         -> missing
+generating -> failed
+expired / deleted / missing / failed -> generating  （仅手动重新生成）
+```
+
+`is_hls_ready` 是兼容字段，仅当 `hls_status = 'ready'` 时为 `TRUE`。看门狗只自动生成
+`pending` HLS；`expired`、`deleted`、`missing` 和 `failed` 不会因播放列表不存在而自动重建。
+清理候选使用索引 `idx_recording_files_hls_cleanup (hls_status, hls_generated_at)`。
 
 **写入时机：**
 
@@ -552,6 +568,8 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 | result                 | VARCHAR(20)   |               | 操作结果（如 `success`、`failed`） |
 | estimated_release_size | BIGINT        |               | 预估释放空间                       |
 | actual_release_size    | BIGINT        |               | 实际释放空间                       |
+| delete_reason          | VARCHAR(20)   |               | HLS 删除原因：`user` / `retention` |
+| recording_file_id      | INTEGER       |               | HLS 对应的 `recording_files.id`    |
 | error_message          | TEXT          |               | 失败时的错误信息                   |
 | created_at             | TIMESTAMP     | DEFAULT NOW() | 创建时间                           |
 

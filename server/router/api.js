@@ -16,6 +16,7 @@ const replayProcessQueue = require('../lib/core/ReplayProcessQueue');
 const pollingManager = require('../lib/core/polling/PollingManager');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
+const hlsCleanupService = require('../services/HLSCleanupService');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../../package.json');
@@ -384,7 +385,8 @@ router.delete('/recordings/:id', async (req, res) => {
 
     // 先查询记录，获取文件路径信息
     const fileResult = await pool.query(
-      `SELECT id, file_path, is_hls_ready, hls_playlist_path FROM recording_files WHERE id = $1`,
+      `SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_status
+       FROM recording_files WHERE id = $1`,
       [id]
     );
 
@@ -411,16 +413,15 @@ router.delete('/recordings/:id', async (req, res) => {
       }
 
       // 删除 HLS 目录
-      if (file.is_hls_ready && file.hls_playlist_path) {
-        try {
-          const hlsDir = path.dirname(file.hls_playlist_path);
-          if (fs.existsSync(hlsDir)) {
-            fs.rmSync(hlsDir, { recursive: true, force: true });
-            deletedPaths.push(hlsDir);
-          }
-        } catch (err) {
-          console.warn(`[api] 删除 HLS 目录失败: ${file.hls_playlist_path}`, err.message);
+      if (file.hls_status === 'ready' && file.hls_playlist_path) {
+        const hlsResult = await hlsCleanupService.deleteForRecording(id, 'user', 'recording-api');
+        if (!['success', 'success_noop'].includes(hlsResult.result)) {
+          return res.status(500).json({
+            status: 'Error',
+            message: `HLS 删除失败: ${hlsResult.error || hlsResult.result}`,
+          });
         }
+        deletedPaths.push(path.dirname(file.hls_playlist_path));
       }
 
       console.log(`[api] 已删除本地文件: ${deletedPaths.join(', ') || '(无)'}`);
@@ -517,7 +518,8 @@ router.get('/recordings/:id/hls', async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      'SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at FROM recording_files WHERE id = $1',
+      `SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at, hls_status
+       FROM recording_files WHERE id = $1`,
       [id]
     );
     const recording = result.rows[0];
@@ -538,6 +540,7 @@ router.get('/recordings/:id/hls', async (req, res) => {
             playlist_path: recording.hls_playlist_path,
             relative_path: relativePath,
             generated_at: recording.hls_generated_at,
+            hls_status: recording.hls_status,
             type: 'recording_file',
           },
         });
@@ -548,6 +551,7 @@ router.get('/recordings/:id/hls', async (req, res) => {
       status: 'ok',
       data: {
         is_ready: false,
+        hls_status: recording.hls_status,
         source_file: recording.file_path,
         type: 'recording_file',
       },
@@ -577,7 +581,7 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
     }
 
     console.log(`[api] 开始生成 HLS: recording_id=${id}`);
-    const genResult = await hlsGenerator.generateForRecording(id, 'recording_file');
+    const genResult = await hlsGenerator.generateForRecording(id, { manual: true });
 
     if (genResult.success) {
       res.json({
@@ -585,6 +589,7 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
         data: {
           playlist_path: genResult.playlistPath,
           already_exists: genResult.alreadyExists || false,
+          hls_status: 'ready',
         },
       });
     } else {

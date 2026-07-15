@@ -9,6 +9,7 @@ const replayProcessQueue = require('./ReplayProcessQueue');
 const { ensureAdminCredentials } = require('./auth-init');
 const { getAccessLogStream, getServerLogStream } = require('./logger');
 const LogCleanupService = require('../../services/LogCleanupService');
+const hlsCleanupService = require('../../services/HLSCleanupService');
 
 const logCleanupService = new LogCleanupService();
 
@@ -29,6 +30,7 @@ async function bootstrap(app, port) {
     await replayProcessQueue.init();
     watchdog.start();
     fileCleanupScheduler.start();
+    hlsCleanupService.start();
 
     app.listen(port, () => {
       console.log(`K-Recorder 已启动，端口 ${port}`);
@@ -48,7 +50,9 @@ async function gracefulShutdown(signal) {
 
   try {
     await pollingManager.stop();
+    watchdog.stop();
     fileCleanupScheduler.stop();
+    hlsCleanupService.stop();
     logCleanupService.stop();
 
     const serverLogStream = getServerLogStream();

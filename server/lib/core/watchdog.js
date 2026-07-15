@@ -547,18 +547,27 @@ async function checkSessionHLS() {
     // console.log('[看门狗][HLS] 开始检查待生成 HLS 的文件');
 
     const { rows: recordings } = await pool.query(
-      `SELECT rf.id, rf.file_path, rf.is_hls_ready, rf.hls_playlist_path
+      `SELECT rf.id, rf.file_path, rf.is_hls_ready, rf.hls_playlist_path, rf.hls_status
        FROM recording_files rf
        LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
        WHERE rf.status = 'completed' AND rf.file_path IS NOT NULL
+         AND rf.hls_status IN ('pending', 'ready')
          AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
 
     for (const recording of recordings) {
-      if (recording.is_hls_ready && recording.hls_playlist_path) {
+      if (recording.hls_status === 'ready') {
         if (fs.existsSync(recording.hls_playlist_path)) {
           continue;
         }
+        await pool.query(
+          `UPDATE recording_files
+           SET hls_status = 'missing', is_hls_ready = FALSE
+           WHERE id = $1 AND hls_status = 'ready'`,
+          [recording.id]
+        );
+        console.warn(`[看门狗][HLS] 播放列表缺失，已标记 missing: recording_id=${recording.id}`);
+        continue;
       }
 
       if (!fs.existsSync(recording.file_path)) {
@@ -753,5 +762,6 @@ module.exports = {
   cleanupFragmentFiles,
   syncMissingFiles,
   finalizeInterruptedSessions,
+  checkSessionHLS,
   backfillSegmentTimes,
 };

@@ -31,6 +31,9 @@ describe('DataService.getSessions', () => {
       })
       .mockResolvedValueOnce({
         rows: [{ count: '1' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
       });
 
     const { rows, total } = await DataService.getSessions({ page: 1, limit: 50 });

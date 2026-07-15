@@ -275,10 +275,32 @@ async function runMigration() {
         is_hls_ready BOOLEAN DEFAULT FALSE,
         hls_playlist_path VARCHAR(1024) DEFAULT '',
         hls_generated_at TIMESTAMP,
+        hls_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        hls_deleted_at TIMESTAMP,
         segment_start_ms INTEGER DEFAULT 0,
         segment_end_ms INTEGER DEFAULT 0,
         danmaku_ass_path VARCHAR(1024) DEFAULT ''
       )
+    `);
+
+    // HLS 生命周期字段：先以 nullable 方式添加，确保历史 ready 记录能正确回填。
+    await client.query(`ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_status VARCHAR(20)`);
+    await client.query(`ALTER TABLE recording_files ADD COLUMN IF NOT EXISTS hls_deleted_at TIMESTAMP`);
+    await client.query(`
+      UPDATE recording_files
+      SET hls_status = CASE
+        WHEN is_hls_ready = TRUE
+          AND hls_playlist_path IS NOT NULL
+          AND hls_playlist_path != '' THEN 'ready'
+        ELSE 'pending'
+      END
+      WHERE hls_status IS NULL
+    `);
+    await client.query(`ALTER TABLE recording_files ALTER COLUMN hls_status SET DEFAULT 'pending'`);
+    await client.query(`ALTER TABLE recording_files ALTER COLUMN hls_status SET NOT NULL`);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_recording_files_hls_cleanup
+        ON recording_files(hls_status, hls_generated_at)
     `);
     // recordings 表已废弃，数据已迁移至 recording_files，清理残留
     await client.query(`DROP TABLE IF EXISTS recordings`);
@@ -568,9 +590,16 @@ async function runMigration() {
         result VARCHAR(20),
         estimated_release_size BIGINT,
         actual_release_size BIGINT,
+        delete_reason VARCHAR(20),
+        recording_file_id INTEGER,
         error_message TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE file_delete_audit_logs
+        ADD COLUMN IF NOT EXISTS delete_reason VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS recording_file_id INTEGER
     `);
 
     await client.query(`

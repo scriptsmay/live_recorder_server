@@ -208,9 +208,9 @@ curl http://127.0.0.1:1123/api/health
 
 **参数（Query）：**
 
-| 参数 | 类型    | 必填 | 说明                                 |
-| ---- | ------- | ---- | ------------------------------------ |
-| file | string  | 是   | 日志文件名，仅允许 `logs/` 下 `.log` |
+| 参数 | 类型    | 必填 | 说明                                                                         |
+| ---- | ------- | ---- | ---------------------------------------------------------------------------- |
+| file | string  | 是   | 日志文件名，仅允许 `logs/` 下 `.log`                                         |
 | tail | integer | 否   | 初始推送最后 N 行，默认 100；`0` 表示只返回当前 offset，后续仅推送新增完整行 |
 
 **事件：**
@@ -484,13 +484,13 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 **参数（Query）：**
 
-| 参数     | 类型    | 必填 | 说明                                                                 |
-| -------- | ------- | ---- | -------------------------------------------------------------------- |
-| page     | integer | 否   | 页码，默认 1                                                         |
-| limit    | integer | 否   | 每页条数，默认 20                                                    |
-| room_url | string  | 否   | 按房间 URL 筛选                                                      |
-| room_id  | integer | 否   | 按房间 ID 筛选                                                       |
-| status   | string  | 否   | 按状态筛选：`recording` / `completed` / `interrupted`               |
+| 参数     | 类型    | 必填 | 说明                                                  |
+| -------- | ------- | ---- | ----------------------------------------------------- |
+| page     | integer | 否   | 页码，默认 1                                          |
+| limit    | integer | 否   | 每页条数，默认 20                                     |
+| room_url | string  | 否   | 按房间 URL 筛选                                       |
+| room_id  | integer | 否   | 按房间 ID 筛选                                        |
+| status   | string  | 否   | 按状态筛选：`recording` / `completed` / `interrupted` |
 
 **响应结构：**
 
@@ -510,9 +510,7 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
         "total_size": 524288000,
         "danmaku_status": "completed",
         "danmaku_event_count": 1200,
-        "upload_records": [
-          { "id": 1, "session_id": 25, "status": "success", "bv_id": "BV1xx" }
-        ]
+        "upload_records": [{ "id": 1, "session_id": 25, "status": "success", "bv_id": "BV1xx" }]
       }
     ],
     "total": 150
@@ -522,12 +520,12 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 **`upload_records` 字段说明：**
 
-| 字段        | 类型          | 说明                       |
-| ----------- | ------------- | -------------------------- |
-| id          | integer       | 投稿记录 ID                |
-| session_id  | integer       | 关联的录制会话 ID          |
-| status      | string        | 投稿状态：success/failed 等 |
-| bv_id       | string \| null | Bilibili BV 号             |
+| 字段       | 类型           | 说明                        |
+| ---------- | -------------- | --------------------------- |
+| id         | integer        | 投稿记录 ID                 |
+| session_id | integer        | 关联的录制会话 ID           |
+| status     | string         | 投稿状态：success/failed 等 |
+| bv_id      | string \| null | Bilibili BV 号              |
 
 **示例：**
 
@@ -607,7 +605,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 **删除本地文件时的行为：**
 
 1. 删除 `file_path` 对应的主文件（.ts/.flv/.mp4 等）
-2. 若 `is_hls_ready` 为 true，删除 `hls_playlist_path` 所在目录（含所有分片）
+2. 若 `hls_status` 为 `ready`，通过统一 HLS 删除服务删除播放列表目录并同步索引与审计
 
 **示例：**
 
@@ -649,7 +647,8 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
     "playlist_path": "/data/videos/room1/hls_filename/playlist.m3u8",
     "relative_path": "room1/hls_filename/playlist.m3u8",
     "generated_at": "2026-05-25T12:00:00.000Z",
-    "type": "recording"
+    "hls_status": "ready",
+    "type": "recording_file"
   }
 }
 ```
@@ -661,8 +660,9 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
   "status": "ok",
   "data": {
     "is_ready": false,
+    "hls_status": "expired",
     "source_file": "/data/videos/room1/file.mp4",
-    "type": "recording"
+    "type": "recording_file"
   }
 }
 ```
@@ -671,7 +671,8 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
 
 ### POST /api/recordings/:id/generate-hls
 
-手动触发生成 HLS 播放文件。
+手动触发生成 HLS 播放文件。允许从 `pending`、`expired`、`deleted`、`missing`、
+`failed` 状态生成；成功后状态恢复为 `ready`，并重新激活对应文件管理索引。
 数据源：`recording_files` 表
 
 **返回（成功）：**
@@ -681,7 +682,8 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
   "status": "ok",
   "data": {
     "playlist_path": "/data/videos/room1/hls_filename/playlist.m3u8",
-    "already_exists": false
+    "already_exists": false,
+    "hls_status": "ready"
   }
 }
 ```
@@ -846,7 +848,7 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 | `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件                |
 | `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                        |
 | `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                           |
-| `hls_cleanup_days`           | number | `30`     | HLS 文件自动清理天数，超过此时长自动删除                     |
+| `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理           |
 | `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                             |
 
 ---
@@ -1006,7 +1008,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | ------ | ------- | ---- | ------------------------------------------------------------ |
 | status | string  | 否   | 按状态筛选：`queued` / `processing` / `completed` / `failed` |
 | limit  | integer | 否   | 返回记录数量，默认 100                                       |
-| page   | integer | 否   | 页码，默认 1。传 `page` 时启用分页（LIMIT + OFFSET）        |
+| page   | integer | 否   | 页码，默认 1。传 `page` 时启用分页（LIMIT + OFFSET）         |
 
 **返回字段说明：**
 
@@ -1256,10 +1258,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **参数（Query）：**
 
-| 参数       | 类型    | 必填 | 说明                   |
-| ---------- | ------- | ---- | ---------------------- |
-| page       | integer | 否   | 页码，默认 1           |
-| page_size  | integer | 否   | 每页条数，默认 20，上限 100 |
+| 参数      | 类型    | 必填 | 说明                        |
+| --------- | ------- | ---- | --------------------------- |
+| page      | integer | 否   | 页码，默认 1                |
+| page_size | integer | 否   | 每页条数，默认 20，上限 100 |
 
 **响应结构：**
 
@@ -1275,14 +1277,14 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **`data` 字段说明：**
 
-| 字段               | 类型          | 说明                       |
-| ------------------ | ------------- | -------------------------- |
-| id                 | integer       | 投稿记录 ID                |
-| replay_record_id   | integer       | 关联的回放记录 ID          |
-| status             | string        | 投稿状态                   |
-| bv_id              | string \| null | Bilibili BV 号             |
-| title              | string        | 投稿标题                   |
-| created_at         | datetime      | 创建时间                   |
+| 字段             | 类型           | 说明              |
+| ---------------- | -------------- | ----------------- |
+| id               | integer        | 投稿记录 ID       |
+| replay_record_id | integer        | 关联的回放记录 ID |
+| status           | string         | 投稿状态          |
+| bv_id            | string \| null | Bilibili BV 号    |
+| title            | string         | 投稿标题          |
+| created_at       | datetime       | 创建时间          |
 
 **示例：**
 
@@ -1303,6 +1305,10 @@ curl http://127.0.0.1:1123/api/replay/principals/kuaishou_123/uploads?page=1&pag
 ## 文件管理
 
 > 文件管理模块提供磁盘文件的安全删除能力。核心流程：查询文件列表 → 生成删除计划（dry-run）→ 确认执行异步删除 → 轮询任务进度。删除操作需要 `confirm: true` 二次确认，并通过审计日志记录所有操作。
+
+每个 `recording_files` HLS 目录对应一条 `managed_files` 记录，`source_id` 为精确的录制文件
+ID，`group_id` 为会话 ID。HLS 目录大小递归汇总目录内文件，不包含目录项自身大小。手动删除
+与保留期删除共用相同的路径校验、生命周期变更和审计逻辑。
 
 ### GET /api/files/summary
 
