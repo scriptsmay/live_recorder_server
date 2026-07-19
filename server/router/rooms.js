@@ -6,6 +6,7 @@ const RoomService = require('../services/RoomService');
 const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
 const { detectPlatform } = require('../lib/utils/platform-detector');
+const { normalizeRoomUrl } = require('../lib/utils/room-url');
 
 router.get('/rooms', async (req, res) => {
   try {
@@ -39,6 +40,8 @@ router.post('/rooms', async (req, res) => {
     if (!room_url) {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
+
+    room_url = normalizeRoomUrl(room_url);
 
     // 直接根据room_url自动检测平台
     const polling_platform = detectPlatform(room_url) || null;

@@ -13,6 +13,7 @@ const DataService = require('./DataService');
 const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const { SUPPORTED_EXT_REGEX } = require('../config/config');
+const { normalizeRoomUrl } = require('../lib/utils/room-url');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -519,15 +520,16 @@ class RecorderService {
    * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
    */
   static async startRecording({ url, title, caption, room_url, roomCover }) {
+    const normalizedRoomUrl = normalizeRoomUrl(room_url);
     console.log('[RecorderService] 收到录制请求:', {
       title,
-      room_url,
+      room_url: normalizedRoomUrl,
       url: url?.slice(0, 60),
       caption,
       roomCover: roomCover ? 'yes' : 'no',
     });
 
-    if (!url || !title || !room_url) {
+    if (!url || !title || !normalizedRoomUrl) {
       console.log('[RecorderService] 录制请求被拒: 缺少必填参数 (url/title/room_url)');
       return { error: true, status: 400, code: 400, message: '请提供直播流URL和标题。' };
     }
@@ -543,7 +545,7 @@ class RecorderService {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
 
-    const roomKey = room_url;
+    const roomKey = normalizedRoomUrl;
 
     if (await this.isActiveTask(roomKey)) {
       console.log('[RecorderService] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');

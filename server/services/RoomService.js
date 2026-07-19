@@ -4,13 +4,15 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const DataService = require('./DataService');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
+const { normalizeRoomUrl } = require('../lib/utils/room-url');
 
 class RoomService {
   static async getRoomByUrl(roomUrl) {
-    return DataService.getRoomByUrl(roomUrl);
+    return DataService.getRoomByUrl(normalizeRoomUrl(roomUrl));
   }
 
   static async upsertRoom(roomUrl, roomName) {
+    roomUrl = normalizeRoomUrl(roomUrl);
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
     if (exist.rows.length > 0) {
       const room = exist.rows[0];
