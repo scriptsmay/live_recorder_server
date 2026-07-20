@@ -87,33 +87,6 @@ npm run stop
 | LOGIN_RATE_LIMIT     | 同一 IP 每分钟允许的登录失败次数                                   | 5          |
 | LOGIN_LOCKOUT_MIN    | 达到失败次数上限后的锁定时长，单位分钟；锁定期间登录接口会直接拒绝 | 5          |
 
-### 快手轮询配置
-
-快手轮询 Checker 依赖远程 Browserless/Chromium，并通过平台级单并发和全局间隔降低风控概率。
-
-| 配置项                     | 说明                         | 默认值 |
-| -------------------------- | ---------------------------- | ------ |
-| REMOTE_BROWSER_WS_ENDPOINT | 远程 Chromium WebSocket 地址 | -      |
-| KUAISHOU_CHECKER_ENABLED   | 是否启用快手 Checker         | true   |
-| POLLING_KUAISHOU_COOKIE    | 快手初始 Cookie              | -      |
-
-Docker 从零部署时可叠加 `docker/docker-compose.browserless.yml` 一起启动 Browserless：
-
-```bash
-cd docker
-docker compose --env-file ../.env \
-  -f docker-compose.full.yml \
-  -f docker-compose.browserless.yml \
-  up -d --build
-```
-
-服务端使用 `chromium.connectOverCDP()`，因此 Browserless 地址应使用
-`/chromium` CDP endpoint，例如
-`ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN}`。
-
-快手轮询内部的超时、等待、backoff 和 UA 参数使用系统常量，不作为用户配置暴露。
-`POLLING_KUAISHOU_COOKIE` 作为快手直播轮询和回放工具箱共享的访问态 cookie。
-
 ### 回放工具箱配置
 
 回放工具箱复用快手轮询 cookie，并依赖远程浏览器提供 m3u8 提取 Playwright 兜底方案：
@@ -240,19 +213,15 @@ docker compose --env-file ../.env \
 FFmpeg 录制直播流                     Chrome 扩展采集弹幕
     ↓                                    ↓
 分段文件 (.ts)                        JSONL → danmaku/danmaku.jsonl
-    ↓                                    ↓
-转码队列 → MP4                       ASS 生成 → danmaku/danmaku.ass
-    ↓                                    ↓
-HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.ass
-                                         ↓
-                                     压制队列 → DANMAKU_OUTPUT_DIR/
-                                         ↓
-                                     弹幕视频 (.mp4) + 日志
+    ↓
+转码队列 → MP4
+    ↓
+HLS 生成 → 在线播放
 ```
 
-**目录隔离**：弹幕数据存放在 `会话目录/danmaku/` 子目录，压制产物输出到独立的 `DANMAKU_OUTPUT_DIR/`，与录制文件完全隔离。
+**目录隔离**：弹幕数据存放在 `会话目录/danmaku/` 子目录。
 
-**操作入口**：录制会话页面提供弹幕只读状态展示和搜索功能，压制功能已移除。
+**操作入口**：录制会话页面提供弹幕只读状态展示和搜索功能，压制功能已移除，如有需要参考下方的**关联项目**。
 
 ## 回放工具箱功能架构
 
@@ -280,7 +249,7 @@ HLS 生成 → 在线播放                   分段 ASS → danmaku/segments/*.
 
 **前端路由**：`/replay-toolbox`（主播列表）→ `/replay-toolbox/:principalId/{records,uploads,tasks,settings}`
 
-**状态机**：`pending → extracted → downloaded → cut → fixed → uploaded → completed`
+**状态机**：`pending → extracted → downloaded → cut → uploaded → completed`
 
 ## 测试
 
@@ -315,7 +284,7 @@ npm run lint && npm run format && npm test
 - **数据库**：PostgreSQL（pg 模块，启动时自动迁移）
 - **缓存**：Redis（瞬时状态 + 任务队列）
 - **下载引擎**：FFmpeg（TS 输出、分段录制）
-- **弹幕渲染**：FFmpeg ASS 滤镜
+- ~~**弹幕渲染**：FFmpeg ASS 滤镜~~（已移除）
 - **投稿**：biliup CLI
 - **测试**：Jest（v30，380+ 个用例，单元测试 + API 集成测试）
 
@@ -329,7 +298,8 @@ npm run lint && npm run format && npm test
 
 ## 关联项目
 
-- **Chrome 扩展**（弹幕采集 + 直播监听）：`../chrome_live_listener/`
+- **Chrome 扩展**（弹幕采集 + 直播状态监听）：[chrome_live_listener](https://github.com/scriptsmay/live_listener)
+- **弹幕压制工具**（支持windows独显硬件）： [danmaku-tool](https://github.com/scriptsmay/danmaku-tool)
 
 ## 文档
 
@@ -339,4 +309,4 @@ npm run lint && npm run format && npm test
 - [开发指南](docs/DEV.md)
 - [测试文档](docs/TEST.md)
 - [踩坑记录](docs/lessons.md)
-- [开发计划](docs/todo/TODO.md)
+- [TODO 开发计划](docs/todo/TODO.md)
