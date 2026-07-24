@@ -14,6 +14,7 @@
 - **回放工具箱**：快手直播回放全自动处理（同步 → 提取 m3u8 → 下载 → 切片 → 修复 → 投稿），Web 界面管理
 - **自动转码**：边下边转码（TS → MP4），转码队列 + 并发控制
 - **HLS 生成**：自动为转码后的 MP4 生成 HLS 分片，支持在线播放
+- **文件清理**：按保留期清理安全文件，并可独立回收录制与回放空目录
 - **直播轮询**：策略模式支持虎牙、B 站、抖音、快手等平台，检测到开播自动触发录制
 - **自动投稿**：录制完成自动调用 biliup 投稿到 Bilibili，支持模板化投稿
 - **看门狗**：自动扫描录制目录，跟踪文件状态，清理孤立文件
@@ -144,6 +145,7 @@ npm run stop
 │   ├── services/                   ← 业务服务层
 │   │   ├── DataService.js          ← 公共数据查询（rooms/sessions/settings/files）
 │   │   ├── FileManageService.js    ← 文件索引、删除计划与安全校验
+│   │   ├── EmptyDirectoryCleanupService.js ← 录制与回放空目录安全回收
 │   │   ├── HLSCleanupService.js    ← HLS 保留期调度与一致性删除
 │   │   ├── RecorderService.js      ← 录制服务（启动/停止/会话完成处理）
 │   │   ├── RoomService.js          ← 直播间管理（CRUD、暂停/恢复）

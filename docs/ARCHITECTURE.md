@@ -277,6 +277,15 @@ generating -> failed
 - 每个录制分段的 HLS 目录独立索引，`managed_files.source_id` 精确指向
   `recording_files.id`，同一会话可对应多条 HLS 记录。
 
+### 文件自动清理与空目录回收
+
+- `FileCleanupScheduler` 每日扫描文件索引并执行可安全删除文件的保留期规则。
+- `file_cleanup_empty_dirs_enabled` 是独立开关；开启后同一调度周期自底向上扫描
+  `VIDEO_DOWNLOAD_DIR` 和 `REPLAY_WORK_DIR`，只用非递归 `rmdir` 回收空目录，不会连带开启视频文件删除。
+- 清理服务保护录制中的会话、HLS 生命周期目录和非终态回放工作目录；符号链接、根目录、
+  非空目录和竞争写入目录均跳过。成功、跳过和失败结果写入 `file_delete_audit_logs`。
+- 文件管理删除单个文件成功后会尝试回收其父目录；回收失败不回滚文件删除。
+
 ### 分片追踪时序
 
 ```text

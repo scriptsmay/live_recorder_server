@@ -27,18 +27,6 @@ function extractPrincipalId(roomUrl) {
   }
 }
 
-function ensureReplayWorkDir(principalId) {
-  const baseDir = path.resolve(getReplayWorkDir());
-  const safePrincipal = sanitizeFilename(String(principalId || 'unknown')) || 'unknown';
-  const principalDir = path.join(baseDir, safePrincipal);
-  const resolved = path.resolve(principalDir);
-  if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
-    throw new Error('非法回放工作目录');
-  }
-  fs.mkdirSync(resolved, { recursive: true });
-  return resolved;
-}
-
 class ReplayService {
   static extractPrincipalId(roomUrl) {
     return extractPrincipalId(roomUrl);
@@ -329,11 +317,20 @@ class ReplayService {
   }
 
   static getRecordWorkDir(record) {
-    const principalDir = ensureReplayWorkDir(record.principal_id);
-    const safeReplay = sanitizeFilename(record.replay_id || String(record.id || 'record')) || String(record.id);
-    const recordDir = path.join(principalDir, safeReplay);
+    const recordDir = this.resolveRecordWorkDir(record);
     fs.mkdirSync(recordDir, { recursive: true });
     return recordDir;
+  }
+
+  static resolveRecordWorkDir(record) {
+    const baseDir = path.resolve(getReplayWorkDir());
+    const safePrincipal = sanitizeFilename(String(record.principal_id || 'unknown')) || 'unknown';
+    const principalDir = path.join(baseDir, safePrincipal);
+    const safeReplay = sanitizeFilename(record.replay_id || String(record.id || 'record')) || String(record.id);
+    const recordDir = path.join(principalDir, safeReplay);
+    const resolved = path.resolve(recordDir);
+    if (!resolved.startsWith(baseDir + path.sep)) throw new Error('非法回放记录目录');
+    return resolved;
   }
 }
 

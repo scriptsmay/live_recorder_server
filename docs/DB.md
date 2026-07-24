@@ -300,6 +300,7 @@ KV 结构的全局配置表。
 | `replay_auto_upload`              | `false`            | 回放处理完成后是否自动投稿                                                  |
 | `replay_max_count_per_run`        | `1`                | 单次主播回放批处理默认数量                                                  |
 | `file_cleanup_enabled`            | `false`            | 是否启用文件自动清理                                                        |
+| `file_cleanup_empty_dirs_enabled` | `false`           | 是否启用录制和回放目录空目录自动清理                                        |
 | `file_cleanup_retention_days`     | `30`               | 文件清理保留天数                                                            |
 | `file_cleanup_categories`         | ``                 | 清理的文件类别，逗号分隔                                                    |
 | `file_cleanup_watermark_warn`     | `80`               | 磁盘空间告警阈值（%）                                                       |
