@@ -1,4 +1,5 @@
 const FileManageService = require('../../services/FileManageService');
+const emptyDirectoryCleanupService = require('../../services/EmptyDirectoryCleanupService');
 const DataService = require('../../services/DataService');
 const { send } = require('./notify');
 
@@ -94,10 +95,43 @@ async function runCleanupCheck() {
       await runAutoCleanup();
     }
 
-    // 4. 清理建议通知
+    // 4. 空目录清理独立于大文件自动清理开关
+    const emptyDirsEnabled = await DataService.getSetting('file_cleanup_empty_dirs_enabled', 'false');
+    if (emptyDirsEnabled === 'true') {
+      await runEmptyDirectoryCleanup();
+    }
+
+    // 5. 清理建议通知
     await sendCleanupSuggestion();
   } catch (err) {
     console.error('[文件管理定时] 执行失败:', err.message);
+  }
+}
+
+/**
+ * 自动回收录制和回放根目录下的空目录。
+ * 独立于 file_cleanup_enabled，避免用户为清理空目录而开启大文件删除。
+ */
+async function runEmptyDirectoryCleanup() {
+  try {
+    const result = await emptyDirectoryCleanupService.cleanup({
+      categories: ['recording', 'replay'],
+      operator: 'auto-scheduler',
+    });
+    if (result.deleted > 0 || result.failed > 0) {
+      const msg =
+        `📁 空目录清理完成: 回收 ${result.deleted} 个, ` +
+        `跳过 ${result.skipped} 个, 失败 ${result.failed} 个`;
+      await send('file_cleanup_empty_directories', '文件管理 - 空目录清理', msg);
+      console.log(`[空目录清理] ${msg}`);
+    } else {
+      console.log(`[空目录清理] 无可回收目录，扫描 ${result.scanned} 个目录`);
+    }
+    return result;
+  } catch (err) {
+    console.error('[空目录清理] 失败:', err.message);
+    await send('file_cleanup_empty_directories_failed', '文件管理 - 空目录清理失败', err.message);
+    return { deleted: 0, skipped: 0, failed: 1, error: err.message };
   }
 }
 
@@ -231,4 +265,4 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, runCleanupCheck, checkDiskWatermark };
+module.exports = { start, stop, runCleanupCheck, runEmptyDirectoryCleanup, checkDiskWatermark };

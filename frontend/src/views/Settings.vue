@@ -234,6 +234,13 @@ const settingGroups: SettingGroup[] = [
         options: ['false', 'true'],
       },
       {
+        key: 'file_cleanup_empty_dirs_enabled',
+        label: '自动清理空目录',
+        desc: '启用后每日回收录制和回放目录中的空目录，不删除视频文件',
+        type: 'select',
+        options: ['false', 'true'],
+      },
+      {
         key: 'file_cleanup_retention_days',
         label: '保留天数',
         desc: '超过此天数且可安全删除的文件将被自动清理',

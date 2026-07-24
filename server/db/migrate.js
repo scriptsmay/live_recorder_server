@@ -437,6 +437,7 @@ async function runMigration() {
       ['replay_auto_upload', 'false'],
       ['replay_max_count_per_run', '1'],
       ['file_cleanup_enabled', 'false'],
+      ['file_cleanup_empty_dirs_enabled', 'false'],
       ['file_cleanup_retention_days', '30'],
       ['file_cleanup_categories', ''],
       ['file_cleanup_watermark_warn', '80'],

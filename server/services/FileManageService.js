@@ -5,6 +5,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const { resolveAndValidate } = require('../lib/utils/path-safety');
 const { getDirectoryStats } = require('../lib/utils/directory-stats');
+const emptyDirectoryCleanupService = require('./EmptyDirectoryCleanupService');
 
 const DELETE_PLAN_TTL = 600; // 10 分钟
 const EVENT_LOOP_YIELD_INTERVAL = 10;
@@ -765,6 +766,11 @@ class FileManageService {
     if (file_type === 'hls_directory' && source_table === 'recording_files' && source_id) {
       const hlsCleanupService = require('./HLSCleanupService');
       const hlsResult = await hlsCleanupService.deleteForRecording(source_id, 'user', operator);
+      if (hlsResult.result === 'success' || hlsResult.result === 'success_noop') {
+        await emptyDirectoryCleanupService.pruneParents(file_path, { category, operator }).catch((err) => {
+          console.warn(`[FileManage] HLS 父目录回收失败: ${err.message}`);
+        });
+      }
       return {
         ...result,
         ...hlsResult,
@@ -907,6 +913,12 @@ class FileManageService {
         result.error = err.message;
       } finally {
         client.release();
+      }
+
+      if (result.result === 'success' || result.result === 'success_noop') {
+        await emptyDirectoryCleanupService.pruneParents(file_path, { category, operator }).catch((err) => {
+          console.warn(`[FileManage] 父目录回收失败 file_id=${file_id}: ${err.message}`);
+        });
       }
     } catch (err) {
       result.result = 'failed';

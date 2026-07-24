@@ -8,17 +8,28 @@ jest.mock('../server/services/FileManageService', () => ({
 jest.mock('../server/services/DataService', () => ({
   getSetting: jest.fn(),
 }));
+jest.mock('../server/services/EmptyDirectoryCleanupService', () => ({
+  cleanup: jest.fn(),
+}));
 jest.mock('../server/lib/core/notify', () => ({
   send: jest.fn(),
 }));
 
 const FileManageService = require('../server/services/FileManageService');
 const DataService = require('../server/services/DataService');
+const emptyDirectoryCleanupService = require('../server/services/EmptyDirectoryCleanupService');
 const { send } = require('../server/lib/core/notify');
 const { runCleanupCheck, checkDiskWatermark } = require('../server/lib/core/FileCleanupScheduler');
 
 beforeEach(() => {
   jest.clearAllMocks();
+  emptyDirectoryCleanupService.cleanup.mockResolvedValue({
+    scanned: 0,
+    candidates: 0,
+    deleted: 0,
+    skipped: 0,
+    failed: 0,
+  });
 });
 
 describe('runCleanupCheck', () => {
@@ -54,6 +65,7 @@ describe('runCleanupCheck', () => {
       .mockResolvedValueOnce('80') // watermark_warn
       .mockResolvedValueOnce('90') // watermark_critical
       .mockResolvedValueOnce('false') // file_cleanup_enabled
+      .mockResolvedValueOnce('false') // file_cleanup_empty_dirs_enabled
       .mockResolvedValueOnce('true'); // file_cleanup_suggestion_notify
     FileManageService.getFileSummary.mockResolvedValue({
       total_size: 10000,
@@ -149,6 +161,42 @@ describe('runCleanupCheck', () => {
     await runCleanupCheck();
 
     expect(send).toHaveBeenCalledWith('disk_watermark', '磁盘空间告警', expect.stringContaining('紧急'));
+
+    childProcess.execSync = origExecSync;
+  });
+
+  test('空目录清理开关独立于文件自动清理', async () => {
+    FileManageService.scanAllFiles.mockResolvedValue({ scanned: 0, created: 0, updated: 0, missing: 0 });
+    DataService.getSetting
+      .mockResolvedValueOnce('80')
+      .mockResolvedValueOnce('90')
+      .mockResolvedValueOnce('false') // file_cleanup_enabled
+      .mockResolvedValueOnce('true') // file_cleanup_empty_dirs_enabled
+      .mockResolvedValueOnce('false'); // file_cleanup_suggestion_notify
+    emptyDirectoryCleanupService.cleanup.mockResolvedValue({
+      scanned: 41,
+      candidates: 36,
+      deleted: 36,
+      skipped: 0,
+      failed: 0,
+    });
+
+    const childProcess = require('child_process');
+    const origExecSync = childProcess.execSync;
+    childProcess.execSync = jest.fn().mockReturnValue('/dev/sda1  100G  50G  50G  50% /data\n');
+
+    await runCleanupCheck();
+
+    expect(FileManageService.generateDeletePlan).not.toHaveBeenCalled();
+    expect(emptyDirectoryCleanupService.cleanup).toHaveBeenCalledWith({
+      categories: ['recording', 'replay'],
+      operator: 'auto-scheduler',
+    });
+    expect(send).toHaveBeenCalledWith(
+      'file_cleanup_empty_directories',
+      '文件管理 - 空目录清理',
+      expect.stringContaining('回收 36 个')
+    );
 
     childProcess.execSync = origExecSync;
   });

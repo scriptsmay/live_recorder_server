@@ -18,6 +18,9 @@ jest.mock('../server/lib/utils/directory-stats', () => ({
 jest.mock('../server/services/HLSCleanupService', () => ({
   deleteForRecording: jest.fn(),
 }));
+jest.mock('../server/services/EmptyDirectoryCleanupService', () => ({
+  pruneParents: jest.fn().mockResolvedValue({ deleted: 0, skipped: 0, failed: 0 }),
+}));
 
 const fs = require('fs');
 const pool = require('../server/db/index');
@@ -25,6 +28,7 @@ const redis = require('../server/db/redis');
 const { resolveAndValidate } = require('../server/lib/utils/path-safety');
 const { getDirectoryStats } = require('../server/lib/utils/directory-stats');
 const hlsCleanupService = require('../server/services/HLSCleanupService');
+const emptyDirectoryCleanupService = require('../server/services/EmptyDirectoryCleanupService');
 const FileManageService = require('../server/services/FileManageService');
 
 // helper：构造 managed_files 行
@@ -81,6 +85,7 @@ beforeEach(() => {
   resolveAndValidate.mockResolvedValue({ valid: true, resolvedPath: '/data/video_downloads/room1/session1/video.mp4' });
   getDirectoryStats.mockReset();
   hlsCleanupService.deleteForRecording.mockReset();
+  emptyDirectoryCleanupService.pruneParents.mockClear();
 });
 
 // ========== getFileList ==========
@@ -792,6 +797,10 @@ describe('_deleteSingleFile', () => {
     );
     expect(rfUpdate).toBeDefined();
     expect(rfUpdate.params).toEqual([100]);
+    expect(emptyDirectoryCleanupService.pruneParents).toHaveBeenCalledWith(file.file_path, {
+      category: 'recording',
+      operator: 'user',
+    });
 
     FileManageService.validateFileSafety.mockRestore();
   });
