@@ -192,8 +192,8 @@ class FileManageService {
           stats.mtime,
           existsOnDisk,
           existsOnDisk ? 'active' : 'missing',
-          existsOnDisk,
-          existsOnDisk ? null : 'file_not_found',
+          true,
+          null,
         ]);
         results.created++;
       } catch (err) {

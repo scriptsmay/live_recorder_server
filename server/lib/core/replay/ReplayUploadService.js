@@ -4,6 +4,7 @@ const pool = require('../../../db/index');
 const notify = require('../notify');
 const biliup = require('../biliup');
 const UploadService = require('../../../services/UploadService');
+const { afterUpload } = require('../backup');
 
 function formatDuration(seconds) {
   const total = parseInt(seconds, 10) || 0;
@@ -49,6 +50,37 @@ function parseFileList(record) {
     } catch (_) {}
   }
   return [record.raw_file_path].filter(Boolean);
+}
+
+/**
+ * 收集回放记录的所有关联文件（raw + cut + fixed + final），用于投稿后清理
+ */
+function collectAllReplayFiles(record) {
+  const seen = new Set();
+  const allFiles = [];
+
+  const add = (list) => {
+    for (const fp of list) {
+      const resolved = path.resolve(fp);
+      if (!seen.has(resolved)) {
+        seen.add(resolved);
+        allFiles.push(resolved);
+      }
+    }
+  };
+
+  // raw 文件
+  if (record.raw_file_path) add([record.raw_file_path]);
+
+  // 各阶段产物
+  for (const field of ['cut_file_paths', 'fixed_file_paths', 'final_file_paths']) {
+    try {
+      const parsed = JSON.parse(record[field] || '[]');
+      if (Array.isArray(parsed)) add(parsed);
+    } catch (_) {}
+  }
+
+  return allFiles;
 }
 
 async function getReplayRecordForUpload(replayRecordId) {
@@ -261,6 +293,53 @@ class ReplayUploadService {
 
         const displayName = resolveDisplayName(record);
         notify.uploadComplete(displayName, title, result.bvId, record.play_url);
+
+        // 投稿后处理：备份/删除（含所有中间产物文件）
+        if (tmpl.after_upload && tmpl.after_upload !== 'none') {
+          const allFiles = collectAllReplayFiles(record);
+          const sessionId = `replay_${record.id}`;
+          try {
+            const postResult = await afterUpload(
+              tmpl.after_upload,
+              allFiles,
+              sessionId,
+              tmpl.name,
+              uploadRecordId,
+              displayName,
+              record.play_url
+            );
+            // 如果确实执行了删除（backup_and_delete 可能因备份失败而跳过删除），
+            // 清空 replay_records 的文件路径引用并同步 managed_files
+            if (
+              postResult &&
+              postResult.status !== 'failed' &&
+              (tmpl.after_upload === 'delete' || tmpl.after_upload === 'backup_and_delete')
+            ) {
+              await pool.query(
+                `UPDATE replay_records
+                 SET raw_file_path = NULL,
+                     cut_file_paths = NULL,
+                     fixed_file_paths = NULL,
+                     final_file_paths = NULL,
+                     updated_at = NOW()
+                 WHERE id = $1`,
+                [record.id]
+              );
+              // 同步更新 managed_files 状态为 deleted
+              await pool.query(
+                `UPDATE managed_files
+                 SET status = 'deleted', exists_on_disk = false, deleted_at = NOW(), updated_at = NOW()
+                 WHERE source_table = 'replay_records' AND source_id = $1
+                   AND status NOT IN ('deleted', 'deleting')`,
+                [record.id]
+              );
+            }
+          } catch (postErr) {
+            console.error(
+              `[回放投稿] 投稿后处理失败 replay_record_id=${record.id}: ${postErr.message}`
+            );
+          }
+        }
       } else {
         await pool.query(
           `UPDATE replay_upload_records
