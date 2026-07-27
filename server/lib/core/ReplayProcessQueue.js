@@ -3,7 +3,6 @@ const pool = require('../../db/index');
 const ReplayService = require('../../services/ReplayService');
 const ReplayUploadService = require('./replay/ReplayUploadService');
 const videoProcessor = require('./replay/video-processor');
-const cleanup = require('./replay/cleanup');
 const notify = require('./notify');
 const fs = require('fs');
 const { createProcLog, writeLog } = require('../utils/proc-log');
@@ -318,7 +317,6 @@ class ReplayProcessQueue {
           final_file_paths: result.cutFilePaths,
           error_message: '',
         });
-        if (current.raw_file_path) cleanup.removeFiles([current.raw_file_path]).catch(() => {});
         writeLog(logStream, `步骤完成: cut files=${JSON.stringify(result.cutFilePaths)}`);
         this.notifyPipelineComplete(current, 'cut', { status: 'cut', cut_file_paths: result.cutFilePaths }, logStream);
       } else if (step === 'fix') {
@@ -328,14 +326,12 @@ class ReplayProcessQueue {
         );
         this.throwIfCancelled(runtime);
         if (!result.success) throw new Error(result.error);
-        const previous = safeParseJson(current.cut_file_paths, []);
         current = await ReplayService.updateRecordStatus(current.id, 'fixed', {
           fixed_file_paths: result.fixedFilePaths,
           // 如果修复成功，则最终文件就是修复后的文件
           final_file_paths: result.finalFilePaths,
           error_message: '',
         });
-        cleanup.removeFiles(previous).catch(() => {});
         writeLog(logStream, `步骤完成: fix files=${JSON.stringify(result.finalFilePaths)}`);
         this.notifyPipelineComplete(
           current,

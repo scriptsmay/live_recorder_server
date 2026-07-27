@@ -19,7 +19,6 @@ const pool = require('../server/db/index');
 const ReplayService = require('../server/services/ReplayService');
 const KuaishouReplayClient = require('../server/lib/core/replay/KuaishouReplayClient');
 const videoProcessor = require('../server/lib/core/replay/video-processor');
-const cleanup = require('../server/lib/core/replay/cleanup');
 const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
 const notify = require('../server/lib/core/notify');
 
@@ -300,16 +299,13 @@ async function runPipeline(record, actions, options = {}) {
         cut_file_paths: result.cutFilePaths,
         final_file_paths: result.cutFilePaths,
       });
-      if (current.raw_file_path) cleanup.removeFiles([current.raw_file_path]).catch(() => {});
     } else if (step === 'fix') {
       const result = await videoProcessor.fix(current, { force });
       if (!result.success) throw new Error(result.error);
-      const previous = safeParseJson(current.cut_file_paths, []);
       current = await ReplayService.updateRecordStatus(current.id, 'fixed', {
         fixed_file_paths: result.fixedFilePaths,
         final_file_paths: result.finalFilePaths,
       });
-      cleanup.removeFiles(previous).catch(() => {});
     } else if (step === 'upload') {
       const result = await ReplayUploadService.executeUpload(current.id);
       if (result.error) throw new Error(result.message);

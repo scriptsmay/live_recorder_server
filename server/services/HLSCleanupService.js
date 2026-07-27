@@ -47,6 +47,14 @@ class HLSCleanupService {
       );
 
       if (rows.length === 0) {
+        // 源 recording_files 记录已不存在，补偿清理 managed_files 托管记录
+        await client.query(
+          `UPDATE managed_files
+           SET status = 'deleted', exists_on_disk = false, deleted_at = NOW(), updated_at = NOW()
+           WHERE source_table = 'recording_files' AND source_id = $1
+             AND file_type = 'hls_directory' AND status NOT IN ('deleted', 'deleting')`,
+          [recordingFileId]
+        );
         return { result: 'blocked', error: 'recording_file_not_found', actual_release_size: 0 };
       }
 
@@ -55,6 +63,15 @@ class HLSCleanupService {
       estimatedSize = Number(recording.managed_file_size || 0);
 
       if (['expired', 'deleted'].includes(recording.hls_status)) {
+        // HLS 已被保留策略清理，补偿同步 managed_files 状态
+        if (managedFileId) {
+          await client.query(
+            `UPDATE managed_files
+             SET status = 'deleted', exists_on_disk = false, deleted_at = NOW(), updated_at = NOW()
+             WHERE id = $1 AND status NOT IN ('deleted', 'deleting')`,
+            [managedFileId]
+          );
+        }
         return {
           file_id: managedFileId,
           recording_file_id: recordingFileId,
