@@ -120,8 +120,7 @@ async function runEmptyDirectoryCleanup() {
     });
     if (result.deleted > 0 || result.failed > 0) {
       const msg =
-        `📁 空目录清理完成: 回收 ${result.deleted} 个, ` +
-        `跳过 ${result.skipped} 个, 失败 ${result.failed} 个`;
+        `📁 空目录清理完成: 回收 ${result.deleted} 个, ` + `跳过 ${result.skipped} 个, 失败 ${result.failed} 个`;
       await send('file_cleanup_empty_directories', '文件管理 - 空目录清理', msg);
       console.log(`[空目录清理] ${msg}`);
     } else {

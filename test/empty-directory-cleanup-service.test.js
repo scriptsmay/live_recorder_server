@@ -130,13 +130,10 @@ test('目录已不存在时按幂等成功处理', async () => {
 
 test('拒绝根目录之外的候选路径', async () => {
   const service = new EmptyDirectoryCleanupService();
-  const result = await service._removeCandidate(
-    path.join(tempRoot, 'outside'),
-    replayRoot,
-    'replay',
-    [],
-    { operator: 'test', dryRun: false }
-  );
+  const result = await service._removeCandidate(path.join(tempRoot, 'outside'), replayRoot, 'replay', [], {
+    operator: 'test',
+    dryRun: false,
+  });
 
   expect(result).toEqual({ result: 'skipped', error: 'outside_allowlist' });
 });
