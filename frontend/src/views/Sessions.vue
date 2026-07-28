@@ -340,7 +340,13 @@ function handleUploadError(message: string) {
     </div>
 
     <!-- Pagination -->
-    <Pagination v-if="total > 0" :current="currentPage" :total="total" :page-size="10" @change="handlePageChange" />
+    <Pagination
+      v-if="total > 0"
+      :current="currentPage"
+      :total="total"
+      :page-size="10"
+      @change="handlePageChange"
+    />
 
     <!-- Upload Modal -->
     <UploadModal

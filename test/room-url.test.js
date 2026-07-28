@@ -13,9 +13,7 @@ const { normalizeRoomUrl } = require('../server/lib/utils/room-url');
 describe('normalizeRoomUrl', () => {
   test('移除快手分享链接的 query string', () => {
     expect(
-      normalizeRoomUrl(
-        'https://live.kuaishou.com/u/3xhpa8nk4a7xdg6?cc=share_wxms&shareMethod=CARD&userId=5226586503'
-      )
+      normalizeRoomUrl('https://live.kuaishou.com/u/3xhpa8nk4a7xdg6?cc=share_wxms&shareMethod=CARD&userId=5226586503')
     ).toBe('https://live.kuaishou.com/u/3xhpa8nk4a7xdg6');
   });
 
