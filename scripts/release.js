@@ -189,6 +189,14 @@ async function main() {
     process.exit(1);
   }
 
+  // 前置校验：发布必须在 dev 分支执行（脚本末尾会自动合并 dev → main）
+  const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+  if (currentBranch !== 'dev') {
+    console.error(`❌ 错误：发布脚本必须在 dev 分支执行，当前位于 "${currentBranch}" 分支。`);
+    console.error(`   请先切换到 dev 分支后再发布：git checkout dev`);
+    process.exit(1);
+  }
+
   console.log('=== K-Recorder Release Script ===');
   console.log(`Current version: ${packageJson.version}`);
 

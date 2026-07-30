@@ -114,6 +114,103 @@ describe('getFileList', () => {
   });
 });
 
+// ========== _refreshDiskStatus ==========
+
+describe('_refreshDiskStatus', () => {
+  test('mtime 为 NULL 时从磁盘 stat 回填 mtime 和 file_size', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const diskMtime = new Date('2026-07-01T23:22:38Z');
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2151, file_path: '/data/video_downloads/34/20260701_232238.ts', mtime: null, file_size: null }],
+      })
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE
+
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest
+      .fn()
+      .mockResolvedValue({ size: 2048, mtime: diskMtime, mtimeMs: diskMtime.getTime(), isDirectory: () => false });
+
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.updated).toBe(1);
+    expect(results.missing).toBe(0);
+    const updateCall = pool.query.mock.calls[1];
+    expect(updateCall[0]).toContain('SET mtime');
+    expect(updateCall[1]).toEqual([diskMtime, 2048, 2151]);
+
+    fs.promises.stat = origStat;
+  });
+
+  test('mtime 一致时不产生 UPDATE', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const diskMtime = new Date('2026-07-20T10:00:00Z');
+
+    pool.query.mockResolvedValueOnce({
+      rows: [{ id: 1, file_path: '/data/video_downloads/a.ts', mtime: diskMtime.toISOString(), file_size: 100 }],
+    });
+
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest
+      .fn()
+      .mockResolvedValue({ size: 100, mtime: diskMtime, mtimeMs: diskMtime.getTime(), isDirectory: () => false });
+
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.updated).toBe(0);
+    expect(pool.query).toHaveBeenCalledTimes(1); // 仅 SELECT
+
+    fs.promises.stat = origStat;
+  });
+
+  test('文件不存在时标记 missing', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, file_path: '/data/video_downloads/gone.ts', mtime: null, file_size: null }],
+      })
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE missing
+
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.missing).toBe(1);
+    const updateCall = pool.query.mock.calls[1];
+    expect(updateCall[0]).toContain("status = 'missing'");
+
+    fs.promises.stat = origStat;
+  });
+
+  test('目录只回填 mtime 不覆盖 file_size', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const dirMtime = new Date('2026-07-10T08:00:00Z');
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, file_path: '/data/video_downloads/34/hls', mtime: null, file_size: 999999 }],
+      })
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE
+
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest
+      .fn()
+      .mockResolvedValue({ size: 4096, mtime: dirMtime, mtimeMs: dirMtime.getTime(), isDirectory: () => true });
+
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.updated).toBe(1);
+    const updateCall = pool.query.mock.calls[1];
+    expect(updateCall[0]).not.toContain('file_size');
+    expect(updateCall[1]).toEqual([dirMtime, 4]);
+
+    fs.promises.stat = origStat;
+  });
+});
+
 // ========== getFileSummary ==========
 
 describe('getFileSummary', () => {
@@ -168,6 +265,91 @@ describe('_scanHlsDirectories', () => {
     expect(upserts).toHaveLength(2);
     expect(upserts[0][1]).toEqual(expect.arrayContaining(['recording_files', 101, 111]));
     expect(upserts[1][1]).toEqual(expect.arrayContaining(['recording_files', 102, 222]));
+  });
+});
+
+describe('_scanRecordingFiles / _scanReplayFiles / _scanDanmakuArchiveFiles', () => {
+  test('录制扫描在插入时写入 mtime（源表 created_at）', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const createdAt = new Date('2026-07-01T12:00:00Z');
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        {
+          source_id: 101,
+          file_path: '/data/video_downloads/20/20260701_120000.ts',
+          file_name: '20260701_120000.ts',
+          file_size: 1024,
+          status: 'completed',
+          session_id: 20,
+          room_url: 'https://example.com/room',
+          created_at: createdAt,
+        },
+      ],
+    });
+
+    await FileManageService._scanRecordingFiles(results);
+
+    expect(results.scanned).toBe(1);
+    expect(results.created).toBe(1);
+    const upserts = pool.query.mock.calls.filter((call) => call[0].includes('INSERT INTO managed_files'));
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0][0]).toContain('mtime');
+    expect(upserts[0][1]).toEqual(expect.arrayContaining([createdAt]));
+  });
+
+  test('回放扫描在插入时写入 mtime（源表 created_at）', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const createdAt = new Date('2026-07-02T08:00:00Z');
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 201,
+          principal_id: 'p1',
+          principal_name: 'tester',
+          raw_file_path: '/data/replay/p1/raw.mp4',
+          cut_file_paths: '[]',
+          fixed_file_paths: '[]',
+          final_file_paths: '[]',
+          status: 'completed',
+          created_at: createdAt,
+        },
+      ],
+    });
+
+    await FileManageService._scanReplayFiles(results);
+
+    expect(results.scanned).toBe(1);
+    expect(results.created).toBe(1);
+    const upserts = pool.query.mock.calls.filter((call) => call[0].includes('INSERT INTO managed_files'));
+    expect(upserts.length).toBeGreaterThan(0);
+    const mtimeUpsert = upserts.find((call) => call[0].includes('mtime'));
+    expect(mtimeUpsert).toBeDefined();
+    expect(mtimeUpsert[1]).toEqual(expect.arrayContaining([createdAt]));
+  });
+
+  test('弹幕归档扫描在插入时写入 mtime（源表 created_at）', async () => {
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    const createdAt = new Date('2026-07-03T09:30:00Z');
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        {
+          source_id: 301,
+          raw_path: '/data/danmaku/session1/danmaku.xml',
+          session_id: 1,
+          status: 'completed',
+          created_at: createdAt,
+        },
+      ],
+    });
+
+    await FileManageService._scanDanmakuArchiveFiles(results);
+
+    expect(results.scanned).toBe(1);
+    expect(results.created).toBe(1);
+    const upserts = pool.query.mock.calls.filter((call) => call[0].includes('INSERT INTO managed_files'));
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0][0]).toContain('mtime');
+    expect(upserts[0][1]).toEqual(expect.arrayContaining([createdAt]));
   });
 });
 
@@ -308,6 +490,42 @@ describe('validateFileSafety', () => {
     expect(result.safe).toBe(false);
     expect(result.reason).toBe('recording_status_recording');
 
+    fs.promises.stat = origStat;
+  });
+
+  test('录制丢失(missing)的 HLS 目录允许删除（孤儿记录清理）', async () => {
+    const origStat = fs.promises.stat;
+    // 目录已在磁盘丢失（ENOENT），删除语义允许 missing
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+    pool.query
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: recording
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: transcode
+      .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: upload
+      .mockResolvedValueOnce({ rows: [] }) // session check
+      .mockResolvedValueOnce({ rows: [{ status: 'missing' }] }); // recording_files status
+
+    const result = await FileManageService.validateFileSafety(
+      makeFile({ file_type: 'hls_directory', status: 'missing' }),
+      { allowMissing: true }
+    );
+    expect(result.safe).toBe(true);
+
+    fs.promises.stat = origStat;
+  });
+
+  test('失败/取消(failed/cancelled)的录制允许删除', async () => {
+    const origStat = fs.promises.stat;
+    fs.promises.stat = jest.fn().mockResolvedValue({ size: 1024, isDirectory: () => false });
+    for (const st of ['failed', 'cancelled']) {
+      pool.query
+        .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: recording
+        .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: transcode
+        .mockResolvedValueOnce({ rows: [] }) // isFileInActiveTask: upload
+        .mockResolvedValueOnce({ rows: [] }) // session check
+        .mockResolvedValueOnce({ rows: [{ status: st }] }); // recording_files status
+      const result = await FileManageService.validateFileSafety(makeFile());
+      expect(result.safe).toBe(true);
+    }
     fs.promises.stat = origStat;
   });
 });

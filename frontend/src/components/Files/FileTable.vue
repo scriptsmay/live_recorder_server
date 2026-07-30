@@ -126,6 +126,7 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
           <th class="px-3 py-3">文件名</th>
           <th class="px-3 py-3">类型</th>
           <th class="px-3 py-3">状态</th>
+          <th class="px-3 py-3">大小</th>
           <th class="px-3 py-3">可删除</th>
           <th class="px-3 py-3">最近修改</th>
           <th class="px-3 py-3 w-20">操作</th>
@@ -166,6 +167,9 @@ function handleDeleteSingle(e: MouseEvent, file: ManagedFile) {
             >
               {{ file.status }}
             </span>
+          </td>
+          <td class="px-3 py-3">
+            {{ file.file_size ? formatBytes(file.file_size) : '-' }}
           </td>
           <td class="px-3 py-3">
             <span v-if="file.safe_to_delete" class="text-green-600 text-xs">✓ 可删除</span>
