@@ -353,6 +353,151 @@ describe('_scanRecordingFiles / _scanReplayFiles / _scanDanmakuArchiveFiles', ()
   });
 });
 
+// ========== _refreshDiskStatus（含 missing 自愈） ==========
+
+describe('_refreshDiskStatus', () => {
+  const origStat = fs.promises.stat;
+  afterEach(() => {
+    fs.promises.stat = origStat;
+  });
+
+  test('源为终态(recording_files=deleted) 的 missing 记录在 ENOENT 后被标记为可安全删除', async () => {
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM managed_files')) {
+        return {
+          rows: [
+            {
+              id: 5309,
+              file_path: '/data/video_downloads/25/hls_20260625_184837',
+              mtime: null,
+              file_size: 100,
+              source_table: 'recording_files',
+              source_id: 55,
+              status: 'active',
+              safe_to_delete: false,
+              delete_block_reason: 'file_not_found',
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM recording_files WHERE id')) {
+        return { rows: [{ status: 'deleted' }] }; // 终态
+      }
+      return { rowCount: 1 };
+    });
+
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.missing).toBe(1);
+    const updateCall = pool.query.mock.calls.find((c) => c[0].includes('exists_on_disk = false'));
+    expect(updateCall).toBeDefined();
+    // UPDATE ... safe_to_delete=$1, delete_block_reason=$2 WHERE id=$3
+    expect(updateCall[1]).toEqual([true, null, 5309]);
+  });
+
+  test('源为进行中(recording) 的 missing 记录在 ENOENT 后保留拦截标记', async () => {
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM managed_files')) {
+        return {
+          rows: [
+            {
+              id: 77,
+              file_path: '/data/x/y.ts',
+              mtime: null,
+              file_size: 10,
+              source_table: 'recording_files',
+              source_id: 9,
+              status: 'active',
+              safe_to_delete: false,
+              delete_block_reason: null,
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM recording_files WHERE id')) {
+        return { rows: [{ status: 'recording' }] }; // 进行中
+      }
+      return { rowCount: 1 };
+    });
+
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.missing).toBe(1);
+    const updateCall = pool.query.mock.calls.find((c) => c[0].includes('exists_on_disk = false'));
+    expect(updateCall[1]).toEqual([false, 'file_not_found', 77]);
+  });
+
+  test('无业务来源(孤儿) 的 missing 记录在 ENOENT 后被标记可安全删除', async () => {
+    fs.promises.stat = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM managed_files')) {
+        return {
+          rows: [
+            {
+              id: 88,
+              file_path: '/data/x/orphan.ts',
+              mtime: null,
+              file_size: 10,
+              source_table: null,
+              source_id: null,
+              status: 'active',
+              safe_to_delete: false,
+              delete_block_reason: 'file_not_found',
+            },
+          ],
+        };
+      }
+      return { rowCount: 1 };
+    });
+
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.missing).toBe(1);
+    const updateCall = pool.query.mock.calls.find((c) => c[0].includes('exists_on_disk = false'));
+    expect(updateCall[1]).toEqual([true, null, 88]);
+  });
+
+  test('missing 记录文件重现时恢复 status=active 与 exists_on_disk', async () => {
+    fs.promises.stat = jest
+      .fn()
+      .mockResolvedValue({ size: 2048, isDirectory: () => false, mtime: new Date('2026-07-10T00:00:00Z') });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM managed_files')) {
+        return {
+          rows: [
+            {
+              id: 99,
+              file_path: '/data/x/z.ts',
+              mtime: null,
+              file_size: 100,
+              source_table: 'recording_files',
+              source_id: 1,
+              status: 'missing',
+              safe_to_delete: true,
+              delete_block_reason: null,
+            },
+          ],
+        };
+      }
+      return { rowCount: 1 };
+    });
+
+    const results = { scanned: 0, created: 0, updated: 0, missing: 0, errors: [] };
+    await FileManageService._refreshDiskStatus(results);
+
+    expect(results.updated).toBe(1);
+    const updateCall = pool.query.mock.calls.find((c) => c[0].includes("status = 'active'"));
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0]).toContain('exists_on_disk = true');
+    expect(updateCall[0]).toContain("status = 'active'");
+  });
+});
+
 // ========== generateDeletePlan ==========
 
 describe('generateDeletePlan', () => {
