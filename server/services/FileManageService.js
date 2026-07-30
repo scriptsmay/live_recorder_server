@@ -87,12 +87,13 @@ class FileManageService {
   /** 扫描 recording_files → managed_files (category=recording, file_type=recording_file) */
   static async _scanRecordingFiles(results) {
     const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, file_size, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        file_path, file_name, extension, file_size, mtime, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT (file_path) DO UPDATE SET
          file_name = EXCLUDED.file_name,
          extension = EXCLUDED.extension,
          file_size = EXCLUDED.file_size,
+         mtime = EXCLUDED.mtime,
          status = CASE
            WHEN managed_files.status IN ('deleting', 'deleted') THEN managed_files.status
            ELSE EXCLUDED.status
@@ -104,7 +105,7 @@ class FileManageService {
     await this._upsertFromQuery(
       results,
       `SELECT rf.id AS source_id, rf.file_path, rf.file_name, rf.file_size, rf.status,
-              rf.session_id, rf.room_url, rs.output_dir
+              rf.session_id, rf.room_url, rs.output_dir, rf.created_at
        FROM recording_files rf
        LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
        WHERE rf.status NOT IN ('deleted', 'missing')`,
@@ -124,6 +125,7 @@ class FileManageService {
             row.file_name,
             ext,
             row.file_size,
+            row.created_at,
             row.status === 'completed' ? 'active' : row.status,
             row.status === 'completed',
             row.status !== 'completed' ? `recording_status_${row.status}` : null,
@@ -206,11 +208,12 @@ class FileManageService {
   /** 扫描回放文件 → managed_files */
   static async _scanReplayFiles(results) {
     const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        file_path, file_name, extension, mtime, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (file_path) DO UPDATE SET
          file_name = EXCLUDED.file_name,
          extension = EXCLUDED.extension,
+         mtime = EXCLUDED.mtime,
          safe_to_delete = EXCLUDED.safe_to_delete,
          delete_block_reason = EXCLUDED.delete_block_reason,
          updated_at = NOW()`;
@@ -225,7 +228,7 @@ class FileManageService {
     // 将每条 replay_record 展开为多条（每种路径类型一条）
     const { rows } = await pool.query(`
       SELECT id, principal_id, principal_name, raw_file_path, cut_file_paths,
-             fixed_file_paths, final_file_paths, status
+             fixed_file_paths, final_file_paths, status, created_at
       FROM replay_records
       WHERE status NOT IN ('pending', 'cancelled')
     `);
@@ -256,6 +259,7 @@ class FileManageService {
           row.filePath,
           path.basename(row.filePath),
           ext,
+          row.created_at,
           'active',
           safeToDelete,
           !safeToDelete ? `replay_status_${row.status}` : null,
@@ -270,15 +274,16 @@ class FileManageService {
   /** 扫描弹幕归档 → managed_files (category=danmaku, file_type=danmaku_archive) */
   static async _scanDanmakuArchiveFiles(results) {
     const UPSERT_SQL = `INSERT INTO managed_files (category, file_type, source_table, source_id, group_id,
-        file_path, file_name, extension, status, safe_to_delete, delete_block_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        file_path, file_name, extension, mtime, status, safe_to_delete, delete_block_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (file_path) DO UPDATE SET
+         mtime = EXCLUDED.mtime,
          status = EXCLUDED.status,
          updated_at = NOW()`;
 
     await this._upsertFromQuery(
       results,
-      `SELECT dcr.id AS source_id, dcr.raw_path, dcr.session_id, dcr.status
+      `SELECT dcr.id AS source_id, dcr.raw_path, dcr.session_id, dcr.status, dcr.created_at
        FROM danmaku_capture_records dcr
        WHERE dcr.raw_path IS NOT NULL AND dcr.raw_path != ''`,
       [],
@@ -296,6 +301,7 @@ class FileManageService {
             row.raw_path,
             path.basename(row.raw_path),
             ext,
+            row.created_at,
             'active',
             false, // 弹幕归档默认不可清理
             'danmaku_archive_protected',
@@ -305,10 +311,10 @@ class FileManageService {
     );
   }
 
-  /** 刷新已索引文件的磁盘状态 */
+  /** 刷新已索引文件的磁盘状态（存在性 + 回填 mtime/file_size） */
   static async _refreshDiskStatus(results) {
     const { rows } = await pool.query(`
-      SELECT id, file_path FROM managed_files
+      SELECT id, file_path, mtime, file_size FROM managed_files
       WHERE status NOT IN ('deleting', 'deleted', 'missing')
     `);
 
@@ -316,7 +322,35 @@ class FileManageService {
     for (const row of rows) {
       idx++;
       try {
-        await fs.promises.access(row.file_path, fs.constants.F_OK);
+        const stat = await fs.promises.stat(row.file_path);
+
+        // mtime 已在各扫描插入时从源表 created_at 写入；此处仅当 mtime 确实为 NULL 才回填，
+        // 避免覆盖扫描阶段已写入的创建时间。file_size 仅在偏差较大时修正，且目录的大小由
+        // _scanHlsDirectories 通过 getDirectoryStats 聚合维护，不可用 stat.size（目录项大小）覆盖。
+        const dbMtimeMs = row.mtime ? new Date(row.mtime).getTime() : null;
+        const mtimeMissing = dbMtimeMs === null;
+        const sizeDrifted =
+          !stat.isDirectory() &&
+          (row.file_size === null || row.file_size === undefined ||
+           Math.abs(row.file_size - stat.size) > 1000);
+
+        const setterParts = [];
+        const params = [];
+        let pi = 1;
+        if (mtimeMissing) {
+          setterParts.push(`mtime = $${pi++}`);
+          params.push(stat.mtime);
+        }
+        if (sizeDrifted) {
+          setterParts.push(`file_size = $${pi++}`);
+          params.push(stat.size);
+        }
+        if (setterParts.length > 0) {
+          setterParts.push(`updated_at = NOW()`);
+          params.push(row.id);
+          await pool.query(`UPDATE managed_files SET ${setterParts.join(', ')} WHERE id = $${pi}`, params);
+          results.updated++;
+        }
       } catch (err) {
         if (err.code === 'ENOENT') {
           await pool.query(
@@ -327,7 +361,7 @@ class FileManageService {
           results.missing++;
         } else {
           console.warn(
-            `[FileManage] _refreshDiskStatus: access failed for ${row.file_path}: ${err.code || err.message}`
+            `[FileManage] _refreshDiskStatus: stat failed for ${row.file_path}: ${err.code || err.message}`
           );
         }
       }
@@ -438,10 +472,11 @@ class FileManageService {
       params.push(filters.end_date);
     }
     // older_than_days: 直接拼接 SQL interval，不使用参数化（days 已 parseInt 校验）
+    // mtime 为 NULL 时（如磁盘文件已丢失无法 stat）回退用索引创建时间，避免记录永远无法被清理命中
     if (filters.older_than_days) {
       const days = parseInt(filters.older_than_days, 10);
       if (!isNaN(days) && days > 0) {
-        conditions.push(`mtime <= NOW() - INTERVAL '${days} days'`);
+        conditions.push(`COALESCE(mtime, created_at) <= NOW() - INTERVAL '${days} days'`);
       }
     }
     // group_id 用于按 session / principal 筛选
@@ -1002,11 +1037,25 @@ class FileManageService {
       }
     }
 
-    // 7. 业务记录已完成/失败/取消
+    // 7. 业务记录已完成/失败/取消（终态均可安全删除；仅进行中状态拦截）
+    // 注意：'missing' 表示录制文件已丢失，其 HLS 目录/录制文件属于孤儿记录，应允许清理；
+    // 仅当录制仍在进行中（如 status='recording'）时才拦截，避免误删活跃数据。
     if (source_table === 'recording_files' && source_id) {
       const rfCheck = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [source_id]);
-      if (rfCheck.rows.length > 0 && !['completed', 'interrupted'].includes(rfCheck.rows[0].status)) {
-        return { safe: false, reason: `recording_status_${rfCheck.rows[0].status}` };
+      if (rfCheck.rows.length > 0) {
+        const rfStatus = rfCheck.rows[0].status;
+        const RF_DELETABLE_STATUSES = [
+          'completed',
+          'interrupted',
+          'missing',
+          'deleted',
+          'failed',
+          'cancelled',
+          'orphaned',
+        ];
+        if (!RF_DELETABLE_STATUSES.includes(rfStatus)) {
+          return { safe: false, reason: `recording_status_${rfStatus}` };
+        }
       }
     }
 
