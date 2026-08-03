@@ -64,7 +64,7 @@ async function checkStaleRecordings() {
         try {
           process.kill(room.ffmpeg_pid, 0);
           processAlive = true;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       let fileStale = false;
@@ -91,7 +91,7 @@ async function checkStaleRecordings() {
               const stat = fs.statSync(path.join(outputDir, f));
               if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
             }
-          } catch (_) {}
+          } catch (_) { }
           if (latestMtime > 0 && Date.now() - latestMtime > STALE_TIMEOUT_MS) {
             fileStale = true;
           }
@@ -101,7 +101,7 @@ async function checkStaleRecordings() {
             if (stat.isFile() && Date.now() - stat.mtimeMs > STALE_TIMEOUT_MS) {
               fileStale = true;
             }
-          } catch (_) {}
+          } catch (_) { }
         }
       }
 
@@ -118,11 +118,11 @@ async function checkStaleRecordings() {
         if (processAlive && room.ffmpeg_pid) {
           try {
             process.kill(room.ffmpeg_pid, 'SIGTERM');
-          } catch (_) {}
+          } catch (_) { }
           setTimeout(() => {
             try {
               process.kill(room.ffmpeg_pid, 'SIGKILL');
-            } catch (_) {}
+            } catch (_) { }
           }, 5000);
         }
 
@@ -133,7 +133,7 @@ async function checkStaleRecordings() {
         try {
           await redis.del(`room:${room.room_url}`);
           await redis.del(`active_task:${room.room_url}`);
-        } catch (_) {}
+        } catch (_) { }
 
         if (room.session_id) {
           let fileSize = 0;
@@ -141,7 +141,7 @@ async function checkStaleRecordings() {
             try {
               const stat = fs.statSync(room.output_path);
               fileSize = stat.size;
-            } catch (_) {}
+            } catch (_) { }
           }
           await pool.query(
             `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted', total_size = $1 WHERE id = $2`,
@@ -265,7 +265,7 @@ async function scanActiveSegments() {
         let durationSec = 0;
         try {
           durationSec = Math.round((await probeSegmentDuration(fp)) / 1000);
-        } catch (_) {}
+        } catch (_) { }
 
         // 检查文件管理模块是否已标记该文件为删除中/已删除，避免"复活"已删文件
         const managedCheck = await pool.query(
@@ -403,7 +403,7 @@ async function cleanupFragmentFiles() {
               });
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   } catch (err) {
     log.error('[碎片清理] 失败:', err.message);
@@ -631,7 +631,7 @@ async function runFileScan() {
 async function runWatchdog() {
   const scanStart = Date.now();
   let intervalSec = 30;
-  log.important('[看门狗] 扫描开始');
+  log.info('[看门狗] 扫描开始');
   try {
     intervalSec = parseInt(await DataService.getSetting('watchdog_interval', '30'), 10);
     await checkStaleRecordings();
@@ -646,7 +646,7 @@ async function runWatchdog() {
     log.error('[看门狗] 异常:', err.message);
   } finally {
     const durationMs = Date.now() - scanStart;
-    log.important(`[看门狗] 扫描完成，耗时 ${durationMs}ms`);
+    log.info(`[看门狗] 扫描完成，耗时 ${durationMs}ms`);
   }
   watchdogTimer = setTimeout(runWatchdog, Math.max(intervalSec, 10) * 1000);
 }
