@@ -181,7 +181,7 @@ async function scanActiveSegments() {
               r.id AS room_id, r.room_url, r.room_name, r.output_path
        FROM recording_sessions rs
        JOIN rooms r ON rs.room_url = r.room_url
-       WHERE (rs.status = 'recording' OR 
+       WHERE (rs.status = 'recording' OR
               (rs.status = 'completed' AND rs.ended_at >= NOW() - INTERVAL '5 minutes'))
          AND rs.output_dir IS NOT NULL`
     );
@@ -325,9 +325,9 @@ async function cleanupFragmentFiles() {
 
   try {
     const { rows: sessions } = await pool.query(
-      `SELECT id AS session_id, output_dir 
-       FROM recording_sessions 
-       WHERE status IN ('completed', 'interrupted') 
+      `SELECT id AS session_id, output_dir
+       FROM recording_sessions
+       WHERE status IN ('completed', 'interrupted')
          AND output_dir IS NOT NULL`
     );
 
