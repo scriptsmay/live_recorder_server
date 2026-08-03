@@ -3,6 +3,9 @@ const redis = require('../../../db/redis');
 const CHECKERS = require('./checkers');
 const RecorderService = require('../../../services/RecorderService');
 const notify = require('../notify');
+
+const { createModuleLogger } = require('../logger');
+const log = createModuleLogger('polling');
 const { detectPlatform } = require('../../utils/platform-detector');
 
 function redactStreamUrl(url) {
@@ -76,7 +79,7 @@ class PollingManager {
   getChecker(platform) {
     const CheckerClass = CHECKERS[platform?.toLowerCase()];
     if (!CheckerClass) {
-      console.warn(`[PollingManager] 不支持的平台: ${platform}`);
+      log.warn(`[PollingManager] 不支持的平台: ${platform}`);
       return null;
     }
     return CheckerClass;
@@ -134,7 +137,7 @@ class PollingManager {
       this._totalRooms = result.rows.length;
       return result.rows;
     } catch (err) {
-      console.error('[PollingManager] 加载轮询房间失败:', err.message);
+      log.error('[PollingManager] 加载轮询房间失败:', err.message);
       this._totalRooms = 0;
       return [];
     }
@@ -166,7 +169,7 @@ class PollingManager {
     try {
       const result = await checker.checkStatus();
       if (result.error) {
-        console.warn(`[PollingManager] 状态检查返回错误，保留上一轮状态: ${result.error}`);
+        log.warn(`[PollingManager] 状态检查返回错误，保留上一轮状态: ${result.error}`);
         return;
       }
 
@@ -175,17 +178,17 @@ class PollingManager {
       const wasLive = this.roomLiveStatus.get(id) || false;
       const isLive = result.isLive;
 
-      console.log(
+      log.debug(
         `[PollingManager] 状态检查: ${room.room_name} wasLive=${wasLive} isLive=${isLive} roomStatus=${room.status}`
       );
 
       if (isLive && !wasLive && room.notification_enabled !== false) {
         notify.liveStart(room.room_name || room_url, room_url).catch((err) => {
-          console.error('[PollingManager] 开播通知失败:', err.message);
+          log.error('[PollingManager] 开播通知失败:', err.message);
         });
       } else if (!isLive && wasLive && room.notification_enabled !== false) {
         notify.liveEnd(room.room_name || room_url, room_url).catch((err) => {
-          console.error('[PollingManager] 下播通知失败:', err.message);
+          log.error('[PollingManager] 下播通知失败:', err.message);
         });
       }
 
@@ -214,21 +217,21 @@ class PollingManager {
       const cooldownKey = `polling:recording_cooldown:${id}`;
       const cooldown = await redis.get(cooldownKey).catch(() => null);
       if (cooldown) {
-        console.log(`[PollingManager] 录制冷却期，跳过: ${room.room_name || room_url}`);
+        log.debug(`[PollingManager] 录制冷却期，跳过: ${room.room_name || room_url}`);
         return;
       }
 
       const recordable = result.recordable !== false;
       if (isLive && recordable && currentStatus !== 'recording' && (result.streamUrl || result.streamInfo)) {
-        console.log(`[PollingManager][streamUrl]: ${redactStreamUrl(result.streamUrl)}`);
+        log.debug(`[PollingManager][streamUrl]: ${redactStreamUrl(result.streamUrl)}`);
         await this._tryStartRecording(room, result);
       } else if (currentStatus === 'recording') {
-        console.log(`[PollingManager] 房间已在录制中，跳过: ${room.room_name || room_url}`);
+        log.debug(`[PollingManager] 房间已在录制中，跳过: ${room.room_name || room_url}`);
       } else if (isLive && !recordable) {
-        console.log(`[PollingManager] 房间已开播但不可录制，跳过: ${room.room_name || room_url}`);
+        log.debug(`[PollingManager] 房间已开播但不可录制，跳过: ${room.room_name || room_url}`);
       }
     } catch (err) {
-      console.error(`[PollingManager] 检查房间失败 (${room_url}):`, err.message);
+      log.error(`[PollingManager] 检查房间失败 (${room_url}):`, err.message);
     }
   }
 
@@ -252,7 +255,7 @@ class PollingManager {
       if (freshRoom.rows.length > 0) {
         const currentStatus = freshRoom.rows[0].status;
         if (currentStatus === 'recording') {
-          console.log(`[PollingManager] 房间已在录制中，跳过: ${room_name || room_url}`);
+          log.info(`[PollingManager] 房间已在录制中，跳过: ${room_name || room_url}`);
           return;
         }
       }
@@ -264,11 +267,11 @@ class PollingManager {
       }
 
       if (!streamUrl) {
-        console.warn(`[PollingManager] 无法提取直播流地址，跳过录制: ${room_name || room_url}`);
+        log.warn(`[PollingManager] 无法提取直播流地址，跳过录制: ${room_name || room_url}`);
         return;
       }
 
-      console.log(`[PollingManager] 准备启动录制: ${room_name || room_url}`);
+      log.important(`[PollingManager] 准备启动录制: ${room_name || room_url}`);
 
       const recordResult = await RecorderService.startRecording({
         url: streamUrl,
@@ -279,12 +282,12 @@ class PollingManager {
       });
 
       if (!recordResult.error) {
-        console.log(`[PollingManager] ✅ 启动录制成功: ${room_name || room_url}, 会话ID: ${recordResult.sessionId}`);
+        log.important(`[PollingManager] ✅ 启动录制成功: ${room_name || room_url}, 会话ID: ${recordResult.sessionId}`);
       } else {
-        console.error(`[PollingManager] ❌ 启动录制失败: [${recordResult.code}] ${recordResult.message}`);
+        log.error(`[PollingManager] ❌ 启动录制失败: [${recordResult.code}] ${recordResult.message}`);
       }
     } catch (err) {
-      console.error(`[PollingManager] ❌ 启动录制异常 (${room_url}):`, err.message);
+      log.error(`[PollingManager] ❌ 启动录制异常 (${room_url}):`, err.message);
     }
   }
 
@@ -335,12 +338,12 @@ class PollingManager {
     const intervalMs = (room.polling_interval || 60) * 1000;
     const timer = setInterval(() => {
       this.pollRoom(room).catch((err) => {
-        console.error(`[PollingManager] 轮询异常 (${room.room_url}):`, err.message);
+        log.error(`[PollingManager] 轮询异常 (${room.room_url}):`, err.message);
       });
     }, intervalMs);
 
     this.timers.set(roomKey, timer);
-    console.log(`[PollingManager] 已启动轮询: ${room.room_name || room.room_url} (${room.polling_interval}s)`);
+    log.important(`[PollingManager] 已启动轮询: ${room.room_name || room.room_url} (${room.polling_interval}s)`);
   }
 
   /**
@@ -353,7 +356,7 @@ class PollingManager {
     if (this.timers.has(roomKey)) {
       clearInterval(this.timers.get(roomKey));
       this.timers.delete(roomKey);
-      console.log(`[PollingManager] 已停止轮询: roomId=${roomId}`);
+      log.important(`[PollingManager] 已停止轮询: roomId=${roomId}`);
     }
     this.roomPollingMeta.delete(roomId);
   }
@@ -365,15 +368,15 @@ class PollingManager {
    */
   async start() {
     if (this.isRunning) {
-      console.log('[PollingManager] 已启动，跳过');
+      log.info('[PollingManager] 已启动，跳过');
       return;
     }
 
     this.isRunning = true;
-    console.log('[PollingManager] 启动中...');
+    log.important('[PollingManager] 启动中...');
 
     const rooms = await this.loadPollingRooms();
-    console.log(`[PollingManager] 加载到 ${rooms.length} 个轮询房间`);
+    log.important(`[PollingManager] 加载到 ${rooms.length} 个轮询房间`);
 
     for (const room of rooms) {
       await this.startRoomPolling(room);
@@ -392,7 +395,7 @@ class PollingManager {
       return;
     }
 
-    console.log('[PollingManager] 停止中...');
+    log.important('[PollingManager] 停止中...');
 
     for (const [, timer] of this.timers) {
       clearInterval(timer);
@@ -401,7 +404,7 @@ class PollingManager {
     this.roomPollingMeta.clear();
     this.isRunning = false;
 
-    console.log('[PollingManager] 已停止');
+    log.important('[PollingManager] 已停止');
   }
 
   /**
@@ -432,7 +435,7 @@ class PollingManager {
     // 判断轮询平台是否支持，不支持则自动关闭轮询
     const checkerClass = this.getChecker(room.polling_platform);
     if (!checkerClass) {
-      console.warn(
+      log.warn(
         `[PollingManager] 房间 ${room.room_name || room.room_url} 配置了不支持的平台 ${room.polling_platform}，已禁用轮询`
       );
       await pool.query('UPDATE rooms SET polling_enabled = false WHERE id = $1', [roomId]);

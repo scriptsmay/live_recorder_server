@@ -1,5 +1,8 @@
 const PlatformChecker = require('./PlatformChecker');
 
+const { createModuleLogger } = require('../logger');
+const log = createModuleLogger('polling');
+
 const HUYA_MP_BASE_URL = 'https://mp.huya.com';
 const HUYA_WEB_BASE_URL = 'https://www.huya.com';
 const HUYA_WEB_ROOM_DATA_REGEX = /var\s+TT_ROOM_DATA\s*=\s*(.*);/;
@@ -62,13 +65,13 @@ class HuyaChecker extends PlatformChecker {
             return String(roomData.profileRoom);
           }
         } catch (e) {
-          console.error(`[HuyaChecker] 解析 roomData 失败:`, e.message);
+          log.error(`[HuyaChecker] 解析 roomData 失败:`, e.message);
         }
       }
 
       throw new Error('未找到 profileRoom');
     } catch (err) {
-      console.error(`[HuyaChecker] 解析真实 roomId 失败 (${this.roomUrl}):`, err.message);
+      log.error(`[HuyaChecker] 解析真实 roomId 失败 (${this.roomUrl}):`, err.message);
       return null;
     }
   }
@@ -85,7 +88,7 @@ class HuyaChecker extends PlatformChecker {
     try {
       const roomId = await this.resolveRealRoomId();
       if (!roomId) {
-        console.error('[HuyaChecker] 无法获取房间ID');
+        log.error('[HuyaChecker] 无法获取房间ID');
         return null;
       }
 
@@ -114,7 +117,7 @@ class HuyaChecker extends PlatformChecker {
       const data = await response.json();
 
       if (data.status !== 200) {
-        console.error(`[HuyaChecker] API 返回错误:`, data.message);
+        log.error(`[HuyaChecker] API 返回错误:`, data.message);
         return null;
       }
 
@@ -134,7 +137,7 @@ class HuyaChecker extends PlatformChecker {
       // 获取流信息列表
       const baseSteamInfoList = liveData.stream?.baseSteamInfoList || [];
       if (!baseSteamInfoList || baseSteamInfoList.length === 0) {
-        console.warn('[HuyaChecker] 未找到流信息');
+        log.warn('[HuyaChecker] 未找到流信息');
         return null;
       }
 
@@ -179,7 +182,7 @@ class HuyaChecker extends PlatformChecker {
       }
 
       if (!selectedFlvUrl) {
-        console.error('[HuyaChecker] 未找到可用的流地址');
+        log.error('[HuyaChecker] 未找到可用的流地址');
         return null;
       }
 
@@ -189,10 +192,10 @@ class HuyaChecker extends PlatformChecker {
       // 参考 DouyinLiveRecorder：TX CDN 特殊处理
       if (selectedCdnType === 'TX') {
         flvUrl = flvUrl.replace(/&ctype=(tars_mp|huya_live)/, '&ctype=huya_webh5').replace('&fs=bhct', '&fs=bgct');
-        console.log(`[HuyaChecker] 应用 TX CDN 特殊处理`);
+        log.debug(`[HuyaChecker] 应用 TX CDN 特殊处理`);
       }
 
-      console.log(`[HuyaChecker] 获取流地址 (${selectedCdnType}): ${flvUrl.slice(0, 120)}...`);
+      log.debug(`[HuyaChecker] 获取流地址 (${selectedCdnType}): ${flvUrl.slice(0, 120)}...`);
 
       return {
         isLive: true,
@@ -202,7 +205,7 @@ class HuyaChecker extends PlatformChecker {
         cdnType: selectedCdnType,
       };
     } catch (err) {
-      console.error(`[HuyaChecker] 从 API 获取流地址失败:`, err.message);
+      log.error(`[HuyaChecker] 从 API 获取流地址失败:`, err.message);
       return null;
     }
   }

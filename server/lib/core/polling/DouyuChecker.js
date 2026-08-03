@@ -1,4 +1,7 @@
 const PlatformChecker = require('./PlatformChecker');
+
+const { createModuleLogger } = require('../logger');
+const log = createModuleLogger('polling');
 const { getSignParams } = require('./signers/douyu');
 const { getOptimalUserAgent } = require('../config/userAgents');
 
@@ -59,7 +62,7 @@ class DouyuChecker extends PlatformChecker {
 
       return null;
     } catch (err) {
-      console.error(`[DouyuChecker] 解析真实房间ID失败 (${shortId}):`, err.message);
+      log.error(`[DouyuChecker] 解析真实房间ID失败 (${shortId}):`, err.message);
       return null;
     }
   }
@@ -87,7 +90,7 @@ class DouyuChecker extends PlatformChecker {
         isVip: room.isVip === 1,
       };
     } catch (err) {
-      console.error(`[DouyuChecker] 获取房间状态失败 (${rid}):`, err.message);
+      log.error(`[DouyuChecker] 获取房间状态失败 (${rid}):`, err.message);
       return null;
     }
   }
@@ -115,7 +118,7 @@ class DouyuChecker extends PlatformChecker {
       const giftInfo = data?.data;
       return giftInfo && Object.keys(giftInfo).length > 0;
     } catch (err) {
-      console.warn(`[DouyuChecker] 互动游戏检测失败 (${rid}):`, err.message);
+      log.warn(`[DouyuChecker] 互动游戏检测失败 (${rid}):`, err.message);
       return false;
     }
   }
@@ -156,7 +159,7 @@ class DouyuChecker extends PlatformChecker {
           // 选择一个非 scdn 且不同于当前 CDN 的选项
           const newCdn = availableCdns.find((c) => !c.cdn?.startsWith('scdn') && c.cdn !== this.options.cdn)?.cdn;
           if (newCdn) {
-            console.log(`[DouyuChecker] 检测到 scdn，切换 CDN: ${this.options.cdn} -> ${newCdn}`);
+            log.debug(`[DouyuChecker] 检测到 scdn，切换 CDN: ${this.options.cdn} -> ${newCdn}`);
             this.options.cdn = newCdn;
             attempt++;
             continue;
@@ -167,7 +170,7 @@ class DouyuChecker extends PlatformChecker {
         const rtmpLive = streamData.rtmp_live;
 
         if (!rtmpUrl || !rtmpLive) {
-          console.error('[DouyuChecker] 流地址参数不完整');
+          log.error('[DouyuChecker] 流地址参数不完整');
           return null;
         }
 
@@ -182,7 +185,7 @@ class DouyuChecker extends PlatformChecker {
           rate: streamData.rate,
         };
       } catch (err) {
-        console.error(`[DouyuChecker] 获取流地址异常 (${rid}):`, err.message);
+        log.error(`[DouyuChecker] 获取流地址异常 (${rid}):`, err.message);
         return null;
       }
     }
@@ -222,7 +225,7 @@ class DouyuChecker extends PlatformChecker {
     });
 
     if (!data || data.error !== 0 || !data.data) {
-      console.error(`[DouyuChecker] 获取流地址失败: ${data?.msg || '未知错误'}`);
+      log.error(`[DouyuChecker] 获取流地址失败: ${data?.msg || '未知错误'}`);
       return null;
     }
 
@@ -323,7 +326,7 @@ class DouyuChecker extends PlatformChecker {
         },
       });
     } catch (err) {
-      console.error(`[DouyuChecker] 检查失败 (${this.roomUrl}):`, err.message);
+      log.error(`[DouyuChecker] 检查失败 (${this.roomUrl}):`, err.message);
       return PlatformChecker.normalizeResult({ error: err.message });
     }
   }
