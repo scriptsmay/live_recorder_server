@@ -1,4 +1,7 @@
 const PlatformChecker = require('./PlatformChecker');
+
+const { createModuleLogger } = require('../logger');
+const log = createModuleLogger('polling');
 const { generateABogus } = require('./signers/douyin');
 
 const DOUBYIN_LIVE_BASE = 'https://live.douyin.com';
@@ -70,7 +73,7 @@ class DouyinChecker extends PlatformChecker {
 
       return url;
     } catch (err) {
-      console.error(`[DouyinChecker] 解析短链接失败 (${url}):`, err.message);
+      log.error(`[DouyinChecker] 解析短链接失败 (${url}):`, err.message);
       return url;
     }
   }
@@ -93,7 +96,7 @@ class DouyinChecker extends PlatformChecker {
 
       const aBogus = generateABogus(params.toString(), this._userAgent);
       if (!aBogus) {
-        console.error('[DouyinChecker] a_bogus 签名生成失败');
+        log.error('[DouyinChecker] a_bogus 签名生成失败');
         return null;
       }
 
@@ -120,7 +123,7 @@ class DouyinChecker extends PlatformChecker {
 
       return data.data;
     } catch (err) {
-      console.error(`[DouyinChecker] Web API 请求失败 (${webRid}):`, err.message);
+      log.error(`[DouyinChecker] Web API 请求失败 (${webRid}):`, err.message);
       return null;
     }
   }
@@ -140,7 +143,7 @@ class DouyinChecker extends PlatformChecker {
         try {
           return JSON.parse(renderDataMatch[1]);
         } catch (e) {
-          console.error('[DouyinChecker] 解析 INITIAL_STATE 失败:', e.message);
+          log.error('[DouyinChecker] 解析 INITIAL_STATE 失败:', e.message);
         }
       }
 
@@ -152,7 +155,7 @@ class DouyinChecker extends PlatformChecker {
 
       return null;
     } catch (err) {
-      console.error(`[DouyinChecker] HTML 解析失败 (${webRid}):`, err.message);
+      log.error(`[DouyinChecker] HTML 解析失败 (${webRid}):`, err.message);
       return null;
     }
   }
@@ -244,7 +247,7 @@ class DouyinChecker extends PlatformChecker {
 
       return null;
     } catch (err) {
-      console.error('[DouyinChecker] 解析 __pace_f 数据失败:', err.message);
+      log.error('[DouyinChecker] 解析 __pace_f 数据失败:', err.message);
       return null;
     }
   }
@@ -285,7 +288,7 @@ class DouyinChecker extends PlatformChecker {
             }
           }
         } catch (e) {
-          console.error('[DouyinChecker] 解析 stream_data 失败:', e.message);
+          log.error('[DouyinChecker] 解析 stream_data 失败:', e.message);
         }
       }
 
@@ -323,7 +326,7 @@ class DouyinChecker extends PlatformChecker {
 
       return { streamUrl, format };
     } catch (err) {
-      console.error('[DouyinChecker] 解析流数据失败:', err.message);
+      log.error('[DouyinChecker] 解析流数据失败:', err.message);
       return null;
     }
   }
@@ -428,7 +431,7 @@ class DouyinChecker extends PlatformChecker {
         streamInfo: { format: streamData.format, source: isFromWebAPI ? 'webapi' : 'html' },
       });
     } catch (err) {
-      console.error(`[DouyinChecker] 检查失败 (${this.roomUrl}):`, err.message);
+      log.error(`[DouyinChecker] 检查失败 (${this.roomUrl}):`, err.message);
       return PlatformChecker.normalizeResult({ error: err.message });
     }
   }

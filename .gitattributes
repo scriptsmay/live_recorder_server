@@ -1,0 +1,12 @@
+# 强制所有文本文件使用 LF 换行符，避免 Windows 上 CRLF 引发的伪差异与审查噪声
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

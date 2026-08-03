@@ -1,5 +1,8 @@
 const crypto = require('crypto');
 
+const { createModuleLogger } = require('../../logger');
+const log = createModuleLogger('polling');
+
 function generateABogus(queryString, _userAgent = '') {
   try {
     if (!queryString) {
@@ -36,7 +39,7 @@ function generateABogus(queryString, _userAgent = '') {
 
     return finalResult;
   } catch (err) {
-    console.error('[DouyinSign] 生成 a_bogus 失败:', err.message);
+    log.error('[DouyinSign] 生成 a_bogus 失败:', err.message);
     return null;
   }
 }
@@ -67,7 +70,7 @@ function generateXbogus(queryString, _userAgent = '') {
 
     return base64Encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   } catch (err) {
-    console.error('[DouyinSign] 生成 x_bogus 失败:', err.message);
+    log.error('[DouyinSign] 生成 x_bogus 失败:', err.message);
     return null;
   }
 }

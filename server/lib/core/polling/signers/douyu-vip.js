@@ -1,5 +1,8 @@
 const vm = require('vm');
 const crypto = require('crypto');
+
+const { createModuleLogger } = require('../../logger');
+const log = createModuleLogger('polling');
 const { getOptimalUserAgent } = require('../../config/userAgents');
 
 const DOUYU_DEFAULT_DID = '10000000000000000000000000001501';
@@ -56,7 +59,7 @@ async function getVipSignParams(rid, jsCode) {
       isVip: true,
     };
   } catch (err) {
-    console.error('[DouyuSign] VIP 签名失败:', err.message);
+    log.error('[DouyuSign] VIP 签名失败:', err.message);
     return null;
   }
 }

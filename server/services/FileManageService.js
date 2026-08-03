@@ -18,6 +18,11 @@ const EVENT_LOOP_YIELD_INTERVAL = 10;
 const SCAN_LOCK_KEY = 'file_manage_scan_lock';
 const SCAN_LOCK_TTL = 300; // 5 分钟自动过期，防止崩溃后锁残留
 
+// 业务记录的可安全删除终态集合（与 validateFileSafety 第 7 条规则保持一致）。
+// 仅进行中状态（如 recording）拦截；已结束/丢失/失败等终态均允许清理其孤儿索引。
+const RF_DELETABLE_STATUSES = ['completed', 'interrupted', 'missing', 'deleted', 'failed', 'cancelled', 'orphaned'];
+const REPLAY_DELETABLE_STATUSES = ['completed', 'uploaded', 'backed_up', 'failed', 'cancelled'];
+
 class FileManageService {
   // ========== 扫描与索引 ==========
 
@@ -313,9 +318,14 @@ class FileManageService {
 
   /** 刷新已索引文件的磁盘状态（存在性 + 回填 mtime/file_size） */
   static async _refreshDiskStatus(results) {
+    // 注意：此处不剔除 status='missing' 的记录——早期版本残留的 delete_block_reason='file_not_found'
+    // 与 safe_to_delete=false 只会写在 status='missing' 的行上，若不重新纳入扫描，这些陈旧标记将永久
+    // 阻挡删除（UI 显示不可删、自动清理候选也筛不到）。纳入后由 ENOENT 分支按源记录终态重新计算。
     const { rows } = await pool.query(`
-      SELECT id, file_path, mtime, file_size FROM managed_files
-      WHERE status NOT IN ('deleting', 'deleted', 'missing')
+      SELECT id, file_path, mtime, file_size, source_table, source_id, status,
+             safe_to_delete, delete_block_reason
+      FROM managed_files
+      WHERE status NOT IN ('deleting', 'deleted')
     `);
 
     let idx = 0;
@@ -345,6 +355,10 @@ class FileManageService {
           setterParts.push(`file_size = $${pi++}`);
           params.push(stat.size);
         }
+        // 文件原先标记为缺失、但此刻磁盘上又存在了 → 恢复为正常索引
+        if (row.status === 'missing') {
+          setterParts.push(`exists_on_disk = true`, `status = 'active'`);
+        }
         if (setterParts.length > 0) {
           setterParts.push(`updated_at = NOW()`);
           params.push(row.id);
@@ -353,10 +367,15 @@ class FileManageService {
         }
       } catch (err) {
         if (err.code === 'ENOENT') {
+          // 文件确实已从磁盘消失：标记为 missing，并按源记录终态重新计算 safe_to_delete /
+          // delete_block_reason，使陈旧标记（file_not_found / safe_to_delete=false）自愈。
+          const { safeToDelete, blockReason } = await this._evaluateMissingSafety(row);
           await pool.query(
-            `UPDATE managed_files SET exists_on_disk = false, status = 'missing', updated_at = NOW()
-             WHERE id = $1`,
-            [row.id]
+            `UPDATE managed_files
+             SET exists_on_disk = false, status = 'missing',
+                 safe_to_delete = $1, delete_block_reason = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [safeToDelete, blockReason, row.id]
           );
           results.missing++;
         } else {
@@ -369,6 +388,36 @@ class FileManageService {
         await new Promise((r) => setImmediate(r));
       }
     }
+  }
+
+  /**
+   * 文件从磁盘消失（ENOENT）后，依据业务源记录状态计算安全删除标记。
+   * - 无业务来源（孤儿索引）→ 直接允许清理
+   * - 源记录处于终态（completed/interrupted/missing/deleted/failed/cancelled/orphaned 等）→ 允许清理，清空 block 原因
+   * - 源记录仍处于进行中（如 recording）→ 保留拦截，标记 file_not_found，交由运行期 validateFileSafety 二次把关
+   * @param {object} row - managed_files 行（至少含 source_table, source_id, delete_block_reason）
+   * @returns {Promise<{safeToDelete: boolean, blockReason: string|null}>}
+   */
+  static async _evaluateMissingSafety(row) {
+    if (!row.source_table || !row.source_id) {
+      return { safeToDelete: true, blockReason: null };
+    }
+    if (row.source_table === 'recording_files') {
+      const { rows: src } = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [row.source_id]);
+      if (src.length > 0 && RF_DELETABLE_STATUSES.includes(src[0].status)) {
+        return { safeToDelete: true, blockReason: null };
+      }
+      return { safeToDelete: false, blockReason: 'file_not_found' };
+    }
+    if (row.source_table === 'replay_records') {
+      const { rows: src } = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [row.source_id]);
+      if (src.length > 0 && REPLAY_DELETABLE_STATUSES.includes(src[0].status)) {
+        return { safeToDelete: true, blockReason: null };
+      }
+      return { safeToDelete: false, blockReason: 'file_not_found' };
+    }
+    // 其它来源表：保守起见不自动放行，保留（或回退为）file_not_found
+    return { safeToDelete: false, blockReason: row.delete_block_reason || 'file_not_found' };
   }
 
   // ========== 查询 ==========
@@ -1044,15 +1093,6 @@ class FileManageService {
       const rfCheck = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [source_id]);
       if (rfCheck.rows.length > 0) {
         const rfStatus = rfCheck.rows[0].status;
-        const RF_DELETABLE_STATUSES = [
-          'completed',
-          'interrupted',
-          'missing',
-          'deleted',
-          'failed',
-          'cancelled',
-          'orphaned',
-        ];
         if (!RF_DELETABLE_STATUSES.includes(rfStatus)) {
           return { safe: false, reason: `recording_status_${rfStatus}` };
         }
@@ -1063,7 +1103,7 @@ class FileManageService {
       const rrCheck = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [source_id]);
       if (
         rrCheck.rows.length > 0 &&
-        !['completed', 'uploaded', 'backed_up', 'failed', 'cancelled'].includes(rrCheck.rows[0].status)
+        !REPLAY_DELETABLE_STATUSES.includes(rrCheck.rows[0].status)
       ) {
         return { safe: false, reason: `replay_status_${rrCheck.rows[0].status}` };
       }

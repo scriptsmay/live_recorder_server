@@ -1,5 +1,8 @@
 const PlatformChecker = require('./PlatformChecker');
 
+const { createModuleLogger } = require('../logger');
+const log = createModuleLogger('polling');
+
 const BILIBILI_API_BASE = 'https://api.live.bilibili.com';
 
 class BilibiliChecker extends PlatformChecker {
@@ -202,7 +205,7 @@ class BilibiliChecker extends PlatformChecker {
         streamInfo: streamUrl ? { format } : null,
       });
     } catch (err) {
-      console.error(`[BilibiliChecker] 检查失败 (${this.roomUrl}):`, err.message);
+      log.error(`[BilibiliChecker] 检查失败 (${this.roomUrl}):`, err.message);
       return PlatformChecker.normalizeResult({ error: err.message });
     }
   }

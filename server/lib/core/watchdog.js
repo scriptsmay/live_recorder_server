@@ -9,6 +9,9 @@ const { getActiveDownloader } = require('./downloaders/DownloaderFactory');
 const { scanRecordingFiles } = require('./scan-files');
 const transcodeQueue = require('./TranscodeQueue');
 const hlsGenerator = require('./hls-generator');
+
+const { createModuleLogger } = require('./logger');
+const log = createModuleLogger('watchdog');
 // const recordingManager = require('./RecordingManager');
 
 let watchdogTimer = null;
@@ -68,7 +71,7 @@ async function checkStaleRecordings() {
       if (room.output_path) {
         const outputDir = path.dirname(room.output_path);
         const downloader = getActiveDownloader(room.polling_platform);
-        console.log('[看门狗] downloader name:', downloader.name);
+        log.debug('[看门狗] downloader name:', downloader.name);
         // 这个是真分段
         const isSegmented = (room.segment_duration || 0) > 0;
 
@@ -102,13 +105,13 @@ async function checkStaleRecordings() {
         }
       }
 
-      console.log(
+      log.debug(
         `[看门狗] 检测: ${room.room_name || room.room_url} (pid=${room.ffmpeg_pid}, 进程=${processAlive}, 文件过时=${fileStale})`
       );
       // console.log('[看门狗] 但暂时不做任何处理.');
 
       if (!processAlive || fileStale) {
-        console.log(
+        log.important(
           `[看门狗] 僵死录制: ${room.room_name || room.room_url} (pid=${room.ffmpeg_pid}, 进程=${processAlive}, 文件过时=${fileStale})`
         );
 
@@ -150,11 +153,11 @@ async function checkStaleRecordings() {
             [room.session_id]
           );
         }
-        console.log(`[看门狗] 清理完成: ${room.room_name || room.room_url}`);
+        log.info(`[看门狗] 清理完成: ${room.room_name || room.room_url}`);
       }
     }
   } catch (err) {
-    console.error('[看门狗] 检查失败:', err.message);
+    log.error('[看门狗] 检查失败:', err.message);
   }
 }
 
@@ -181,7 +184,7 @@ async function scanActiveSegments() {
               r.id AS room_id, r.room_url, r.room_name, r.output_path
        FROM recording_sessions rs
        JOIN rooms r ON rs.room_url = r.room_url
-       WHERE (rs.status = 'recording' OR 
+       WHERE (rs.status = 'recording' OR
               (rs.status = 'completed' AND rs.ended_at >= NOW() - INTERVAL '5 minutes'))
          AND rs.output_dir IS NOT NULL`
     );
@@ -252,7 +255,7 @@ async function scanActiveSegments() {
         if (Date.now() - stat.mtimeMs < stabilityMs) continue;
 
         if (stat.size < thresholdBytes && stat.size > 0) {
-          console.log(
+          log.debug(
             `[分段追踪] ${session.room_name || session.room_url}: ${f} 碎片(${(stat.size / 1024 / 1024).toFixed(1)}MB < ${thresholdMB}MB)，跳过`
           );
           continue;
@@ -289,7 +292,7 @@ async function scanActiveSegments() {
           [stat.size, session.session_id]
         );
 
-        console.log(
+        log.debug(
           `[分段追踪] ${session.room_name || session.room_url}: ${f} (${(stat.size / 1024 / 1024).toFixed(1)}MB, ${durationSec}s)`
         );
 
@@ -297,7 +300,7 @@ async function scanActiveSegments() {
       }
     }
   } catch (err) {
-    console.error('[分段追踪] 失败:', err.message);
+    log.error('[分段追踪] 失败:', err.message);
   }
 }
 
@@ -325,9 +328,9 @@ async function cleanupFragmentFiles() {
 
   try {
     const { rows: sessions } = await pool.query(
-      `SELECT id AS session_id, output_dir 
-       FROM recording_sessions 
-       WHERE status IN ('completed', 'interrupted') 
+      `SELECT id AS session_id, output_dir
+       FROM recording_sessions
+       WHERE status IN ('completed', 'interrupted')
          AND output_dir IS NOT NULL`
     );
 
@@ -365,11 +368,11 @@ async function cleanupFragmentFiles() {
           // 先删磁盘文件，成功后再删 DB 记录（避免 unlink 失败时丢失 DB 追踪）
           try {
             fs.unlinkSync(fp);
-            console.log(`[碎片清理] 已删除: ${path.basename(fp)} (${(size / 1024).toFixed(0)}KB)`);
+            log.debug(`[碎片清理] 已删除: ${path.basename(fp)} (${(size / 1024).toFixed(0)}KB)`);
           } catch (unlinkErr) {
             if (unlinkErr.code === 'ENOENT') {
               // 文件已被文件管理模块或其他进程提前删除，降级清理 DB 记录
-              console.log(`[碎片清理] 文件已被其他进程删除: ${path.basename(fp)}`);
+              log.debug(`[碎片清理] 文件已被其他进程删除: ${path.basename(fp)}`);
             } else {
               continue; // unlink 失败则跳过 DB 删除
             }
@@ -396,14 +399,14 @@ async function cleanupFragmentFiles() {
                 [fp]
               )
               .catch((err) => {
-                console.warn(`[碎片清理] 更新 managed_files 失败: ${err.message}`);
+                log.warn(`[碎片清理] 更新 managed_files 失败: ${err.message}`);
               });
           }
         }
       } catch (_) {}
     }
   } catch (err) {
-    console.error('[碎片清理] 失败:', err.message);
+    log.error('[碎片清理] 失败:', err.message);
   }
 }
 
@@ -445,9 +448,9 @@ async function syncMissingFiles() {
         count++;
       }
     }
-    if (count > 0) console.log(`[文件同步] ${count} 个文件在磁盘上已不存在，标记为 missing`);
+    if (count > 0) log.info(`[文件同步] ${count} 个文件在磁盘上已不存在，标记为 missing`);
   } catch (err) {
-    console.error('[文件同步] 失败:', err.message);
+    log.error('[文件同步] 失败:', err.message);
   }
 }
 
@@ -484,17 +487,15 @@ async function finalizeInterruptedSessions() {
       if (timeDiff > delayMs) {
         await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [session.id]);
         updatedCount++;
-        console.log(
-          `[会话完成] (ID=${session.id}): interrupted -> completed (结束于${Math.floor(timeDiff / 1000)}秒前)`
-        );
+        log.debug(`[会话完成] (ID=${session.id}): interrupted -> completed (结束于${Math.floor(timeDiff / 1000)}秒前)`);
       }
     }
 
     if (updatedCount > 0) {
-      console.log(`[会话完成] 共更新 ${updatedCount} 个会话状态为 completed`);
+      log.info(`[会话完成] 共更新 ${updatedCount} 个会话状态为 completed`);
     }
   } catch (err) {
-    console.error('[会话完成] 失败:', err.message);
+    log.error('[会话完成] 失败:', err.message);
   }
 }
 
@@ -528,12 +529,12 @@ async function checkSessionTranscode() {
             mp4Path: mp4Path,
             sessionId: file.session_id,
           })
-          .catch((err) => console.error('[看门狗][转码队列] 入队异常:', err.message));
-        console.log(`[看门狗][转码队列] 已添加文件 ${filePath} 到转码队列`);
+          .catch((err) => log.error('[看门狗][转码队列] 入队异常:', err.message));
+        log.debug(`[看门狗][转码队列] 已添加文件 ${filePath} 到转码队列`);
       }
     }
   } catch (err) {
-    console.error('[看门狗][检查待转码会话文件] 失败:', err.message);
+    log.error('[看门狗][检查待转码会话文件] 失败:', err.message);
   }
 }
 
@@ -566,7 +567,7 @@ async function checkSessionHLS() {
            WHERE id = $1 AND hls_status = 'ready'`,
           [recording.id]
         );
-        console.warn(`[看门狗][HLS] 播放列表缺失，已标记 missing: recording_id=${recording.id}`);
+        log.warn(`[看门狗][HLS] 播放列表缺失，已标记 missing: recording_id=${recording.id}`);
         continue;
       }
 
@@ -580,13 +581,13 @@ async function checkSessionHLS() {
 
       const result = await hlsGenerator.generateForRecording(recording.id);
       if (result.success) {
-        console.log(`[看门狗][HLS] 已为文件 ${path.basename(recording.file_path)} 生成 HLS`);
+        log.debug(`[看门狗][HLS] 已为文件 ${path.basename(recording.file_path)} 生成 HLS`);
       } else {
-        console.warn(`[看门狗][HLS] 生成失败 ${path.basename(recording.file_path)}: ${result.error}`);
+        log.warn(`[看门狗][HLS] 生成失败 ${path.basename(recording.file_path)}: ${result.error}`);
       }
     }
   } catch (err) {
-    console.error('[看门狗][检查待生成HLS会话文件] 失败:', err.message);
+    log.error('[看门狗][检查待生成HLS会话文件] 失败:', err.message);
   }
 }
 
@@ -604,9 +605,9 @@ async function runFileScan() {
     if (r.associated) parts.push(`${r.associated} 关联`);
     if (r.orphaned) parts.push(`${r.orphaned} 孤⽂件`);
 
-    if (parts.length) console.log(`[文件扫描] 完成: ${parts.join(', ')}`);
+    if (parts.length) log.info(`[文件扫描] 完成: ${parts.join(', ')}`);
   } catch (err) {
-    console.error('[文件扫描] 失败:', err.message);
+    log.error('[文件扫描] 失败:', err.message);
   }
 }
 
@@ -628,7 +629,9 @@ async function runFileScan() {
  * @returns {Promise<void>} 无返回值，错误会在内部捕获并打印日志
  */
 async function runWatchdog() {
+  const scanStart = Date.now();
   let intervalSec = 30;
+  log.important('[看门狗] 扫描开始');
   try {
     intervalSec = parseInt(await DataService.getSetting('watchdog_interval', '30'), 10);
     await checkStaleRecordings();
@@ -640,7 +643,10 @@ async function runWatchdog() {
     await checkSessionHLS();
     await UploadService.scanPendingAutoUpload();
   } catch (err) {
-    console.error('[看门狗] 异常:', err.message);
+    log.error('[看门狗] 异常:', err.message);
+  } finally {
+    const durationMs = Date.now() - scanStart;
+    log.important(`[看门狗] 扫描完成，耗时 ${durationMs}ms`);
   }
   watchdogTimer = setTimeout(runWatchdog, Math.max(intervalSec, 10) * 1000);
 }
@@ -744,18 +750,19 @@ async function backfillSegmentTimes(sessionId, pool) {
         accumulatedMs = endMs;
         updated++;
       } catch (err) {
-        console.warn(`[backfillSegmentTimes] 无法获取文件时长 ${row.file_path}: ${err.message}`);
+        log.warn(`[backfillSegmentTimes] 无法获取文件时长 ${row.file_path}: ${err.message}`);
       }
     }
-    console.log(`[backfillSegmentTimes] 会话 ${sessionId} 已补充分段时间，共 ${updated} 个分段`);
+    log.info(`[backfillSegmentTimes] 会话 ${sessionId} 已补充分段时间，共 ${updated} 个分段`);
   } catch (err) {
-    console.error(`[backfillSegmentTimes] 会话 ${sessionId} 补充失败:`, err.message);
+    log.error(`[backfillSegmentTimes] 会话 ${sessionId} 补充失败:`, err.message);
   }
 }
 
 module.exports = {
   start,
   stop,
+  runWatchdog,
   runFileScan,
   checkStaleRecordings,
   scanActiveSegments,

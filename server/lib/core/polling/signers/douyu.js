@@ -1,4 +1,7 @@
 const crypto = require('crypto');
+
+const { createModuleLogger } = require('../../logger');
+const log = createModuleLogger('polling');
 const { getOptimalUserAgent } = require('../../config/userAgents');
 
 const DEFAULT_DID = '10000000000000000000000000001501';
@@ -66,7 +69,7 @@ async function _fetchEncryptionKey(did, requestTime) {
 
     return encryptKeyCache;
   } catch (err) {
-    console.error('[DouyuSign] 密钥获取异常:', err.message);
+    log.error('[DouyuSign] 密钥获取异常:', err.message);
     throw err;
   }
 }
@@ -86,7 +89,7 @@ async function getSignParams(rid, options = {}) {
     const keyData = await getEncryptionKey(did);
     if (!keyData) {
       // 降级到简化签名
-      console.warn('[DouyuSign] 使用简化签名（降级）');
+      log.warn('[DouyuSign] 使用简化签名（降级）');
       const time = Date.now();
       return {
         did,
@@ -119,7 +122,7 @@ async function getSignParams(rid, options = {}) {
       _fallback: false,
     };
   } catch (err) {
-    console.error('[DouyuSign] 获取签名失败:', err.message);
+    log.error('[DouyuSign] 获取签名失败:', err.message);
     return null;
   }
 }
