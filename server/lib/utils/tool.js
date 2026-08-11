@@ -148,13 +148,14 @@ function getDanmakuJsonlPath(sessionId) {
 /**
  * 获取弹幕数据集中目录
  *
+ * 与 `getDanmakuJsonlPath()` 的差异：本函数用于展示/统计场景（如文件管理概览），
+ * 缺少环境变量时沿用仓库既有约定回落到 `/data/video_downloads`（同 `path-safety.js`
+ * 的 ALLOWLIST_ROOTS 写法），不抛错；写入路径则必须显式配置，故那边严格校验。
+ *
  * @returns {string} VIDEO_DOWNLOAD_DIR/danmaku 绝对路径
  */
 function getDanmakuDir() {
-  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR;
-  if (!downloadDir) {
-    throw new Error('getDanmakuDir: 环境变量 VIDEO_DOWNLOAD_DIR 未配置');
-  }
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads';
   return path.join(downloadDir, DANMAKU_DIR_NAME);
 }
 

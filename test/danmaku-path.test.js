@@ -61,4 +61,9 @@ describe('getDanmakuDir', () => {
     expect(getDanmakuDir()).toBe(path.join('/data/video_downloads', DANMAKU_DIR_NAME));
     expect(path.dirname(getDanmakuJsonlPath(7))).toBe(getDanmakuDir());
   });
+
+  test('VIDEO_DOWNLOAD_DIR 未配置时回落到默认值不抛错', () => {
+    delete process.env.VIDEO_DOWNLOAD_DIR;
+    expect(getDanmakuDir()).toBe(path.join('/data/video_downloads', DANMAKU_DIR_NAME));
+  });
 });
