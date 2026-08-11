@@ -753,7 +753,6 @@ class RecorderService {
           roomId: room.id,
           roomUrl: room.room_url,
           platform: room.polling_platform || 'kuaishou',
-          outputDir: path.join(sessionDir, 'danmaku'),
           recordingStartedAt: sessionStartMs,
         })
         .catch((err) => {
