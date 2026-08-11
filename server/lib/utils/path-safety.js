@@ -11,8 +11,6 @@ const path = require('path');
 const ALLOWLIST_ROOTS = [
   process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads',
   process.env.REPLAY_WORK_DIR || '/data/replay',
-  process.env.DANMAKU_OUTPUT_DIR || '/data/danmaku_output',
-  process.env.DANMAKU_ARCHIVE_DIR || '/data/danmaku_archive',
   process.env.BILIUP_WORK_DIR || '/data/biliup',
 ].map((r) => path.resolve(r));
 

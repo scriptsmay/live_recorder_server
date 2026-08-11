@@ -5,6 +5,7 @@ const router = express.Router();
 const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const DataService = require('../services/DataService');
+const { getDanmakuJsonlPath } = require('../lib/utils/tool');
 
 /**
  * GET /api/sessions/:id/danmaku-page
@@ -124,16 +125,13 @@ router.get('/danmaku/search', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 session_id' });
     }
 
-    const session = await pool.query('SELECT output_dir FROM recording_sessions WHERE id = $1', [session_id]);
+    const session = await pool.query('SELECT id FROM recording_sessions WHERE id = $1', [session_id]);
     if (session.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
 
-    const sessionDir = session.rows[0].output_dir;
-    const danmakuDir = path.join(sessionDir, 'danmaku');
-    const newJsonlPath = path.join(danmakuDir, 'danmaku.jsonl');
-    const oldJsonlPath = path.join(sessionDir, 'danmaku.jsonl');
-    const jsonlPath = fs.existsSync(newJsonlPath) ? newJsonlPath : oldJsonlPath;
+    // v1.8.0：弹幕集中存放，路径由 sessionId 唯一推导，不再兼容会话目录下的旧路径
+    const jsonlPath = getDanmakuJsonlPath(session_id);
     if (!fs.existsSync(jsonlPath)) {
       return res.json({ status: 'ok', data: [], total: 0 });
     }

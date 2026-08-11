@@ -109,7 +109,7 @@ npm run lint && npm run format && npm run test
 
 - 启动时自动迁移建表（`server/db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
 - 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）、`danmaku_capture_records`（弹幕采集）
-- 已废弃待移除（计划 v1.8.0 DROP）：`danmaku_burn_records`、`danmaku_free_burn_records`、`recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` —— 弹幕压制已迁至 danmaku-tool，这些表/列不再写入
+- 已废弃已移除（v1.8.0 DROP）：`danmaku_burn_records`、`danmaku_free_burn_records`、`recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` —— 弹幕压制已迁至 danmaku-tool，启动时自动执行 DROP
 - `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
 - `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
@@ -170,9 +170,7 @@ npm run lint && npm run format && npm run test
 
 ## 关键环境变量
 
-- `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建
-- `DANMAKU_OUTPUT_DIR` —— ⚠️ 已废弃：原弹幕压制产物输出目录。压制迁出后本服务不再向该目录写入，仅剩 `path-safety` 白名单与 `getFileSummary()` 两处防御性读取，计划 v1.8.0 移除
-- `DANMAKU_ARCHIVE_DIR` —— ⚠️ 已废弃：原弹幕长期归档目录，设计未落地（`DanmakuRecorder` 始终写会话目录），仅 `scripts/backup-danmaku.js` 手动脚本消费，计划 v1.8.0 移除
+- `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建；弹幕 JSONL 集中存放在 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`
 - `PORT` —— 正式环境默认 1123 ，开发环境默认 3001
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
@@ -219,14 +217,15 @@ npm run lint && npm run format && npm run test
 
 ```text
 VIDEO_DOWNLOAD_DIR/
+├── danmaku/                           # 弹幕 JSONL 集中目录（保留目录名，scan-files 跳过）
+│   ├── 118.jsonl                      # sessionId 命名，自解释
+│   └── 119.jsonl
 ├── [sessionId]/
 │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
-│   └── danmaku/                       # 弹幕数据（与录制文件隔离）
-│       └── danmaku.jsonl              # 弹幕原始数据（JSONL）
+│   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
 ```
 
-> 注：ASS 字幕生成与弹幕压制产物已随 v1.7.0 迁出至独立的 danmaku-tool 项目，不再由本服务写入。弹幕路径的整体扁平化改造纳入 v1.8.0 计划。
+> v1.8.0 起弹幕 JSONL 不再放在会话子目录下的 `danmaku/danmaku.jsonl`。路径由 `getDanmakuJsonlPath(sessionId)` 唯一推导，业务代码禁止自行拼接。danmaku-tool 的批量压制功能需同步更新路径（见 ADR-011）。
 
 ## 日志
 

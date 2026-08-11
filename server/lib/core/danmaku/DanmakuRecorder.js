@@ -1,19 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const pool = require('../../../db/index');
+const { getDanmakuJsonlPath } = require('../../utils/tool');
 
 /**
  * DanmakuRecorder — 弹幕录制器
  *
  * 职责：
  * 1. 接收 Chrome Extension 推送的弹幕事件
- * 2. 将弹幕写入会话级 danmaku.jsonl 文件（每行一条标准化事件）
+ * 2. 将弹幕写入 VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl（每行一条标准化事件）
  * 3. 管理 danmaku_capture_records 数据库记录
  * 4. 在录制结束时停止采集并标记状态
  */
 class DanmakuRecorder {
   constructor() {
-    // 活跃的采集会话：roomUrl -> { sessionId, captureId, fd, startedAt, eventCount, outputDir }
+    // 活跃的采集会话：roomUrl -> { sessionId, captureId, fd, startedAt, eventCount, rawPath }
     this.activeSessions = new Map();
   }
 
@@ -21,32 +22,35 @@ class DanmakuRecorder {
    * 启动弹幕采集
    * 在录制会话启动时调用，创建 danmaku_capture_records 并打开 JSONL 文件
    *
+   * JSONL 路径由 sessionId 唯一推导（v1.8.0 起集中扁平存放），调用方无需传目录。
+   *
    * @param {Object} params
    * @param {number} params.sessionId - 录制会话 ID
    * @param {number} params.roomId - 房间 ID
    * @param {string} params.roomUrl - 房间 URL（直播间地址）
    * @param {string} params.platform - 平台（默认 kuaishou）
-   * @param {string} params.outputDir - 会话输出目录
    * @param {number} [params.recordingStartedAt] - 录制（FFmpeg）启动时间戳（epoch ms），用于对齐视频时间轴
    * @returns {Promise<number|null>} capture_id 或 null（未启用时）
    */
-  async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', outputDir, recordingStartedAt }) {
+  async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', recordingStartedAt }) {
     const enabled = await this._getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
       return null;
     }
 
-    if (!outputDir) {
-      console.warn('[DanmakuRecorder] 缺少 outputDir，跳过采集');
+    let rawPath;
+    try {
+      rawPath = getDanmakuJsonlPath(sessionId);
+    } catch (err) {
+      console.warn(`[DanmakuRecorder] 无法确定弹幕路径，跳过采集: ${err.message}`);
       return null;
     }
 
-    // 确保目录存在
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    // 确保集中目录存在
+    const danmakuDir = path.dirname(rawPath);
+    if (!fs.existsSync(danmakuDir)) {
+      fs.mkdirSync(danmakuDir, { recursive: true });
     }
-
-    const rawPath = path.join(outputDir, 'danmaku.jsonl');
 
     try {
       // 创建数据库记录
@@ -70,11 +74,10 @@ class DanmakuRecorder {
         recordingStartedAt: startedAt,
         startedAt, // sessionStartMs 别名，供 _normalizeEvent 批量处理用
         eventCount: 0,
-        outputDir,
         rawPath,
       });
 
-      console.log(`[DanmakuRecorder] 采集启动: capture_id=${captureId}, session=${sessionId}, dir=${outputDir}`);
+      console.log(`[DanmakuRecorder] 采集启动: capture_id=${captureId}, session=${sessionId}, file=${rawPath}`);
       return captureId;
     } catch (err) {
       console.error('[DanmakuRecorder] 启动采集失败:', err.message);

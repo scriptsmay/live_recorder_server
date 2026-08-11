@@ -133,10 +133,9 @@ VIDEO_DOWNLOAD_DIR/
 
 - 弹幕采集与录制流程完全解耦，录制模块只负责「采集 + 落 JSONL」
 - 新录制目录结构为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
-- 兼容旧路径：JSONL 优先读取 `danmaku_capture_records.raw_path`，fallback 到 `[sessionDir]/danmaku/danmaku.jsonl` 和 `[sessionDir]/danmaku.jsonl`
-- **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool
-- 弹幕路径统一为 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl` 的扁平化改造，以及 `DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 两个废弃变量的移除，纳入 v1.8.0（见知识库 ADR-011）
-- 遗留待清理：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列均已不再写入，计划 v1.8.0 DROP
+- 弹幕 JSONL 集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0）；路径由 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)` 唯一推导，读取与写入均走该函数，不再兼容会话子目录旧路径（历史数据由 `scripts/migrate-danmaku-paths.js` 一次性迁移）
+- **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool（见知识库 ADR-011）
+- 已于 v1.8.0 DROP：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列；`DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 两个废弃环境变量一并移除
 
 ## 1. 会话生命周期
 

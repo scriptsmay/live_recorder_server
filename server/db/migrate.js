@@ -3,6 +3,12 @@ const ensureDatabase = require('./ensure-database');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+// 迁移事务包含 DROP TABLE / DROP COLUMN，需要 ACCESS EXCLUSIVE 锁。
+// 滚动部署时旧实例的查询可能持锁，用 lock_timeout 快速失败 + 重试，
+// 避免启动阶段无限期阻塞在等锁上。
+const LOCK_TIMEOUT_MS = 5000;
+// 40P01 死锁、55P03 拿不到锁（lock_timeout 触发）
+const RETRYABLE_CODES = new Set(['40P01', '55P03']);
 
 async function migrate() {
   await ensureDatabase();
@@ -21,8 +27,8 @@ async function migrate() {
           console.error('[DB] 自动建库失败:', createErr.message);
         }
       }
-      if (err.code === '40P01' && attempt < MAX_RETRIES) {
-        console.warn(`[DB] 死锁检测 (${attempt}/${MAX_RETRIES}), ${RETRY_DELAY_MS}ms 后重试...`);
+      if (RETRYABLE_CODES.has(err.code) && attempt < MAX_RETRIES) {
+        console.warn(`[DB] 迁移锁冲突 ${err.code} (${attempt}/${MAX_RETRIES}), ${RETRY_DELAY_MS}ms 后重试...`);
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       } else {
         throw err;
@@ -36,6 +42,7 @@ async function runMigration() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS admin_users (
@@ -278,8 +285,7 @@ async function runMigration() {
         hls_status VARCHAR(20) NOT NULL DEFAULT 'pending',
         hls_deleted_at TIMESTAMP,
         segment_start_ms INTEGER DEFAULT 0,
-        segment_end_ms INTEGER DEFAULT 0,
-        danmaku_ass_path VARCHAR(1024) DEFAULT ''
+        segment_end_ms INTEGER DEFAULT 0
       )
     `);
 
@@ -313,14 +319,13 @@ async function runMigration() {
       END $$;
     `);
 
-    // danmaku_ass_path 已迁移到弹幕文件系统的确定性路径，不再写入 recording_files
-    // 保留列以兼容历史数据及 watchdog/RecorderService 中的引用，DROP 推迟到发布后 1 个月（见下方 deferred migration）
-
-    // ========== 推迟执行：recording_files 弹幕字段 DROP ==========
-    // 以下 migration 推迟到发布后至少 1 个月执行，确保无回滚需求后再取消注释
-    // -- await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
-    // -- 回滚 SQL（如需要，手动执行）：
-    // -- ALTER TABLE recording_files ADD COLUMN danmaku_ass_path VARCHAR(1024) DEFAULT '';
+    // ========== v1.8.0：弹幕压制遗留结构清理 ==========
+    // 弹幕压制已于 v1.7.0 迁出至 danmaku-tool，以下列/表不再被任何代码写入或读取。
+    // 生产存量（2026-08-11 实测）：recording_files.danmaku_ass_path 101 行非空、
+    // danmaku_capture_records.ass_path 64 行非空、danmaku_burn_records 4 行、
+    // danmaku_free_burn_records 0 行。DROP 会丢弃这些历史记录，已获用户确认。
+    // 回滚：结构见 server/db/rollback_danmaku_fields.sql；数据需从 pg_dump 备份恢复。
+    await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
 
     // ========== settings ==========
 
@@ -368,7 +373,6 @@ async function runMigration() {
         platform VARCHAR(50) DEFAULT 'kuaishou',
         status VARCHAR(20) DEFAULT 'recording',
         raw_path VARCHAR(1024) DEFAULT '',
-        ass_path VARCHAR(1024) DEFAULT '',
         event_count INTEGER DEFAULT 0,
         started_at TIMESTAMP DEFAULT NOW(),
         ended_at TIMESTAMP,
@@ -376,30 +380,11 @@ async function runMigration() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // v1.8.0：ass_path 列已废弃（ASS 生成迁至 danmaku-tool）
+    await client.query(`ALTER TABLE danmaku_capture_records DROP COLUMN IF EXISTS ass_path`);
 
-    // TODO: drop in v1.8.0 (danmaku burn moved to danmaku-tool)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS danmaku_burn_records (
-        id SERIAL PRIMARY KEY,
-        session_id INTEGER,
-        recording_file_id INTEGER UNIQUE,
-        segment_index INTEGER DEFAULT 0,
-        segment_start_ms INTEGER DEFAULT 0,
-        segment_end_ms INTEGER DEFAULT 0,
-        input_path VARCHAR(1024) NOT NULL,
-        ass_path VARCHAR(1024) NOT NULL,
-        output_path VARCHAR(1024) DEFAULT '',
-        status VARCHAR(20) DEFAULT 'queued',
-        error TEXT DEFAULT '',
-        log_path VARCHAR(1024) DEFAULT '',
-        enqueued_at TIMESTAMP DEFAULT NOW(),
-        started_at TIMESTAMP,
-        completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        session_ass_path VARCHAR(1024) DEFAULT '',
-        jsonl_path VARCHAR(1024) DEFAULT ''
-      )
-    `);
+    // v1.8.0：弹幕压制记录表已迁至 danmaku-tool，本服务不再维护
+    await client.query(`DROP TABLE IF EXISTS danmaku_burn_records`);
 
     // ========== 弹幕 settings 清理 ==========
     // 清除 settings 表中已废弃的弹幕配置项（这些 key 已从前端设置页和默认值中移除）
@@ -470,33 +455,8 @@ async function runMigration() {
         ON replay_upload_records(started_at DESC);
     `);
 
-    // TODO: drop in v1.8.0 (free burn moved to independent tool)
-    // 弹幕自由压制记录表
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS danmaku_free_burn_records (
-        id SERIAL PRIMARY KEY,
-        source_type VARCHAR(20) NOT NULL,
-        source_id INTEGER NOT NULL,
-        danmaku_session_id INTEGER NOT NULL,
-        video_path VARCHAR(1024) NOT NULL,
-        jsonl_path VARCHAR(1024) NOT NULL,
-        offset_ms INTEGER DEFAULT 0,
-        manual_adjust_ms INTEGER DEFAULT 0,
-        status VARCHAR(20) DEFAULT 'pending',
-        output_path VARCHAR(1024) DEFAULT '',
-        error_message TEXT DEFAULT '',
-        started_at TIMESTAMP,
-        completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        log_path VARCHAR(1024) DEFAULT ''
-      );
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_free_burn_status ON danmaku_free_burn_records(status);
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_free_burn_created ON danmaku_free_burn_records(created_at DESC);
-    `);
+    // v1.8.0：弹幕自由压制记录表已迁至 danmaku-tool，本服务不再维护
+    await client.query(`DROP TABLE IF EXISTS danmaku_free_burn_records`);
 
     // ========== 文件管理模块表 ==========
 

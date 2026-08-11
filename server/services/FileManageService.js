@@ -5,6 +5,7 @@ const pool = require('../db/index');
 const redis = require('../db/redis');
 const { resolveAndValidate } = require('../lib/utils/path-safety');
 const { getDirectoryStats } = require('../lib/utils/directory-stats');
+const { getDanmakuDir } = require('../lib/utils/tool');
 const emptyDirectoryCleanupService = require('./EmptyDirectoryCleanupService');
 
 const DELETE_PLAN_TTL = 600; // 10 分钟
@@ -433,7 +434,7 @@ class FileManageService {
     const categoryMap = {
       recording: { type: 'recording', root: process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads' },
       replay: { type: 'replay', root: process.env.REPLAY_WORK_DIR || '/data/replay' },
-      danmaku: { type: 'danmaku', root: process.env.DANMAKU_OUTPUT_DIR || '/data/danmaku_output' },
+      danmaku: { type: 'danmaku', root: getDanmakuDir() },
       orphan: { type: 'orphan', root: null },
     };
 
