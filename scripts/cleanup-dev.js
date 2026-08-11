@@ -226,14 +226,6 @@ async function cleanup() {
       console.log('  └─ danmaku_capture_records 已为空');
     }
 
-    // 清空 danmaku_burn_records 表（弹幕压制记录）
-    const danmakuBurnRecords = await d.query('DELETE FROM danmaku_burn_records RETURNING id');
-    if (danmakuBurnRecords.rowCount > 0) {
-      console.log(`  └─ 清空 danmaku_burn_records: ${danmakuBurnRecords.rowCount} 条`);
-    } else {
-      console.log('  └─ danmaku_burn_records 已为空');
-    }
-
     // 房间复位
     const rooms = await d.query(
       "UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, output_path = '' WHERE status IN ('recording', 'paused') RETURNING id"
