@@ -115,9 +115,55 @@ function generateOutputPath(
   return outputFilePattern;
 }
 
+/**
+ * 弹幕数据集中目录名（VIDEO_DOWNLOAD_DIR 下的保留目录名）
+ *
+ * 该目录与会话目录同级。sessionId 为 SERIAL 整数，不会与此名冲突，
+ * 但文件扫描逻辑必须显式跳过该目录，否则会被判定为孤儿会话目录。
+ */
+const DANMAKU_DIR_NAME = 'danmaku';
+
+/**
+ * 生成弹幕 JSONL 文件路径（唯一入口）
+ *
+ * 路径结构：VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl
+ *
+ * v1.8.0 起弹幕数据集中扁平存放，不再放在会话目录的 danmaku/ 子目录下。
+ * 业务代码禁止自行 path.join 拼接弹幕路径，一律走本函数。
+ *
+ * @param {string|number} sessionId - 录制会话 ID
+ * @returns {string} 弹幕 JSONL 绝对路径
+ */
+function getDanmakuJsonlPath(sessionId) {
+  if (sessionId === null || sessionId === undefined || sessionId === '') {
+    throw new Error('getDanmakuJsonlPath: sessionId 不能为空');
+  }
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!downloadDir) {
+    throw new Error('getDanmakuJsonlPath: 环境变量 VIDEO_DOWNLOAD_DIR 未配置');
+  }
+  return path.join(downloadDir, DANMAKU_DIR_NAME, `${sessionId}.jsonl`);
+}
+
+/**
+ * 获取弹幕数据集中目录
+ *
+ * @returns {string} VIDEO_DOWNLOAD_DIR/danmaku 绝对路径
+ */
+function getDanmakuDir() {
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!downloadDir) {
+    throw new Error('getDanmakuDir: 环境变量 VIDEO_DOWNLOAD_DIR 未配置');
+  }
+  return path.join(downloadDir, DANMAKU_DIR_NAME);
+}
+
 module.exports = {
   generateFilename,
   templateToStrftime,
   sanitizeFilename,
   generateOutputPath,
+  getDanmakuJsonlPath,
+  getDanmakuDir,
+  DANMAKU_DIR_NAME,
 };
