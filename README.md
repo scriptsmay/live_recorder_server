@@ -210,7 +210,7 @@ npm run stop
 ─────────                           ─────────────────
 FFmpeg 录制直播流                     Chrome 扩展采集弹幕
     ↓                                    ↓
-分段文件 (.ts)                        JSONL → danmaku/danmaku.jsonl
+分段文件 (.ts)                        JSONL → danmaku/[sessionId].jsonl
     ↓
 转码队列 → MP4
     ↓

@@ -1,5 +1,11 @@
 # 文件管理模块需求文档
 
+> **已归档（v1.8.0）**：本文档是文件管理模块的原始需求稿，仅作历史留存。文中的
+> `DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 目录规划、`danmaku_burn_records` 等
+> 弹幕压制表已在 v1.7.0 / v1.8.0 移除，不代表当前实现。当前实际行为以
+> `docs/DB.md`（`managed_files`、`file_delete_audit_logs`）、
+> `server/services/FileManageService.js` 与 ADR-011 为准。
+
 ## 背景
 
 当前生产环境的视频文件主要落在以下目录：

@@ -36,14 +36,12 @@
 
 ### 缓存策略
 
-| 用途       | Key 模式                        | TTL     | 说明                                                |
-| ---------- | ------------------------------- | ------- | --------------------------------------------------- |
-| 直播间缓存 | `room:{room_url}`               | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询                   |
-| 录制任务锁 | `active_task:{roomKey}`         | 24 小时 | 防止重复录制，替代内存 Map                          |
-| 转码队列   | `transcode_queue`               | 无      | Redis LIST，转码任务 FIFO 队列                      |
-| 转码并发   | `transcode_processing_count`    | 无      | 当前处理中转码任务计数                              |
-| 压制队列   | `danmaku_burn_queue`            | 无      | Redis LIST，弹幕压制任务 FIFO 队列（v1.7.0 已废弃） |
-| 压制并发   | `danmaku_burn_processing_count` | 无      | 当前处理中压制任务计数（v1.7.0 已废弃）             |
+| 用途       | Key 模式                     | TTL     | 说明                              |
+| ---------- | ---------------------------- | ------- | --------------------------------- |
+| 直播间缓存 | `room:{room_url}`            | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询 |
+| 录制任务锁 | `active_task:{roomKey}`      | 24 小时 | 防止重复录制，替代内存 Map        |
+| 转码队列   | `transcode_queue`            | 无      | Redis LIST，转码任务 FIFO 队列    |
+| 转码并发   | `transcode_processing_count` | 无      | 当前处理中转码任务计数            |
 
 - 直播间写操作（创建/更新/删除/暂停/恢复/停止）后自动清除对应缓存
 - 应用启动时自动清理残留的录制任务锁
@@ -120,30 +118,29 @@
 
 **会话详情、投稿操作、流媒体播放、文件统计均以此表作为数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
 
-| 字段              | 类型          | 约束                                           | 说明                                                                                                                                                         |
-| ----------------- | ------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                                                                                                                                                     |
-| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）                                                                                                                                    |
-| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                                                                                                                                                   |
-| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径                                                                                                                                                 |
-| file_name         | VARCHAR(512)  |                                                | 文件名                                                                                                                                                       |
-| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                                                                                                                                             |
-| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                                                                                                                                                 |
-| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                                                                                                                                                     |
-| ended_at          | TIMESTAMP     |                                                | 结束时间                                                                                                                                                     |
-| completed_at      | TIMESTAMP     |                                                | 完成时间                                                                                                                                                     |
-| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                                                                                                                                             |
-| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                                                                                                                                                     |
-| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                                                                                                                                                   |
-| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                                                                                                                                               |
-| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                                                                                                                                             |
-| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                                                                                                                                                 |
-| hls_status        | VARCHAR(20)   | NOT NULL DEFAULT 'pending'                     | HLS 生命周期状态，见下                                                                                                                                       |
-| hls_deleted_at    | TIMESTAMP     |                                                | HLS 因保留期或用户操作被删除的时间                                                                                                                           |
-| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）                                                                                                                                         |
-| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）                                                                                                                                         |
-| danmaku_ass_path  | VARCHAR(1024) | DEFAULT ''                                     | 兼容字段。分段级 ASS 文件以确定性路径 `{session.output_dir}/danmaku/segments/{recording_files.id}.ass` 为准，生成接口会回填该列以兼容历史流程，DROP 推迟执行 |
-| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                                                                                                                                                     |
+| 字段              | 类型          | 约束                                           | 说明                               |
+| ----------------- | ------------- | ---------------------------------------------- | ---------------------------------- |
+| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                           |
+| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）          |
+| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                         |
+| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径                       |
+| file_name         | VARCHAR(512)  |                                                | 文件名                             |
+| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                   |
+| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                       |
+| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                           |
+| ended_at          | TIMESTAMP     |                                                | 结束时间                           |
+| completed_at      | TIMESTAMP     |                                                | 完成时间                           |
+| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                   |
+| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                           |
+| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                         |
+| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                     |
+| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                   |
+| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                       |
+| hls_status        | VARCHAR(20)   | NOT NULL DEFAULT 'pending'                     | HLS 生命周期状态，见下             |
+| hls_deleted_at    | TIMESTAMP     |                                                | HLS 因保留期或用户操作被删除的时间 |
+| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）               |
+| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）               |
+| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                           |
 
 **状态流转：**
 
@@ -285,7 +282,6 @@ KV 结构的全局配置表。
 | `hls_cleanup_days`                | `30`               | HLS 文件自动清理天数                                                        |
 | `log_retention_days`              | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件        |
 | `kuaishou_danmaku_enabled`        | `false`            | 是否启用快手弹幕采集                                                        |
-| `danmaku_burn_concurrency`        | `1`                | 弹幕压制队列并发数（v1.7.0 已废弃，v1.8.0 移除）                            |
 | `danmaku_density_per_second`      | `15`               | ASS 字幕每秒最大弹幕密度                                                    |
 | `danmaku_font_family`             | `Noto Sans CJK SC` | ASS 字体                                                                    |
 | `danmaku_font_size`               | `38`               | ASS 字体大小                                                                |
@@ -329,7 +325,6 @@ KV 结构的全局配置表。
 | platform    | VARCHAR(50)   | DEFAULT 'kuaishou'  | 平台标识                             |
 | status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed` |
 | raw_path    | VARCHAR(1024) | DEFAULT ''          | `danmaku.jsonl` 文件绝对路径         |
-| ass_path    | VARCHAR(1024) | DEFAULT ''          | 生成的 `danmaku.ass` 文件路径        |
 | event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数                 |
 | started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间                         |
 | ended_at    | TIMESTAMP     |                     | 采集结束时间                         |
@@ -343,53 +338,6 @@ KV 结构的全局配置表。
 | 录制会话启动弹幕采集 | INSERT，status = `recording`                  |
 | 录制正常结束         | UPDATE status = `completed`，写入 event_count |
 | 采集异常             | UPDATE status = `failed`，写入 error          |
-
----
-
-### danmaku_burn_records — 弹幕压制记录（v1.7.0 已废弃）
-
-> **已废弃**：v1.7.0 移除弹幕压制功能后，此表不再写入新数据。计划在 v1.8.0 中通过 `DROP TABLE` 彻底删除。现有数据仍可读取用于历史查询。
-
-**记录每个分段的弹幕压制（FFmpeg 渲染）任务。** 每个 `recording_file_id` 最多一条记录（UNIQUE 约束）。压制产物输出到独立的 `DANMAKU_OUTPUT_DIR` 目录（默认 `VIDEO_DOWNLOAD_DIR/../danmaku_output`），与录制文件物理隔离。
-
-| 字段              | 类型          | 约束             | 说明                                                            |
-| ----------------- | ------------- | ---------------- | --------------------------------------------------------------- |
-| id                | SERIAL        | PRIMARY KEY      | 自增主键                                                        |
-| session_id        | INTEGER       |                  | 所属录制会话                                                    |
-| recording_file_id | INTEGER       | UNIQUE           | 关联的 `recording_files.id`                                     |
-| segment_index     | INTEGER       | DEFAULT 0        | 分段序号                                                        |
-| segment_start_ms  | INTEGER       | DEFAULT 0        | 分段起始时间（毫秒）                                            |
-| segment_end_ms    | INTEGER       | DEFAULT 0        | 分段结束时间（毫秒）                                            |
-| input_path        | VARCHAR(1024) | NOT NULL         | 输入视频路径                                                    |
-| ass_path          | VARCHAR(1024) | NOT NULL         | ASS 字幕文件路径                                                |
-| output_path       | VARCHAR(1024) | DEFAULT ''       | 压制输出视频路径，独立目录 `DANMAKU_OUTPUT_DIR/[sessionId]/` 下 |
-| status            | VARCHAR(20)   | DEFAULT 'queued' | 状态流转见下                                                    |
-| error             | TEXT          | DEFAULT ''       | 失败时的错误信息                                                |
-| log_path          | VARCHAR(1024) | DEFAULT ''       | FFmpeg 压制日志路径                                             |
-| session_ass_path  | VARCHAR(1024) | DEFAULT ''       | 会话级 ASS 路径（来源于 `danmaku_capture_records.ass_path`）    |
-| jsonl_path        | VARCHAR(1024) | DEFAULT ''       | 弹幕 JSONL 原始数据路径                                         |
-| enqueued_at       | TIMESTAMP     | DEFAULT NOW()    | 入队时间                                                        |
-| started_at        | TIMESTAMP     |                  | 压制开始时间                                                    |
-| completed_at      | TIMESTAMP     |                  | 压制完成/失败时间                                               |
-| created_at        | TIMESTAMP     | DEFAULT NOW()    | 记录创建时间                                                    |
-
-**状态流转：**
-
-```
-queued ──→ processing ──→ completed
-                     └──→ failed
-            queued ──→ skipped     （输入/ASS 文件不存在时跳过）
-```
-
-**写入时机：**
-
-| 场景                  | 操作                                 |
-| --------------------- | ------------------------------------ |
-| 手动/自动加入压制队列 | INSERT，status = `queued`            |
-| 压制队列开始处理      | UPDATE status = `processing`         |
-| FFmpeg 压制成功       | UPDATE status = `completed`          |
-| FFmpeg 压制失败       | UPDATE status = `failed`，写入 error |
-| 输入/ASS 文件不存在   | UPDATE status = `skipped`            |
 
 ---
 
@@ -483,32 +431,6 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 | started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
 | completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
 | created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
-
----
-
-### danmaku_free_burn_records — 弹幕自由压制记录（v1.7.0 已废弃）
-
-> **已废弃**：v1.7.0 移除弹幕压制功能后，此表不再写入新数据。计划在 v1.8.0 中通过 `DROP TABLE` 彻底删除。
-
-**记录自由压制任务（非会话绑定的弹幕压制）。** 与 `danmaku_burn_records` 不同，此表支持任意视频 + 弹幕组合压制。
-
-| 字段               | 类型          | 约束              | 说明                                              |
-| ------------------ | ------------- | ----------------- | ------------------------------------------------- |
-| id                 | SERIAL        | PRIMARY KEY       | 自增主键                                          |
-| source_type        | VARCHAR(20)   | NOT NULL          | 来源类型                                          |
-| source_id          | INTEGER       | NOT NULL          | 来源 ID                                           |
-| danmaku_session_id | INTEGER       | NOT NULL          | 弹幕采集会话 ID                                   |
-| video_path         | VARCHAR(1024) | NOT NULL          | 输入视频路径                                      |
-| jsonl_path         | VARCHAR(1024) | NOT NULL          | 弹幕 JSONL 数据路径                               |
-| offset_ms          | INTEGER       | DEFAULT 0         | 时间偏移（毫秒）                                  |
-| manual_adjust_ms   | INTEGER       | DEFAULT 0         | 手动调整偏移（毫秒）                              |
-| status             | VARCHAR(20)   | DEFAULT 'pending' | `pending` / `processing` / `completed` / `failed` |
-| output_path        | VARCHAR(1024) | DEFAULT ''        | 压制输出视频路径                                  |
-| error_message      | TEXT          | DEFAULT ''        | 失败时的错误信息                                  |
-| log_path           | VARCHAR(1024) | DEFAULT ''        | FFmpeg 压制日志路径                               |
-| started_at         | TIMESTAMP     |                   | 开始时间                                          |
-| completed_at       | TIMESTAMP     |                   | 完成/失败时间                                     |
-| created_at         | TIMESTAMP     | DEFAULT NOW()     | 创建时间                                          |
 
 ---
 
