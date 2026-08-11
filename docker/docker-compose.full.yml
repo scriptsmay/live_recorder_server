@@ -10,7 +10,6 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://default:password@redis:6379/1}
       APP_DATA_DIR: ${APP_DATA_DIR:-/data}
       VIDEO_DOWNLOAD_DIR: ${VIDEO_DOWNLOAD_DIR:-/data/video_downloads}
-      DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
       REPLAY_WORK_DIR: ${REPLAY_WORK_DIR:-/data/replay}
       YTDLP_TEMP_DIR: ${YTDLP_TEMP_DIR:-/tmp/yt_dlp_cache}
       BILIUP_WORK_DIR: ${BILIUP_WORK_DIR:-/data/biliup}
@@ -27,8 +26,6 @@ services:
       - '${PORT:-1123}:1123'
     volumes:
       - ../data/video_downloads:/data/video_downloads
-      - ../data/danmaku_output:/data/danmaku_output
-      - ../data/danmaku_archive:/data/danmaku_archive
       - ../data/replay:/data/replay
       - ${YTDLP_TEMP_HOST_DIR:-../data/yt_dlp_cache}:/tmp/yt_dlp_cache
       - ../data/biliup:/data/biliup

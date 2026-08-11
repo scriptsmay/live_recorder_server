@@ -19,13 +19,10 @@ services:
       CRON_API_TOKEN: ${CRON_API_TOKEN:-}
       REPLAY_WORK_DIR: ${REPLAY_WORK_DIR:-/data/replay}
       YTDLP_TEMP_DIR: ${YTDLP_TEMP_DIR:-/tmp/yt_dlp_cache}
-      DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
     ports:
       - '11123:1123'
     volumes:
       - ../data/video_downloads:/data/video_downloads
-      - ../data/danmaku_output:/data/danmaku_output
-      - ../data/danmaku_archive:/data/danmaku_archive
       - ../data/replay:/data/replay
       - ${YTDLP_TEMP_HOST_DIR:-/srv/nas-ssd/tmp/yt_dlp_cache}:/tmp/yt_dlp_cache
       - ../data/biliup:/data/biliup
