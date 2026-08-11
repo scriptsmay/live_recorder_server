@@ -48,7 +48,7 @@ Chrome Extension / PollingManager
 
 Chrome Extension (danmaku)
     → POST /api/danmaku/batch
-    → DanmakuRecorder → danmaku.jsonl
+    → DanmakuRecorder → VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl
     → Session ends → capture record marked completed (ASS/burn moved to danmaku-tool)
 ```
 
@@ -79,7 +79,7 @@ Chrome Extension (danmaku)
 
 **State storage:** Redis for transient state (live status, polling timers, active tasks with TTL). PostgreSQL for persistent data (rooms, sessions, recordings, settings).
 
-**File paths:** `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/[filename]`, danmaku data in `danmaku/` subdirectory
+**File paths:** `VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]` (recordings); danmaku JSONL centralized at `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl` (v1.8.0). Legacy `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` recording paths remain readable via `recording_sessions.output_dir`.
 
 ## Environment
 

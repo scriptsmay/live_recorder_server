@@ -30,8 +30,8 @@ test/
 ├── watchdog-hls.test.js             # 看门狗 HLS 状态过滤测试
 ├── directory-stats.test.js          # 目录递归大小统计测试
 ├── file-manage-service.test.js      # 文件索引、安全校验与删除测试
-├── danmaku-burner.test.js           # 弹幕压制测试
-├── danmaku-burn-queue.test.js       # 弹幕压制队列测试
+├── file-manage-routes.test.js       # 文件管理 8 个 HTTP 路由集成测试
+├── danmaku-path.test.js             # 弹幕 JSONL 路径生成（v1.8.0）
 ├── polling-kuaishou.test.js         # 快手轮询测试
 └── ...
 ```

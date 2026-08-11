@@ -58,6 +58,41 @@ node scripts/cleanup-dev.js
 - 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）
 - Redis DB 编号：`2`（生产使用 `1`）
 
+## 弹幕 JSONL 路径约定（v1.8.0）
+
+弹幕 JSONL **只有一个合法位置**：`VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`。
+
+- 读写两侧都必须调用 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)`，**禁止在业务代码里手工拼接路径**。目录名由 `getDanmakuDir()` 提供。
+- 不保留旧路径兜底。历史上的三种旧形态（`[sessionId]/danmaku/danmaku.jsonl`、`[sessionId]/danmaku.jsonl`、`[roomId]/[sessionId]/danmaku/danmaku.jsonl`）一律靠一次性迁移脚本收敛。
+- `danmaku/` 是保留目录名，`scan-files` 会跳过它，不会产生 orphaned 误报。
+- 废弃的 `DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 环境变量已彻底移除，不要重新引入。
+- 外部项目 **danmaku-tool 直接依赖这个路径**，改动路径规则必须两端同步（见知识库 ADR-011）。
+
+### 存量数据迁移（一次性）
+
+```bash
+# 0. 先停服并备份数据库
+sudo docker stop live_recorder_server && bash scripts/backup-db.sh
+
+# 1. dry-run：只输出报告，不动磁盘和 DB（默认行为）
+node scripts/migrate-danmaku-paths.js
+
+# 2. 核对报告无误后真实执行
+node scripts/migrate-danmaku-paths.js --apply
+```
+
+脚本行为：
+
+- 默认 dry-run，真实写入必须显式加 `--apply`。
+- 幂等：目标文件已存在则跳过移动，只补齐 DB；重复执行安全。
+- 先移动文件，再在**同一事务**内更新 `danmaku_capture_records.raw_path` 和 `managed_files.file_path`；事务失败会把文件搬回原位，避免磁盘/DB 不一致。
+- 用 `COPYFILE_EXCL` 拷贝后删源，不会覆盖已存在的活文件。
+- `raw_path` 形态不符合预期时**跳过并告警**，不做猜测性改写。
+- 收尾清理残留的空 `danmaku/` 目录。
+- 退出码非 0 表示存在失败项，需人工核对报告。
+
+校验方法：`--apply` 后确认 `danmaku_capture_records` 中不再有 `raw_path` 指向旧路径，且 `GET /api/danmaku/search`、会话详情弹幕条数、`GET /api/danmaku/sessions/:id/raw` 均正常。
+
 ## 快手轮询 smoke
 
 快手轮询 Checker 需要远程 Browserless/Chromium。开发环境可用以下命令验证远程浏览器、平台级串行限速、风控处理和 FLV 抽取：

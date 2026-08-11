@@ -654,6 +654,8 @@ Chrome Extension 发来的事件 `ts_ms` 是相对时间（可能为 `0`），�
 
 ## 分段 ASS 路径规则不一致导致“生成成功但前端仍显示缺失”
 
+> **⚠️ 已失效（v1.8.0）**：本节涉及的 `POST /api/sessions/:id/danmaku/ass` 端点、`recording_files.danmaku_ass_path` 列和 `danmaku/segments/*.ass` 路径均已移除，弹幕压制迁至 danmaku-tool。以下内容仅保留「经验总结」的方法论价值，具体实现细节不再适用。
+
 ### 现象
 
 1. 手动调用 `POST /api/sessions/52/danmaku/ass` 返回成功，但会话文件列表里 ASS 状态仍为空

@@ -1,5 +1,7 @@
 # 弹幕压制参考
 
+> **⚠️ 已归档（v1.8.0）**：弹幕压制功能已于 v1.7.0 迁出至独立的 [danmaku-tool](https://github.com/scriptsmay/danmaku-tool) 项目。以下内容仅作为历史参考，不再代表本服务的当前行为。`scripts/test-danmaku-burn-session.js` 已删除，settings 中的 ASS 渲染参数作为遗留键保留供 danmaku-tool 消费。
+
 ## 视觉稳定性默认值
 
 2026-06-23 起，弹幕压制默认值偏向可观看性和运动稳定性：

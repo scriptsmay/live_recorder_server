@@ -94,7 +94,7 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
      │  POST /api/danmaku/batch     │  每 5s flush（仅 isSending=true）   │
      │  ──────────────────────────────────────────────────────────────────>│
      │                              │                                     │  DanmakuRecorder
-     │                              │                                     │  → danmaku.jsonl
+     │                              │                                     │  → VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl
      │  录制结束 → flush → 停止发送 │                                     │
 ```
 
@@ -123,10 +123,10 @@ _handleDanmakuFinish()
 
 ```text
 VIDEO_DOWNLOAD_DIR/
+  ├── danmaku/                          ← 弹幕数据集中目录（v1.8.0）
+  │   └── [sessionId].jsonl             ← 弹幕原始数据（JSONL，扁平命名）
   └── [sessionId]/
-      ├── *.mp4 / *.ts                    ← 录制分段（纯净）
-      └── danmaku/                        ← 弹幕数据目录
-          └── danmaku.jsonl               ← 弹幕原始数据（JSONL）
+      └── *.mp4 / *.ts                  ← 录制分段（纯净）
 ```
 
 **关键设计决策**：
@@ -188,11 +188,11 @@ VIDEO_DOWNLOAD_DIR/
 
 ```text
 VIDEO_DOWNLOAD_DIR/
+├── danmaku/                     # 弹幕 JSONL 集中目录（v1.8.0，扫描时跳过）
+│   └── [sessionId].jsonl        # 弹幕原始数据（扁平命名）
 ├── [sessionId]/                 # 会话ID目录（新结构）
 │   ├── {room_name}_{datetime}.ts      # 非分段录制
-│   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
-│   └── danmaku/                 # 弹幕数据目录
-│       └── danmaku.jsonl        # 弹幕原始数据（JSONL）
+│   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
 ```
 
 历史录制可能仍位于 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/`。代码不得再从 `room_id` 推导历史路径，应始终以 `recording_sessions.output_dir` 和 `recording_files.file_path` 为准。

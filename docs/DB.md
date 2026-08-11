@@ -260,56 +260,79 @@ KV 结构的全局配置表。
 
 **默认设置项：**
 
-| 键                                | 默认值             | 说明                                                                        |
-| --------------------------------- | ------------------ | --------------------------------------------------------------------------- |
-| `pool_size`                       | `3`                | 下载线程池大小，限制最大同时录制数                                          |
-| `watchdog_interval`               | `30`               | 看门狗检查间隔（秒）                                                        |
-| `watchdog_timeout`                | `60`               | 录制状态检查超时（秒），超过则标记为完成                                    |
-| `filtering_threshold`             | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                |
-| `delay`                           | `60`               | 下播延迟检测（秒）                                                          |
-| `submit_api`                      | ``                 | biliup --submit 选项，留空为自动                                            |
-| `lines`                           | ``                 | 上传线路，留空为自动                                                        |
-| `threads`                         | `3`                | 单文件并发上传数                                                            |
-| `pool2_size`                      | `3`                | 上传线程池大小                                                              |
-| `max_upload_limit`                | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                  |
-| `max_resume_retries`              | `3`                | 会话崩溃后最大恢复重试次数                                                  |
-| `auto_transcode`                  | `true`             | 是否自动转码 FLV 到 MP4                                                     |
-| `transcode_delete_originals`      | `true`             | 转码后是否删除原 FLV 文件                                                   |
-| `transcode_concurrency`           | `3`                | 转码队列并发数，控制同时处理的转码任务数                                    |
-| `auto_generate_hls`               | `true`             | 是否自动生成 HLS 播放文件                                                   |
-| `hls_enabled`                     | `true`             | 是否启用 HLS 播放功能                                                       |
-| `hls_segment_duration`            | `10`               | HLS 分片时长（秒）                                                          |
-| `hls_cleanup_days`                | `30`               | HLS 文件自动清理天数                                                        |
-| `log_retention_days`              | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件        |
-| `kuaishou_danmaku_enabled`        | `false`            | 是否启用快手弹幕采集                                                        |
-| `danmaku_density_per_second`      | `15`               | ASS 字幕每秒最大弹幕密度                                                    |
-| `danmaku_font_family`             | `Noto Sans CJK SC` | ASS 字体                                                                    |
-| `danmaku_font_size`               | `38`               | ASS 字体大小                                                                |
-| `danmaku_opacity`                 | `0.88`             | ASS 弹幕不透明度                                                            |
-| `danmaku_outline_colour`          | `000000`           | ASS 弹幕描边颜色                                                            |
-| `danmaku_outline_width`           | `2`                | ASS 弹幕描边宽度                                                            |
-| `replay_enabled`                  | `true`             | 是否启用回放工具箱                                                          |
-| `replay_work_dir`                 | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR`      |
-| `replay_queue_concurrency`        | `1`                | 回放队列并发数（当前强制最大 1）                                            |
-| `replay_cron_enabled`             | `false`            | 是否启用回放定时任务                                                        |
-| `replay_cron_expr`                | `0 3 * * *`        | 回放定时任务表达式                                                          |
-| `replay_auto_upload`              | `false`            | 回放处理完成后是否自动投稿                                                  |
-| `replay_max_count_per_run`        | `1`                | 单次主播回放批处理默认数量                                                  |
-| `file_cleanup_enabled`            | `false`            | 是否启用文件自动清理                                                        |
-| `file_cleanup_empty_dirs_enabled` | `false`            | 是否启用录制和回放目录空目录自动清理                                        |
-| `file_cleanup_retention_days`     | `30`               | 文件清理保留天数                                                            |
-| `file_cleanup_categories`         | ``                 | 清理的文件类别，逗号分隔                                                    |
-| `file_cleanup_watermark_warn`     | `80`               | 磁盘空间告警阈值（%）                                                       |
-| `file_cleanup_watermark_critical` | `90`               | 磁盘空间严重告警阈值（%）                                                   |
-| `file_cleanup_suggestion_notify`  | `false`            | 是否发送文件清理建议通知                                                    |
-| `webhook_enabled`                 | `false`            | 是否启用 Webhook 通知                                                       |
-| `webhook_url`                     | ``                 | Webhook 推送 URL                                                            |
-| `feishu_webhook_enabled`          | `false`            | 是否启用飞书通知（v1.7.0 细化，原 `MESSAGE_FEISHU_WEBHOOK` 环境变量仍兼容） |
-| `feishu_webhook_url`              | ``                 | 飞书 Webhook URL                                                            |
-| `gotify_enabled`                  | `false`            | 是否启用 Gotify 通知                                                        |
-| `gotify_server`                   | ``                 | Gotify 服务地址                                                             |
-| `gotify_token`                    | ``                 | Gotify app token                                                            |
-| `gotify_priority`                 | `5`                | Gotify 优先级                                                               |
+| 键                                | 默认值             | 说明                                                                           |
+| --------------------------------- | ------------------ | ------------------------------------------------------------------------------ |
+| `pool_size`                       | `3`                | 下载线程池大小，限制最大同时录制数                                             |
+| `watchdog_interval`               | `30`               | 看门狗检查间隔（秒）                                                           |
+| `watchdog_timeout`                | `60`               | 录制状态检查超时（秒），超过则标记为完成                                       |
+| `filtering_threshold`             | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                   |
+| `delay`                           | `60`               | 下播延迟检测（秒）                                                             |
+| `submit_api`                      | ``                 | biliup --submit 选项，留空为自动                                               |
+| `lines`                           | ``                 | 上传线路，留空为自动                                                           |
+| `threads`                         | `3`                | 单文件并发上传数                                                               |
+| `pool2_size`                      | `3`                | 上传线程池大小                                                                 |
+| `max_upload_limit`                | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                     |
+| `max_resume_retries`              | `3`                | 会话崩溃后最大恢复重试次数                                                     |
+| `auto_transcode`                  | `true`             | 是否自动转码 FLV 到 MP4                                                        |
+| `transcode_delete_originals`      | `true`             | 转码后是否删除原 FLV 文件                                                      |
+| `transcode_concurrency`           | `3`                | 转码队列并发数，控制同时处理的转码任务数                                       |
+| `auto_generate_hls`               | `true`             | 是否自动生成 HLS 播放文件                                                      |
+| `hls_enabled`                     | `true`             | 是否启用 HLS 播放功能                                                          |
+| `hls_segment_duration`            | `10`               | HLS 分片时长（秒）                                                             |
+| `hls_cleanup_days`                | `30`               | HLS 文件自动清理天数                                                           |
+| `log_retention_days`              | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件           |
+| `kuaishou_danmaku_enabled`        | `false`            | 是否启用快手弹幕采集                                                           |
+| `danmaku_density_per_second`      | `15`               | 弹幕渲染每秒最大密度（**遗留键**，仅供外部 danmaku-tool 消费，本服务不再使用） |
+| `danmaku_font_family`             | `Noto Sans CJK SC` | 弹幕渲染字体（**遗留键**，同上）                                               |
+| `danmaku_font_size`               | `38`               | 弹幕渲染字体大小（**遗留键**，同上）                                           |
+| `danmaku_opacity`                 | `0.88`             | 弹幕不透明度（**遗留键**，同上）                                               |
+| `danmaku_outline_colour`          | `000000`           | 弹幕描边颜色（**遗留键**，同上）                                               |
+| `danmaku_outline_width`           | `2`                | 弹幕描边宽度（**遗留键**，同上）                                               |
+| `replay_enabled`                  | `true`             | 是否启用回放工具箱                                                             |
+| `replay_work_dir`                 | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR`         |
+| `replay_queue_concurrency`        | `1`                | 回放队列并发数（当前强制最大 1）                                               |
+| `replay_cron_enabled`             | `false`            | 是否启用回放定时任务                                                           |
+| `replay_cron_expr`                | `0 3 * * *`        | 回放定时任务表达式                                                             |
+| `replay_auto_upload`              | `false`            | 回放处理完成后是否自动投稿                                                     |
+| `replay_max_count_per_run`        | `1`                | 单次主播回放批处理默认数量                                                     |
+| `file_cleanup_enabled`            | `false`            | 是否启用文件自动清理                                                           |
+| `file_cleanup_empty_dirs_enabled` | `false`            | 是否启用录制和回放目录空目录自动清理                                           |
+| `file_cleanup_retention_days`     | `30`               | 文件清理保留天数                                                               |
+| `file_cleanup_categories`         | ``                 | 清理的文件类别，逗号分隔                                                       |
+| `file_cleanup_watermark_warn`     | `80`               | 磁盘空间告警阈值（%）                                                          |
+| `file_cleanup_watermark_critical` | `90`               | 磁盘空间严重告警阈值（%）                                                      |
+| `file_cleanup_suggestion_notify`  | `false`            | 是否发送文件清理建议通知                                                       |
+| `webhook_enabled`                 | `false`            | 是否启用 Webhook 通知                                                          |
+| `webhook_url`                     | ``                 | Webhook 推送 URL                                                               |
+| `feishu_webhook_enabled`          | `false`            | 是否启用飞书通知（v1.7.0 细化，原 `MESSAGE_FEISHU_WEBHOOK` 环境变量仍兼容）    |
+| `feishu_webhook_url`              | ``                 | 飞书 Webhook URL                                                               |
+| `gotify_enabled`                  | `false`            | 是否启用 Gotify 通知                                                           |
+| `gotify_server`                   | ``                 | Gotify 服务地址                                                                |
+| `gotify_token`                    | ``                 | Gotify app token                                                               |
+| `gotify_priority`                 | `5`                | Gotify 优先级                                                                  |
+
+**v1.8.0 已删除的设置键**（启动迁移 `DELETE FROM settings` 自动清理，无需人工干预）：
+
+- `auto_burn_danmaku`
+- `prefer_danmaku_burned_video`
+- `danmaku_preserve_clean_video`
+
+---
+
+## v1.8.0 已 DROP 的表与列
+
+以下结构在 v1.8.0 随弹幕压制迁出 danmaku-tool 一并移除。DDL 写在 `server/db/migrate.js`，**服务启动时自动执行**（全部带 `IF EXISTS`，幂等）：
+
+| 对象                               | 类型 | migrate.js 位置                    |
+| ---------------------------------- | ---- | ---------------------------------- |
+| `danmaku_burn_records`             | 表   | `DROP TABLE IF EXISTS`（约 L387）  |
+| `danmaku_free_burn_records`        | 表   | `DROP TABLE IF EXISTS`（约 L459）  |
+| `recording_files.danmaku_ass_path` | 列   | `DROP COLUMN IF EXISTS`（约 L328） |
+| `danmaku_capture_records.ass_path` | 列   | `DROP COLUMN IF EXISTS`（约 L384） |
+
+- 这是**不可逆的数据删除**，升级前请 `bash scripts/backup-db.sh` 或 `pg_dump` 备份。
+- 列结构回滚脚本：`server/db/rollback_danmaku_fields.sql`（仅恢复列定义，数据需从备份还原）。
+- 弹幕 JSONL 的存量路径迁移是**独立的手动步骤**，见 `scripts/migrate-danmaku-paths.js`（详见 `docs/DEV.md`）。
 
 ---
 
@@ -317,19 +340,19 @@ KV 结构的全局配置表。
 
 **记录每个会话的弹幕采集生命周期。** 一个 `session_id` 可能对应多条采集记录（如中断后重连）。
 
-| 字段        | 类型          | 约束                | 说明                                 |
-| ----------- | ------------- | ------------------- | ------------------------------------ |
-| id          | SERIAL        | PRIMARY KEY         | 自增主键                             |
-| session_id  | INTEGER       |                     | 所属录制会话                         |
-| room_id     | INTEGER       |                     | 关联房间                             |
-| platform    | VARCHAR(50)   | DEFAULT 'kuaishou'  | 平台标识                             |
-| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed` |
-| raw_path    | VARCHAR(1024) | DEFAULT ''          | `danmaku.jsonl` 文件绝对路径         |
-| event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数                 |
-| started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间                         |
-| ended_at    | TIMESTAMP     |                     | 采集结束时间                         |
-| error       | TEXT          | DEFAULT ''          | 失败时的错误信息                     |
-| created_at  | TIMESTAMP     | DEFAULT NOW()       | 记录创建时间                         |
+| 字段        | 类型          | 约束                | 说明                                                                                                                                              |
+| ----------- | ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id          | SERIAL        | PRIMARY KEY         | 自增主键                                                                                                                                          |
+| session_id  | INTEGER       |                     | 所属录制会话                                                                                                                                      |
+| room_id     | INTEGER       |                     | 关联房间                                                                                                                                          |
+| platform    | VARCHAR(50)   | DEFAULT 'kuaishou'  | 平台标识                                                                                                                                          |
+| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed`                                                                                                              |
+| raw_path    | VARCHAR(1024) | DEFAULT ''          | 弹幕 JSONL 绝对路径，形如 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0 起为扁平集中路径，由 `getDanmakuJsonlPath(sessionId)` 唯一推导） |
+| event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数                                                                                                                              |
+| started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间                                                                                                                                      |
+| ended_at    | TIMESTAMP     |                     | 采集结束时间                                                                                                                                      |
+| error       | TEXT          | DEFAULT ''          | 失败时的错误信息                                                                                                                                  |
+| created_at  | TIMESTAMP     | DEFAULT NOW()       | 记录创建时间                                                                                                                                      |
 
 **写入时机：**
 

@@ -9,8 +9,8 @@
 ## 功能特性
 
 - **直播录制**：使用 FFmpeg 作为下载引擎，支持分段录制（可配置时长）
-- **弹幕采集与压制**：通过 Chrome 扩展采集弹幕（JSONL），生成 ASS 字幕，FFmpeg 渲染弹幕到视频
-- **弹幕工具箱**：独立的 Web 界面，管理弹幕采集状态、批量压制、产物播放和下载
+- **弹幕采集**：通过 Chrome 扩展采集弹幕，写入 JSONL（v1.8.0 起集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`）
+- **弹幕查询**：Web 界面查看弹幕采集状态、按会话搜索与下载原始 JSONL；批量压制已迁至独立的 [danmaku-tool](https://github.com/scriptsmay/danmaku-tool) 项目
 - **回放工具箱**：快手直播回放全自动处理（同步 → 提取 m3u8 → 下载 → 切片 → 修复 → 投稿），Web 界面管理
 - **自动转码**：边下边转码（TS → MP4），转码队列 + 并发控制
 - **HLS 生成**：自动为转码后的 MP4 生成 HLS 分片，支持在线播放
@@ -116,7 +116,7 @@ npm run stop
 │   │   │   ├── DownloaderInterface.js ← 下载器接口
 │   │   │   └── FFmpegDownloader.js    ← FFmpeg 下载引擎（TS 输出、分段检测）
 │   │   ├── danmaku/                ← 弹幕采集
-│   │   │   └── DanmakuRecorder.js     ← 弹幕采集器（JSONL 写入 danmaku/ 子目录）
+│   │   │   └── DanmakuRecorder.js     ← 弹幕采集器（JSONL 写入集中 danmaku/ 目录）
 │   │   ├── replay/                 ← 回放工具箱
 │   │   │   ├── KuaishouReplayClient.js ← 快手回放 API 客户端（列表同步 + m3u8 提取）
 │   │   │   ├── m3u8-extractor.js       ← Playwright 浏览器 m3u8 提取器（API 失败时兜底）
@@ -217,7 +217,7 @@ FFmpeg 录制直播流                     Chrome 扩展采集弹幕
 HLS 生成 → 在线播放
 ```
 
-**目录隔离**：弹幕数据存放在 `会话目录/danmaku/` 子目录。
+**目录隔离**：弹幕 JSONL 集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0 起，不再放在会话子目录下）。路径由 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)` 唯一推导，业务代码禁止自行拼接；`danmaku/` 是保留目录名，文件扫描会跳过它。历史数据由 `scripts/migrate-danmaku-paths.js` 一次性迁移。
 
 **操作入口**：录制会话页面提供弹幕只读状态展示和搜索功能，压制功能已移除，如有需要参考下方的**关联项目**。
 

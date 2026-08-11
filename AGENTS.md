@@ -160,7 +160,7 @@ npm run lint && npm run format && npm run test
 - `/dashboard` —— 仪表盘
 - `/rooms` —— 直播间管理
 - `/sessions` —— 录制会话（含投稿、文件查看）
-- `/sessions/:id/danmaku` —— 弹幕详情（会话信息、分段压制状态、弹幕搜索）
+- `/sessions/:id/danmaku` —— 弹幕详情（会话信息、弹幕搜索）
 - `/recordings` —— 录制文件
 - `/transcode` —— 转码记录
 - `/templates` —— 投稿模板管理

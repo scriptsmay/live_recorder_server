@@ -99,7 +99,7 @@ curl http://127.0.0.1:1123/api/health
 
 ### GET /api/dashboard/status
 
-获取 Dashboard 运维概览数据。接口聚合活跃录制、转码队列、弹幕采集/压制队列、轮询快照、今日摘要和近期活动，前端 Dashboard 只需调用此接口。
+获取 Dashboard 运维概览数据。接口聚合活跃录制、转码队列、弹幕采集、轮询快照、今日摘要和近期活动，前端 Dashboard 只需调用此接口。
 
 **响应示例：**
 
@@ -938,10 +938,10 @@ curl -X POST http://127.0.0.1:1123/api/upload_templates \
 
 **请求体：**
 
-| 参数          | 类型    | 必填 | 说明                                                                |
-| ------------- | ------- | ---- | ------------------------------------------------------------------- |
-| template_id   | integer | 是   | 投稿模板 ID                                                         |
-| upload_source | string  | 否   | 投稿文件来源：`original`=源视频（默认），`danmaku`=弹幕压制后的视频 |
+| 参数          | 类型    | 必填 | 说明                                                                                                                  |
+| ------------- | ------- | ---- | --------------------------------------------------------------------------------------------------------------------- |
+| template_id   | integer | 是   | 投稿模板 ID                                                                                                           |
+| upload_source | string  | 否   | 投稿文件来源：`original`=源视频（默认，v1.8.0 起为唯一有效值；弹幕压制已迁至 danmaku-tool，不再产出可投稿的压制视频） |
 
 **示例：**
 
@@ -950,11 +950,6 @@ curl -X POST http://127.0.0.1:1123/api/upload_templates \
 curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
   -H 'Content-Type: application/json' \
   -d '{"template_id": 1, "upload_source": "original"}'
-
-# 使用弹幕压制后的视频投稿
-curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
-  -H 'Content-Type: application/json' \
-  -d '{"template_id": 1, "upload_source": "danmaku"}'
 ```
 
 **返回：**
@@ -1111,7 +1106,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ### GET /api/danmaku/status
 
-获取当前弹幕采集和压制队列的实时状态。
+获取当前弹幕采集的实时状态（弹幕压制已迁出，本接口不再包含压制队列信息）。
 
 **返回：**
 

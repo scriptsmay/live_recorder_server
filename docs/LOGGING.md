@@ -494,8 +494,8 @@ INFO  [看门狗] 扫描完成 耗时 1234ms                  ← important（�
 `server/lib/utils/proc-log.js` 是**另一类用途**，不应合并：
 
 - 它服务于**子进程原始输出**（ffmpeg / biliup / 回放等），每个实例对应一个进程，
-  文件名是 `{name}_{id}.log`（带随机 id 或传入 id），如 `logs/replay_{recordId}.log`、
-  弹幕压制的 `logs/*_burn*.log`。
+  文件名是 `{name}_{id}.log`（带随机 id 或传入 id），如 `logs/replay_{recordId}.log`。
+  历史上还产生过 `logs/*_burn*.log`（弹幕压制），v1.8.0 起该功能迁至 danmaku-tool，本服务不再产出。
 - 只有**按大小**滚动（>10MB 就 `rename` 成 `_rotated_时间戳`），没有日期维度、
   没有级别标签、不回显终端。
 - 它的调用契约（按 id 命名、可 `rename`/`destroy`）被现有业务依赖，**改动有风险**。
