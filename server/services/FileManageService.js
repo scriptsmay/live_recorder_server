@@ -341,8 +341,7 @@ class FileManageService {
         const mtimeMissing = dbMtimeMs === null;
         const sizeDrifted =
           !stat.isDirectory() &&
-          (row.file_size === null || row.file_size === undefined ||
-           Math.abs(row.file_size - stat.size) > 1000);
+          (row.file_size === null || row.file_size === undefined || Math.abs(row.file_size - stat.size) > 1000);
 
         const setterParts = [];
         const params = [];
@@ -379,9 +378,7 @@ class FileManageService {
           );
           results.missing++;
         } else {
-          console.warn(
-            `[FileManage] _refreshDiskStatus: stat failed for ${row.file_path}: ${err.code || err.message}`
-          );
+          console.warn(`[FileManage] _refreshDiskStatus: stat failed for ${row.file_path}: ${err.code || err.message}`);
         }
       }
       if (idx % EVENT_LOOP_YIELD_INTERVAL === 0) {
@@ -1101,10 +1098,7 @@ class FileManageService {
 
     if (source_table === 'replay_records' && source_id) {
       const rrCheck = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [source_id]);
-      if (
-        rrCheck.rows.length > 0 &&
-        !REPLAY_DELETABLE_STATUSES.includes(rrCheck.rows[0].status)
-      ) {
+      if (rrCheck.rows.length > 0 && !REPLAY_DELETABLE_STATUSES.includes(rrCheck.rows[0].status)) {
         return { safe: false, reason: `replay_status_${rrCheck.rows[0].status}` };
       }
     }

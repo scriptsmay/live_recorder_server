@@ -65,16 +65,15 @@ npm run stop
 
 ### 关键环境变量
 
-| 配置项                 | 说明                           | 默认值                                    |
-| ---------------------- | ------------------------------ | ----------------------------------------- |
-| VIDEO_DOWNLOAD_DIR     | 录制文件输出根目录（**必需**） | -                                         |
-| DANMAKU_OUTPUT_DIR     | 弹幕压制产物独立输出目录       | `${VIDEO_DOWNLOAD_DIR}/../danmaku_output` |
-| PORT                   | 服务端口                       | 1123（生产）/ 3001（开发）                |
-| BILIUP_PATH            | biliup 可执行文件路径          | `biliup`                                  |
-| BILIUP_WORK_DIR        | biliup 工作目录                | `$HOME`                                   |
-| MESSAGE_FEISHU_WEBHOOK | 飞书通知 Webhook URL           | -                                         |
-| MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址              | -                                         |
-| MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token              | -                                         |
+| 配置项                 | 说明                           | 默认值                     |
+| ---------------------- | ------------------------------ | -------------------------- |
+| VIDEO_DOWNLOAD_DIR     | 录制文件输出根目录（**必需**） | -                          |
+| PORT                   | 服务端口                       | 1123（生产）/ 3001（开发） |
+| BILIUP_PATH            | biliup 可执行文件路径          | `biliup`                   |
+| BILIUP_WORK_DIR        | biliup 工作目录                | `$HOME`                    |
+| MESSAGE_FEISHU_WEBHOOK | 飞书通知 Webhook URL           | -                          |
+| MESSAGE_GOTIFY_SERVER  | Gotify 服务器地址              | -                          |
+| MESSAGE_GOTIFY_TOKEN   | Gotify 应用 Token              | -                          |
 
 ### 登录鉴权配置
 
@@ -116,11 +115,8 @@ npm run stop
 │   │   │   ├── DownloaderFactory.js   ← 工厂模式（返回 FFmpeg 实例）
 │   │   │   ├── DownloaderInterface.js ← 下载器接口
 │   │   │   └── FFmpegDownloader.js    ← FFmpeg 下载引擎（TS 输出、分段检测）
-│   │   ├── danmaku/                ← 弹幕采集与字幕生成
-│   │   │   ├── DanmakuRecorder.js     ← 弹幕采集器（JSONL 写入 danmaku/ 子目录）
-│   │   │   └── DanmakuAssGenerator.js ← ASS 字幕生成器（会话级 + 分段级）
-│   │   ├── DanmakuBurnQueue.js     ← 弹幕压制队列（Redis 队列，独立于转码）
-│   │   ├── danmaku-burner.js       ← FFmpeg 弹幕压制（ASS 滤镜渲染）
+│   │   ├── danmaku/                ← 弹幕采集
+│   │   │   └── DanmakuRecorder.js     ← 弹幕采集器（JSONL 写入 danmaku/ 子目录）
 │   │   ├── replay/                 ← 回放工具箱
 │   │   │   ├── KuaishouReplayClient.js ← 快手回放 API 客户端（列表同步 + m3u8 提取）
 │   │   │   ├── m3u8-extractor.js       ← Playwright 浏览器 m3u8 提取器（API 失败时兜底）

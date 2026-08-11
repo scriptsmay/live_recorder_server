@@ -1,6 +1,7 @@
 # 文件管理规则（File Management Rules）
 
 > 本文档说明 `live_recorder_server` 文件管理模块的两类核心规则：
+>
 > 1. **自动清理规则**（按保留天数定时清理）；
 > 2. **删除安全校验 7 条规则**（`validateFileSafety`，任何用户/系统删除前都要过）。
 >
@@ -10,13 +11,13 @@
 
 ## 1. 概述
 
-| 项 | 说明 |
-|----|------|
-| 核心服务 | `server/services/FileManageService.js` |
-| 自动清理调度 | `server/lib/core/FileCleanupScheduler.js` |
-| HLS 目录删除 | `server/services/HLSCleanupService.js` |
-| 索引表 | `managed_files`（每次扫描同步磁盘状态；`safe_to_delete`、`delete_block_reason`、`mtime`、`status` 等字段决策的依据） |
-| 路径白名单 | 来自 `lib/utils/path-safety` 的 `ALLOWLIST_ROOTS`（默认 `/data/video_downloads`、`/data/replay`；生产可能为其他挂载点，以代码配置为准） |
+| 项           | 说明                                                                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 核心服务     | `server/services/FileManageService.js`                                                                                                  |
+| 自动清理调度 | `server/lib/core/FileCleanupScheduler.js`                                                                                               |
+| HLS 目录删除 | `server/services/HLSCleanupService.js`                                                                                                  |
+| 索引表       | `managed_files`（每次扫描同步磁盘状态；`safe_to_delete`、`delete_block_reason`、`mtime`、`status` 等字段决策的依据）                    |
+| 路径白名单   | 来自 `lib/utils/path-safety` 的 `ALLOWLIST_ROOTS`（默认 `/data/video_downloads`、`/data/replay`；生产可能为其他挂载点，以代码配置为准） |
 
 两类触发删除的操作：
 
@@ -36,13 +37,13 @@
 
 ### 2.2 关键参数（`settings` 表）
 
-| key | 默认 | 含义 |
-|-----|------|------|
-| `file_cleanup_retention_days` | `30` | 文件保留天数 `N`（超过则进入清理候选） |
-| `file_cleanup_categories` | 空 | 限定清理的 category（逗号分隔）；为空 = 全部 |
-| `file_cleanup_empty_dirs_enabled` | `false` | 是否回收空目录 |
-| `file_cleanup_suggestion_notify` | `false` | 是否发送清理建议通知 |
-| `hls_cleanup_days` | `30` | **HLS 目录独立**保留天数；`0` = 禁用，且不受 `file_cleanup_enabled` 控制 |
+| key                               | 默认    | 含义                                                                     |
+| --------------------------------- | ------- | ------------------------------------------------------------------------ |
+| `file_cleanup_retention_days`     | `30`    | 文件保留天数 `N`（超过则进入清理候选）                                   |
+| `file_cleanup_categories`         | 空      | 限定清理的 category（逗号分隔）；为空 = 全部                             |
+| `file_cleanup_empty_dirs_enabled` | `false` | 是否回收空目录                                                           |
+| `file_cleanup_suggestion_notify`  | `false` | 是否发送清理建议通知                                                     |
+| `hls_cleanup_days`                | `30`    | **HLS 目录独立**保留天数；`0` = 禁用，且不受 `file_cleanup_enabled` 控制 |
 
 ### 2.3 选择条件
 
@@ -80,15 +81,15 @@ runAutoCleanup()
 
 > 规则按顺序短路求值：**任意一条不通过即返回 `{ safe:false, reason }`**，该文件被放入删除计划的 `blocked[]`，不会进入实际删除。
 
-| # | 规则 | 校验方式 | 不通过时的 `reason` |
-|---|------|---------|--------------------|
-| 1 | **路径在白名单内** | `resolveAndValidate(file_path)`（path-safety） | `outside_allowlist`（或 path-safety 返回的具体 reason） |
-| 2 | **文件当前存在（磁盘）** | `fs.promises.stat(file_path)`；ENOENT 时，**若非** `allowMissing` 才拦截 | `file_not_found`；其他 stat 错误 → `stat_error: <msg>` |
-| 3 | **不是目录**（HLS 聚合目录除外） | `stat.isDirectory()` 且 `file_type !== 'hls_directory'` | `is_directory` |
-| 4 | **不属于活跃任务** | `isFileInActiveTask()`：录制中 / 转码中 / 投稿中 | `active_task_recording` / `active_task_transcoding` / `active_task_uploading` |
-| 5 | **不属于进行中的录制会话** | 当 `source_table=recording_files`，JOIN 查 `recording_sessions.status='recording'` | `active_recording_session` |
-| 6 | **不在 Redis 待处理队列** | `_isFileInRedisQueue()`：查 `transcode_queue_paths` 集合 | `in_processing_queue` |
-| 7 | **业务记录处于终态** | 见下方「可删终态集合」 | `recording_status_<status>` / `replay_status_<status>` |
+| #   | 规则                             | 校验方式                                                                           | 不通过时的 `reason`                                                           |
+| --- | -------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 1   | **路径在白名单内**               | `resolveAndValidate(file_path)`（path-safety）                                     | `outside_allowlist`（或 path-safety 返回的具体 reason）                       |
+| 2   | **文件当前存在（磁盘）**         | `fs.promises.stat(file_path)`；ENOENT 时，**若非** `allowMissing` 才拦截           | `file_not_found`；其他 stat 错误 → `stat_error: <msg>`                        |
+| 3   | **不是目录**（HLS 聚合目录除外） | `stat.isDirectory()` 且 `file_type !== 'hls_directory'`                            | `is_directory`                                                                |
+| 4   | **不属于活跃任务**               | `isFileInActiveTask()`：录制中 / 转码中 / 投稿中                                   | `active_task_recording` / `active_task_transcoding` / `active_task_uploading` |
+| 5   | **不属于进行中的录制会话**       | 当 `source_table=recording_files`，JOIN 查 `recording_sessions.status='recording'` | `active_recording_session`                                                    |
+| 6   | **不在 Redis 待处理队列**        | `_isFileInRedisQueue()`：查 `transcode_queue_paths` 集合                           | `in_processing_queue`                                                         |
+| 7   | **业务记录处于终态**             | 见下方「可删终态集合」                                                             | `recording_status_<status>` / `replay_status_<status>`                        |
 
 ### 规则 2 的 `allowMissing` 开关（易混淆点）
 
@@ -134,15 +135,15 @@ runAutoCleanup()
 
 该服务按 `hls_status` / 会话状态决策：
 
-| 情况 | 结果 |
-|------|------|
+| 情况                                 | 结果                                                                   |
+| ------------------------------------ | ---------------------------------------------------------------------- |
 | `hls_status` ∈ `expired` / `deleted` | 补偿置 `managed_files` 为 `deleted`，返回 `success_noop`（视为已清理） |
-| `hls_status` ≠ `ready`（且非上述） | `blocked`，`error = hls_status_<status>` |
-| 所属会话仍 `recording` | `blocked`，`error = active_recording_session` |
-| `hls_playlist_path` 缺失 | `blocked`，`error = hls_playlist_path_missing` |
-| 路径越界（path-safety 不通过） | `blocked`，`error = <reason>` |
-| 删除过程中状态被并发改变 | `blocked`，`error = hls_status_changed` |
-| 源 `recording_files` 记录已不存在 | `blocked`，`error = recording_file_not_found` |
+| `hls_status` ≠ `ready`（且非上述）   | `blocked`，`error = hls_status_<status>`                               |
+| 所属会话仍 `recording`               | `blocked`，`error = active_recording_session`                          |
+| `hls_playlist_path` 缺失             | `blocked`，`error = hls_playlist_path_missing`                         |
+| 路径越界（path-safety 不通过）       | `blocked`，`error = <reason>`                                          |
+| 删除过程中状态被并发改变             | `blocked`，`error = hls_status_changed`                                |
+| 源 `recording_files` 记录已不存在    | `blocked`，`error = recording_file_not_found`                          |
 
 含义：**HLS 目录最终是否可删，由 `HLSCleanupService` 把关**；`validateFileSafety` 的规则 5/7 只是前置辅助拦截。
 一个 `status='missing'` 的孤儿 HLS 目录，只要其 `hls_status='expired'`，走上面第一行就会 `success_noop` 清理掉，因此前置规则 7 放行后即可正常清理。
@@ -151,26 +152,26 @@ runAutoCleanup()
 
 ## 6. 「被阻止」reason 速查表
 
-| reason | 触发规则 | 含义 | 处理建议 |
-|--------|---------|------|---------|
-| `outside_allowlist` | 1 | 路径不在白名单根目录内 | 检查文件实际路径；正常业务文件不应出现 |
-| `file_not_found` | 2 | 文件不在磁盘（`allowMissing=false` 时） | 通常为单文件删除未开 allowMissing；批量删除不应触发 |
-| `stat_error: <msg>` | 2 | stat 抛非 ENOENT 错误 | 查磁盘/权限问题 |
-| `is_directory` | 3 | 目标是目录且非 HLS 聚合目录 | 目录删除需以 HLS 聚合形式走 `hls_directory` |
-| `active_task_recording` | 4 | 该路径正被录制占用 | 等录制结束 |
-| `active_task_transcoding` | 4 | 正转码中 | 等转码完成 |
-| `active_task_uploading` | 4 | 正投稿上传中 | 等上传完成 |
-| `active_recording_session` | 5 | 所属录制会话仍在 `recording` | 等会话结束 |
-| `in_processing_queue` | 6 | 在 Redis 转码队列中 | 等队列排空 |
-| `recording_status_<status>` | 7 | 录制业务记录未到终态（如 `recording`） | 等录制结束；若为孤儿 `missing` 见 §7 修复 |
-| `replay_status_<status>` | 7 | 回放业务记录未到终态 | 等回放流程结束 |
-| `hls_status_<status>` | 5（执行期） | HLS 未 ready / 未 expired | 看 HLS 生成状态 |
-| `recording_file_not_found` | 5（执行期） | 源录制记录已删 | 一般会自动补偿置 deleted |
-| `hls_playlist_path_missing` | 5（执行期） | 缺少播放列表路径 | 数据不一致，需查源表 |
-| `hls_status_changed` | 5（执行期） | 并发改变状态 | 重试 |
-| `file_locked` / `EBUSY` / `EPERM` | 执行期 | 文件被占用/无权限 | 排查占用进程或权限 |
-| `already_deleted_or_deleting` | 执行期 | 记录已删除/删除中 | 无需处理 |
-| `file_record_not_found` | 执行期 | 索引记录丢失 | 一般会自动补偿 |
+| reason                            | 触发规则    | 含义                                    | 处理建议                                            |
+| --------------------------------- | ----------- | --------------------------------------- | --------------------------------------------------- |
+| `outside_allowlist`               | 1           | 路径不在白名单根目录内                  | 检查文件实际路径；正常业务文件不应出现              |
+| `file_not_found`                  | 2           | 文件不在磁盘（`allowMissing=false` 时） | 通常为单文件删除未开 allowMissing；批量删除不应触发 |
+| `stat_error: <msg>`               | 2           | stat 抛非 ENOENT 错误                   | 查磁盘/权限问题                                     |
+| `is_directory`                    | 3           | 目标是目录且非 HLS 聚合目录             | 目录删除需以 HLS 聚合形式走 `hls_directory`         |
+| `active_task_recording`           | 4           | 该路径正被录制占用                      | 等录制结束                                          |
+| `active_task_transcoding`         | 4           | 正转码中                                | 等转码完成                                          |
+| `active_task_uploading`           | 4           | 正投稿上传中                            | 等上传完成                                          |
+| `active_recording_session`        | 5           | 所属录制会话仍在 `recording`            | 等会话结束                                          |
+| `in_processing_queue`             | 6           | 在 Redis 转码队列中                     | 等队列排空                                          |
+| `recording_status_<status>`       | 7           | 录制业务记录未到终态（如 `recording`）  | 等录制结束；若为孤儿 `missing` 见 §7 修复           |
+| `replay_status_<status>`          | 7           | 回放业务记录未到终态                    | 等回放流程结束                                      |
+| `hls_status_<status>`             | 5（执行期） | HLS 未 ready / 未 expired               | 看 HLS 生成状态                                     |
+| `recording_file_not_found`        | 5（执行期） | 源录制记录已删                          | 一般会自动补偿置 deleted                            |
+| `hls_playlist_path_missing`       | 5（执行期） | 缺少播放列表路径                        | 数据不一致，需查源表                                |
+| `hls_status_changed`              | 5（执行期） | 并发改变状态                            | 重试                                                |
+| `file_locked` / `EBUSY` / `EPERM` | 执行期      | 文件被占用/无权限                       | 排查占用进程或权限                                  |
+| `already_deleted_or_deleting`     | 执行期      | 记录已删除/删除中                       | 无需处理                                            |
+| `file_record_not_found`           | 执行期      | 索引记录丢失                            | 一般会自动补偿                                      |
 
 ---
 
@@ -179,6 +180,7 @@ runAutoCleanup()
 以下问题 A、B **已在 v1.7.17 部署生效**；问题 C（本次新增）**本地代码已修复，待下次发版部署**（线上现跑 `v1.7.17`）：
 
 ### 问题 A：自动清理永不命中（`mtime` 全为 NULL）
+
 - **现象**：全局保留天数改为 10 天后，列表里仍残留 7/1 等旧文件；自动清理日志长期为「无可清理文件」。
 - **根因**：录制/回放/弹幕扫描的 upsert 从不写 `mtime`，`managed_files.mtime` 全为 NULL；而清理条件 `mtime <= NOW() - N days` 对 NULL 永远不成立。
 - **修复**（两层）：
@@ -188,12 +190,14 @@ runAutoCleanup()
 - **状态**：✅ 已在 v1.7.17 部署生效。
 
 ### 问题 B：孤儿 HLS 目录被误拦（`recording_status_missing`）
+
 - **现象**：批量删除 `file_id` 结果为「被阻止」，reason = `recording_status_missing`。
 - **根因**：`validateFileSafety` 规则 7 原只允许 `completed` / `interrupted`；而对应录制 `status='missing'`（录制丢失，终态）被误判不可删，在 `generateDeletePlan` 阶段就进 `blocked[]`。
 - **修复**：规则 7 终态集合扩展为 `completed, interrupted, missing, deleted, failed, cancelled, orphaned`；活跃状态（如 `recording`）仍拦截。
 - **状态**：✅ 已在 v1.7.17 部署生效。
 
 ### 问题 C：陈旧 `file_not_found` 标记导致 `safe_to_delete=false` 永久阻挡删除
+
 - **现象**：`file_id`（如 5309、5298）已是 `status='missing'`、`delete_block_reason='file_not_found'`、`safe_to_delete=false`，但源业务记录已是终态（`deleted`/`missing`），用户在 UI 上看到「不可删除」，自动清理也筛不到它。
 - **根因（两段式）**：
   1. 早期版本 `_refreshDiskStatus` 在 ENOENT 时只设 `exists_on_disk=false, status='missing'`，**不触碰** `safe_to_delete` / `delete_block_reason`。

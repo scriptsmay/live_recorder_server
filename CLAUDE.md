@@ -49,7 +49,7 @@ Chrome Extension / PollingManager
 Chrome Extension (danmaku)
     → POST /api/danmaku/batch
     → DanmakuRecorder → danmaku.jsonl
-    → Session ends → DanmakuAssGenerator → danmaku.ass + segments
+    → Session ends → capture record marked completed (ASS/burn moved to danmaku-tool)
 ```
 
 **Key layers:**
@@ -57,7 +57,7 @@ Chrome Extension (danmaku)
 - `server/router/` — Express route handlers (thin, delegate to services)
 - `server/services/` — Business logic (RecorderService, RoomService, UploadService, DataService)
 - `server/lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
-- `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder) and ASS subtitle generation
+- `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder writes JSONL only; ASS/burn moved out)
 - `server/lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
 - `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
 - `server/lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)

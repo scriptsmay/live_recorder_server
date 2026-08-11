@@ -100,7 +100,7 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
 
 ### 弹幕服务端处理流程
 
-弹幕录制结束后，服务端自动执行 ASS 字幕生成。弹幕压制为独立的工具箱功能，**不再自动触发**，由用户通过「弹幕工具箱」页面手动操作。
+弹幕压制（ASS 生成 + 硬字幕烧录）已于 v1.7.0 迁出至独立的 [danmaku-tool](https://github.com/scriptsmay/danmaku-tool) 项目。本服务只负责**弹幕采集与查询**，录制结束后不再做任何字幕生成。
 
 ```text
 录制会话结束
@@ -108,29 +108,15 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
     ▼
 _handleDanmakuFinish()
     │
-    ├── DanmakuRecorder.stopCapture()     停止采集
-    ├── DanmakuAssGenerator.generateFromJsonl()   生成会话级 ASS
-    │     → [sessionDir]/danmaku/danmaku.ass
-    └── DanmakuAssGenerator.generateSegmentAss()  生成分段 ASS
-          → [sessionDir]/danmaku/segments/*.ass
-          → ASS 文件存放在确定性路径 danmaku/segments/*.ass（不再写入 DB 列）
+    ├── DanmakuRecorder.stopCapture()   停止采集，返回 captureId / eventCount
+    └── 更新 danmaku_capture_records     status → completed，写入 ended_at / event_count
 
-用户通过弹幕工具箱手动操作
+弹幕数据的后续消费
     │
-    ├── 生成 ASS (POST /api/sessions/:id/danmaku/ass)
-    ├── 批量压制 (POST /api/sessions/:id/danmaku/burn)
-    │     │
-    │     ▼
-    │   DanmakuBurnQueue.enqueueSession()
-    │     │  检查 ASS 就绪 + 转码完成
-    │     │  输出到独立目录 DANMAKU_OUTPUT_DIR/[sessionId]/
-    │     ▼
-    │   DanmakuBurnQueue.processTask()
-    │     │  danmaku-burner → FFmpeg ASS 渲染
-    │     │  → *_danmaku.mp4
-    │     ▼
-    │   更新 danmaku_burn_records (completed/failed)
-    └── 产物管理：播放/下载/删除
+    ├── GET /api/danmaku/search              搜索 JSONL 内容
+    ├── GET /api/sessions/:id/danmaku-page   会话弹幕详情
+    ├── GET /api/danmaku/sessions/:id/raw    下载原始 JSONL
+    └── danmaku-tool（外部项目）              批量压制，直接读取 JSONL 路径
 ```
 
 **目录结构**：
@@ -140,24 +126,17 @@ VIDEO_DOWNLOAD_DIR/
   └── [sessionId]/
       ├── *.mp4 / *.ts                    ← 录制分段（纯净）
       └── danmaku/                        ← 弹幕数据目录
-          ├── danmaku.ass                 ← 会话级 ASS
-          └── segments/                   ← 分段 ASS
-
-DANMAKU_OUTPUT_DIR/                       ← 独立压制输出目录
-  └── [sessionId]/
-      ├── *_danmaku.mp4                   ← 压制产物
-      └── logs/*.log                      ← FFmpeg 日志
+          └── danmaku.jsonl               ← 弹幕原始数据（JSONL）
 ```
 
 **关键设计决策**：
 
-- 弹幕压制从录制流程中完全解耦，录制模块只负责「采集 + ASS 生成」，压制作为独立工具箱功能
-- 压制产物存放在独立目录，不与录制文件混合，避免文件扫描、统计、投稿环节的过滤负担
-- 分段 ASS 文件通过确定性路径 `{session.output_dir}/danmaku/segments/{recording_file_id}.ass` 查询，不再依赖 DB 列；`recording_files.danmaku_ass_path` 已废弃，保留列以兼容历史数据
-- 新录制目录结构从下个版本开始简化为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
-- 原始弹幕 JSONL 后续迁移到 `DANMAKU_ARCHIVE_DIR` 长期归档；会话目录仅保留可重建的 ASS 缓存
+- 弹幕采集与录制流程完全解耦，录制模块只负责「采集 + 落 JSONL」
+- 新录制目录结构为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
 - 兼容旧路径：JSONL 优先读取 `danmaku_capture_records.raw_path`，fallback 到 `[sessionDir]/danmaku/danmaku.jsonl` 和 `[sessionDir]/danmaku.jsonl`
-- `danmaku_burn_records` 表集中管理所有压制数据，JOIN `recording_files` 查询状态
+- **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool
+- 弹幕路径统一为 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl` 的扁平化改造，以及 `DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 两个废弃变量的移除，纳入 v1.8.0（见知识库 ADR-011）
+- 遗留待清理：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列均已不再写入，计划 v1.8.0 DROP
 
 ## 1. 会话生命周期
 
@@ -213,23 +192,11 @@ VIDEO_DOWNLOAD_DIR/
 ├── [sessionId]/                 # 会话ID目录（新结构）
 │   ├── {room_name}_{datetime}.ts      # 非分段录制
 │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
-│   └── danmaku/                 # 可重建的弹幕 ASS 缓存
-│       ├── danmaku.ass          # 会话级 ASS 字幕
-│       └── segments/            # 分段 ASS 字幕
-│           ├── {recording_file_id}.ass
-│           └── ...
+│   └── danmaku/                 # 弹幕数据目录
+│       └── danmaku.jsonl        # 弹幕原始数据（JSONL）
 ```
 
 历史录制可能仍位于 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/`。代码不得再从 `room_id` 推导历史路径，应始终以 `recording_sessions.output_dir` 和 `recording_files.file_path` 为准。
-
-**压制产物独立目录**：
-
-```text
-DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
-├── [sessionId]/                 # 按会话分组
-│   ├── {filename}_danmaku.mp4   # 压制产物
-│   └── logs/                    # FFmpeg 压制日志
-```
 
 - 录制输出固定为 TS 格式(经 ffmpeg 录制)，容错性更强
 - 转码后输出 MP4 格式(通过 TranscodeQueue 异步处理)
@@ -239,7 +206,7 @@ DANMAKU_OUTPUT_DIR/              # 默认 VIDEO_DOWNLOAD_DIR/../danmaku_output
 
 - 避免文件名冲突：每个会话有独立的目录
 - 目录更浅：会话 ID 全局唯一，去掉 roomId 层不会引入覆盖风险
-- 便于管理：文件管理、投稿、弹幕 ASS 都直接围绕 session 组织
+- 便于管理：文件管理、投稿、弹幕数据都直接围绕 session 组织
 - 扫描效率提升：看门狗可以只扫描特定会话目录
 - 投稿简化：直接从会话目录获取文件
 

@@ -335,9 +335,7 @@ class ReplayUploadService {
               );
             }
           } catch (postErr) {
-            console.error(
-              `[回放投稿] 投稿后处理失败 replay_record_id=${record.id}: ${postErr.message}`
-            );
+            console.error(`[回放投稿] 投稿后处理失败 replay_record_id=${record.id}: ${postErr.message}`);
           }
         }
       } else {

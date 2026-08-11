@@ -35,11 +35,8 @@
 │   │   │   ├── DownloaderFactory.js
 │   │   │   ├── DownloaderInterface.js
 │   │   │   └── FFmpegDownloader.js
-│   │   ├── danmaku/        # 弹幕采集与 ASS 字幕生成
-│   │   │   ├── DanmakuRecorder.js    # 弹幕采集器（JSONL 写入）
-│   │   │   └── DanmakuAssGenerator.js # ASS 字幕生成器
-│   │   ├── DanmakuBurnQueue.js # 弹幕压制队列（Redis 队列，独立于转码）
-│   │   ├── danmaku-burner.js   # FFmpeg 弹幕压制（ASS 渲染）
+│   │   ├── danmaku/        # 弹幕采集
+│   │   │   └── DanmakuRecorder.js    # 弹幕采集器（JSONL 写入）
 │   │   ├── notify.js       # 通知服务
 │   │   ├── polling/       # 直播轮询检测
 │   │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
@@ -111,7 +108,8 @@ npm run lint && npm run format && npm run test
 ## 数据库
 
 - 启动时自动迁移建表（`server/db/migrate.js`），遇到死锁自动重试 3 次，详见 `docs/DB.md`
-- 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）、`danmaku_capture_records`（弹幕采集）、`danmaku_burn_records`（弹幕压制）
+- 表：`rooms`（直播间）、`recording_sessions`（录制会话）、`recordings`（分片文件）、`recording_files`（磁盘文件跟踪）、`upload_templates`（投稿模板）、`upload_records`（投稿记录）、`settings`（全局设置）、`danmaku_capture_records`（弹幕采集）
+- 已废弃待移除（计划 v1.8.0 DROP）：`danmaku_burn_records`、`danmaku_free_burn_records`、`recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` —— 弹幕压制已迁至 danmaku-tool，这些表/列不再写入
 - `rooms` 表新增字段：`notification_enabled`（通知开关）、`monitoring_enabled`（监听开关）、`polling_enabled`（轮询开关）、`polling_platform`（轮询平台，如 `huya`）、`polling_interval`（轮询间隔秒数，默认 60）
 - 启动时自动扫描 `VIDEO_DOWNLOAD_DIR`，将未跟踪文件标记为 `orphaned`，缺失文件标记为 `missing`
 - `POST /api/scan_files` 手动触发扫描，5 分钟内重复调用自动跳过（带冷却）
@@ -136,16 +134,14 @@ npm run lint && npm run format && npm run test
 
 ### 弹幕
 
+> 弹幕压制（ASS 生成 + 硬字幕烧录）已于 v1.7.0 迁出至独立的 danmaku-tool 项目，相关端点已下线。本服务只负责弹幕采集与查询。
+
 - `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据
-- `POST /api/sessions/:id/danmaku/ass` —— 手动重新生成会话 ASS 字幕
-- `POST /api/sessions/:id/danmaku/burn` —— 将会话加入弹幕压制队列
 - `GET /api/danmaku_capture_records` —— 查询弹幕采集记录
-- `GET /api/danmaku_burn_records` —— 查询弹幕压制记录
-- `DELETE /api/danmaku_burn_records/:id` —— 删除压制记录（可选删除文件）
-- `GET /api/danmaku/status` —— 获取弹幕采集和压制队列状态
+- `GET /api/danmaku/status` —— 获取弹幕采集状态
 - `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
-- `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件、压制记录）
-- `GET /api/danmaku/burn_output/:id/stream` —— 流式播放压制产物文件
+- `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件）
+- `GET /api/danmaku/sessions/:id/raw` —— 下载会话原始弹幕 JSONL
 
 ### 投稿
 
@@ -175,7 +171,8 @@ npm run lint && npm run format && npm run test
 ## 关键环境变量
 
 - `VIDEO_DOWNLOAD_DIR` —— 录制端点必需；需确保目录存在或自动创建
-- `DANMAKU_OUTPUT_DIR` —— 弹幕压制产物输出目录，默认 `VIDEO_DOWNLOAD_DIR/../danmaku_output`
+- `DANMAKU_OUTPUT_DIR` —— ⚠️ 已废弃：原弹幕压制产物输出目录。压制迁出后本服务不再向该目录写入，仅剩 `path-safety` 白名单与 `getFileSummary()` 两处防御性读取，计划 v1.8.0 移除
+- `DANMAKU_ARCHIVE_DIR` —— ⚠️ 已废弃：原弹幕长期归档目录，设计未落地（`DanmakuRecorder` 始终写会话目录），仅 `scripts/backup-danmaku.js` 手动脚本消费，计划 v1.8.0 移除
 - `PORT` —— 正式环境默认 1123 ，开发环境默认 3001
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
@@ -226,16 +223,10 @@ VIDEO_DOWNLOAD_DIR/
 │   ├── {room_name}_{datetime}.ts      # 非分段录制
 │   ├── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
 │   └── danmaku/                       # 弹幕数据（与录制文件隔离）
-│       ├── danmaku.jsonl              # 弹幕原始数据
-│       ├── danmaku.ass                # 会话级 ASS
-│       └── segments/                  # 分段 ASS
-│           └── {segment_index}.ass
-
-DANMAKU_OUTPUT_DIR/                        # 弹幕压制产物（独立目录）
-└── [sessionId]/
-    ├── {filename}_danmaku.mp4             # 压制产物
-    └── logs/                              # FFmpeg 压制日志
+│       └── danmaku.jsonl              # 弹幕原始数据（JSONL）
 ```
+
+> 注：ASS 字幕生成与弹幕压制产物已随 v1.7.0 迁出至独立的 danmaku-tool 项目，不再由本服务写入。弹幕路径的整体扁平化改造纳入 v1.8.0 计划。
 
 ## 日志
 

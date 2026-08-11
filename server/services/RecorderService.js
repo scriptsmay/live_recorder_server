@@ -805,29 +805,18 @@ class RecorderService {
   //   }
   // }
 
-  // /**
-  //  * 获取最大恢复重试次数配置
-  //  *
-  //  * @returns {Promise<number>} 最大重试次数
-  //  */
-  // static async getMaxResumeRetries() {
-  //   const maxResumeRetries = await DataService.getSetting('max_resume_retries', 3);
-  //   return parseInt(maxResumeRetries, 10) || 3;
-  // }
-
   /**
    * 清理陈旧的录制任务和会话
    *
-   * 该函数用于处理系统异常重启或崩溃后遗留的录制状态，主要执行以下操作：
-   * 1. 查找所有状态为 'recording' 或 'paused' 的直播间房间
-   *    - 终止相关的 ffmpeg 进程（如果存在）
+   * 用于处理系统异常重启或崩溃后遗留的录制状态：
+   * 1. 查找所有状态为 'recording' 或 'paused' 的直播间
+   *    - 优先通过 checkReuseSession 尝试续播复用旧会话
+   *    - 终止残留的 ffmpeg 进程
    *    - 将房间状态重置为 'idle'
    * 2. 查找所有状态为 'recording' 的录制会话
-   *    - 如果重试次数未达上限，尝试恢复会话
-   *    - 如果恢复失败或重试次数已达上限，将会话和文件状态标记为 'interrupted'
+   *    - 将会话和其未完成文件统一标记为 'interrupted'
    */
   static async cleanupStaleRecordings() {
-    // const MAX_RESUME_RETRIES = await this.getMaxResumeRetries();
     try {
       const staleRooms = await pool.query(
         `SELECT id, room_url, room_name, ffmpeg_pid, polling_platform, output_path FROM rooms WHERE status IN ('recording', 'paused')`
@@ -856,25 +845,14 @@ class RecorderService {
         ]);
       }
 
-      // TODO： 待验证 - 跳过处理会话
-      // 录制中状态的会话
+      // 录制中状态的会话：统一标记为 interrupted。
+      // 会话恢复能力已由启动清理链中的「延迟续播」机制（checkReuseSession）承担，
+      // 此处不再尝试 resumeSession，避免与续播逻辑重复。
       const staleSessions = await pool.query(
         `SELECT rs.*, r.id as room_id, r.room_name, r.polling_platform FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
       );
 
       for (const session of staleSessions.rows) {
-        // if ((session.retry_count || 0) < MAX_RESUME_RETRIES) {
-        //   try {
-        //     console.log(`[恢复] 尝试恢复会话 ${session.id} (直播间: ${session.room_url})`);
-        //     await recordingManager.resumeSession(session);
-        //     continue;
-        //   } catch (err) {
-        //     console.error(`[恢复] 会话 ${session.id} 恢复失败:`, err.message);
-        //   }
-        // }
-        // // 跳过恢复会话
-        // // 如果当前时间
-
         console.log(`[清理] 会话 ${session.id} 状态已标记为 interrupted`);
         await pool.query(`UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted' WHERE id = $1`, [
           session.id,
