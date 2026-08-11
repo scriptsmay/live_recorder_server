@@ -14,10 +14,11 @@
  * 安全约束：
  * - 默认 dry-run，真实执行必须显式 --apply
  * - 幂等：目标文件已存在则跳过移动，仅补齐 DB
- * - 顺序：移动文件 → 更新 danmaku_capture_records.raw_path → 更新 managed_files.file_path
- *         → 清理残留空目录
+ * - 顺序：移动文件 → 事务内更新 danmaku_capture_records.raw_path + managed_files.file_path
+ *         → 清理残留空目录；DB 事务失败时把文件移回原位，避免磁盘/DB 不一致
+ * - 不覆盖：用 COPYFILE_EXCL 拷贝后删源，目标被并发创建时抛 EEXIST 而非覆盖活文件
  * - 不猜测：raw_path 形态不符合预期时跳过并告警，不做改写
- * - 执行前请先备份：bash scripts/backup-db.sh
+ * - 执行前请先停服并备份：sudo docker stop live_recorder_server && bash scripts/backup-db.sh
  */
 
 require('../server/config/env').initEnv();
@@ -26,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../server/db');
 const { getDanmakuJsonlPath, getDanmakuDir } = require('../server/lib/utils/tool');
+const { isWithinRoot } = require('../server/lib/utils/path-safety');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const apply = process.argv.includes('--apply');
@@ -56,23 +58,56 @@ function isNewShape(rawPath, sessionId) {
  */
 function isKnownOldShape(rawPath) {
   const resolved = path.resolve(rawPath);
-  const rel = path.relative(path.resolve(DOWNLOAD_DIR), resolved);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  if (!isWithinRoot(resolved, path.resolve(DOWNLOAD_DIR))) {
+    return false;
+  }
   return path.basename(resolved) === 'danmaku.jsonl';
 }
 
 /**
- * 移动单个文件；目标已存在则不覆盖
+ * 移动单个文件；目标已存在则不覆盖（COPYFILE_EXCL 保证并发安全）
  * @returns {'moved'|'target_exists'|'source_missing'}
  */
 function moveFile(src, dest) {
-  if (fs.existsSync(dest)) return 'target_exists';
-  if (!fs.existsSync(src)) return 'source_missing';
+  if (fs.existsSync(dest)) {
+    return 'target_exists';
+  }
+  if (!fs.existsSync(src)) {
+    return 'source_missing';
+  }
   if (apply) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.renameSync(src, dest);
+    // COPYFILE_EXCL: 目标已存在时抛 EEXIST，防止 rename 的原子覆盖语义误伤活文件
+    try {
+      fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        return 'target_exists';
+      }
+      throw err;
+    }
+    // 复制成功后再删源，避免任何时刻目标被半写入状态
+    fs.unlinkSync(src);
   }
   return 'moved';
+}
+
+/**
+ * 移动失败或事务回滚时，把文件移回原位（尽力而为）
+ */
+function rollbackMove(src, dest) {
+  if (!apply) {
+    return;
+  }
+  try {
+    if (fs.existsSync(dest) && !fs.existsSync(src)) {
+      fs.mkdirSync(path.dirname(src), { recursive: true });
+      fs.copyFileSync(dest, src, fs.constants.COPYFILE_EXCL);
+      fs.unlinkSync(dest);
+    }
+  } catch (err) {
+    report.failures.push(`回滚移动失败 ${dest} → ${src}: ${err.message}`);
+  }
 }
 
 /**
@@ -80,7 +115,9 @@ function moveFile(src, dest) {
  * 以及因此变空的父会话目录（只删空目录，不递归删文件）
  */
 function cleanupEmptyDanmakuDirs(dir, depth = 0) {
-  if (depth > 3) return;
+  if (depth > 3) {
+    return;
+  }
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -88,10 +125,14 @@ function cleanupEmptyDanmakuDirs(dir, depth = 0) {
     return;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory()) {
+      continue;
+    }
     const fp = path.join(dir, entry.name);
     // 跳过新的集中目录本身
-    if (path.resolve(fp) === path.resolve(getDanmakuDir())) continue;
+    if (path.resolve(fp) === path.resolve(getDanmakuDir())) {
+      continue;
+    }
 
     if (entry.name === 'danmaku') {
       let inner;
@@ -172,28 +213,49 @@ async function main() {
       continue;
     }
 
-    if (result === 'moved') report.moved++;
-    if (result === 'target_exists') report.targetExists++;
-    if (result === 'source_missing') report.sourceMissing++;
+    if (result === 'moved') {
+      report.moved++;
+    }
+    if (result === 'target_exists') {
+      report.targetExists++;
+    }
+    if (result === 'source_missing') {
+      report.sourceMissing++;
+    }
 
     // 无论文件是否存在磁盘，DB 路径都应指向新位置（磁盘缺失的记录本就是历史清理产物）
+    // 事务保证 danmaku_capture_records + managed_files 一起更新，
+    // 任一失败则回滚 DB 并把已移动的文件搬回原位，避免磁盘/DB 三态不一致
     if (apply) {
+      const client = await pool.connect();
       try {
-        const capRes = await pool.query(
+        await client.query('BEGIN');
+        const capRes = await client.query(
           `UPDATE danmaku_capture_records SET raw_path = $1 WHERE id = $2 AND raw_path IS DISTINCT FROM $1`,
           [dest, id]
         );
-        report.captureUpdated += capRes.rowCount;
-
-        const mfRes = await pool.query(
+        const mfRes = await client.query(
           `UPDATE managed_files SET file_path = $1, file_name = $2, updated_at = NOW()
            WHERE source_table = 'danmaku_capture_records' AND source_id = $3
              AND file_path IS DISTINCT FROM $1`,
           [dest, path.basename(dest), id]
         );
+        await client.query('COMMIT');
+        report.captureUpdated += capRes.rowCount;
         report.managedUpdated += mfRes.rowCount;
       } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {
+          // 忽略回滚二次异常
+        }
         report.failures.push(`capture_id=${id} DB 更新失败: ${err.message}`);
+        if (result === 'moved') {
+          rollbackMove(rawPath, dest);
+          report.moved--;
+        }
+      } finally {
+        client.release();
       }
     } else {
       report.captureUpdated++;

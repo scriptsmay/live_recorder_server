@@ -3,6 +3,12 @@ const ensureDatabase = require('./ensure-database');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+// 迁移事务包含 DROP TABLE / DROP COLUMN，需要 ACCESS EXCLUSIVE 锁。
+// 滚动部署时旧实例的查询可能持锁，用 lock_timeout 快速失败 + 重试，
+// 避免启动阶段无限期阻塞在等锁上。
+const LOCK_TIMEOUT_MS = 5000;
+// 40P01 死锁、55P03 拿不到锁（lock_timeout 触发）
+const RETRYABLE_CODES = new Set(['40P01', '55P03']);
 
 async function migrate() {
   await ensureDatabase();
@@ -21,8 +27,8 @@ async function migrate() {
           console.error('[DB] 自动建库失败:', createErr.message);
         }
       }
-      if (err.code === '40P01' && attempt < MAX_RETRIES) {
-        console.warn(`[DB] 死锁检测 (${attempt}/${MAX_RETRIES}), ${RETRY_DELAY_MS}ms 后重试...`);
+      if (RETRYABLE_CODES.has(err.code) && attempt < MAX_RETRIES) {
+        console.warn(`[DB] 迁移锁冲突 ${err.code} (${attempt}/${MAX_RETRIES}), ${RETRY_DELAY_MS}ms 后重试...`);
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       } else {
         throw err;
@@ -36,6 +42,7 @@ async function runMigration() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS admin_users (
