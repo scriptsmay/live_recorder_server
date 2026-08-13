@@ -147,6 +147,26 @@ describe('OrphanDanmakuReconciler._readJsonl', () => {
 
     fs.unlinkSync(tmpFile);
   });
+
+  test('跳过字面量 null / 数字 / 字符串等非对象行（防回填崩溃）', () => {
+    const tmpFile = path.join(os.tmpdir(), `test-orphan-nullsafe-${Date.now()}.jsonl`);
+    const lines = [
+      'null',
+      '123',
+      '"a string"',
+      '[1,2,3]',
+      JSON.stringify({ ts_abs_ms: 1000, type: 'comment', text: 'ok' }),
+    ];
+    fs.writeFileSync(tmpFile, lines.join('\n'));
+
+    const events = OrphanDanmakuReconciler._readJsonl(tmpFile);
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toBe('ok');
+    // 关键：不因 null 行导致后续 ev.ts_abs_ms 抛 TypeError
+    expect(() => events.forEach((e) => e.ts_abs_ms)).not.toThrow();
+
+    fs.unlinkSync(tmpFile);
+  });
 });
 
 describe('ts_ms 重算正确性（ADR-012 决策第 4 条）', () => {

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const pool = require('../../../db/index');
+const DataService = require('../../../services/DataService');
 const { getDanmakuJsonlPath, getOrphanDanmakuPath } = require('../../utils/tool');
 
 /**
@@ -33,7 +34,7 @@ class DanmakuRecorder {
    * @returns {Promise<number|null>} capture_id 或 null（未启用时）
    */
   async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', recordingStartedAt }) {
-    const enabled = await this._getSetting('kuaishou_danmaku_enabled', 'false');
+    const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
       return null;
     }
@@ -310,17 +311,6 @@ class DanmakuRecorder {
   }
 
   /**
-   * 获取 settings 值
-   */
-  async _getSetting(key, defaultValue) {
-    try {
-      const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-      if (result.rows.length > 0) return result.rows[0].value;
-    } catch (_) {}
-    return defaultValue;
-  }
-
-  /**
    * 兜底写入：无活跃采集会话时把整批弹幕落到孤儿文件（ADR-012 方案 C 写入侧）
    *
    * 之所以在这里同时写文件 + 建 DB 记录：
@@ -339,7 +329,7 @@ class DanmakuRecorder {
    * @private
    */
   async _writeOrphanBatch(roomUrl, events) {
-    const enabled = await this._getSetting('kuaishou_danmaku_enabled', 'false');
+    const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
       // 采集未启用时不需要落孤儿：扩展本不该向后端推
       return null;
@@ -364,8 +354,12 @@ class DanmakuRecorder {
         }
         const rec = this._normalizeEvent(event, 0);
         records.push(rec);
-        if (rec.ts_abs_ms < tsMin) tsMin = rec.ts_abs_ms;
-        if (rec.ts_abs_ms > tsMax) tsMax = rec.ts_abs_ms;
+        if (rec.ts_abs_ms < tsMin) {
+          tsMin = rec.ts_abs_ms;
+        }
+        if (rec.ts_abs_ms > tsMax) {
+          tsMax = rec.ts_abs_ms;
+        }
       } catch (_) {}
     }
     if (records.length === 0) {
@@ -408,20 +402,39 @@ class DanmakuRecorder {
       return null;
     }
 
-    // 建 DB 记录（失败不影响文件已落盘 —— 文件是最坏兜底）
+    // 建/并 DB 记录（失败不影响文件已落盘 —— 文件是最坏兜底）
+    //
+    // 同一天同一房间的多批弹幕共享一个 raw_path（见 getOrphanDanmakuPath 按天分片），
+    // 因此这里对 (raw_path, status='orphan_pending') 做合并写：命中已有待回填记录时
+    // 累加 event_count、扩展 started_at/ended_at 区间，而不是每批新建一行。
+    // 扩展收到 409 会持续重发同批数据，若每次都 INSERT，单房间可在短时间内堆出大量
+    // 重复的 orphan 记录，回填列表会被淹没。
     let orphanId = null;
     try {
       const startedAt = new Date(tsMin).toISOString();
       const endedAt = new Date(tsMax).toISOString();
-      const result = await pool.query(
-        `INSERT INTO danmaku_capture_records
-           (session_id, room_id, room_url, platform, status, raw_path,
-            event_count, started_at, ended_at)
-         VALUES (NULL, NULL, $1, $2, 'orphan_pending', $3, $4, $5, $6)
+      const merged = await pool.query(
+        `UPDATE danmaku_capture_records
+         SET event_count = COALESCE(event_count, 0) + $1,
+             started_at = LEAST(started_at, $2::timestamptz),
+             ended_at = GREATEST(ended_at, $3::timestamptz)
+         WHERE raw_path = $4 AND status = 'orphan_pending'
          RETURNING id`,
-        [roomUrl, 'kuaishou', rawPath, records.length, startedAt, endedAt]
+        [records.length, startedAt, endedAt, rawPath]
       );
-      orphanId = result.rows[0].id;
+      if (merged.rowCount > 0) {
+        orphanId = merged.rows[0].id;
+      } else {
+        const result = await pool.query(
+          `INSERT INTO danmaku_capture_records
+             (session_id, room_id, room_url, platform, status, raw_path,
+              event_count, started_at, ended_at)
+           VALUES (NULL, NULL, $1, $2, 'orphan_pending', $3, $4, $5, $6)
+           RETURNING id`,
+          [roomUrl, 'kuaishou', rawPath, records.length, startedAt, endedAt]
+        );
+        orphanId = result.rows[0].id;
+      }
     } catch (err) {
       console.error('[DanmakuRecorder] 登记孤儿弹幕记录失败:', err.message);
     }

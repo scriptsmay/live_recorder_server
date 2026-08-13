@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../db/index');
 const DataService = require('./DataService');
-const { getDanmakuJsonlPath, getDiscardedOrphanDanmakuDir } = require('../lib/utils/tool');
+const { getDanmakuJsonlPath, getDiscardedOrphanDanmakuDir, readJsonlLines } = require('../lib/utils/tool');
 
 /**
  * OrphanDanmakuReconciler — 孤儿弹幕回填服务（ADR-012 方案 C 回填侧）
@@ -33,17 +33,32 @@ class OrphanDanmakuReconciler {
    * @returns {Promise<Object>} 结果摘要
    */
   async reconcile(orphanRecordId, options = {}) {
-    const orphan = await DataService.getDanmakuCaptureRecord(orphanRecordId);
-    if (!orphan) {
-      return { status: 'not_found', recordId: orphanRecordId };
-    }
-    if (!String(orphan.status || '').startsWith('orphan_')) {
+    // 原子占位：只有 status='orphan_pending' 才能抢占，防止并发重复回填
+    const claimResult = await pool.query(
+      `UPDATE danmaku_capture_records
+       SET status = 'orphan_processing'
+       WHERE id = $1 AND status = 'orphan_pending'
+       RETURNING *`,
+      [orphanRecordId]
+    );
+    if (claimResult.rowCount === 0) {
+      // 抢占失败：可能 not_found、已处理或被其他并发请求抢走
+      const orphan = await DataService.getDanmakuCaptureRecord(orphanRecordId);
+      if (!orphan) {
+        return { status: 'not_found', recordId: orphanRecordId };
+      }
+      if (orphan.status === 'orphan_processing') {
+        return { status: 'in_progress', recordId: orphanRecordId };
+      }
+      if (orphan.status === 'orphan_associated' || orphan.status === 'orphan_discarded') {
+        return { status: 'already_processed', recordId: orphanRecordId, currentStatus: orphan.status };
+      }
       return { status: 'not_orphan', recordId: orphanRecordId, currentStatus: orphan.status };
     }
-    if (orphan.status === 'orphan_associated' || orphan.status === 'orphan_discarded') {
-      return { status: 'already_processed', recordId: orphanRecordId, currentStatus: orphan.status };
-    }
+    const orphan = claimResult.rows[0];
     if (!orphan.raw_path || !fs.existsSync(orphan.raw_path)) {
+      // 回退状态
+      await pool.query(`UPDATE danmaku_capture_records SET status = 'orphan_pending' WHERE id = $1`, [orphan.id]);
       return { status: 'file_missing', recordId: orphanRecordId, rawPath: orphan.raw_path };
     }
 
@@ -60,6 +75,7 @@ class OrphanDanmakuReconciler {
 
     const events = this._readJsonl(orphan.raw_path);
     if (events.length === 0) {
+      await this._releaseClaim(orphan.id);
       return { status: 'empty', recordId: orphanRecordId };
     }
 
@@ -67,11 +83,16 @@ class OrphanDanmakuReconciler {
     let tsMax = Number.NEGATIVE_INFINITY;
     for (const ev of events) {
       if (typeof ev.ts_abs_ms === 'number') {
-        if (ev.ts_abs_ms < tsMin) tsMin = ev.ts_abs_ms;
-        if (ev.ts_abs_ms > tsMax) tsMax = ev.ts_abs_ms;
+        if (ev.ts_abs_ms < tsMin) {
+          tsMin = ev.ts_abs_ms;
+        }
+        if (ev.ts_abs_ms > tsMax) {
+          tsMax = ev.ts_abs_ms;
+        }
       }
     }
     if (!Number.isFinite(tsMin) || !Number.isFinite(tsMax)) {
+      await this._releaseClaim(orphan.id);
       return { status: 'no_timestamps', recordId: orphanRecordId };
     }
 
@@ -90,7 +111,9 @@ class OrphanDanmakuReconciler {
         (s) => ev.ts_abs_ms >= s.started_ms - toleranceMs && ev.ts_abs_ms <= s.ended_ms + toleranceMs
       );
       if (hit) {
-        if (!buckets.has(hit.id)) buckets.set(hit.id, { session: hit, events: [] });
+        if (!buckets.has(hit.id)) {
+          buckets.set(hit.id, { session: hit, events: [] });
+        }
         buckets.get(hit.id).events.push(ev);
       } else {
         unmatched.push(ev);
@@ -101,22 +124,31 @@ class OrphanDanmakuReconciler {
     const summary = this._summarize(buckets, unmatched, confidence);
 
     if (buckets.size === 0) {
+      await this._releaseClaim(orphan.id);
       return { status: 'no_match', recordId: orphanRecordId, ...summary };
     }
     if (confidence < confidenceThreshold && !options.force) {
+      await this._releaseClaim(orphan.id);
       return { status: 'low_confidence', recordId: orphanRecordId, confidenceThreshold, ...summary };
     }
     if (options.dryRun) {
+      await this._releaseClaim(orphan.id);
       return { status: 'preview', recordId: orphanRecordId, ...summary };
     }
 
     // 落盘：逐桶合并到目标会话 JSONL（ts_ms 按目标会话重算 + 去重）
     const applied = [];
     const associatedSessionIds = [];
-    for (const [sessionId, bucket] of buckets) {
-      const merged = this._mergeToSessionJsonl(sessionId, bucket.session.started_ms, bucket.events, dedupScanLines);
-      applied.push({ session_id: sessionId, matched: bucket.events.length, ...merged });
-      associatedSessionIds.push(sessionId);
+    try {
+      for (const [sessionId, bucket] of buckets) {
+        const merged = this._mergeToSessionJsonl(sessionId, bucket.session.started_ms, bucket.events, dedupScanLines);
+        applied.push({ session_id: sessionId, matched: bucket.events.length, ...merged });
+        associatedSessionIds.push(sessionId);
+      }
+    } catch (err) {
+      // 落盘中途失败：释放占位让下次重试（去重逻辑保证重跑幂等）
+      await this._releaseClaim(orphan.id);
+      throw err;
     }
 
     // 未匹配事件回写孤儿文件（保留 _meta 首行）；全部匹配则清空事件行
@@ -182,7 +214,9 @@ class OrphanDanmakuReconciler {
     if (orphan.raw_path && fs.existsSync(orphan.raw_path)) {
       try {
         const dir = getDiscardedOrphanDanmakuDir();
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
         archivedPath = path.join(dir, `${orphan.id}_${path.basename(orphan.raw_path)}`);
         fs.renameSync(orphan.raw_path, archivedPath);
       } catch (err) {
@@ -208,22 +242,30 @@ class OrphanDanmakuReconciler {
   // ==================== 内部工具 ====================
 
   /**
-   * 读取孤儿 JSONL，跳过 `_meta` 行与畸形行
+   * 释放 reconcile 抢占：把 orphan_processing 回退为 orphan_pending。
+   * 只在早退分支（empty / no_match / dryRun / 落盘失败）调用；成功路径由业务
+   * UPDATE 直接切换到 orphan_associated 或 orphan_pending（含未匹配）。
+   * @private
+   */
+  async _releaseClaim(id) {
+    try {
+      await pool.query(
+        `UPDATE danmaku_capture_records
+         SET status = 'orphan_pending'
+         WHERE id = $1 AND status = 'orphan_processing'`,
+        [id]
+      );
+    } catch (err) {
+      console.error('[OrphanReconciler] 释放占位失败:', err.message);
+    }
+  }
+
+  /**
+   * 读取孤儿 JSONL，跳过 `_meta` 行、空行、畸形行与非对象行（null/数字/字符串）
    * @private
    */
   _readJsonl(filePath) {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const events = [];
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const obj = JSON.parse(trimmed);
-        if (obj && obj._meta) continue;
-        events.push(obj);
-      } catch (_) {}
-    }
-    return events;
+    return readJsonlLines(filePath, { skipMeta: true });
   }
 
   /**
@@ -239,7 +281,9 @@ class OrphanDanmakuReconciler {
   _mergeToSessionJsonl(sessionId, sessionStartMs, events, dedupScanLines) {
     const targetPath = getDanmakuJsonlPath(sessionId);
     const dir = path.dirname(targetPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
 
     const dedupSet = this._buildDedupSet(targetPath, dedupScanLines);
 
@@ -272,17 +316,13 @@ class OrphanDanmakuReconciler {
    */
   _buildDedupSet(filePath, scanLines) {
     const set = new Set();
-    if (!fs.existsSync(filePath)) return set;
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const allLines = content.split('\n').filter(Boolean);
-      const tail = allLines.slice(Math.max(0, allLines.length - (scanLines || 200)));
-      for (const line of tail) {
-        try {
-          set.add(this._dedupKey(JSON.parse(line)));
-        } catch (_) {}
-      }
-    } catch (_) {}
+    const tailItems = readJsonlLines(filePath, {
+      skipMeta: false,
+      tailLines: scanLines || 200,
+    });
+    for (const obj of tailItems) {
+      set.add(this._dedupKey(obj));
+    }
     return set;
   }
 

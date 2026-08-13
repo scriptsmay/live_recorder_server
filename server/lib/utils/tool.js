@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const dayjs = require('dayjs');
@@ -226,6 +227,69 @@ function getOrphanDanmakuPath(roomUrl, date = new Date()) {
   return path.join(downloadDir, DANMAKU_DIR_NAME, ORPHAN_DIR_NAME, day, `${hashRoomUrl(roomUrl)}.jsonl`);
 }
 
+/**
+ * 解析 JSONL 文本内容，跳过空行与畸形行，只返回合法的对象行
+ *
+ * 弹幕 JSONL 是"人可编辑"的落盘格式（人工审阅、手动拼接孤儿文件都会发生），
+ * 因此单行 JSON 可能是 `null` / 数字 / 字符串等非对象值。调用方几乎总是直接访问
+ * `ev.ts_abs_ms` 之类的属性，所以在这里就统一过滤掉非对象行，避免各调用方各写一遍守卫。
+ *
+ * 与 `readJsonlLines` 的分工：本函数只做解析，不碰 IO，供已经异步拿到内容的
+ * 调用方（如 HTTP 处理器用 fs.promises.readFile）复用，避免为了复用而把异步读退化成同步读。
+ *
+ * @param {string} content - JSONL 文本
+ * @param {Object} [options]
+ * @param {boolean} [options.skipMeta=true] - 跳过 `_meta` 元信息行
+ * @param {number} [options.tailLines] - 只解析尾部 N 行（缺省解析全部）
+ * @returns {Array<Object>} 合法对象数组
+ */
+function parseJsonlContent(content, options = {}) {
+  const { skipMeta = true, tailLines } = options;
+  let lines = String(content || '').split('\n');
+  if (tailLines > 0 && lines.length > tailLines) {
+    lines = lines.slice(lines.length - tailLines);
+  }
+  const items = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    let obj;
+    try {
+      obj = JSON.parse(trimmed);
+    } catch (_) {
+      continue;
+    }
+    // 非对象行（null / 数字 / 字符串 / 数组）一律丢弃：调用方按对象取属性
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      continue;
+    }
+    if (skipMeta && obj._meta) {
+      continue;
+    }
+    items.push(obj);
+  }
+  return items;
+}
+
+/**
+ * 同步读取并解析 JSONL 文件（`parseJsonlContent` 的 IO 包装）
+ *
+ * @param {string} filePath - JSONL 文件路径
+ * @param {Object} [options] - 同 `parseJsonlContent`
+ * @returns {Array<Object>} 合法对象数组；文件不存在或读取失败时返回空数组
+ */
+function readJsonlLines(filePath, options = {}) {
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch (_) {
+    return [];
+  }
+  return parseJsonlContent(content, options);
+}
+
 module.exports = {
   generateFilename,
   templateToStrftime,
@@ -237,6 +301,8 @@ module.exports = {
   getOrphanDanmakuPath,
   getDiscardedOrphanDanmakuDir,
   hashRoomUrl,
+  parseJsonlContent,
+  readJsonlLines,
   DANMAKU_DIR_NAME,
   ORPHAN_DIR_NAME,
   DISCARDED_DIR_NAME,

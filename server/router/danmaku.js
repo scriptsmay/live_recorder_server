@@ -6,7 +6,7 @@ const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const orphanReconciler = require('../services/OrphanDanmakuReconciler');
 const DataService = require('../services/DataService');
-const { getDanmakuJsonlPath } = require('../lib/utils/tool');
+const { getDanmakuJsonlPath, parseJsonlContent } = require('../lib/utils/tool');
 
 /**
  * GET /api/sessions/:id/danmaku-page
@@ -149,21 +149,9 @@ router.get('/danmaku/search', async (req, res) => {
       return res.json({ status: 'ok', data: [], total: 0 });
     }
 
-    // 流式读取 JSONL，筛选匹配项
+    // 异步读取 JSONL（HTTP 处理器不能用同步 IO 阻塞事件循环），解析复用 parseJsonlContent
     const content = await fs.promises.readFile(jsonlPath, 'utf-8');
-    const lines = content.split('\n').filter(Boolean);
-
-    let allEvents = [];
-    for (const line of lines) {
-      try {
-        const event = JSON.parse(line);
-        if (event.type === 'comment' && event.text) {
-          allEvents.push(event);
-        }
-      } catch {
-        /* skip malformed lines */
-      }
-    }
+    let allEvents = parseJsonlContent(content).filter((e) => e.type === 'comment' && e.text);
 
     // 关键词筛选
     const kwLower = (keyword || '').toLowerCase();
