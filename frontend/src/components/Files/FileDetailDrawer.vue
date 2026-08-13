@@ -33,7 +33,6 @@ const fileTypeLabels: Record<FileType, string> = {
   replay_cut: '回放切片',
   replay_fixed: '回放修复',
   replay_final: '回放成品',
-  danmaku_output: '弹幕压制',
   danmaku_archive: '弹幕归档',
   danmaku_ass_cache: 'ASS 缓存',
   orphan: '孤儿文件',

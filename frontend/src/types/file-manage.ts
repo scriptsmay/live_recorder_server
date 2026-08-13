@@ -9,7 +9,6 @@ export type FileType =
   | 'replay_cut'
   | 'replay_fixed'
   | 'replay_final'
-  | 'danmaku_output'
   | 'danmaku_archive'
   | 'danmaku_ass_cache'
   | 'orphan'

@@ -1,11 +1,11 @@
-# 回放定时任务 + 数据同步 cron 服务
-# 与主应用 docker-compose.yml 分离，按需启用
+# 回放定时任务 + 数据同步 cron overlay
+# 始终叠加在 base docker-compose.yml 之上（依赖服务名 live_recorder_server）：
+#   生产: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
+#   本地: docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.cron.yml up -d
 #
-# 使用方式（需要与主应用在同一 Docker 网络下）:
-#   方式一：在同一个 compose 项目中同时启动
-#     docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
-#   方式二：单独启动（需确保网络互通）
-#     docker compose -f docker-compose.cron.yml up -d
+# replay_cron 镜像（Dockerfile.replay-cron）是轻量 Alpine，**不含 scripts**，
+# 完全依赖 SCRIPTS_VOLUME 挂载。生产用 shared_scripts named volume，
+# 由主容器 entrypoint 从镜像内 /app/scripts.image 刷新（v1.8.2）。
 services:
   replay_cron:
     image: ${REPLAY_CRON_IMAGE:-ghcr.io/scriptsmay/live_recorder_server-replay-cron:latest}
@@ -39,10 +39,3 @@ services:
     restart: unless-stopped
     depends_on:
       - live_recorder_server
-    networks:
-      - default
-
-networks:
-  default:
-    name: ${COMPOSE_NETWORK_NAME:-live_recorder_default}
-    external: true

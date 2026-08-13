@@ -1,153 +1,113 @@
 # Docker 部署指南
 
-## 生产环境部署
+> **注意**：本文件不包含任何生产环境真实路径、IP 或网络名。生产环境基础设施信息集中在私有知识库文档中维护。
 
-生产环境使用外部 PostgreSQL 和 Redis（由 1Panel 管理），应用通过 `docker/docker-compose.yml` 单独部署。定时任务（回放 + 数据同步）独立在 `docker/docker-compose.cron.yml` 中，按需启用。
+## 编排文件说明（v1.8.2）
 
-### 目录结构
+采用 **base + override** 组合，统一服务名为 `live_recorder_server`。详见 `docker/README.md`。
+
+| 文件 | 职责 |
+|------|------|
+| `docker-compose.yml` | base —— 主服务共性配置（环境变量、healthcheck、ports、volumes） |
+| `docker-compose.build.yml` | 本地全栈 override —— 覆盖 build 指向 `Dockerfile.local`，追加 postgres + redis |
+| `docker-compose.prod.yml` | 生产 override —— `APP_VERSION`（必填）、`EXTERNAL_NETWORK_NAME`（必填）、shared_scripts 卷、deploy.resources |
+| `docker-compose.cron.yml` | replay_cron overlay —— 回放定时 + 数据同步 |
+| `docker-compose.browserless.yml` | browserless overlay —— 远程 Chromium |
+
+常用组合：
+
+```bash
+cd docker
+
+# 本地全栈开发
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+# 本地 + browserless
+docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.browserless.yml up -d --build
+
+# 生产（APP_VERSION 和 EXTERNAL_NETWORK_NAME 必须在 .env 中填写）
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
+```
+
+## 生产部署
+
+生产环境使用外部 PostgreSQL 和 Redis（由面板托管），应用通过上述三文件组合部署。
+
+### 目录结构（通用）
 
 ```text
-/srv/nas-data/docker2/auto_recorder/
-├── .env                        # 环境变量
+<deploy-root>/
+├── .env                        # 环境变量（真实值，gitignore）
 ├── docker/
-│   ├── docker-compose.yml          # 主服务
-│   ├── docker-compose.cron.yml     # 定时任务（可选）
-│   ├── docker-compose.full.yml     # 本地开发全栈
-│   ├── docker-compose.browserless.yml
-│   └── .env.docker.example
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   ├── docker-compose.cron.yml
+│   └── ...
 ├── data/
 │   └── biliup/                 # biliup 登录态
 ├── logs/
-└── scripts/
-    ├── replay-cron.sh          # 回放定时任务脚本
-    └── sync-records.sh         # 数据同步脚本
+└── scripts/                    # (由 shared_scripts named volume 覆盖)
 ```
 
-录制文件和回放产物存放在独立目录：
+### 更新版本
 
-```text
-/srv/nas-data/videos/live_records/
-├── downloads/                  # 直播录制文件
-└── replay/                     # 回放工作目录
-```
-
-### 部署步骤
-
-首次部署：
+v1.8.2 只需更换镜像版本号：
 
 ```bash
-mkdir -p /srv/nas-data/docker2/auto_recorder/{data/biliup,logs,scripts}
-cd /srv/nas-data/docker2/auto_recorder
-# 从仓库复制 docker/ 目录和 scripts/ 目录
-# 创建 .env（参考 docker/.env.docker.example）
-cd docker
-docker compose pull
-docker compose up -d
+# 修改 .env 中 APP_VERSION=vX.Y.Z
+# 然后
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull live_recorder_server
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
 ```
 
-如需启用定时任务（回放 + 数据同步）：
+如果不使用三文件组合（现有单文件部署方案），则按原方式修改 `image:` 行版本号后执行 `pull` + `up -d`。
 
-```bash
-cd /srv/nas-data/docker2/auto_recorder/docker
-docker compose -f docker-compose.yml -f docker-compose.cron.yml up -d
-```
+### shared_scripts 同步（v1.8.2）
 
-如果定时任务服务与主服务分开部署，需要让 cron 容器加入包含
-`live_recorder_server`、`postgresql`、`redis` 的 Docker 网络。生产 NAS 使用：
+v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app/scripts`（named volume 挂载点）。replay_cron 以 `:ro` 挂载同一 volume。
 
-```env
-COMPOSE_NETWORK_NAME=external-network
-```
-
-`replay_cron` 使用专用镜像
-`ghcr.io/scriptsmay/live_recorder_server-replay-cron:latest`，基于
-`alpine:3.21` 并预装 `curl`、`redis-cli`、`psql`，避免容器每次重建时运行
-`apk add`。如生产环境通过内部镜像源拉取，可覆盖：
-
-```env
-REPLAY_CRON_IMAGE=<internal-registry>/scriptsmay/live_recorder_server-replay-cron:latest
-```
-
-两个 cron 脚本都会通过 `/api/notify/feishu_webhook` 发送执行结果通知；
-`replay-cron.sh` 通知回放同步与入队统计，`sync-records.sh` 通知本地导出、
-远端暂存导入和 upsert 写入数量。
-Supabase 同步不会删除远端记录；当远端 `kuaishou` 记录数大于本地
-`replay_records` 时会默认停止同步，避免本地源数据异常时继续覆盖远端。
-如确认允许源数据减少，可显式设置 `SYNC_ALLOW_SOURCE_SHRINK=true`。
+- 正常升级时 `up -d` 即自动同步
+- 若仅改了 scripts 未改主服务代码：需 `up -d --force-recreate live_recorder_server`
+- replay_cron 需手动重启：`docker compose restart replay_cron`
 
 ### 运行时依赖
 
-主服务镜像使用 Debian bookworm 仓库提供的 `ffmpeg` / `ffprobe`。
-不要在镜像中注入 nightly 静态 FFmpeg 构建；生产环境曾出现静态构建在
-快手 FLV 直播流输入上启动即 `SIGSEGV`，导致轮询创建录制会话后无有效文件。
-
-更新版本：
-
-```bash
-cd /srv/nas-data/docker2/auto_recorder/docker
-docker compose pull
-docker compose up -d
-```
-
-查看日志：
-
-```bash
-cd /srv/nas-data/docker2/auto_recorder/docker
-docker compose logs -f live_recorder_server
-```
-
-### .env 配置
-
-```env
-# 快手轮询 + 回放 m3u8 提取
-REMOTE_BROWSER_WS_ENDPOINT=ws://192.168.0.247:11300/chromium?--user-data-dir=data/user-profiles/kuaishou
-POLLING_KUAISHOU_COOKIE=<快手 cookie>
-KUAISHOU_CHECKER_ENABLED=true
-KUAISHOU_CHECKER_ALLOW_FIRST_SCREEN_RESOURCES=true
-
-# 回放定时任务（默认关闭）
-REPLAY_CRON_ENABLED=false
-REPLAY_CRON_EXPR=0 3 * * *
-REPLAY_PRINCIPAL_ID=
-REPLAY_CRON_COUNT=1
-
-# 数据同步（默认关闭，测试阶段写入 test_records）
-SYNC_CRON_ENABLED=false
-SYNC_CRON_EXPR=0 4 * * *
-SUPABASE_URL=
-REMOTE_TABLE=test_records
-
-# cron 调用后端 API 的内部密钥（主服务和 replay_cron 必须一致）
-CRON_API_TOKEN=<生成一个随机长字符串>
-```
+主服务镜像使用 BtbN n7.1 静态 FFmpeg 构建。不要在镜像中注入 nightly 静态 FFmpeg；生产环境曾出现静态构建在快手 FLV 直播流输入上启动即 `SIGSEGV`。
 
 ### 持久化目录
 
-| 宿主机路径                                 | 容器路径                | 说明          |
-| ------------------------------------------ | ----------------------- | ------------- |
-| `/srv/nas-data/videos/live_records/downloads` | `/data/video_downloads` | 直播录制文件  |
-| `/srv/nas-data/videos/live_records/replay`    | `/data/replay`          | 回放工作目录  |
-| `./data/biliup`                            | `/data/biliup`          | biliup 登录态 |
-| `./logs`                                   | `/app/logs`             | 应用日志      |
+| `.env` 变量 | 容器路径 | 说明 |
+|---|---|---|
+| 由 base compose `../data/video_downloads` 或 prod override `${VIDEO_DOWNLOAD_HOST_DIR}` | `/data/video_downloads` | 直播录制文件 |
+| 同上 `../data/replay` 或 `${REPLAY_HOST_DIR}` | `/data/replay` | 回放工作目录 |
+| `${DANMAKU_ARCHIVE_HOST_DIR}` | `/data/danmaku_archive` | 弹幕归档 |
+| `${YTDLP_TEMP_HOST_DIR}` | `/tmp/yt_dlp_cache` | yt-dlp 临时缓存 |
+| `./data/biliup` | `/data/biliup` | biliup 登录态 |
+| `./logs` | `/app/logs` | 应用日志 |
 
 ## 镜像内置组件
 
-镜像已包含以下依赖，无需额外安装：
+| 组件 | 说明 |
+|---|---|
+| Node.js 22 | 运行时 |
+| FFmpeg | 录制、转码（BtbN n7.1 静态构建） |
+| mkvmerge | 视频切片（mkvtoolnix） |
+| yt-dlp | 回放下载（通过 uv tool 安装） |
+| biliup | B 站投稿（通过 uv tool 安装） |
+| fontconfig + CJK 字体 | 弹幕压制 libass 渲染所需 |
 
-| 组件       | 说明                                       |
-| ---------- | ------------------------------------------ |
-| Node.js 22 | 运行时                                     |
-| FFmpeg     | 录制、转码（BtbN n7.1 静态构建）           |
-| mkvmerge   | 视频切片（mkvtoolnix）                     |
-| yt-dlp     | 回放下载（通过 uv tool 安装）              |
-| biliup     | B 站投稿（通过 uv tool 安装）              |
-| playwright | 回放 m3u8 提取兜底方案（需配置远程浏览器） |
+## .env 配置参考
+
+参考根目录 `.env.example` 了解所有可配置变量。生产必填变量（缺失会导致 compose 直接报错）：
+
+- `APP_VERSION` —— 镜像版本号
+- `EXTERNAL_NETWORK_NAME` —— 外部 docker 网络名
+
+其他重要配置项见 `.env.example` 中的分组注释。
 
 ## biliup 配置
 
 cookie 文件放在宿主机 `./data/biliup/cookies.json`，投稿模板的 `cookies_path` 填容器内路径 `/data/biliup/cookies.json`。
-
-进入容器执行 biliup 命令：
 
 ```bash
 docker compose exec live_recorder_server sh
@@ -158,90 +118,69 @@ biliup --help
 
 通知通道可选，未配置时静默跳过：
 
-| 环境变量                  | 说明                    |
-| ------------------------- | ----------------------- |
-| `MESSAGE_FEISHU_WEBHOOK`  | 飞书机器人 webhook      |
-| `MESSAGE_GOTIFY_SERVER`   | Gotify 服务地址         |
-| `MESSAGE_GOTIFY_TOKEN`    | Gotify app token        |
+| 环境变量 | 说明 |
+|---|---|
+| `MESSAGE_FEISHU_WEBHOOK` | 飞书机器人 webhook |
+| `MESSAGE_GOTIFY_SERVER` | Gotify 服务地址 |
+| `MESSAGE_GOTIFY_TOKEN` | Gotify app token |
 | `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级（默认 5） |
 
 ## 登录鉴权
 
-| 环境变量               | 说明                                                               | 默认值       |
-| ---------------------- | ------------------------------------------------------------------ | ------------ |
-| `AUTH_ENABLED`         | 登录鉴权总开关；生产环境建议保持开启                               | `true`       |
-| `ADMIN_USERNAME`       | 首次启动自动创建管理员时使用的用户名                               | `admin`      |
-| `AUTH_TOKEN_TTL_HOURS` | 登录态有效期，单位小时                                             | `24`         |
-| `AUTH_COOKIE_NAME`     | 登录态 Cookie 名称                                                 | `auth_token` |
-| `AUTH_COOKIE_SECURE`   | 是否只允许 HTTPS 写入 Cookie；内网 HTTP 部署保持 `false`           | `false`      |
-| `LOGIN_RATE_LIMIT`     | 同一 IP 每分钟允许的登录失败次数                                   | `5`          |
-| `LOGIN_LOCKOUT_MIN`    | 达到失败次数上限后的锁定时长，单位分钟；锁定期间登录接口会直接拒绝 | `5`          |
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `AUTH_ENABLED` | 鉴权总开关 | `true` |
+| `ADMIN_USERNAME` | 首次启动自动创建管理员用户名 | `admin` |
+| `AUTH_TOKEN_TTL_HOURS` | 登录态有效期（小时） | `24` |
+| `AUTH_COOKIE_NAME` | Cookie 名称 | `auth_token` |
+| `AUTH_COOKIE_SECURE` | 是否 HTTPS only | `false` |
+| `LOGIN_RATE_LIMIT` | 每分钟允许登录失败次数 | `5` |
+| `LOGIN_LOCKOUT_MIN` | 锁定时长（分钟） | `5` |
 
 ## 快手轮询 + 回放工具箱
 
-两者共享以下配置：
+两者共享配置：
 
-| 配置项                       | 说明                                                 |
-| ---------------------------- | ---------------------------------------------------- |
-| `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（轮询 + m3u8 提取兜底） |
-| `POLLING_KUAISHOU_COOKIE`    | 快手 cookie（轮询 + 回放共享）                       |
-
-地址格式：`ws://<host>:<port>/chromium`（CDP endpoint，不是 `/chromium/playwright`）。
+| 变量 | 说明 |
+|---|---|
+| `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（CDP endpoint） |
+| `POLLING_KUAISHOU_COOKIE` | 快手 cookie |
+| `KUAISHOU_CHECKER_ENABLED` | 是否启用快手轮询（默认 true） |
+| `KUAISHOU_CHECKER_MODE` | `remote-browser`（默认）或 `api` |
 
 ## 定时任务
 
-定时任务独立在 `docker/docker-compose.cron.yml` 中，包含两个 cron 服务：
+定时任务独立在 `docker-compose.cron.yml` 中。
 
 ### 回放定时任务
 
-`replay_cron` 通过 curl 调用后端 API，每日自动同步回放列表并入队处理。
-
-启用：在 `.env` 中设置 `REPLAY_CRON_ENABLED=true`，填写 `REPLAY_PRINCIPAL_ID`（快手主播 ID）。
+`replay_cron` 通过 curl 调用后端 API，每日自动同步回放列表并入队处理。启用：`.env` 中设置 `REPLAY_CRON_ENABLED=true`。
 
 ### 数据同步
 
-`sync-records.sh` 通过 psql 将本地 `replay_records` 表同步到远程 Supabase 数据库。
+`sync-records.sh` 通过 psql 将本地 `replay_records` 表同步到远程数据库。启用：`.env` 中设置 `SYNC_CRON_ENABLED=true`。
 
-启用：在 `.env` 中设置 `SYNC_CRON_ENABLED=true`，填写 `SUPABASE_URL`。测试阶段默认写入 `test_records` 表，上线时改 `REMOTE_TABLE=records`。
-
-`replay_cron` 容器同时监听 `REDIS_PUBLISH_CHANNEL`。后端仅在回放记录的
-`duration` 更新时发布 `replay_record_projection_changed` 事件，监听器解析事件中的
-`record_id` 并执行 `sync-records.sh --ids <record_id>`。该事件用于更新远端
-`records.duration` 以及由 `start_time - duration` 派生的
-`start_live_time` / `start_live_time_text`；回放状态流转、投稿完成和分辨率更新不再单独触发
-远端 records 同步。
+`replay_cron` 容器同时监听 Redis `REDIS_PUBLISH_CHANNEL`。后端在回放记录 `duration` 更新时发布事件，监听器解析 `record_id` 执行增量同步。
 
 ## 数据库备份
 
-PostgreSQL 备份：
-
 ```bash
 docker compose exec postgres pg_dump -U postgres live_recorder > backup.sql
-```
-
-恢复：
-
-```bash
+# 恢复
 docker compose exec -T postgres psql -U postgres live_recorder < backup.sql
 ```
 
 ## 本地开发部署
 
-本地开发使用 `docker/docker-compose.full.yml`，包含 PostgreSQL 和 Redis 容器：
-
 ```bash
-cp docker/.env.docker.example .env
-# 编辑 .env 配置
+cp .env.example .env
+# 编辑 .env
 cd docker
-docker compose -f docker-compose.full.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-如需 Browserless（快手轮询 + m3u8 提取），叠加 overlay：
+如需 Browserless：
 
 ```bash
-cd docker
-docker compose \
-  -f docker-compose.full.yml \
-  -f docker-compose.browserless.yml \
-  up -d --build
+docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.browserless.yml up -d --build
 ```

@@ -7,6 +7,13 @@ BILIUP_WORK_DIR="${BILIUP_WORK_DIR:-$APP_DATA_DIR/biliup}"
 
 mkdir -p "$VIDEO_DOWNLOAD_DIR" "$BILIUP_WORK_DIR" /app/logs
 
+# 若存在镜像内 scripts snapshot，用它刷新 /app/scripts（可能是 named volume 挂载点）
+# 目的：解决 named volume 只在首次创建时播种、后续镜像更新被屏蔽的问题
+if [ -d /app/scripts.image ]; then
+  cp -a /app/scripts.image/. /app/scripts/
+  echo "[entrypoint] scripts 已从镜像 snapshot 同步到 /app/scripts"
+fi
+
 wait_for_postgres() {
   node <<'NODE'
 const { Client } = require('pg');

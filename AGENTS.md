@@ -40,16 +40,34 @@
 │   │   ├── notify.js       # 通知服务
 │   │   ├── polling/       # 直播轮询检测
 │   │   │   ├── PlatformChecker.js   # 平台检查器基类（策略模式）
-│   │   │   ├── HuyaChecker.js       # 虎牙平台检查器
+│   │   │   ├── checkers.js          # 平台注册表（新增平台在此登记）
+│   │   │   ├── HuyaChecker.js       # 虎牙
+│   │   │   ├── BilibiliChecker.js   # B 站
+│   │   │   ├── DouyinChecker.js     # 抖音
+│   │   │   ├── DouyuChecker.js      # 斗鱼
+│   │   │   ├── KuaishouChecker.js   # 快手（默认远程浏览器模式）
+│   │   │   ├── KuaishouAPIChecker.js # 快手（KUAISHOU_CHECKER_MODE=api 时启用）
+│   │   │   ├── signers/             # 签名模块（douyin.js / douyu.js / douyu-vip.js）
 │   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
 │   │   │   └── index.js
+│   │   ├── browser/       # 远程浏览器
+│   │   │   └── RemoteBrowserClient.js  # Browserless CDP 客户端（快手轮询 / 回放 m3u8 提取共用）
 │   │   ├── proc-log.js     # 进程日志
 │   │   ├── scan-files.js   # 文件扫描
 │   │   ├── transcoder.js   # 视频转码
 │   │   ├── TranscodeQueue.js # 转码队列（支持边下边转码）
 │   │   └── watchdog.js     # 看门狗
 │   ├── lib/utils/         # 工具类
-│   │   └── markdown.js
+│   │   ├── tool.js         # 路径与 JSONL 工具（generateOutputPath / getDanmakuJsonlPath / getOrphanDanmakuPath / parseJsonlContent / readJsonlLines 等）
+│   │   ├── directory-stats.js
+│   │   ├── fetch.js
+│   │   ├── markdown.js
+│   │   ├── path-safety.js
+│   │   ├── platform-detector.js
+│   │   ├── proc-log.js
+│   │   ├── redis-service.js
+│   │   ├── response.js
+│   │   └── room-url.js
 │   ├── router/             # 路由层（API + 页面）
 │   │   └── index.js       # 统一路由挂载
 │   ├── services/           # 业务服务层
@@ -90,7 +108,7 @@
   - 允许空 catch 块、`_` 前缀未使用参数
   - 排除 `public/`（minified bootstrap）、`node_modules/`、`logs/`、`backups/`
 - **Prettier**：`npm run format` 运行，配置见 `.prettierrc.json`，忽略规则见 `.prettierignore`
-  - 单引号、尾逗号 es5、每行 80 字符、2 空格缩进
+  - 单引号、尾逗号 es5、每行 120 字符、2 空格缩进
 - **TypeScript 类型检查**：修改 `frontend/src/` 下任何 `.vue` 或 `.ts` 文件后，**必须**在 `frontend/` 目录执行 `npm run build` 验证类型检查通过。`npm run dev` 使用 esbuild 跳过 TS 检查，不能作为正确性依据
 - 提交前建议执行 `npm run lint && npm run format && cd frontend && npm run build`
 
@@ -179,11 +197,17 @@ npm run lint && npm run format && npm run test
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
 - `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`
+- **鉴权**：`AUTH_ENABLED`（设为 `false` 关闭；其他值均视为开启）、`ADMIN_USERNAME`（默认 `admin`）、`AUTH_TOKEN_TTL_HOURS`（24）、`AUTH_COOKIE_NAME`（`auth_token`）、`AUTH_COOKIE_SECURE`、`LOGIN_RATE_LIMIT`（5）、`LOGIN_LOCKOUT_MIN`（5）。首次启动 `admin_users` 表为空时，`server/lib/core/auth-init.js` 自动生成随机密码并输出到启动日志；session 存 Redis `auth:session:{token}`。启用时未带 cookie 的 curl 会被 auth wall 拦截
+- **远程浏览器 / Browserless**：`REMOTE_BROWSER_WS_ENDPOINT`（`server/lib/core/browser/RemoteBrowserClient.js` 用于快手轮询 remote-browser 模式和回放 m3u8 提取）、`BROWSERLESS_TOKEN`、`BROWSERLESS_CONCURRENT`、`BROWSERLESS_QUEUED`、`BROWSERLESS_TIMEOUT_MS`
+- **快手轮询**：`KUAISHOU_CHECKER_ENABLED`（默认 true）、`KUAISHOU_CHECKER_MODE`（默认 remote-browser，`api` 切 HTTP 直连）、`POLLING_KUAISHOU_COOKIE`
+- **弹幕归档**：`DANMAKU_ARCHIVE_DIR`（生产 `/data/danmaku_archive`）—— 未废弃。FileManageService 以 `file_type=danmaku_archive` 索引归档 JSONL 并标记不可自动清理。v1.8.0 只删除了 `DANMAKU_OUTPUT_DIR`
 
 ## 直播轮询 (Polling)
 
-- **策略模式**：`server/lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `PollingManager.CHECKERS`
+- **策略模式**：`server/lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `server/lib/core/polling/checkers.js`
+- **已注册检查器**（`checkers.js`）：`huya`（HuyaChecker）、`bilibili`（BilibiliChecker）、`douyu`（DouyuChecker）、`douyin`（DouyinChecker）、`kuaishou`（根据 `KUAISHOU_CHECKER_MODE` 切换 KuaishouChecker/KuaishouAPIChecker）
 - **虎牙检查器**：`server/lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
+- **快手检查器**：默认使用远程 Browserless/Chromium 浏览器（`RemoteBrowserClient`），`KUAISHOU_CHECKER_MODE=api` 时切换为 HTTP API 直连模式（无需浏览器）。受 `KUAISHOU_CHECKER_ENABLED` 控制开关
 - **轮询管理器**：`server/lib/core/polling/PollingManager.js` — 单例
   - 启动时只检查一次所有 `polling_enabled=true` 房间的状态（无定时器）
   - `reloadRoom()` 控制定时轮询：新增/修改房间时启动定时器，按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）

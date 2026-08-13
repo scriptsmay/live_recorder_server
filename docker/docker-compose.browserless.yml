@@ -1,7 +1,9 @@
-# Optional overlay for docker-compose.full.yml.
-# Usage: cd docker && docker compose --env-file ../.env -f docker-compose.full.yml -f docker-compose.browserless.yml up -d --build
+# browserless overlay —— 叠加在 base docker-compose.yml 之上
+# 用法（本地全栈）:
+#   cd docker && docker compose --env-file ../.env \
+#     -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.browserless.yml up -d --build
 services:
-  app:
+  live_recorder_server:
     environment:
       REMOTE_BROWSER_WS_ENDPOINT: ws://browserless:3000/chromium?token=${BROWSERLESS_TOKEN:-change-me-browserless-token}
       KUAISHOU_CHECKER_ENABLED: ${KUAISHOU_CHECKER_ENABLED:-true}

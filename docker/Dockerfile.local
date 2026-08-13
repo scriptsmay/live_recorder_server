@@ -1,3 +1,13 @@
+# 本地加速构建镜像 —— **不等价于生产镜像**
+#
+# 与根目录 Dockerfile 的已知差异（有意保留，为了本地构建速度）：
+# - apt / npm / pypi 全部走阿里云镜像源
+# - ffmpeg 用 Debian 发行版包，而非 BtbN n7.1 静态二进制
+# - 无 frontend 构建阶段，不产出 public/frontend/（本地用 npm run dev 起前端）
+# - 未安装 yt-dlp、fontconfig / fonts-noto-cjk
+#
+# 生产构建请始终使用根目录 Dockerfile。
+#
 # 阶段 1: 构建依赖
 FROM node:22-bookworm-slim AS builder
 
@@ -50,4 +60,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:1123/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 ENTRYPOINT ["./docker/scripts/docker-entrypoint.sh"]
-CMD ["node", "app.js"]
+CMD ["node", "server/app.js"]

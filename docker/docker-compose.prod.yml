@@ -1,0 +1,42 @@
+# 生产环境 override
+# 用法: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
+#
+# 本文件已脱敏：不包含任何真实宿主机路径或网络名。生产真实值一律通过 .env 注入。
+# 标注 `:?` 的变量为**生产必填**，缺失时 compose 直接报错（防止静默用错默认值）。
+# 发布/升级时同步维护此文件，使模板与生产实际部署保持一致。
+services:
+  live_recorder_server:
+    # 生产使用发布版本号镜像，禁止 latest
+    image: ghcr.io/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}
+    environment:
+      DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
+      REMOTE_BROWSER_WS_ENDPOINT: ${REMOTE_BROWSER_WS_ENDPOINT:-}
+      KUAISHOU_CHECKER_ENABLED: ${KUAISHOU_CHECKER_ENABLED:-true}
+      KUAISHOU_CHECKER_MODE: ${KUAISHOU_CHECKER_MODE:-}
+      POLLING_KUAISHOU_COOKIE: ${POLLING_KUAISHOU_COOKIE:-}
+      POLLING_DOUYIN_COOKIE: ${POLLING_DOUYIN_COOKIE:-}
+    volumes:
+      # 与主镜像 scripts 同步的 named volume（v1.8.2 起 entrypoint 会用镜像内
+      # /app/scripts.image 刷新此挂载点，让 replay_cron ro 挂载能读到最新脚本）
+      - shared_scripts:/app/scripts
+      # 弹幕归档目录（file-manage 保护，不可自动清理）
+      # 生产真实宿主机路径通过 .env 的 DANMAKU_ARCHIVE_HOST_DIR 注入
+      - ${DANMAKU_ARCHIVE_HOST_DIR:-../data/danmaku_archive}:/data/danmaku_archive
+    networks:
+      - default
+      - external
+    deploy:
+      resources:
+        limits:
+          cpus: ${APP_CPU_LIMIT:-2}
+          memory: ${APP_MEM_LIMIT:-2G}
+
+volumes:
+  shared_scripts:
+
+networks:
+  external:
+    # 生产实际外部网络名通过 .env 的 EXTERNAL_NETWORK_NAME 注入
+    name: ${EXTERNAL_NETWORK_NAME:?EXTERNAL_NETWORK_NAME is required for prod}
+    external: true
+

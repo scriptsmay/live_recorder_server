@@ -67,6 +67,12 @@ COPY . .
 # 复制前端构建产物到 public/frontend/
 COPY --from=frontend-builder /app/public/frontend ./public/frontend
 
+# scripts snapshot：用于 entrypoint 启动时刷新共享卷
+# 目的：解决 Docker named volume 只在首次创建时从镜像播种、后续镜像更新被
+# 屏蔽的问题（v1.8.0 上线踩坑，v1.8.2 修复）。entrypoint 会用此副本刷新
+# /app/scripts 挂载点，让 replay_cron 的 ro 挂载能读到最新脚本。
+RUN cp -a /app/scripts /app/scripts.image
+
 RUN mkdir -p /data/video_downloads /data/replay /data/biliup /app/logs \
     && chmod +x docker/scripts/docker-entrypoint.sh scripts/replay-cron.sh
 

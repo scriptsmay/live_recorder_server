@@ -135,7 +135,7 @@ VIDEO_DOWNLOAD_DIR/
 - 新录制目录结构为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
 - 弹幕 JSONL 集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0）；路径由 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)` 唯一推导，读取与写入均走该函数，不再兼容会话子目录旧路径（历史数据由 `scripts/migrate-danmaku-paths.js` 一次性迁移）
 - **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool（见知识库 ADR-011）
-- 已于 v1.8.0 DROP：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列；`DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 两个废弃环境变量一并移除
+- 已于 v1.8.0 DROP：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列；废弃环境变量 `DANMAKU_OUTPUT_DIR` 一并移除。`DANMAKU_ARCHIVE_DIR` 未废弃 —— 仍在生产挂载（`/data/danmaku_archive`），file-manage 以 `file_type=danmaku_archive` 索引归档文件并标记不可自动清理
 
 ## 1. 会话生命周期
 

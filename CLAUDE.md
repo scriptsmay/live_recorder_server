@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-K-Recorder - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. (Douyu/斗鱼 support is currently unavailable due to platform stream timeout issues) (Douyin/抖音 support is available)
+K-Recorder - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin, Kuaishou, Douyu) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. Kuaishou uses a remote Browserless/Chromium instance (or HTTP API mode). Douyu code exists and is registered in the checker registry but may experience platform-side stream timeout issues.
 
 ## Commands
 
@@ -59,7 +59,7 @@ Chrome Extension (danmaku)
 - `server/lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
 - `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder writes JSONL only; ASS/burn moved out)
 - `server/lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
-- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`)
+- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`). Checkers: `HuyaChecker`, `BilibiliChecker`, `DouyinChecker`, `DouyuChecker`, `KuaishouChecker` (remote-browser) / `KuaishouAPIChecker` (HTTP API, selected via `KUAISHOU_CHECKER_MODE=api`). Signature helpers under `signers/` (douyin, douyu, douyu-vip)
 - `server/lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
 - `server/db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
 - `public/` — static assets, `frontend/` — Vue SPA source
@@ -86,6 +86,13 @@ Chrome Extension (danmaku)
 - `.env` for production, `.env.dev` for development (auto-loaded when `NODE_ENV=development`)
 - Dev uses separate database (`ks_live_recorder_dev`), separate Redis DB (2 vs 1), separate download dir (`dev_downloads/`)
 - `npm run check-env` validates environment configuration
+- See `.env.example` for the full variable list
+
+**Auth (enabled in production):** `AUTH_ENABLED` (set `false` to disable — anything else enables it), `ADMIN_USERNAME` (default `admin`), `AUTH_TOKEN_TTL_HOURS` (24), `AUTH_COOKIE_NAME` (`auth_token`), `AUTH_COOKIE_SECURE`, `LOGIN_RATE_LIMIT` (5), `LOGIN_LOCKOUT_MIN` (5). On first boot with an empty `admin_users` table, `server/lib/core/auth-init.js` generates a random password and prints it to the startup log. Sessions live in Redis at `auth:session:{token}`. Note this auth wall blocks unauthenticated `curl` against API endpoints.
+
+**Remote browser / Browserless:** `REMOTE_BROWSER_WS_ENDPOINT` (CDP endpoint used by `server/lib/core/browser/RemoteBrowserClient.js` for Kuaishou polling and replay m3u8 extraction), `BROWSERLESS_TOKEN`, `BROWSERLESS_CONCURRENT`, `BROWSERLESS_QUEUED`, `BROWSERLESS_TIMEOUT_MS`. Kuaishou polling also reads `KUAISHOU_CHECKER_ENABLED` and `POLLING_KUAISHOU_COOKIE`.
+
+**Danmaku archive:** `DANMAKU_ARCHIVE_DIR` (production `/data/danmaku_archive`) — not deprecated. `FileManageService._scanDanmakuArchiveFiles` indexes archived JSONL from `danmaku_capture_records.raw_path` with `file_type=danmaku_archive` and marks it not safe to delete. Only `DANMAKU_OUTPUT_DIR` was removed in v1.8.0.
 
 ## Code Style
 
@@ -115,9 +122,24 @@ Chrome Extension (danmaku)
 
 ## Docker
 
-All Docker config files live in `docker/`:
+All Docker config files live in `docker/`. Composition is **base + override**, service name is always `live_recorder_server`. See `docker/README.md` for details.
 
-- `docker/docker-compose.yml` — pre-built GHCR image deployment (main app only)
-- `docker/docker-compose.cron.yml` — replay cron + data sync (optional overlay)
-- `docker/docker-compose.full.yml` — full stack with PostgreSQL 16 + Redis 7
-- CI/CD: GitHub Actions builds Docker image on `v*` tags, pushes to GHCR
+- `docker/docker-compose.yml` (base) — main service commonalities; image via `${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:latest}`
+- `docker/docker-compose.build.yml` — local full-stack override: builds from `Dockerfile.local`, adds PostgreSQL 16 + Redis 7
+- `docker/docker-compose.prod.yml` — production override: pinned `APP_VERSION`, `shared_scripts` volume, external network (`EXTERNAL_NETWORK_NAME`), `deploy.resources`
+- `docker/docker-compose.cron.yml` — replay cron + data sync overlay
+- `docker/docker-compose.browserless.yml` — Browserless/Chromium overlay
+
+```bash
+cd docker
+# local full stack
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# production
+APP_VERSION=v1.8.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
+```
+
+**Dockerfiles:** root `Dockerfile` is the only production image (4 stages: frontend build → backend deps → BtbN n7.1 static ffmpeg → runtime with yt-dlp + CJK fonts). `docker/Dockerfile.local` is a local-acceleration build and is **not equivalent to production**. `docker/Dockerfile.replay-cron` is a lightweight Alpine that contains **no scripts** and depends entirely on the mounted volume.
+
+**shared_scripts sync (v1.8.2):** Docker named volumes only seed from the image on first creation, so image updates to `scripts/` were previously masked. The production `Dockerfile` now snapshots `cp -a /app/scripts /app/scripts.image`, and `docker/scripts/docker-entrypoint.sh` refreshes `/app/scripts` from that snapshot on every boot. If a release only changes `scripts/`, force-recreate the main container to trigger the sync, then restart `replay_cron`.
+
+CI/CD: GitHub Actions builds Docker image on `v*` tags, pushes to GHCR

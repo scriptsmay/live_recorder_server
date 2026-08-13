@@ -65,7 +65,7 @@ node scripts/cleanup-dev.js
 - 读写两侧都必须调用 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)`，**禁止在业务代码里手工拼接路径**。目录名由 `getDanmakuDir()` 提供。
 - 不保留旧路径兜底。历史上的三种旧形态（`[sessionId]/danmaku/danmaku.jsonl`、`[sessionId]/danmaku.jsonl`、`[roomId]/[sessionId]/danmaku/danmaku.jsonl`）一律靠一次性迁移脚本收敛。
 - `danmaku/` 是保留目录名，`scan-files` 会跳过它，不会产生 orphaned 误报。
-- 废弃的 `DANMAKU_OUTPUT_DIR` / `DANMAKU_ARCHIVE_DIR` 环境变量已彻底移除，不要重新引入。
+- 废弃的 `DANMAKU_OUTPUT_DIR` 环境变量已彻底移除（v1.8.0），不要重新引入。`DANMAKU_ARCHIVE_DIR` 仍在生产使用（file-manage `_scanDanmakuArchiveFiles` 从 `danmaku_capture_records.raw_path` 索引归档文件），仅通过 `docker-compose.prod.yml` 和 `.env` 注入，代码内不默认读取。
 - 外部项目 **danmaku-tool 直接依赖这个路径**，改动路径规则必须两端同步（见知识库 ADR-011）。
 
 ### 存量数据迁移（一次性）
