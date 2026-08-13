@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
+const orphanReconciler = require('../services/OrphanDanmakuReconciler');
 const DataService = require('../services/DataService');
 const { getDanmakuJsonlPath } = require('../lib/utils/tool');
 
@@ -44,8 +45,20 @@ router.post('/danmaku/batch', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url 或 events' });
     }
 
-    // 写入 JSONL
-    const result = danmakuRecorder.writeBatch(room_url, events);
+    // 写入 JSONL（无活跃采集会话时落 orphan 兜底文件）
+    const result = await danmakuRecorder.writeBatch(room_url, events);
+
+    // 409 是与扩展的契约：扩展据此保留缓冲区，等录制启动后自动续发。
+    // 后端已把这批弹幕落到 orphan 文件，两端各留一份，任一侧失效都不丢数据。
+    if (result.error === 'no_active_session') {
+      return res.status(409).json({
+        ok: false,
+        status: 'Error',
+        written: 0,
+        error: 'no_active_session',
+        orphan: result.orphan || null,
+      });
+    }
 
     res.json({
       status: 'ok',
@@ -224,6 +237,99 @@ router.get('/danmaku/sessions/:id/raw', async (req, res) => {
   } catch (err) {
     console.error('[api] JSONL 下载失败:', err.message);
     res.status(500).json({ status: 'Error', message: '下载失败' });
+  }
+});
+
+/**
+ * GET /api/danmaku/orphan
+ * 孤儿弹幕记录列表（ADR-012）
+ */
+router.get('/danmaku/orphan', async (req, res) => {
+  try {
+    const { status, limit } = req.query;
+    const rows = await DataService.listOrphanDanmakuRecords({
+      status,
+      limit: Math.min(parseInt(limit, 10) || 100, 500),
+    });
+    res.json({ status: 'ok', data: rows, total: rows.length });
+  } catch (err) {
+    console.error('[api] 孤儿弹幕列表查询失败:', err.message);
+    res.status(500).json({ status: 'Error', message: err.message });
+  }
+});
+
+/**
+ * POST /api/danmaku/orphan/reconcile-all?dry_run=1&force=1
+ * 批量回填所有 orphan_pending 记录
+ *
+ * 注意：必须注册在 /reconcile/:recordId 之前，否则 'reconcile-all' 会被
+ * 当成 :recordId 匹配到单条路由上。
+ */
+router.post('/danmaku/orphan/reconcile-all', async (req, res) => {
+  try {
+    const result = await orphanReconciler.reconcileAll({
+      dryRun: req.query.dry_run === '1' || req.query.dry_run === 'true',
+      force: req.query.force === '1' || req.query.force === 'true',
+    });
+    res.json({ status: 'ok', data: result });
+  } catch (err) {
+    console.error('[api] 孤儿弹幕批量回填失败:', err.message);
+    res.status(500).json({ status: 'Error', message: err.message });
+  }
+});
+
+/**
+ * POST /api/danmaku/orphan/reconcile/:recordId?dry_run=1&force=1
+ * 触发单条孤儿弹幕的时间戳区间匹配回填
+ */
+router.post('/danmaku/orphan/reconcile/:recordId', async (req, res) => {
+  try {
+    const recordId = parseInt(req.params.recordId, 10);
+    if (!Number.isInteger(recordId)) {
+      return res.status(400).json({ status: 'Error', message: 'recordId 非法' });
+    }
+
+    const result = await orphanReconciler.reconcile(recordId, {
+      dryRun: req.query.dry_run === '1' || req.query.dry_run === 'true',
+      force: req.query.force === '1' || req.query.force === 'true',
+    });
+
+    if (result.status === 'not_found') {
+      return res.status(404).json({ status: 'Error', message: '孤儿弹幕记录不存在' });
+    }
+    // low_confidence / no_match 是业务上的"拒绝执行"，用 409 与成功区分，
+    // 前端据此提示人工确认后带 force=1 重试。
+    if (result.status === 'low_confidence' || result.status === 'no_match') {
+      return res.status(409).json({ status: 'Error', message: '匹配置信度不足', data: result });
+    }
+
+    res.json({ status: 'ok', data: result });
+  } catch (err) {
+    console.error('[api] 孤儿弹幕回填失败:', err.message);
+    res.status(500).json({ status: 'Error', message: err.message });
+  }
+});
+
+/**
+ * DELETE /api/danmaku/orphan/:recordId
+ * 人工丢弃孤儿弹幕：文件移动到 _discarded/ 归档，不硬删
+ */
+router.delete('/danmaku/orphan/:recordId', async (req, res) => {
+  try {
+    const recordId = parseInt(req.params.recordId, 10);
+    if (!Number.isInteger(recordId)) {
+      return res.status(400).json({ status: 'Error', message: 'recordId 非法' });
+    }
+
+    const result = await orphanReconciler.discard(recordId);
+    if (result.status === 'not_found') {
+      return res.status(404).json({ status: 'Error', message: '孤儿弹幕记录不存在' });
+    }
+
+    res.json({ status: 'ok', data: result });
+  } catch (err) {
+    console.error('[api] 孤儿弹幕丢弃失败:', err.message);
+    res.status(500).json({ status: 'Error', message: err.message });
   }
 });
 

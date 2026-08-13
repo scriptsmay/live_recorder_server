@@ -614,6 +614,111 @@ class DataService {
       total: parseInt(countResult.rows[0].count, 10),
     };
   }
+
+  // ==================== 孤儿弹幕回填（ADR-012） ====================
+
+  /**
+   * 查询与给定时间窗有重叠的录制会话，直接返回 epoch 毫秒
+   *
+   * ⚠️ 时区正确性是本方法存在的唯一理由：`recording_sessions.started_at` / `ended_at`
+   * 是 `TIMESTAMP`（无时区），由 `NOW()` 写入，存的是**数据库会话时区的墙上时间**。
+   * 若在 Node 侧 `new Date(row.started_at).getTime()`，结果取决于 Node 进程的 TZ，
+   * 生产 Docker 时区与库不一致时会整体偏若干小时，刚好可能把弹幕吸附到相邻会话。
+   * 因此这里用 `AT TIME ZONE current_setting('TimeZone')` 把无时区值按库自身时区
+   * 解释成 timestamptz 再取 epoch，读写用同一个时区设置，往返精确。
+   * 业务代码拿到的就是 epoch ms，不做二次转换。
+   *
+   * `ended_at IS NULL`（被 kill / 崩溃 / SIGTERM 未及时写库）不能当成无限区间，
+   * 依次回退到该会话最后一个分片文件的完成时间、再回退到 `started_at + maxSessionMs`。
+   * 回退值只用于匹配，绝不回写 DB（避免掩盖真实的进程崩溃事件）。
+   *
+   * @param {string} roomUrl - 直播间 URL
+   * @param {number} windowStartMs - 时间窗起点（epoch ms，含容差）
+   * @param {number} windowEndMs - 时间窗终点（epoch ms，含容差）
+   * @param {number} [maxSessionMs=28800000] - ended_at 为 NULL 时的兜底区间上限
+   * @returns {Promise<Array<{id:number, started_ms:number, ended_ms:number, ended_at_inferred:boolean}>>}
+   */
+  static async getSessionsOverlappingWindow(roomUrl, windowStartMs, windowEndMs, maxSessionMs = 28800000) {
+    const EPOCH_MS = (col) => `EXTRACT(EPOCH FROM (${col} AT TIME ZONE current_setting('TimeZone'))) * 1000`;
+
+    const result = await pool.query(
+      `WITH candidates AS (
+         SELECT rs.id,
+                ${EPOCH_MS('rs.started_at')} AS started_ms,
+                CASE
+                  WHEN rs.ended_at IS NOT NULL THEN ${EPOCH_MS('rs.ended_at')}
+                  WHEN f.last_file_at IS NOT NULL THEN ${EPOCH_MS('f.last_file_at')}
+                  ELSE ${EPOCH_MS('rs.started_at')} + $4
+                END AS ended_ms,
+                (rs.ended_at IS NULL) AS ended_at_inferred
+         FROM recording_sessions rs
+         LEFT JOIN (
+           SELECT session_id, MAX(COALESCE(ended_at, completed_at)) AS last_file_at
+           FROM recording_files
+           WHERE session_id IS NOT NULL
+           GROUP BY session_id
+         ) f ON f.session_id = rs.id
+         WHERE rs.room_url = $1 AND rs.deleted_at IS NULL
+       )
+       SELECT id, started_ms, ended_ms, ended_at_inferred
+       FROM candidates
+       WHERE started_ms <= $3 AND ended_ms >= $2
+       ORDER BY started_ms ASC`,
+      [roomUrl, windowStartMs, windowEndMs, maxSessionMs]
+    );
+
+    return result.rows.map((r) => ({
+      id: r.id,
+      started_ms: Number(r.started_ms),
+      ended_ms: Number(r.ended_ms),
+      ended_at_inferred: r.ended_at_inferred === true,
+    }));
+  }
+
+  /**
+   * 按 id 查询单条弹幕采集记录
+   *
+   * @param {number|string} id - danmaku_capture_records.id
+   * @returns {Promise<Object|null>}
+   */
+  static async getDanmakuCaptureRecord(id) {
+    const result = await pool.query('SELECT * FROM danmaku_capture_records WHERE id = $1', [parseInt(id, 10)]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * 查询孤儿弹幕记录列表
+   *
+   * @param {Object} [options]
+   * @param {string} [options.status] - 指定状态；缺省时返回全部 orphan_* 状态
+   * @param {number} [options.limit=100]
+   * @returns {Promise<Array>} 每条附带 `file_exists`
+   */
+  static async listOrphanDanmakuRecords(options = {}) {
+    const { status, limit = 100 } = options;
+    const params = [];
+    let where = `WHERE status LIKE 'orphan\\_%'`;
+    if (status) {
+      params.push(status);
+      where = `WHERE status = $${params.length}`;
+    }
+    params.push(parseInt(limit, 10) || 100);
+
+    const result = await pool.query(
+      `SELECT dcr.*, rm.room_name
+       FROM danmaku_capture_records dcr
+       LEFT JOIN rooms rm ON dcr.room_url = rm.room_url
+       ${where}
+       ORDER BY dcr.id DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    return result.rows.map((row) => ({
+      ...row,
+      file_exists: row.raw_path ? fs.existsSync(row.raw_path) : false,
+    }));
+  }
 }
 
 module.exports = DataService;

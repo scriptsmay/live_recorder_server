@@ -1087,6 +1087,10 @@ curl -X DELETE http://127.0.0.1:1123/api/transcode_records/1
 
 接收 Chrome Extension 批量推送的弹幕数据。
 
+v1.9.0 起：无活跃采集会话时返回 **HTTP 409**，响应 `{ok:false, error:'no_active_session'}`。
+扩展据此保留自己的缓冲区（`buffer.unshift`），等录制启动后自动续发。
+后端同时把这批弹幕落到 `danmaku/_orphan/` 兜底文件（ADR-012）。
+
 **请求体：**
 
 | 字段       | 类型   | 必填 | 说明         |
@@ -1146,6 +1150,45 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 | ------------ | ------ | ---------- |
 | `session_id` | number | 按会话筛选 |
 | `status`     | string | 按状态筛选 |
+
+---
+
+### 孤儿弹幕回填（ADR-012，v1.9.0）
+
+无活跃采集会话时收到的弹幕批次会落到 `danmaku/_orphan/` 兜底文件并登记
+`orphan_pending` 记录，通过以下接口按时间戳区间匹配回填到历史会话。
+
+#### GET /api/danmaku/orphan
+
+孤儿弹幕记录列表。
+
+**查询参数：**
+
+| 参数     | 类型   | 说明                                                          |
+| -------- | ------ | ------------------------------------------------------------- |
+| `status` | string | 状态筛选；缺省返回全部 `orphan_*`                             |
+| `limit`  | number | 条数，默认 100，最大 500                                      |
+
+#### POST /api/danmaku/orphan/reconcile/:recordId
+
+触发单条孤儿弹幕的时间戳区间匹配回填。
+
+**查询参数：**
+
+| 参数      | 类型 | 说明                                          |
+| --------- | ---- | --------------------------------------------- |
+| `dry_run` | 0/1  | 只预览分桶结果，不落盘、不改状态              |
+| `force`   | 0/1  | 忽略置信度阈值强制回填（人工确认后使用）      |
+
+置信度不足或无命中时返回 **HTTP 409**，`data` 内含分桶预览供人工判断。
+
+#### POST /api/danmaku/orphan/reconcile-all
+
+批量回填所有 `orphan_pending` 记录，支持 `dry_run` / `force`。
+
+#### DELETE /api/danmaku/orphan/:recordId
+
+人工丢弃某条孤儿弹幕：文件移动到 `danmaku/_discarded/` 归档（不硬删），状态置 `orphan_discarded`。
 
 ---
 

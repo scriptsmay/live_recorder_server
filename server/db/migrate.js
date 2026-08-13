@@ -382,6 +382,8 @@ async function runMigration() {
     `);
     // v1.8.0：ass_path 列已废弃（ASS 生成迁至 danmaku-tool）
     await client.query(`ALTER TABLE danmaku_capture_records DROP COLUMN IF EXISTS ass_path`);
+    // v1.9.0：orphan 记录需要 room_url 来匹配历史会话（session_id=NULL 时无法通过 JOIN 拿 room_url）
+    await client.query(`ALTER TABLE danmaku_capture_records ADD COLUMN IF NOT EXISTS room_url VARCHAR(512) DEFAULT ''`);
 
     // v1.8.0：弹幕压制记录表已迁至 danmaku-tool，本服务不再维护
     await client.query(`DROP TABLE IF EXISTS danmaku_burn_records`);
@@ -414,6 +416,11 @@ async function runMigration() {
       ['hls_cleanup_days', '30'],
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
+      // v1.9.0 ADR-012 孤儿弹幕兜底采集与回填
+      ['orphan_tolerance_ms', '120000'],
+      ['orphan_confidence_threshold', '0.8'],
+      ['orphan_max_session_ms', '28800000'],
+      ['orphan_dedup_scan_lines', '200'],
       ['replay_enabled', 'true'],
       ['replay_work_dir', '/data/replay'],
       ['replay_queue_concurrency', '1'],

@@ -340,27 +340,60 @@ KV 结构的全局配置表。
 
 **记录每个会话的弹幕采集生命周期。** 一个 `session_id` 可能对应多条采集记录（如中断后重连）。
 
+v1.9.0 起该表同时承载**孤儿弹幕**记录（ADR-012）：无活跃采集会话时收到的弹幕批次以
+`session_id = NULL` + `status = 'orphan_pending'` 落库，`raw_path` 指向孤儿 JSONL，
+由 `OrphanDanmakuReconciler` 按时间戳回填到重叠的历史会话。
+
 | 字段        | 类型          | 约束                | 说明                                                                                                                                              |
 | ----------- | ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id          | SERIAL        | PRIMARY KEY         | 自增主键                                                                                                                                          |
-| session_id  | INTEGER       |                     | 所属录制会话                                                                                                                                      |
-| room_id     | INTEGER       |                     | 关联房间                                                                                                                                          |
+| session_id  | INTEGER       |                     | 所属录制会话；孤儿记录为 NULL，回填后写入唯一命中的会话                                                                                           |
+| room_id     | INTEGER       |                     | 关联房间；孤儿记录为 NULL                                                                                                                         |
+| room_url    | VARCHAR(512)  | DEFAULT ''          | 直播间 URL（v1.9.0 新增）。孤儿记录 `session_id` 为空，无法 JOIN 取 room_url，回填匹配必须靠本列                                                   |
 | platform    | VARCHAR(50)   | DEFAULT 'kuaishou'  | 平台标识                                                                                                                                          |
-| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed`                                                                                                              |
+| status      | VARCHAR(20)   | DEFAULT 'recording' | `recording` → `completed` / `failed`；孤儿链路：`orphan_pending` → `orphan_associated` / `orphan_discarded`                                        |
 | raw_path    | VARCHAR(1024) | DEFAULT ''          | 弹幕 JSONL 绝对路径，形如 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0 起为扁平集中路径，由 `getDanmakuJsonlPath(sessionId)` 唯一推导） |
-| event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数                                                                                                                              |
-| started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间                                                                                                                                      |
-| ended_at    | TIMESTAMP     |                     | 采集结束时间                                                                                                                                      |
+| event_count | INTEGER       | DEFAULT 0           | 采集到的弹幕事件总数；孤儿记录表示**尚未匹配**的剩余事件数                                                                                         |
+| started_at  | TIMESTAMP     | DEFAULT NOW()       | 采集开始时间；孤儿记录为该批 `ts_abs_ms` 的最小值                                                                                                 |
+| ended_at    | TIMESTAMP     |                     | 采集结束时间；孤儿记录为该批 `ts_abs_ms` 的最大值                                                                                                 |
 | error       | TEXT          | DEFAULT ''          | 失败时的错误信息                                                                                                                                  |
 | created_at  | TIMESTAMP     | DEFAULT NOW()       | 记录创建时间                                                                                                                                      |
 
 **写入时机：**
 
-| 场景                 | 操作                                          |
-| -------------------- | --------------------------------------------- |
-| 录制会话启动弹幕采集 | INSERT，status = `recording`                  |
-| 录制正常结束         | UPDATE status = `completed`，写入 event_count |
-| 采集异常             | UPDATE status = `failed`，写入 error          |
+| 场景                                | 操作                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| 录制会话启动弹幕采集                | INSERT，status = `recording`                                            |
+| 录制正常结束                        | UPDATE status = `completed`，写入 event_count                           |
+| 采集异常                            | UPDATE status = `failed`，写入 error                                    |
+| 收到弹幕但无活跃采集会话（v1.9.0）  | INSERT，status = `orphan_pending`，session_id = NULL，写入 room_url      |
+| 回填命中会话（v1.9.0）              | UPDATE status = `orphan_associated`，event_count 改为剩余未匹配数        |
+| 回填部分命中（v1.9.0）              | UPDATE 保持 `orphan_pending`，event_count 改为剩余未匹配数，供二次回填   |
+| 人工丢弃孤儿记录（v1.9.0）          | UPDATE status = `orphan_discarded`，raw_path 指向 `_discarded/` 归档文件 |
+
+**孤儿弹幕文件布局**（`ORPHAN_DIR_NAME` / `DISCARDED_DIR_NAME` 下划线前缀显式区别于 `{sessionId}.jsonl`，扫描逻辑天然跳过）：
+
+```text
+VIDEO_DOWNLOAD_DIR/danmaku/
+├── 118.jsonl                          # 正常会话弹幕
+├── _orphan/2026-08-13/{sha1(roomUrl).slice(0,12)}.jsonl   # 按天 + 房间分片
+└── _discarded/{recordId}_{原文件名}.jsonl                  # 人工丢弃归档（不硬删）
+```
+
+**回填相关 settings：**
+
+| key                           | 默认值               | 说明                                    |
+| ----------------------------- | -------------------- | --------------------------------------- |
+| `orphan_tolerance_ms`         | `120000`（2 分钟）   | 时间戳落在会话区间外的前后容差          |
+| `orphan_confidence_threshold` | `0.8`                | 自动回填的最低置信度（命中数 / 总数）   |
+| `orphan_max_session_ms`       | `28800000`（8 小时） | `ended_at IS NULL` 时的兜底区间上限     |
+| `orphan_dedup_scan_lines`     | `200`                | 去重时扫描目标 JSONL 尾部的行数         |
+
+> ⚠️ `recording_sessions.started_at` / `ended_at` 是 `TIMESTAMP`（**无时区**）。
+> 回填匹配必须走 `DataService.getSessionsOverlappingWindow()`，它在 SQL 里用
+> `EXTRACT(EPOCH FROM (col AT TIME ZONE current_setting('TimeZone'))) * 1000` 取
+> epoch，避免 Node 进程时区与数据库时区不一致时整体偏移、把弹幕吸附到相邻会话。
+> 禁止在业务代码里 `new Date(row.started_at).getTime()`。
 
 ---
 

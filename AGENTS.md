@@ -136,12 +136,16 @@ npm run lint && npm run format && npm run test
 
 > 弹幕压制（ASS 生成 + 硬字幕烧录）已于 v1.7.0 迁出至独立的 danmaku-tool 项目，相关端点已下线。本服务只负责弹幕采集与查询。
 
-- `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据
+- `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据；无活跃采集会话时返回 **HTTP 409** 并落 orphan 兜底文件（ADR-012）
 - `GET /api/danmaku_capture_records` —— 查询弹幕采集记录
 - `GET /api/danmaku/status` —— 获取弹幕采集状态
 - `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
 - `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件）
 - `GET /api/danmaku/sessions/:id/raw` —— 下载会话原始弹幕 JSONL
+- `GET /api/danmaku/orphan` —— 孤儿弹幕记录列表（ADR-012）
+- `POST /api/danmaku/orphan/reconcile/:recordId` —— 单条回填
+- `POST /api/danmaku/orphan/reconcile-all` —— 批量回填
+- `DELETE /api/danmaku/orphan/:recordId` —— 人工丢弃
 
 ### 投稿
 

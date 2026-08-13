@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const pool = require('../../../db/index');
-const { getDanmakuJsonlPath } = require('../../utils/tool');
+const { getDanmakuJsonlPath, getOrphanDanmakuPath } = require('../../utils/tool');
 
 /**
  * DanmakuRecorder — 弹幕录制器
@@ -88,14 +88,20 @@ class DanmakuRecorder {
   /**
    * 接收批量弹幕事件并写入 JSONL
    *
+   * 无活跃采集会话时不再静默丢弃（ADR-012）：落到孤儿弹幕文件并登记
+   * `status='orphan_pending'` 记录，后续由 OrphanDanmakuReconciler 按时间戳回填。
+   * 返回的 `error='no_active_session'` 仍然保留，路由层据此回 HTTP 409，
+   * 让扩展保留自己的缓冲区——两端各留一份，任一侧失效都不丢数据。
+   *
    * @param {string} roomUrl - 房间 URL
    * @param {Array} events - 标准化事件数组
-   * @returns {{ written: number, error: string|null }}
+   * @returns {Promise<{ written: number, error: string|null, orphan?: Object|null }>}
    */
-  writeBatch(roomUrl, events) {
+  async writeBatch(roomUrl, events) {
     const session = this.activeSessions.get(roomUrl);
     if (!session) {
-      return { written: 0, error: 'no_active_session' };
+      const orphan = await this._writeOrphanBatch(roomUrl, events);
+      return { written: 0, error: 'no_active_session', orphan };
     }
 
     if (!Array.isArray(events) || events.length === 0) {
@@ -312,6 +318,125 @@ class DanmakuRecorder {
       if (result.rows.length > 0) return result.rows[0].value;
     } catch (_) {}
     return defaultValue;
+  }
+
+  /**
+   * 兜底写入：无活跃采集会话时把整批弹幕落到孤儿文件（ADR-012 方案 C 写入侧）
+   *
+   * 之所以在这里同时写文件 + 建 DB 记录：
+   * - 文件保证"最坏兜底"—— 即使 DB 事务失败，数据仍能人工从磁盘恢复
+   * - DB 记录承担索引 + 回填状态机 —— OrphanDanmakuReconciler 逐条按时间戳分桶
+   *   到重叠的历史 recording_sessions，需要 room_url 和时间范围来一次 SQL 定位候选
+   *
+   * 首行 `_meta` 用于追溯（同一天同一房间的多批共享一个文件，各批的 `_meta`
+   * 前缀虽然重复，但足以在人工审阅时看出批次分界）。
+   *
+   * 幂等/去重不在写入阶段处理，留给回填阶段（避免这里做数据库检查拖慢热路径）。
+   *
+   * @param {string} roomUrl - 房间 URL
+   * @param {Array} events - 原始事件数组
+   * @returns {Promise<Object|null>} 孤儿记录摘要 `{ id, raw_path, event_count, ts_min, ts_max }` 或 null（失败/未启用）
+   * @private
+   */
+  async _writeOrphanBatch(roomUrl, events) {
+    const enabled = await this._getSetting('kuaishou_danmaku_enabled', 'false');
+    if (enabled !== 'true') {
+      // 采集未启用时不需要落孤儿：扩展本不该向后端推
+      return null;
+    }
+    if (!roomUrl || !Array.isArray(events) || events.length === 0) {
+      return null;
+    }
+
+    // 标准化事件（sessionStartMs=0 让 ts_ms 保留绝对值，回填时会按目标 session 重算）
+    const batchArrivalBase = Date.now();
+    const records = [];
+    let tsMin = Number.POSITIVE_INFINITY;
+    let tsMax = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < events.length; i++) {
+      try {
+        const event = events[i];
+        const hasValidTs =
+          (typeof event.ts_ms === 'number' && event.ts_ms > 0) ||
+          (typeof event.ts_abs_ms === 'number' && event.ts_abs_ms > 0);
+        if (!hasValidTs) {
+          event._receivedAt = batchArrivalBase + i;
+        }
+        const rec = this._normalizeEvent(event, 0);
+        records.push(rec);
+        if (rec.ts_abs_ms < tsMin) tsMin = rec.ts_abs_ms;
+        if (rec.ts_abs_ms > tsMax) tsMax = rec.ts_abs_ms;
+      } catch (_) {}
+    }
+    if (records.length === 0) {
+      return null;
+    }
+
+    let rawPath;
+    try {
+      rawPath = getOrphanDanmakuPath(roomUrl, new Date(batchArrivalBase));
+    } catch (err) {
+      console.warn('[DanmakuRecorder] 生成孤儿弹幕路径失败:', err.message);
+      return null;
+    }
+
+    try {
+      const dir = path.dirname(rawPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      // _meta 首行仅在新建文件时写入，避免重复
+      const isNewFile = !fs.existsSync(rawPath);
+      const lines = [];
+      if (isNewFile) {
+        lines.push(
+          JSON.stringify({
+            _meta: {
+              room_url: roomUrl,
+              received_at: batchArrivalBase,
+              schema: 'orphan-v1',
+            },
+          })
+        );
+      }
+      for (const rec of records) {
+        lines.push(JSON.stringify(rec));
+      }
+      fs.appendFileSync(rawPath, lines.join('\n') + '\n');
+    } catch (err) {
+      console.error('[DanmakuRecorder] 写入孤儿弹幕文件失败:', err.message);
+      return null;
+    }
+
+    // 建 DB 记录（失败不影响文件已落盘 —— 文件是最坏兜底）
+    let orphanId = null;
+    try {
+      const startedAt = new Date(tsMin).toISOString();
+      const endedAt = new Date(tsMax).toISOString();
+      const result = await pool.query(
+        `INSERT INTO danmaku_capture_records
+           (session_id, room_id, room_url, platform, status, raw_path,
+            event_count, started_at, ended_at)
+         VALUES (NULL, NULL, $1, $2, 'orphan_pending', $3, $4, $5, $6)
+         RETURNING id`,
+        [roomUrl, 'kuaishou', rawPath, records.length, startedAt, endedAt]
+      );
+      orphanId = result.rows[0].id;
+    } catch (err) {
+      console.error('[DanmakuRecorder] 登记孤儿弹幕记录失败:', err.message);
+    }
+
+    console.warn(
+      `[DanmakuRecorder] 无活跃采集，弹幕已落孤儿文件: room=${roomUrl} file=${rawPath} count=${records.length}`
+    );
+
+    return {
+      id: orphanId,
+      raw_path: rawPath,
+      event_count: records.length,
+      ts_min: tsMin,
+      ts_max: tsMax,
+    };
   }
 }
 

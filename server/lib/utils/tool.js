@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const dayjs = require('dayjs');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -159,6 +160,72 @@ function getDanmakuDir() {
   return path.join(downloadDir, DANMAKU_DIR_NAME);
 }
 
+/**
+ * 孤儿弹幕目录名（下划线前缀，显式区别于 sessionId 命名的正常 JSONL）
+ *
+ * `danmaku/` 目录下除 `_orphan/` 外全是 `{sessionId}.jsonl`。下划线前缀让
+ * scan-files 与 danmaku-tool 的批量扫描能一眼跳过，无需维护白名单。
+ */
+const ORPHAN_DIR_NAME = '_orphan';
+
+/** 人工丢弃的孤儿弹幕归档目录名（只移动不硬删，保留最坏兜底） */
+const DISCARDED_DIR_NAME = '_discarded';
+
+/**
+ * 计算 roomUrl 的短哈希（孤儿弹幕文件名用）
+ *
+ * roomUrl 含 `:` `/` `?` 等非法文件名字符，且长度可达 512。取 sha1 前 12 位
+ * 十六进制（48 bit）足够避免个位数量级房间的碰撞，同时保持文件名可读。
+ *
+ * @param {string} roomUrl - 直播间 URL
+ * @returns {string} 12 位十六进制哈希
+ */
+function hashRoomUrl(roomUrl) {
+  if (!roomUrl) {
+    throw new Error('hashRoomUrl: roomUrl 不能为空');
+  }
+  return crypto.createHash('sha1').update(String(roomUrl)).digest('hex').slice(0, 12);
+}
+
+/**
+ * 获取孤儿弹幕根目录
+ *
+ * @returns {string} VIDEO_DOWNLOAD_DIR/danmaku/_orphan 绝对路径
+ */
+function getOrphanDanmakuDir() {
+  return path.join(getDanmakuDir(), ORPHAN_DIR_NAME);
+}
+
+/**
+ * 获取人工丢弃的孤儿弹幕归档目录
+ *
+ * @returns {string} VIDEO_DOWNLOAD_DIR/danmaku/_discarded 绝对路径
+ */
+function getDiscardedOrphanDanmakuDir() {
+  return path.join(getDanmakuDir(), DISCARDED_DIR_NAME);
+}
+
+/**
+ * 生成孤儿弹幕 JSONL 文件路径（唯一入口）
+ *
+ * 路径结构：VIDEO_DOWNLOAD_DIR/danmaku/_orphan/{YYYY-MM-DD}/{roomUrlHash}.jsonl
+ *
+ * 按天分片避免单文件无限增长；同一天同一房间的多个批次追加到同一文件。
+ * 业务代码禁止自行 path.join 拼接孤儿弹幕路径，一律走本函数。
+ *
+ * @param {string} roomUrl - 直播间 URL
+ * @param {Date|string|number} [date] - 归档日期，默认当前时间
+ * @returns {string} 孤儿弹幕 JSONL 绝对路径
+ */
+function getOrphanDanmakuPath(roomUrl, date = new Date()) {
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!downloadDir) {
+    throw new Error('getOrphanDanmakuPath: 环境变量 VIDEO_DOWNLOAD_DIR 未配置');
+  }
+  const day = dayjs(date).format('YYYY-MM-DD');
+  return path.join(downloadDir, DANMAKU_DIR_NAME, ORPHAN_DIR_NAME, day, `${hashRoomUrl(roomUrl)}.jsonl`);
+}
+
 module.exports = {
   generateFilename,
   templateToStrftime,
@@ -166,5 +233,11 @@ module.exports = {
   generateOutputPath,
   getDanmakuJsonlPath,
   getDanmakuDir,
+  getOrphanDanmakuDir,
+  getOrphanDanmakuPath,
+  getDiscardedOrphanDanmakuDir,
+  hashRoomUrl,
   DANMAKU_DIR_NAME,
+  ORPHAN_DIR_NAME,
+  DISCARDED_DIR_NAME,
 };

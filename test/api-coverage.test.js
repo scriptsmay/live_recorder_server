@@ -78,6 +78,11 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/danmaku_capture_records' },
   { method: 'GET', path: '/danmaku/status' },
   { method: 'GET', path: '/danmaku/search' },
+  // ADR-012 孤儿弹幕兜底采集与回填
+  { method: 'GET', path: '/danmaku/orphan' },
+  { method: 'POST', path: '/danmaku/orphan/reconcile-all' },
+  { method: 'POST', path: '/danmaku/orphan/reconcile/:recordId' },
+  { method: 'DELETE', path: '/danmaku/orphan/:recordId' },
 
   // ===== transcode.js =====
   { method: 'GET', path: '/transcode_records' },
