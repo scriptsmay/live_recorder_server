@@ -395,6 +395,11 @@ async function runMigration() {
       DELETE FROM settings WHERE key IN ('auto_burn_danmaku', 'prefer_danmaku_burned_video', 'danmaku_preserve_clean_video')
     `);
 
+    // v1.8.3：清除已下线的投稿/录制死配置项（已从默认值和前端设置页移除，后端无任何读取方）
+    await client.query(`
+      DELETE FROM settings WHERE key IN ('submit_api', 'lines', 'threads', 'pool2_size', 'max_resume_retries')
+    `);
+
     const defaultSettings = [
       ['pool_size', '3'],
       ['watchdog_interval', '30'],

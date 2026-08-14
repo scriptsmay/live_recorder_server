@@ -34,6 +34,7 @@ const fileTypeLabels: Record<FileType, string> = {
   replay_fixed: '回放修复',
   replay_final: '回放成品',
   danmaku_archive: '弹幕归档',
+  unknown: '未知类型',
 }
 
 const activeTaskLabels: Record<string, string> = {

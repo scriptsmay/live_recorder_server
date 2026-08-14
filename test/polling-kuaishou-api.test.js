@@ -202,8 +202,27 @@ describe('KuaishouAPIChecker', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to hevc when h264 is missing', () => {
-    const stream = KuaishouAPIChecker.pickBestStreamUrl({
+  it('extracts offline status from author.name when room is not living', () => {
+    const result = KuaishouAPIChecker.extractStatusFromLivedetail({
+      data: {
+        result: 2,
+        author: { name: 'KSG句号', living: false },
+        liveStream: {},
+      },
+    });
+
+    expect(result.isLive).toBe(false);
+    expect(result.roomName).toBe('KSG句号');
+    expect(result.streamUrl).toBeNull();
+  });
+
+  it('throws KUAISHOU_ANTICRAWL for request-too-fast payload', () => {
+    const payload = { data: { errorType: { title: '请求过快，请稍后重试' } } };
+    expect(() => KuaishouAPIChecker.extractStatusFromLivedetail(payload)).toThrow('KUAISHOU_ANTICRAWL');
+  });
+
+  it('falls back to hevc then h265 when h264 is missing', () => {
+    const hevcStream = KuaishouAPIChecker.pickBestStreamUrl({
       playUrls: {
         hevc: {
           adaptationSet: {
@@ -216,17 +235,61 @@ describe('KuaishouAPIChecker', () => {
       },
     });
 
-    expect(stream).toEqual({
+    expect(hevcStream).toEqual({
       url: 'https://example.com/hevc-high.flv',
       codec: 'hevc',
       bitrate: 1500,
     });
+
+    const h265Stream = KuaishouAPIChecker.pickBestStreamUrl({
+      playUrls: {
+        h265: {
+          adaptationSet: {
+            representation: [
+              { url: 'https://example.com/h265-low.flv', bitrate: 500 },
+              { url: 'https://example.com/h265-high.flv', bitrate: 1500 },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(h265Stream).toEqual({
+      url: 'https://example.com/h265-high.flv',
+      codec: 'h265',
+      bitrate: 1500,
+    });
+  });
+
+  it('extracts room name from plain HTML title', () => {
+    const html = '<html><head><title>KSG句号-快手直播</title></head></html>';
+    expect(KuaishouAPIChecker.extractRoomNameFromHtml(html)).toBe('KSG句号');
   });
 
   it('redacts signed FLV URL parameters', () => {
     expect(KuaishouAPIChecker.redactUrl('https://example.com/live.flv?txSecret=abc&token=def&cdn=tx')).toBe(
       'https://example.com/live.flv?txSecret=<redacted>&token=<redacted>&cdn=tx'
     );
+  });
+
+  it('throws KUAISHOU_CHECKER_DISABLED when checker is disabled', async () => {
+    process.env.KUAISHOU_CHECKER_ENABLED = 'false';
+    const checker = new KuaishouAPIChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock(),
+    });
+
+    await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_CHECKER_DISABLED');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch API when room lock is busy', async () => {
+    const checker = new KuaishouAPIChecker('https://live.kuaishou.com/u/KPL704668133', {
+      redis: createRedisMock({ lockBusyKey: 'kuaishou:checker:lock:KPL704668133' }),
+      now: () => 100000,
+    });
+
+    await expect(checker.checkStatus()).rejects.toThrow('KUAISHOU_ROOM_LOCK_BUSY');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('does not fetch API when platform lock is busy', async () => {
