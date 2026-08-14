@@ -1200,3 +1200,266 @@ describe('executeDelete', () => {
     FileManageService._processDeleteTask.mockRestore();
   });
 });
+
+// ========== scanAllFiles（编排层）==========
+// 只验证编排契约：锁的获取/释放、四个子扫描器 + _refreshDiskStatus 的调用顺序、
+// 共享 results 计数器透传。子扫描器各自的 SQL 行为由上面独立的 describe 覆盖。
+describe('scanAllFiles', () => {
+  const STAGES = [
+    '_scanRecordingFiles',
+    '_scanHlsDirectories',
+    '_scanReplayFiles',
+    '_scanDanmakuArchiveFiles',
+    '_refreshDiskStatus',
+  ];
+
+  let callOrder;
+  let spies;
+
+  beforeEach(() => {
+    redis.set.mockReset();
+    redis.set.mockResolvedValue('OK');
+    redis.del.mockReset();
+    redis.del.mockResolvedValue(1);
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+
+    callOrder = [];
+    spies = STAGES.map((name) =>
+      jest.spyOn(FileManageService, name).mockImplementation(async () => {
+        callOrder.push(name);
+      })
+    );
+  });
+
+  afterEach(() => {
+    spies.forEach((spy) => spy.mockRestore());
+    console.log.mockRestore();
+  });
+
+  test('拿到锁 — 五个阶段按序执行，结束后释放锁', async () => {
+    const results = await FileManageService.scanAllFiles();
+
+    expect(redis.set).toHaveBeenCalledWith('file_manage_scan_lock', '1', { NX: true, EX: 300 });
+    expect(callOrder).toEqual(STAGES);
+    expect(redis.del).toHaveBeenCalledWith('file_manage_scan_lock');
+    expect(results).toEqual({ scanned: 0, created: 0, updated: 0, missing: 0, errors: [] });
+  });
+
+  test('五个阶段共享同一个 results 计数器', async () => {
+    spies[0].mockImplementation(async (results) => {
+      results.scanned += 3;
+      results.created += 2;
+    });
+    spies[4].mockImplementation(async (results) => {
+      results.updated += 1;
+      results.missing += 1;
+      results.errors.push({ file: '/data/x', error: 'boom' });
+    });
+
+    const results = await FileManageService.scanAllFiles();
+
+    expect(results).toEqual({
+      scanned: 3,
+      created: 2,
+      updated: 1,
+      missing: 1,
+      errors: [{ file: '/data/x', error: 'boom' }],
+    });
+  });
+
+  test('锁被占用 — 抛错且不执行任何阶段，也不释放别人的锁', async () => {
+    redis.set.mockResolvedValueOnce(null);
+
+    await expect(FileManageService.scanAllFiles()).rejects.toThrow('文件扫描正在进行中，请稍后再试');
+
+    expect(callOrder).toEqual([]);
+    expect(redis.del).not.toHaveBeenCalled();
+  });
+
+  test('阶段抛错 — 异常向上抛且锁仍被释放（finally）', async () => {
+    spies[2].mockRejectedValueOnce(new Error('replay scan failed'));
+
+    await expect(FileManageService.scanAllFiles()).rejects.toThrow('replay scan failed');
+
+    // 失败阶段之前的已执行，之后的不再执行
+    expect(callOrder).toEqual(['_scanRecordingFiles', '_scanHlsDirectories']);
+    expect(redis.del).toHaveBeenCalledWith('file_manage_scan_lock');
+  });
+
+  test('释放锁失败被吞掉 — 不影响扫描结果返回', async () => {
+    redis.del.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(FileManageService.scanAllFiles()).resolves.toMatchObject({ scanned: 0 });
+  });
+});
+
+// ========== _processDeleteTask（后台 worker 进度追踪）==========
+// executeDelete 是 fire-and-forget，进度全靠 Redis 里的 file_delete_task:{id}。
+// 这里验证计数器分桶、体积累加、逐文件写 Redis、终态与计划清理。
+describe('_processDeleteTask', () => {
+  const TASK_KEY = 'file_delete_task:task-1';
+
+  // 构造 executeDelete 已写入 Redis 的初始任务对象
+  function makeTask(overrides = {}) {
+    return {
+      task_id: 'task-1',
+      plan_id: 'plan-1',
+      status: 'processing',
+      total_count: 0,
+      deleted_count: 0,
+      blocked_count: 0,
+      failed_count: 0,
+      estimated_release_size: 0,
+      actual_release_size: 0,
+      operator: 'user',
+      results: [],
+      created_at: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  // 取第 n 次 setEx 写入的任务 JSON（n 从 0 开始）
+  function taskAtWrite(n) {
+    return JSON.parse(redis.setEx.mock.calls[n][2]);
+  }
+
+  function lastWrittenTask() {
+    return taskAtWrite(redis.setEx.mock.calls.length - 1);
+  }
+
+  let deleteSpy;
+
+  beforeEach(() => {
+    redis.del.mockReset();
+    redis.del.mockResolvedValue(1);
+    redis.setEx.mockResolvedValue('OK');
+    deleteSpy = jest.spyOn(FileManageService, '_deleteSingleFile');
+  });
+
+  afterEach(() => {
+    deleteSpy.mockRestore();
+  });
+
+  test('混合结果 — success / success_noop / blocked / failed 分别落到对应计数器', async () => {
+    const plan = {
+      plan_id: 'plan-1',
+      deletable: [
+        { file_id: 1, file_path: '/a.ts' },
+        { file_id: 2, file_path: '/b.ts' },
+        { file_id: 3, file_path: '/c.ts' },
+        { file_id: 4, file_path: '/d.ts' },
+      ],
+      blocked: [{ file_id: 9 }],
+    };
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ total_count: 4, blocked_count: 1 })));
+
+    deleteSpy
+      .mockResolvedValueOnce({ file_id: 1, result: 'success', actual_release_size: 1000 })
+      .mockResolvedValueOnce({ file_id: 2, result: 'success_noop', actual_release_size: 0 })
+      .mockResolvedValueOnce({ file_id: 3, result: 'blocked', actual_release_size: 0 })
+      .mockResolvedValueOnce({ file_id: 4, result: 'failed', actual_release_size: 0 });
+
+    await FileManageService._processDeleteTask('task-1', plan, 'user');
+
+    const task = lastWrittenTask();
+    expect(task.deleted_count).toBe(2); // success + success_noop
+    expect(task.blocked_count).toBe(2); // plan.blocked 的 1 条 + 运行时 blocked 1 条
+    expect(task.failed_count).toBe(1);
+    expect(task.actual_release_size).toBe(1000);
+    expect(task.results).toHaveLength(4);
+    expect(task.status).toBe('completed');
+  });
+
+  test('逐文件写 Redis — 每删一个文件刷新一次进度，最后再写终态', async () => {
+    const plan = {
+      plan_id: 'plan-1',
+      deletable: [
+        { file_id: 1, file_path: '/a.ts' },
+        { file_id: 2, file_path: '/b.ts' },
+      ],
+      blocked: [],
+    };
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ total_count: 2 })));
+
+    deleteSpy
+      .mockResolvedValueOnce({ file_id: 1, result: 'success', actual_release_size: 500 })
+      .mockResolvedValueOnce({ file_id: 2, result: 'success', actual_release_size: 700 });
+
+    await FileManageService._processDeleteTask('task-1', plan, 'user');
+
+    // 2 个文件各一次 + 终态一次
+    expect(redis.setEx).toHaveBeenCalledTimes(3);
+    expect(redis.setEx.mock.calls.every((c) => c[0] === TASK_KEY)).toBe(true);
+    expect(redis.setEx.mock.calls.every((c) => c[1] === 1800)).toBe(true);
+
+    // 中途进度可被前端轮询到：第一次写入时只删了 1 个，且仍是 processing
+    const mid = taskAtWrite(0);
+    expect(mid.deleted_count).toBe(1);
+    expect(mid.actual_release_size).toBe(500);
+    expect(mid.status).toBe('processing');
+
+    const final = taskAtWrite(2);
+    expect(final.deleted_count).toBe(2);
+    expect(final.actual_release_size).toBe(1200);
+    expect(final.status).toBe('completed');
+  });
+
+  test('完成后清理删除计划键', async () => {
+    const plan = { plan_id: 'plan-1', deletable: [{ file_id: 1, file_path: '/a.ts' }], blocked: [] };
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ total_count: 1 })));
+    deleteSpy.mockResolvedValueOnce({ file_id: 1, result: 'success', actual_release_size: 10 });
+
+    await FileManageService._processDeleteTask('task-1', plan, 'user');
+
+    expect(redis.del).toHaveBeenCalledWith('file_delete_plan:plan-1');
+  });
+
+  test('operator 透传给 _deleteSingleFile', async () => {
+    const plan = { plan_id: 'plan-1', deletable: [{ file_id: 1, file_path: '/a.ts' }], blocked: [] };
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ operator: 'alice' })));
+    deleteSpy.mockResolvedValueOnce({ file_id: 1, result: 'success', actual_release_size: 0 });
+
+    await FileManageService._processDeleteTask('task-1', plan, 'alice');
+
+    expect(deleteSpy).toHaveBeenCalledWith(plan.deletable[0], 'alice');
+  });
+
+  test('超过 10 个文件 — 让出事件循环后仍处理完全部文件', async () => {
+    const deletable = Array.from({ length: 25 }, (_, i) => ({ file_id: i + 1, file_path: `/f${i}.ts` }));
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ total_count: 25 })));
+    deleteSpy.mockImplementation(async (item) => ({
+      file_id: item.file_id,
+      result: 'success',
+      actual_release_size: 100,
+    }));
+
+    await FileManageService._processDeleteTask('task-1', { plan_id: 'plan-1', deletable, blocked: [] }, 'user');
+
+    const task = lastWrittenTask();
+    expect(deleteSpy).toHaveBeenCalledTimes(25);
+    expect(task.deleted_count).toBe(25);
+    expect(task.actual_release_size).toBe(2500);
+    expect(task.status).toBe('completed');
+  });
+
+  test('单文件删除抛错 — 异常上抛，任务不会被标记 completed', async () => {
+    const plan = {
+      plan_id: 'plan-1',
+      deletable: [
+        { file_id: 1, file_path: '/a.ts' },
+        { file_id: 2, file_path: '/b.ts' },
+      ],
+      blocked: [],
+    };
+    redis.get.mockResolvedValueOnce(JSON.stringify(makeTask({ total_count: 2 })));
+    deleteSpy
+      .mockResolvedValueOnce({ file_id: 1, result: 'success', actual_release_size: 100 })
+      .mockRejectedValueOnce(new Error('advisory lock timeout'));
+
+    await expect(FileManageService._processDeleteTask('task-1', plan, 'user')).rejects.toThrow('advisory lock timeout');
+
+    // 第一个文件的进度已落盘，但状态仍是 processing（由 executeDelete 的 catch 记录日志）
+    expect(lastWrittenTask()).toMatchObject({ deleted_count: 1, status: 'processing' });
+    expect(redis.del).not.toHaveBeenCalled();
+  });
+});

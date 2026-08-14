@@ -61,53 +61,48 @@
    - 重启后已删/已过期 HLS 不重新生成
    - 自动转码完成后仍能正常生成 HLS
 
-8. **FileManageService 测试缺口**：`executeDelete` 后台 worker `_processDeleteTask` 的进度追踪未覆盖；`scanAllFiles` 编排层（锁 + 四个子扫描器顺序 + `_refreshDiskStatus`）未直接覆盖
+8. **v1.7.19 看门狗日志修复的生产端确认**：代码已把心跳 `important` 降为 `info`，但"生产观察一个看门狗周期、确认扫描日志只进 `watchdog.log` 不进 `server.log`"这一步从未记录
 
-9. **v1.8.0 验收 #5/#6 端到端补验**：`GET /api/danmaku/search` 与 `/api/danmaku/sessions/:id/raw` 因 auth wall 拦截 curl，当时只做了底层数据校验，未做带 cookie 的接口级验证
-
-10. **v1.7.19 看门狗日志修复的生产端确认**：代码已把心跳 `important` 降为 `info`，但"生产观察一个看门狗周期、确认扫描日志只进 `watchdog.log` 不进 `server.log`"这一步从未记录
-
-11. **前端组件测试**：需引入 `@vue/test-utils`，侧边栏重构等 P2 项当时因此搁置
-
-12. **`RemoteBrowserClient` 生命周期测试**：异常/超时路径下不遗留 page/context（v1.8.3 后该模块仅服务回放 m3u8 提取）
+9. **前端组件测试**：需引入 `@vue/test-utils`，侧边栏重构等 P2 项当时因此搁置
 
 ## P3 — 运维与编排
 
-13. **compose 迁移到 base + prod override**
+10. **compose 迁移到 base + prod override**
     - 仓库侧 v1.8.2 已整理为 base + build + prod + cron/browserless，但**现网仍是手工维护的单文件 `docker-compose.yml`**，与仓库模板脱节
     - 迁移前需把真实值搬进生产 `.env`：`APP_VERSION`、`EXTERNAL_NETWORK_NAME`、`DANMAKU_ARCHIVE_HOST_DIR`、`YTDLP_TEMP_HOST_DIR`
 
-14. **空目录自动回收 Phase 3 生产灰度**（v1.7.15 起挂到现在）
+11. **空目录自动回收 Phase 3 生产灰度**（v1.7.15 起挂到现在）
     - 生产只读扫描统计两个根目录候选空目录数量 + 前 20 条样例路径
     - dryRun 跑一轮核对活跃录制 / 回放队列 / HLS 保护
     - 保持 `file_cleanup_enabled=false`，仅开 `file_cleanup_empty_dirs_enabled`
 
-15. **HLS 匿名播放未纳入鉴权**：AUTH_LOGIN 计划遗留的安全缺口，缓解方案（反代 `auth_request`，或 `/hls/*` 仅监听 127.0.0.1）仍停留在文档建议层面
+12. **HLS 匿名播放未纳入鉴权**：AUTH_LOGIN 计划遗留的安全缺口，缓解方案（反代 `auth_request`，或 `/hls/*` 仅监听 127.0.0.1）仍停留在文档建议层面
 
-16. **发布流程补一条**：镜像升级时同步校对生产 compose 是否需要更新（KB `skills/release-workflow/SKILL.md`）
+13. **发布流程补一条**：镜像升级时同步校对生产 compose 是否需要更新（KB `skills/release-workflow/SKILL.md`）
 
 ## P4 — 清理与技术债
 
-17. **超大 service 拆分**：`FileManageService.js`（~1200 行）、`RecorderService.js`（~900 行）
+14. **超大 service 拆分**：`FileManageService.js`（~1200 行）、`RecorderService.js`（~900 行）
 
-18. **`recording_files` 重命名为 `recordings`**：双表合并已完成，表名优化 + 按查询模式补索引 + 清理双表操作残留代码
+15. **`recording_files` 重命名为 `recordings`**：双表合并已完成，表名优化 + 按查询模式补索引 + 清理双表操作残留代码
 
-19. **文件管理 Task 7 缺项：删除前备份到 NAS 归档目录**（`FileManageService` 删除链路 + `backup.js`，与百度网盘备份不是同一条路线）
+16. **文件管理 Task 7 缺项：删除前备份到 NAS 归档目录**（`FileManageService` 删除链路 + `backup.js`，与百度网盘备份不是同一条路线）
 
-20. **EJS 中间件与依赖清理**：`server/router/html.js` 已全注释，相关依赖可移除以减小体积
+17. **EJS 中间件与依赖清理**：`server/router/html.js` 已全注释，相关依赖可移除以减小体积
 
-21. **v1.6.0 code review 的 21 个 LOW 级遗留项**：非阻塞，一直延后，建议挑一版集中收口
+18. **v1.6.0 code review 的 21 个 LOW 级遗留项**：非阻塞，一直延后，建议挑一版集中收口
 
-22. **斗鱼平台功能性修复**：v1.8.2 只更正了文档表述，未动 `DouyuChecker.js` / `signers/douyu.js` / `douyu-vip.js`（生产零斗鱼房间，不阻塞）
+19. **斗鱼平台功能性修复**：v1.8.2 只更正了文档表述，未动 `DouyuChecker.js` / `signers/douyu.js` / `douyu-vip.js`（生产零斗鱼房间，不阻塞）
 
-23. **目录结构收尾（可选）**：`PollingManager.js` / `watchdog.js` 两处冗余 require 路径；`scripts/` 中纯后端脚本（`ensure-db.js`、`transcode-missed.js`）移入 `server/scripts/`
+20. **目录结构收尾（可选）**：`PollingManager.js` / `watchdog.js` 两处冗余 require 路径；`scripts/` 中纯后端脚本（`ensure-db.js`、`transcode-missed.js`）移入 `server/scripts/`
 
 ## 待起草
 
-24. **ADR-013：扩展端弹幕本地持久化（IndexedDB）**
+21. **ADR-013：扩展端弹幕本地持久化（IndexedDB）**
     - ADR-012 方案 D，作为孤儿弹幕的前置防线：chrome-live-listener 在推送失败时本地落盘 + Blob 导出
     - 涉及扩展侧 `core/state.js` / `core/danmaku-session.js` / `manifest.json`（需 `unlimitedStorage`）
     - 注：ADR-012 Phase 1 的扩展侧止血（409 回填 buffer）已闭环，无需重做
+
 
 ## 暂缓 / 条件触发（有明确触发条件才做）
 

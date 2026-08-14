@@ -29,12 +29,17 @@ test/
 ├── hls-cleanup-service.test.js      # HLS 保留期与一致性删除测试
 ├── watchdog-hls.test.js             # 看门狗 HLS 状态过滤测试
 ├── directory-stats.test.js          # 目录递归大小统计测试
-├── file-manage-service.test.js      # 文件索引、安全校验与删除测试
+├── file-manage-service.test.js      # 文件索引、安全校验与删除测试（含 scanAllFiles 编排 + 删除任务进度）
 ├── file-manage-routes.test.js       # 文件管理 8 个 HTTP 路由集成测试
 ├── danmaku-path.test.js             # 弹幕 JSONL 路径生成（v1.8.0）
+├── danmaku-routes.test.js           # 弹幕查询接口 auth wall + search/raw 端到端
+├── remote-browser-client.test.js    # 远程浏览器 page/context 生命周期与超时清理
 ├── polling-kuaishou.test.js         # 快手轮询测试
 └── ...
 ```
+
+> 注：`path-safety` / `empty-directory-cleanup-service` / `video-processor` 三个用例依赖 `fs.symlinkSync` 与 POSIX 绝对路径，
+> 在 Windows 上会因 EPERM / 盘符前缀失败，属已知环境限制，需在 Linux（或容器）内验证。
 
 #### 测试覆盖率要求
 
