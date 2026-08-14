@@ -123,13 +123,6 @@
 
 ## 已完成 / 已作废
 
-- **v1.8.3**：快手 checker 收敛（删除浏览器版 `KuaishouChecker` + `KUAISHOU_CHECKER_MODE`，仅保留 `KuaishouAPIChecker`）、settings 死键清理（`submit_api` / `lines` / `threads` / `pool2_size` / `max_resume_retries`）、前端 FileType 死值清理、删除 `rollback_danmaku_fields.sql` 与 `docs/todo/FILE_MANAGEMENT_REQUIREMENTS.md`、AGENTS.md 与 KB 文档漂移收口
-- **v1.8.2**：`shared_scripts` 命名卷根治（镜像 snapshot + entrypoint 同步）、compose 合并整理、文档漂移修复
-- **v1.8.1**：孤儿弹幕兜底采集与时间戳区间回填（ADR-012 Phase 1-3）
-- **v1.8.0**：弹幕路径统一为 `danmaku/{sessionId}.jsonl`（ADR-011）、DROP 弹幕压制遗留表/列、file-manage 路由 HTTP 层测试补齐（49 用例）
-- **回放重复投稿修复**：`ReplayUploadService.getBlockingUploadRecord()` 阻断检查、`migrate.js:259` partial unique index（`status='uploading'`）、`ReplayProcessQueue` 的 `replay:queued:record:` Redis 去重键、相关测试覆盖
-- **ADR-011 跨项目改造**：danmaku-tool 侧 `utils.py` / `burn.py` / `ass.py` / `sessions.py` 已切换到扁平路径（扁平优先、旧路径兜底）
-- ~~移除自由投稿（FREE_UPLOAD）~~：v1.8.3 已在 KB `archive_plans/FREE_UPLOAD/FREE_UPLOAD_PLAN.md` 标注 `status: abandoned`（需求取消、代码零落地）
-- ~~测试弹幕视频压制~~：v1.8.0 起弹幕压制迁至独立的 [danmaku-tool](https://github.com/scriptsmay/danmaku-tool) 项目，本仓库不再承担压制相关的测试与生产化工作
-- ~~裁剪 bilibili / douyu / douyin 检查器~~：v1.8.0 计划中的裁剪候选，实际决策转向保留
-- ~~删除 `docker/Dockerfile.replay-cron` + `docker-compose.cron.yml`~~：判断已被推翻，replay_cron 在生产实际运行并依赖 `/mnt/scripts/cron-entrypoint.sh`
+> 已上线和已作废的历史记录不在本清单维护，完整归档见知识库：
+> `knowledge-personal/projects/live-recorder-server/`（`changelog/` 逐版本发布记录 + `_index.md` 近期活动）。
+> 本文件只保留待办与在途项。
