@@ -143,10 +143,10 @@ biliup --help
 
 | 变量 | 说明 |
 |---|---|
-| `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（CDP endpoint） |
+| `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（CDP endpoint，回放 m3u8 提取使用） |
 | `POLLING_KUAISHOU_COOKIE` | 快手 cookie |
 | `KUAISHOU_CHECKER_ENABLED` | 是否启用快手轮询（默认 true） |
-| `KUAISHOU_CHECKER_MODE` | `remote-browser`（默认）或 `api` |
+| `KUAISHOU_API_TIMEOUT_MS` | 快手 API 请求超时（默认 15000） |
 
 ## 定时任务
 

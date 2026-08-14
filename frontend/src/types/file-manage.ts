@@ -10,8 +10,6 @@ export type FileType =
   | 'replay_fixed'
   | 'replay_final'
   | 'danmaku_archive'
-  | 'danmaku_ass_cache'
-  | 'orphan'
 
 export type FileStatus = 'active' | 'deleting' | 'deleted' | 'missing'
 

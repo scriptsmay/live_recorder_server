@@ -133,34 +133,6 @@ const settingGroups: SettingGroup[] = [
     title: '上传设置',
     items: [
       {
-        key: 'submit_api',
-        label: '提交接口',
-        desc: 'biliup --submit 选项，留空为自动选择',
-        type: 'select',
-        options: ['', 'app', 'web', 'b-cut-android'],
-      },
-      {
-        key: 'lines',
-        label: '上传线路',
-        desc: 'b站上传线路选择，留空为自动',
-        type: 'select',
-        options: ['', 'bda', 'bda2', 'ws', 'qn', 'bldsa', 'tx', 'txa'],
-      },
-      {
-        key: 'threads',
-        label: '上传并发',
-        desc: '单文件并发上传数',
-        type: 'number',
-        attrs: { min: 1, max: 16 },
-      },
-      {
-        key: 'pool2_size',
-        label: '上传线程池大小',
-        desc: '负责上传事件的线程池大小',
-        type: 'number',
-        attrs: { min: 1, max: 20 },
-      },
-      {
         key: 'max_upload_limit',
         label: '上传重试次数限制',
         desc: '每个录制会话的上传次数上限，重启服务后重置。默认99（较大值以兼容旧用户），建议设为2-3',

@@ -838,13 +838,8 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 | `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成         |
 | `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除             |
 | `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间             |
-| `max_resume_retries`         | number | `3`      | 会话恢复重试次数，服务器启动时自动恢复录制会话的最大重试次数 |
 | `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                    |
 | `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件          |
-| `submit_api`                 | string | -        | 外部投稿 API 地址                                            |
-| `lines`                      | string | `1`      | 上传线路                                                     |
-| `threads`                    | string | `8`      | 上传线程数                                                   |
-| `pool2_size`                 | string | `1`      | 上传线程池大小                                               |
 | `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                                 |
 | `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件                |
 | `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                        |

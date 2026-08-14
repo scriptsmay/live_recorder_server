@@ -34,8 +34,6 @@ const fileTypeLabels: Record<FileType, string> = {
   replay_fixed: '回放修复',
   replay_final: '回放成品',
   danmaku_archive: '弹幕归档',
-  danmaku_ass_cache: 'ASS 缓存',
-  orphan: '孤儿文件',
 }
 
 const statusStyles: Record<string, string> = {

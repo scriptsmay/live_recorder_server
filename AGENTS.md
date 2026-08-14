@@ -45,13 +45,12 @@
 │   │   │   ├── BilibiliChecker.js   # B 站
 │   │   │   ├── DouyinChecker.js     # 抖音
 │   │   │   ├── DouyuChecker.js      # 斗鱼
-│   │   │   ├── KuaishouChecker.js   # 快手（默认远程浏览器模式）
-│   │   │   ├── KuaishouAPIChecker.js # 快手（KUAISHOU_CHECKER_MODE=api 时启用）
+│   │   │   ├── KuaishouAPIChecker.js # 快手（HTTP API 直连，唯一快手 checker）
 │   │   │   ├── signers/             # 签名模块（douyin.js / douyu.js / douyu-vip.js）
 │   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
 │   │   │   └── index.js
 │   │   ├── browser/       # 远程浏览器
-│   │   │   └── RemoteBrowserClient.js  # Browserless CDP 客户端（快手轮询 / 回放 m3u8 提取共用）
+│   │   │   └── RemoteBrowserClient.js  # Browserless CDP 客户端（回放 m3u8 提取使用）
 │   │   ├── proc-log.js     # 进程日志
 │   │   ├── scan-files.js   # 文件扫描
 │   │   ├── transcoder.js   # 视频转码
@@ -150,6 +149,11 @@ npm run lint && npm run format && npm run test
 - `GET /api/settings` —— 查询全局设置列表
 - `PUT /api/settings/:key` —— 更新全局设置项
 
+### 两个"扫描"端点的区别（易混淆）
+
+- `POST /api/scan_files`（`server/router/api.js`）—— **磁盘文件追踪扫描**。扫 `VIDEO_DOWNLOAD_DIR`，把未跟踪文件写入 `recording_files` 并标 `orphaned`，缺失文件标 `missing`。5 分钟冷却
+- `POST /api/files/scan`（`server/router/file-manage.js`）—— **文件管理索引扫描**。`FileManageService.scanAllFiles()` 编排四个子扫描器（recording_files / HLS 目录 / 回放产物 / 弹幕归档）写入 `managed_files`，并刷新磁盘存在状态。带锁，供文件管理页使用
+
 ### 弹幕
 
 > 弹幕压制（ASS 生成 + 硬字幕烧录）已于 v1.7.0 迁出至独立的 danmaku-tool 项目，相关端点已下线。本服务只负责弹幕采集与查询。
@@ -198,16 +202,16 @@ npm run lint && npm run format && npm run test
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
 - `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`
 - **鉴权**：`AUTH_ENABLED`（设为 `false` 关闭；其他值均视为开启）、`ADMIN_USERNAME`（默认 `admin`）、`AUTH_TOKEN_TTL_HOURS`（24）、`AUTH_COOKIE_NAME`（`auth_token`）、`AUTH_COOKIE_SECURE`、`LOGIN_RATE_LIMIT`（5）、`LOGIN_LOCKOUT_MIN`（5）。首次启动 `admin_users` 表为空时，`server/lib/core/auth-init.js` 自动生成随机密码并输出到启动日志；session 存 Redis `auth:session:{token}`。启用时未带 cookie 的 curl 会被 auth wall 拦截
-- **远程浏览器 / Browserless**：`REMOTE_BROWSER_WS_ENDPOINT`（`server/lib/core/browser/RemoteBrowserClient.js` 用于快手轮询 remote-browser 模式和回放 m3u8 提取）、`BROWSERLESS_TOKEN`、`BROWSERLESS_CONCURRENT`、`BROWSERLESS_QUEUED`、`BROWSERLESS_TIMEOUT_MS`
-- **快手轮询**：`KUAISHOU_CHECKER_ENABLED`（默认 true）、`KUAISHOU_CHECKER_MODE`（默认 remote-browser，`api` 切 HTTP 直连）、`POLLING_KUAISHOU_COOKIE`
+- **远程浏览器 / Browserless**：`REMOTE_BROWSER_WS_ENDPOINT`（`server/lib/core/browser/RemoteBrowserClient.js`，v1.8.3 起仅用于回放 m3u8 提取）、`BROWSERLESS_TOKEN`、`BROWSERLESS_CONCURRENT`、`BROWSERLESS_QUEUED`、`BROWSERLESS_TIMEOUT_MS`
+- **快手轮询**：`KUAISHOU_CHECKER_ENABLED`（默认 true）、`KUAISHOU_API_TIMEOUT_MS`（默认 15000）、`POLLING_KUAISHOU_COOKIE`
 - **弹幕归档**：`DANMAKU_ARCHIVE_DIR`（生产 `/data/danmaku_archive`）—— 未废弃。FileManageService 以 `file_type=danmaku_archive` 索引归档 JSONL 并标记不可自动清理。v1.8.0 只删除了 `DANMAKU_OUTPUT_DIR`
 
 ## 直播轮询 (Polling)
 
 - **策略模式**：`server/lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `server/lib/core/polling/checkers.js`
-- **已注册检查器**（`checkers.js`）：`huya`（HuyaChecker）、`bilibili`（BilibiliChecker）、`douyu`（DouyuChecker）、`douyin`（DouyinChecker）、`kuaishou`（根据 `KUAISHOU_CHECKER_MODE` 切换 KuaishouChecker/KuaishouAPIChecker）
+- **已注册检查器**（`checkers.js`）：`huya`（HuyaChecker）、`bilibili`（BilibiliChecker）、`douyu`（DouyuChecker）、`douyin`（DouyinChecker）、`kuaishou`（KuaishouAPIChecker）
 - **虎牙检查器**：`server/lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
-- **快手检查器**：默认使用远程 Browserless/Chromium 浏览器（`RemoteBrowserClient`），`KUAISHOU_CHECKER_MODE=api` 时切换为 HTTP API 直连模式（无需浏览器）。受 `KUAISHOU_CHECKER_ENABLED` 控制开关
+- **快手检查器**：`server/lib/core/polling/KuaishouAPIChecker.js` — HTTP API 直连（`live_api/liveroom/livedetail` 为主，`live_api/profile/public` 兜底），不依赖浏览器。受 `KUAISHOU_CHECKER_ENABLED` 控制开关。v1.8.3 起浏览器版 checker 与 `KUAISHOU_CHECKER_MODE` 已移除
 - **轮询管理器**：`server/lib/core/polling/PollingManager.js` — 单例
   - 启动时只检查一次所有 `polling_enabled=true` 房间的状态（无定时器）
   - `reloadRoom()` 控制定时轮询：新增/修改房间时启动定时器，按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
@@ -278,6 +282,16 @@ VIDEO_DOWNLOAD_DIR/
   - 向 `POST /api/notify/live_download` 推送直播流 URL
   - 向 `GET /api/notify/status` 查询录制状态
   - 两端 API 契约变更时需同步修改
+
+### scripts/ 脚本用途
+
+- `cron-entrypoint.sh` —— cron 容器入口，v1.8.2 起 entrypoint 用镜像内 `scripts` 同步到 `shared_scripts` named volume（`scripts.image` 机制）
+- `replay-cron.sh` —— 回放定时任务（`docker-compose.cron.yml` 使用，依赖 `/mnt/scripts/cron-entrypoint.sh`）
+- `sync-records.sh` / `sync-db-tables.sh` —— 生产/开发数据库记录与表结构同步
+- `migrate-danmaku-paths.js` —— 弹幕 JSONL 存量路径迁移（ADR-011 扁平路径，手动执行）
+- `ensure-db.js` / `backup-db.sh` —— 数据库就绪检查 / 备份
+- `test-checker.js` —— 各平台 checker 独立冒烟测试脚本
+- `release.js` —— 版本号发布（patch/minor/major bump）
 
 ### 开发和测试文档
 

@@ -129,7 +129,7 @@ npm run stop
 │   │   │   ├── BilibiliChecker.js     ← B 站
 │   │   │   ├── DouyuChecker.js        ← 斗鱼
 │   │   │   ├── DouyinChecker.js       ← 抖音
-│   │   │   ├── KuaishouChecker.js     ← 快手（HTTP GET 页面提取）
+│   │   │   ├── KuaishouAPIChecker.js  ← 快手（HTTP API 直连）
 │   │   │   └── PollingManager.js      ← 轮询管理器（定时调度、状态转换检测）
 │   │   ├── TranscodeQueue.js       ← 转码队列（Redis 队列 + 并发控制）
 │   │   ├── transcoder.js           ← 视频转码（FFmpeg -c copy TS → MP4）

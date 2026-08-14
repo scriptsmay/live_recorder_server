@@ -59,7 +59,7 @@ Chrome Extension (danmaku)
 - `server/lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
 - `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder writes JSONL only; ASS/burn moved out)
 - `server/lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
-- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`). Checkers: `HuyaChecker`, `BilibiliChecker`, `DouyinChecker`, `DouyuChecker`, `KuaishouChecker` (remote-browser) / `KuaishouAPIChecker` (HTTP API, selected via `KUAISHOU_CHECKER_MODE=api`). Signature helpers under `signers/` (douyin, douyu, douyu-vip)
+- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`). Checkers: `HuyaChecker`, `BilibiliChecker`, `DouyinChecker`, `DouyuChecker`, `KuaishouAPIChecker` (HTTP API direct, the only Kuaishou checker since v1.8.3). Signature helpers under `signers/` (douyin, douyu, douyu-vip)
 - `server/lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
 - `server/db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
 - `public/` — static assets, `frontend/` — Vue SPA source

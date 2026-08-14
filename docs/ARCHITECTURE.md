@@ -498,9 +498,7 @@ PollingManager (单例)
 │   │                          signers/douyu.js (完整签名 + 单飞机制)
 │   │                          signers/douyu-vip.js (VIP房间 JS 签名)
 │   ├── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
-│   └── kuaishou → KuaishouChecker (RemoteBrowserClient + __INITIAL_STATE__)
-├── RemoteBrowserClient
-│   └── browserless/Chromium (REMOTE_BROWSER_WS_ENDPOINT)
+│   └── kuaishou → KuaishouAPIChecker (live_api/liveroom/livedetail + profile/public)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
 ```
@@ -556,17 +554,18 @@ PollingManager (单例)
 - **画质选择**：支持 `rate` 参数选择画质等级
 - **流格式检测**：自动判断 HLS (m3u8) 或 FLV 格式
 
-### KuaishouChecker 实现要点
+### KuaishouAPIChecker 实现要点
 
-- 依赖 `playwright-core` 连接远程 Browserless/Chromium，不下载本地浏览器。
-- 每次检查通过 `RemoteBrowserClient.withPage()` 创建 browser context 和 page，结束后在 `finally` 中关闭，避免僵尸页面泄漏。
+- HTTP API 直连，不依赖浏览器：`live_api/liveroom/livedetail` 为主，失败时回退 `live_api/profile/public`。
 - `POLLING_KUAISHOU_COOKIE` 作为快手直播轮询和回放工具箱共享的访问态 cookie。
-- 默认启用轻量人类行为模拟：页面状态 ready 后、数据提取前随机等待并滚动。超时、等待、backoff、UA、session TTL 和行为模拟参数均使用系统常量，不暴露为用户配置。
-- 读取快手直播页 `window.__INITIAL_STATE__.liveroom.playList[activeIndex]` 判断主播名、开播状态和 FLV 地址。
+- 超时可通过 `KUAISHOU_API_TIMEOUT_MS` 调整（默认 15000）；房间/平台轮询间隔与 backoff 使用系统常量，不暴露为用户配置。
+- 房间名为空时回退抓取 `/u/{principalId}` 页面 title，结果缓存到 Redis（TTL 24h）。
 - 风控、验证码、`请求过快`、`400002` 均视为未知状态并抛错，不写成 `isLive=false`。
-- FLV 选择优先 H.264，缺失时 fallback 到 H.265/HEVC。
+- FLV 选择优先 H.264，缺失时 fallback 到 HEVC/H.265。
 - 快手平台级并发固定为 1；跨房间通过 Redis `kuaishou:checker:platform_lock` 和 `kuaishou:checker:platform_last_poll` 串行限速。
 - 任一房间触发风控后写入房间 backoff 和平台级 backoff，保留上一轮 Redis 直播状态。
+
+> v1.8.3 起浏览器版 `KuaishouChecker`（Browserless + `__INITIAL_STATE__`）已移除，快手仅保留 API 直连。`RemoteBrowserClient` 仍保留，供回放 m3u8 提取使用。
 
 ### 轮询流程
 
@@ -583,7 +582,7 @@ server/router/rooms.js (新增/修改房间)
             ├─ pollRoom(room)                       # 首次立即执行（0~5s jitter）
             │    └─ checkRoom(room)
             │         ├─ PlatformChecker.checkStatus()   # 平台 API
-            │         │    └─ KuaishouChecker 使用平台级 Redis 锁串行访问 Browserless
+            │         │    └─ KuaishouAPIChecker 使用平台级 Redis 锁串行访问快手 API
             │         ├─ 状态转换检测 (wasLive→isLive)
             │         ├─ Redis SET (TTL=interval×2)      # 瞬时状态缓存
             │         └─ _tryStartRecording()             # 开播触发录制
@@ -610,7 +609,7 @@ server/router/rooms.js (新增/修改房间)
 - **状态转换判定**：仅 `!wasLive && isLive` 触发录制
 - **防重复**：`RecorderService.startRecording()` 有 Redis `active_task` 保护
 - **jitter**：0~5s 随机延迟防惊群
-- **快手平台级串行**：同一 Browserless 出口下快手房间不并发检查，并限制跨房间连续页面加载间隔
+- **快手平台级串行**：快手房间不并发检查，并限制跨房间连续 API 请求间隔
 
 ### 扩展新平台
 

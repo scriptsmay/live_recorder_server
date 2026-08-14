@@ -324,7 +324,7 @@ async function runMigration() {
     // 生产存量（2026-08-11 实测）：recording_files.danmaku_ass_path 101 行非空、
     // danmaku_capture_records.ass_path 64 行非空、danmaku_burn_records 4 行、
     // danmaku_free_burn_records 0 行。DROP 会丢弃这些历史记录，已获用户确认。
-    // 回滚：结构见 server/db/rollback_danmaku_fields.sql；数据需从 pg_dump 备份恢复。
+    // 回滚：结构需从 pg_dump 备份恢复（v1.8.3 起回滚脚本已移除，DROP 已稳定运行多版本）。
     await client.query(`ALTER TABLE recording_files DROP COLUMN IF EXISTS danmaku_ass_path`);
 
     // ========== settings ==========
@@ -401,12 +401,7 @@ async function runMigration() {
       ['watchdog_timeout', '60'],
       ['filtering_threshold', '10'],
       ['delay', '60'],
-      ['submit_api', ''],
-      ['lines', ''],
-      ['threads', '3'],
-      ['pool2_size', '3'],
       ['max_upload_limit', '99'],
-      ['max_resume_retries', '3'],
       ['auto_transcode', 'true'],
       ['transcode_delete_originals', 'true'],
       ['transcode_concurrency', '3'],

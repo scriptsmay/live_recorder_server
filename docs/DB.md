@@ -267,12 +267,7 @@ KV 结构的全局配置表。
 | `watchdog_timeout`                | `60`               | 录制状态检查超时（秒），超过则标记为完成                                       |
 | `filtering_threshold`             | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                   |
 | `delay`                           | `60`               | 下播延迟检测（秒）                                                             |
-| `submit_api`                      | ``                 | biliup --submit 选项，留空为自动                                               |
-| `lines`                           | ``                 | 上传线路，留空为自动                                                           |
-| `threads`                         | `3`                | 单文件并发上传数                                                               |
-| `pool2_size`                      | `3`                | 上传线程池大小                                                                 |
 | `max_upload_limit`                | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                     |
-| `max_resume_retries`              | `3`                | 会话崩溃后最大恢复重试次数                                                     |
 | `auto_transcode`                  | `true`             | 是否自动转码 FLV 到 MP4                                                        |
 | `transcode_delete_originals`      | `true`             | 转码后是否删除原 FLV 文件                                                      |
 | `transcode_concurrency`           | `3`                | 转码队列并发数，控制同时处理的转码任务数                                       |
@@ -331,7 +326,7 @@ KV 结构的全局配置表。
 | `danmaku_capture_records.ass_path` | 列   | `DROP COLUMN IF EXISTS`（约 L384） |
 
 - 这是**不可逆的数据删除**，升级前请 `bash scripts/backup-db.sh` 或 `pg_dump` 备份。
-- 列结构回滚脚本：`server/db/rollback_danmaku_fields.sql`（仅恢复列定义，数据需从备份还原）。
+- 列结构需从 `pg_dump` 备份还原（v1.8.3 起独立回滚脚本已移除，DROP 已稳定运行多版本）。
 - 弹幕 JSONL 的存量路径迁移是**独立的手动步骤**，见 `scripts/migrate-danmaku-paths.js`（详见 `docs/DEV.md`）。
 
 ---

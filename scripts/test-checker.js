@@ -27,7 +27,7 @@ require('../server/config/env').initEnv();
 const { detectPlatform } = require('../server/lib/utils/platform-detector');
 const checkers = require('../server/lib/core/polling/checkers');
 const PlatformChecker = require('../server/lib/core/polling/PlatformChecker');
-const KuaishouChecker = require('../server/lib/core/polling/KuaishouChecker');
+const KuaishouChecker = require('../server/lib/core/polling/KuaishouAPIChecker');
 
 // ─── ANSI colors ───────────────────────────────────────────────────────────────
 
