@@ -134,12 +134,20 @@ TGT_DB="${TGT_DB:-${DB_NAME:-live_recorder}}"
 TGT_USER="${TGT_USER:-${DB_USER:-postgres}}"
 TGT_PASSWORD="${TGT_PASSWORD:-${DB_PASSWORD:-}}"
 
-# 源（生产）DB 配置：环境变量 > .env 连接参数 > 默认值（NAS）
-SRC_HOST="${SRC_HOST:-${DB_HOST:-192.168.0.247}}"
-SRC_PORT="${SRC_PORT:-${DB_PORT:-15432}}"
+# 源（生产）DB 配置：环境变量 > .env / .env.dev 中的 SRC_* > .env 的 DB_* 连接参数
+# 注意：本仓库为公开仓库，不在脚本里硬编码生产地址，缺省时直接报错退出
+SRC_HOST="${SRC_HOST:-${DB_HOST:-}}"
+SRC_PORT="${SRC_PORT:-${DB_PORT:-5432}}"
 SRC_DB="${SRC_DB:-live_recorder}"
 SRC_USER="${SRC_USER:-${DB_USER:-postgres}}"
 SRC_PASSWORD="${SRC_PASSWORD:-${DB_PASSWORD:-}}"
+
+if [ -z "$SRC_HOST" ]; then
+  warn "未配置源（生产）数据库地址"
+  echo "  请在 .env / .env.dev 中设置 SRC_HOST（可选 SRC_PORT），或通过环境变量传入："
+  echo "    SRC_HOST=<prod-host> SRC_PORT=<prod-port> $0 $*"
+  exit 1
+fi
 
 # ── 依赖检查 ──────────────────────────────────────────
 for cmd in pg_dump psql; do
