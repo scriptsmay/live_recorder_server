@@ -362,12 +362,13 @@ class UploadService {
   /**
    * 由看门狗调用：扫描已完成且转码就绪的会话，按直播间模板自动投稿
    * 查询最近7天内完成、未删除、配置了上传模板且没有成功/进行中上传记录的会话
+   * 会话行用 rs.* 整行透传给 executeUpload，避免手工挑字段导致模板变量缺失（如 caption）
    * @returns {Promise<void>}
    */
   static async scanPendingAutoUpload() {
     try {
       const { rows } = await pool.query(
-        `SELECT rs.id, rs.room_url, rs.started_at, rs.ended_at, r.room_name, r.upload_template_id
+        `SELECT rs.*, r.room_name, r.upload_template_id
          FROM recording_sessions rs
          INNER JOIN rooms r ON r.room_url = rs.room_url
          WHERE rs.status = 'completed'
@@ -397,100 +398,11 @@ class UploadService {
         if (!(await this.checkUploadLimit(row.id))) continue;
         if (await this.hasBlockingUploadRecord(row.id)) continue;
 
-        const session = {
-          id: row.id,
-          room_url: row.room_url,
-          room_name: row.room_name,
-          started_at: row.started_at,
-          ended_at: row.ended_at,
-        };
         console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
-        await this.executeUpload(session, tmpl);
+        await this.executeUpload(row, tmpl);
       }
     } catch (err) {
       console.error('[UploadService][投稿] 扫描失败:', err.message);
-    }
-  }
-
-  /**
-   * 查找并执行自动上传
-   * 通过Redis分布式锁防止并发执行，检查各种前置条件后执行上传
-   * @param {Object} session - 录制会话对象
-   * @param {string} session.id - 会话ID
-   * @param {string} session.room_url - 直播间URL
-   * @param {string} session.room_name - 直播间名称
-   * @param {Date|string} session.started_at - 会话开始时间
-   * @returns {Promise<void>}
-   */
-  static async findAndAutoUpload(session) {
-    const lockKey = `lock:auto_upload:${session.id}`;
-    try {
-      const acquired = await redis.set(lockKey, '1', { EX: 300, NX: true });
-      if (!acquired) {
-        console.log(`[投稿] 会话 ${session.id} 正在执行中，跳过`);
-        return;
-      }
-    } catch (_) {}
-
-    try {
-      // 检查是否已跳过上传
-      if (await this.isUploadSkipped(session.id)) {
-        console.log(`[投稿] 会话 ${session.id} 已达上传限制，跳过`);
-        return;
-      }
-      if (!(await this.checkUploadLimit(session.id))) return;
-
-      // 检查是否已有上传记录
-      const existingRecords = await pool.query('SELECT id, status FROM upload_records WHERE session_id = $1 LIMIT 1', [
-        session.id,
-      ]);
-      if (existingRecords.rows.length > 0) {
-        console.log(`[投稿] 会话 ${session.id} 已有投稿记录，跳过自动投稿`);
-        return;
-      }
-
-      // 检查会话状态是否为completed
-      const sess = await pool.query('SELECT status FROM recording_sessions WHERE id = $1', [session.id]);
-      if (sess.rows.length === 0 || sess.rows[0].status !== 'completed') {
-        console.log(`[投稿] 会话 ${session.id} 状态非 completed (${sess.rows[0]?.status || '不存在'})，跳过自动投稿`);
-        return;
-      }
-
-      // 检查转码是否完成
-      if (!(await this.isSessionTranscodeComplete(session.id))) {
-        console.log(`[投稿] 会话 ${session.id} 转码未完成，跳过自动投稿（等待看门狗兜底）`);
-        return;
-      }
-
-      // 获取直播间的上传模板配置
-      let tmpl = null;
-
-      const roomResult = await pool.query('SELECT upload_template_id FROM rooms WHERE room_url = $1', [
-        session.room_url,
-      ]);
-      if (roomResult.rows.length > 0 && roomResult.rows[0].upload_template_id) {
-        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [
-          roomResult.rows[0].upload_template_id,
-        ]);
-        if (tmplResult.rows.length > 0) {
-          tmpl = tmplResult.rows[0];
-        }
-      }
-
-      if (!tmpl) {
-        console.log(`[投稿] 会话 ${session.id} 直播间未配置投稿模板，跳过`);
-        return;
-      }
-
-      if (!tmpl.cookies_path) {
-        console.log(`[投稿] 模板 ${tmpl.id} 未配置 cookies_path，跳过`);
-        return;
-      }
-
-      // 执行上传
-      await this.executeUpload(session, tmpl);
-    } catch (err) {
-      console.error('[投稿] 失败:', err.message);
     }
   }
 }
