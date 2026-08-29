@@ -205,7 +205,9 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 > **v1.7.0 变更**：`room_url` 列已删除。模板不再与特定直播间绑定，改为由 `rooms.upload_template_id` 反向引用。
 
-**模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}` `{H}` `{M}` `{D}` `{duration}` `{duration_mins}` `{duration_hour}`
+**直播投稿模板变量：** `{room_name}` `{room_url}` `{caption}` `{date}` `{datetime}` `{YYYY}` `{MM}` `{DD}` `{HH}` `{mm}` `{ss}` `{H}` `{M}` `{D}` `{duration_mins}`
+
+其中 `{duration_mins}` 为根据录制时长计算的分钟数。`{duration}`、`{duration_hour}` 是回放投稿专用变量，分别表示格式化后的时长和小时数；直播投稿不会提供这两个变量。回放投稿中的 `{caption}` 当前固定为空值。
 
 ### upload_records — 投稿记录
 

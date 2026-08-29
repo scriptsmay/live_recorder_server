@@ -851,6 +851,10 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 
 ## 投稿模板
 
+标题、简介、标签和来源字段支持模板变量。直播投稿可用变量为 `{room_name}`、`{room_url}`、`{caption}`、`{date}`、`{datetime}`、`{YYYY}`、`{MM}`、`{DD}`、`{HH}`、`{mm}`、`{ss}`、`{H}`、`{M}`、`{D}` 和 `{duration_mins}`。其中 `{duration_mins}` 为根据录制时长计算的分钟数。
+
+回放投稿另外支持 `{duration}`、`{duration_hour}`、`{principal_name}`、`{principal_id}`、`{replay_date}`、`{replay_time}` 和 `{replay_id}`；回放记录当前没有直播简介字段，因此 `{caption}` 在回放投稿中为空。
+
 ### GET /api/upload_templates
 
 查询所有投稿模板列表。
