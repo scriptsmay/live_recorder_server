@@ -211,6 +211,13 @@ async function main() {
   // 2. 尝试用 AI 生成摘要
   let aiSummary = await generateReleaseNoteAI(rawCommits);
 
+  // 自动模式必须依赖 AI 生成结果，失败时立即退出，避免在没有有效 Release Note
+  // 的情况下继续改版本、创建 tag 并推送。
+  if (isAuto && !aiSummary) {
+    console.error('❌ 自动发版中止：AI Release Note 生成失败。');
+    process.exit(1);
+  }
+
   // 3. 打印 AI 结果，并给人工一次确认或修改的机会
   if (aiSummary) {
     console.log('------ AI 建议的 Release Note ------');
