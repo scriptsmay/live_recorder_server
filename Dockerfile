@@ -1,5 +1,5 @@
 # 阶段 1: 构建前端
-FROM node:22-bookworm-slim AS frontend-builder
+FROM node:22-trixie-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -10,7 +10,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # 阶段 2: 构建后端依赖
-FROM node:22-bookworm-slim AS builder
+FROM node:22-trixie-slim AS builder
 
 WORKDIR /app
 
@@ -21,20 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 阶段3：下载并解压 FFmpeg 7.1 静态二进制文件
-# 使用 BtbN GitHub Release（GitHub CDN，构建时走内网，稳定可靠）
-# 使用 release/tag/latest 下的 n7.1 自动构建资产，避免 master nightly
-FROM alpine:latest AS ffmpeg-downloader
-RUN apk add --no-cache curl tar xz
-RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
-        -o /tmp/ffmpeg.tar.xz \
-    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
-    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
-    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
-    && rm -rf /tmp/ffmpeg*
-
 # 阶段 4: 运行环境
-FROM node:22-bookworm-slim
+FROM node:22-trixie-slim
 
 ENV LANG=C.UTF-8 \
     NODE_ENV=production \
@@ -43,16 +31,9 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# 从阶段 3 复制最新的 ffmpeg 和 ffprobe（直接注入，无需 apt 安装）
-COPY --from=ffmpeg-downloader /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
-
-# 这里去掉了 ffmpeg 安装
-# fontconfig + fonts-noto-cjk：弹幕压制 libass 渲染 CJK 字幕必需
+# ffmpeg/mkvtoolnix：视频处理和封装
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl mkvtoolnix python3 python3-pip \
-    fontconfig fonts-noto-cjk \
-    && fc-cache -fv \
+    ffmpeg ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \

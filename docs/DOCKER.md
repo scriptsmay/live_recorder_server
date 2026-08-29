@@ -72,7 +72,7 @@ v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app
 
 ### 运行时依赖
 
-主服务镜像使用 BtbN n7.1 静态 FFmpeg 构建。不要在镜像中注入 nightly 静态 FFmpeg；生产环境曾出现静态构建在快手 FLV 直播流输入上启动即 `SIGSEGV`。
+主服务镜像基于 `node:22-trixie-slim`，通过 Debian Trixie 软件源安装 FFmpeg。这样避免依赖第三方 Release 的滚动资产文件名；FFmpeg 版本随 Debian 安全更新维护。
 
 ### 持久化目录
 
@@ -90,11 +90,10 @@ v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app
 | 组件 | 说明 |
 |---|---|
 | Node.js 22 | 运行时 |
-| FFmpeg | 录制、转码（BtbN n7.1 静态构建） |
+| FFmpeg | 录制、转码（Debian Trixie 软件包） |
 | mkvmerge | 视频切片（mkvtoolnix） |
 | yt-dlp | 回放下载（通过 uv tool 安装） |
 | biliup | B 站投稿（通过 uv tool 安装） |
-| fontconfig + CJK 字体 | 弹幕压制 libass 渲染所需 |
 
 ## .env 配置参考
 
