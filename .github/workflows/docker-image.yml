@@ -24,13 +24,13 @@ jobs:
 
     steps:
       - name: 1. Checkout repository 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 2. Set up Docker Buildx 配置高阶构建环境
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: 3. Log in to the Container registry 登录镜像库
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -38,7 +38,7 @@ jobs:
 
       - name: 4. Extract metadata 自动生成镜像标签
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -48,7 +48,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
       - name: 5. Build and push Docker image 构建并推送
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile

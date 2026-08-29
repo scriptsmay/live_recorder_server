@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: 1. Log in to GHCR 登录镜像库
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
