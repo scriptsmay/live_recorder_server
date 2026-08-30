@@ -19,7 +19,6 @@ const {
   decodeString,
 } = require('../server/lib/core/danmaku/codec/stt');
 const {
-  DouyuDanmakuClient,
   extractRoomId,
   buildPacket,
   parseFrames,

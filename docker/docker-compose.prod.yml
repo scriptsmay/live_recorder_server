@@ -14,6 +14,9 @@ services:
       KUAISHOU_CHECKER_ENABLED: ${KUAISHOU_CHECKER_ENABLED:-true}
       POLLING_KUAISHOU_COOKIE: ${POLLING_KUAISHOU_COOKIE:-}
       POLLING_DOUYIN_COOKIE: ${POLLING_DOUYIN_COOKIE:-}
+      DANMAKU_NATIVE_PLATFORMS: ${DANMAKU_NATIVE_PLATFORMS:-}
+      DOUYIN_TTWID: ${DOUYIN_TTWID:-}
+      BILIBILI_DANMAKU_COOKIE: ${BILIBILI_DANMAKU_COOKIE:-}
     volumes:
       # 与主镜像 scripts 同步的 named volume（v1.8.2 起 entrypoint 会用镜像内
       # /app/scripts.image 刷新此挂载点，让 replay_cron ro 挂载能读到最新脚本）

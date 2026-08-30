@@ -15,7 +15,6 @@ jest.mock('../server/services/DataService', () => ({
 const pool = require('../server/db/index');
 const DanmakuRecorder = require('../server/lib/core/danmaku/DanmakuRecorder');
 const { TarsWriter } = require('../server/lib/core/danmaku/codec/tars/writer');
-const { TarsReader } = require('../server/lib/core/danmaku/codec/tars/reader');
 const { buildRegisterPacket } = require('../server/lib/core/danmaku/client/platforms/huya');
 
 jest.mock('axios', () => ({

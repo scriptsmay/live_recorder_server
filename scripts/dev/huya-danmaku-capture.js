@@ -170,7 +170,7 @@ function collectStringsStrict(r, depth, prefix) {
   }
 }
 
-function analyzeDanmakuBody(body, frameNo) {
+function analyzeDanmakuBody(body) {
   strings.length = 0;
   try {
     collectStringsStrict(new TarsReader(body), 0, '');
@@ -195,7 +195,7 @@ function parseFrame(buf) {
         const body = ir.readBytes(2);
         if (body) {
           stats.danmaku++;
-          const layout = analyzeDanmakuBody(body, stats.danmaku);
+          const layout = analyzeDanmakuBody(body);
           if (stats.danmaku <= 8) {
             console.log(`[danmaku #${stats.danmaku}] 弹幕体字段布局:`);
             for (const s of layout) {
@@ -246,7 +246,7 @@ async function main() {
     }, 60000);
     ws._hbTimer = hbTimer;
   });
-  ws.on('message', (data, isBinary) => {
+  ws.on('message', (data) => {
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
     dumpFrame('S2C', buf, '');
     try {

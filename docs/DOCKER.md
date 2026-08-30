@@ -147,6 +147,18 @@ biliup --help
 | `KUAISHOU_CHECKER_ENABLED` | 是否启用快手轮询（默认 true） |
 | `KUAISHOU_API_TIMEOUT_MS` | 快手 API 请求超时（默认 15000） |
 
+## 服务端原生弹幕采集（v1.10.0）
+
+录制会话期间由服务端直连各平台弹幕服务（虎牙/斗鱼 TCP、B站/抖音 WS），弹幕落盘 `danmaku/{sessionId}.jsonl`，格式与扩展推送路径完全一致。**默认全关**，通过白名单灰度：
+
+| 变量 | 说明 |
+|---|---|
+| `DANMAKU_NATIVE_PLATFORMS` | 逗号分隔平台白名单（`huya,bilibili,douyu,douyin`），留空 = 全关（行为与 v1.9.0 一致） |
+| `DOUYIN_TTWID` | 抖音 ttwid cookie；douyin 平台必需，缺省用内置值（有时效风险）。抖音客户端定位为「尽力而为」，签名/凭证随时可能失效 |
+| `BILIBILI_DANMAKU_COOKIE` | B站 cookie（可选）；用于缓解 getDanmuInfo -352 风控 |
+
+灰度顺序建议：先 `huya` 观察一个完整录制周期，再开 `bilibili,douyu`；`douyin` 默认不开、按需显式加白名单。弹幕采集异常只导致 JSONL 缺失 + 告警日志，绝不影响录制主流程。
+
 ## 定时任务
 
 定时任务独立在 `docker-compose.cron.yml` 中。
