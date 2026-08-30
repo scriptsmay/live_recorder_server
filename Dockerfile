@@ -21,6 +21,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
+# 阶段 3: 下载并解压 FFmpeg 7.1 静态二进制文件
+# 使用 BtbN GitHub Release（release/7.1 分支自动构建，稳定可靠）
+# v1.8.6 曾切到 Debian trixie apt 包（7.1.5-0+deb13u1），生产实测对虎牙 FLV 流
+# 出现 "Timestamps are unset" 且 segment 切割点漂移（52 号会话首段 2h35m/9.7GB），
+# 回退为 v1.8.3 同源 BtbN 静态构建
+FROM alpine:latest AS ffmpeg-downloader
+RUN apk add --no-cache curl tar xz
+RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
+        -o /tmp/ffmpeg.tar.xz \
+    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
+    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
+    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
+    && rm -rf /tmp/ffmpeg*
+
 # 阶段 4: 运行环境
 FROM node:22-trixie-slim
 
@@ -31,9 +45,11 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# ffmpeg/mkvtoolnix：视频处理和封装
+# ffmpeg 从 BtbN 静态构建注入（阶段 3），apt 不再安装；mkvtoolnix：封装
+COPY --from=ffmpeg-downloader /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg ca-certificates curl mkvtoolnix python3 python3-pip \
+    ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \
