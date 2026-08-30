@@ -13,6 +13,7 @@ const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const { SUPPORTED_EXT_REGEX } = require('../config/config');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { fetchRoomCoverByUrl } = require('../lib/core/polling/checkers');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
@@ -570,6 +571,22 @@ class RecorderService {
   }
 
   /**
+   * 解析录制会话的封面 URL
+   *
+   * 优先使用调用方传入的 roomCover（轮询路径 / API 请求体 cover_url）；
+   * 缺失时按 room_url 反查平台 checker 自取一次（best-effort，失败返回空串）。
+   *
+   * @param {Object} params
+   * @param {string} params.roomCover - 调用方传入的封面 URL（可为空）
+   * @param {string} params.roomUrl - 房间 URL
+   * @returns {Promise<string>} 封面 URL，取不到为空串
+   */
+  static async _resolveRecordingCover({ roomCover, roomUrl }) {
+    if (roomCover) return roomCover;
+    return fetchRoomCoverByUrl(roomUrl);
+  }
+
+  /**
    * 正式启动直播间录制流程
    * @param {Object} params - 录制参数
    * @param {string} params.roomId - 房间ID
@@ -582,6 +599,9 @@ class RecorderService {
     const room = await DataService.getRoomById(roomId);
     const roomKey = room.room_url;
     console.log(`[任务启动] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
+
+    // 封面来源：入参缺失时按房间 URL 自取兜底（扩展/Webhook/前端手动触发均不带 cover_url）
+    const coverUrl = await this._resolveRecordingCover({ roomCover, roomUrl: room.room_url });
 
     const downloader = getActiveDownloader(room.polling_platform);
     const template = room.filename_template || '{room_name}_{datetime}';
@@ -612,7 +632,7 @@ class RecorderService {
           resumeCount,
           caption,
           streamUrl: url,
-          coverUrl: roomCover,
+          coverUrl,
         });
         // console.log(`[任务启动] 录制会话: ${sessionId}`);
       }
@@ -636,9 +656,9 @@ class RecorderService {
       }
 
       // 下载直播间封面
-      if (roomCover) {
+      if (coverUrl) {
         try {
-          const coverPath = await downloadFile(roomCover, path.join(sessionDir, 'cover.ext'));
+          const coverPath = await downloadFile(coverUrl, path.join(sessionDir, 'cover.ext'));
           await recordingManager.updateSessionCover(sessionId, coverPath);
           console.log(`[任务启动] 封面已下载: ${coverPath}`);
         } catch (coverErr) {

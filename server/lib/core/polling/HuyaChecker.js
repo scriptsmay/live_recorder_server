@@ -14,6 +14,8 @@ class HuyaChecker extends PlatformChecker {
   constructor(roomUrl) {
     super(roomUrl);
     this._roomId = null;
+    // 网页 TT_ROOM_DATA.screenshot，作为 mp API 未返回封面时的兜底
+    this._webScreenshot = '';
   }
 
   static getPlatformId() {
@@ -62,6 +64,9 @@ class HuyaChecker extends PlatformChecker {
         try {
           const roomData = JSON.parse(match[1]);
           if (roomData?.profileRoom) {
+            if (roomData.screenshot) {
+              this._webScreenshot = roomData.screenshot;
+            }
             return String(roomData.profileRoom);
           }
         } catch (e) {
@@ -125,12 +130,14 @@ class HuyaChecker extends PlatformChecker {
       const isLive = liveData.realLiveStatus === 'ON';
       const anchorName = liveData.profileInfo?.nick || '';
       const liveTitle = liveData.liveData?.introduction || '';
+      const roomCover = liveData.liveData?.screenshot || liveData.screenshot || this._webScreenshot || '';
 
       if (!isLive) {
         return {
           isLive: false,
           anchorName,
           liveTitle,
+          roomCover,
         };
       }
 
@@ -201,6 +208,7 @@ class HuyaChecker extends PlatformChecker {
         isLive: true,
         anchorName,
         liveTitle,
+        roomCover,
         streamUrl: flvUrl,
         cdnType: selectedCdnType,
       };
@@ -221,6 +229,7 @@ class HuyaChecker extends PlatformChecker {
       isLive: streamData.isLive,
       roomName: streamData.anchorName,
       roomTitle: streamData.liveTitle,
+      roomCover: streamData.roomCover,
       streamUrl: streamData.streamUrl,
       streamInfo: streamData.isLive ? { cdnType: streamData.cdnType } : null,
     });
