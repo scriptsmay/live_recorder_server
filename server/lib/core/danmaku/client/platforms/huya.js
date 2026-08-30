@@ -22,6 +22,11 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const WSS_URL = 'wss://cdnws.api.huya.com/';
 
+/** 测试/开发口：覆盖弹幕 WS 端点（集成测试指向 mock server） */
+function getWssUrl() {
+  return process.env.HUYA_DANMAKU_WS_URL || WSS_URL;
+}
+
 const CMD_TYPE = {
   REGISTER_RSP: 2,
   HEARTBEAT_ACK: 6,
@@ -74,9 +79,20 @@ function parseDanmakuBody(body) {
   if (r.skipToTag(0)) {
     const head = r.readHead();
     if (head && head.type === 10) {
-      // 在 struct 体内按 tag 读（tag 升序：0 uid → 2 昵称），停在 STRUCT_END 并消费它
+      // 在 struct 体内按 tag 读（tag 升序：0 uid → 2 昵称）
       userId = String(r.readInt(0) ?? '');
       user = r.readString(2);
+      // 消费到 STRUCT_END，游标回到外层才能继续读顶层 tag 3 内容
+      while (!r.isEof()) {
+        const h = r.peekHead();
+        if (!h) break;
+        if (h.type === 11) {
+          r.readHead();
+          break;
+        }
+        r.readHead();
+        r.skipField(h.type);
+      }
     }
   }
   const text = r.readString(3);
@@ -99,7 +115,7 @@ class HuyaDanmakuClient extends DanmakuClientBase {
     const uid = await this._fetchRoomUid(roomId);
     return {
       transport: 'ws',
-      endpoints: [WSS_URL],
+      endpoints: [getWssUrl()],
       headers: { 'User-Agent': UA },
       registration: [buildRegisterPacket(uid)],
       heartbeat: { data: HEARTBEAT, intervalMs: 60000, ackTimeoutMs: 150000 },

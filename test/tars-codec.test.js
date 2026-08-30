@@ -56,7 +56,7 @@ describe('TARS writer — 固定字节向量', () => {
     expect(packet.equals(REGISTER_PACKET_UID_12345)).toBe(true);
   });
 
-  test('biliup 118 字节心跳包可被 reader 正确解构', () => {
+  test('biliup 硬编码心跳包（112 字节）可被 reader 正确解构', () => {
     const r = new TarsReader(BILIUP_HEARTBEAT);
     expect(r.readInt32(0)).toBe(3); // iVersion
     const payload = r.readBytes(1);
