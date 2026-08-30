@@ -169,6 +169,11 @@ class DouyuDanmakuClient extends DanmakuClientBase {
     }
     return events;
   }
+
+  /** 重连后清掉上一条连接残留的半帧缓冲，避免旧字节污染新连接的帧边界 */
+  _onConnected() {
+    this._tcpBuf = Buffer.alloc(0);
+  }
 }
 
 module.exports = {

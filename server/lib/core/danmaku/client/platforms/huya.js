@@ -6,7 +6,7 @@
  * - 外层 WebSocketCommand: tag0 iCmdType(int32) / tag1 vData(bytes)
  *   1=注册 2=注册响应 5=心跳 6=心跳响应 7=消息推送
  * - 注册：WSUserInfo（tag0 lUid / tag6 lGroupId=uid / tag7 lGroupType=3 ...）包进 cmdType=1
- * - 心跳：60s 固定 118 字节预编码 TARS 包（biliup huya.rs 同款），响应 cmdType=6
+ * - 心跳：60s 固定 112 字节预编码 TARS 包（biliup huya.rs 同款），响应 cmdType=6
  * - 1400 弹幕体（MessageNotification）实测布局：
  *     tag 0 = UserInfo struct（内层 tag0=发送者uid, tag2=昵称, tag4=头像URL）
  *     tag 3 = 弹幕内容（顶层 string）

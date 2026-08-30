@@ -31,7 +31,14 @@ class DanmakuClientBase {
     this.platform = platform;
     this.roomUrl = roomUrl;
     this.onEvent = onEvent;
-    this.log = logger || console;
+    // 兜底 shim：console 没有 important/debug，缺省 logger 时不能崩
+    this.log = logger || {
+      info: (...args) => console.log(...args),
+      important: (...args) => console.log(...args),
+      warn: (...args) => console.warn(...args),
+      error: (...args) => console.error(...args),
+      debug: () => {},
+    };
     this.destroyed = false;
     this.connected = false;
     this.socket = null;
@@ -131,6 +138,9 @@ class DanmakuClientBase {
 
   async _connectAttempt() {
     const info = await this.getConnectionInfo();
+    // destroy() 可能发生在 getConnectionInfo 的 IO 等待期间（如平台 HTTP 探测），
+    // 此刻再建连会泄漏一条无人管理的连接
+    if (this.destroyed) return;
     const transport = info.transport === 'tcp' ? 'tcp' : 'ws';
 
     let lastErr = null;
@@ -150,6 +160,10 @@ class DanmakuClientBase {
     if (lastErr) {
       throw lastErr;
     }
+    if (this.destroyed) {
+      this._closeSocket();
+      return;
+    }
 
     // 连接成功：重置退避
     if (this.attempt > 0) {
@@ -164,6 +178,9 @@ class DanmakuClientBase {
     );
 
     // 注册包
+    if (typeof this._onConnected === 'function') {
+      this._onConnected();
+    }
     for (const reg of info.registration || []) {
       this._write(reg);
     }
@@ -240,6 +257,11 @@ class DanmakuClientBase {
     const socket = this.socket;
     this.socket = null;
     this.connected = false;
+    // 先摘掉监听器：close 握手/半开窗口内服务端可能仍在推送，
+    // 旧 socket 的残余消息不得再进入 _onData（防重复入盘）
+    try {
+      socket.removeAllListeners();
+    } catch (_) {}
     try {
       if (typeof socket.close === 'function') {
         socket.close();
@@ -254,6 +276,9 @@ class DanmakuClientBase {
     if (!this.connected) return; // 重连流程中重复触发
     this.connected = false;
     this._stopHeartbeat();
+    // 必须关掉旧 socket：否则心跳超时路径下旧连接保持打开，重连成功后新旧并存
+    // （事件重复入盘），且旧 socket 稍后的 close 事件会误杀新连接造成重连抖动
+    this._closeSocket();
     this.log.warn(`[${this.platform}] 连接断开: room=${this.roomUrl} reason=${reason}`);
     this._scheduleReconnect();
   }
