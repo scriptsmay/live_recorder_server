@@ -10,21 +10,11 @@ function mockCheckerFactory(urlPattern) {
   return CheckerClass;
 }
 
-jest.mock('../server/lib/core/polling/HuyaChecker', () =>
-  mockCheckerFactory(/huya\.com/i)
-);
-jest.mock('../server/lib/core/polling/BilibiliChecker', () =>
-  mockCheckerFactory(/live\.bilibili\.com/i)
-);
-jest.mock('../server/lib/core/polling/DouyuChecker', () =>
-  mockCheckerFactory(/douyu\.com/i)
-);
-jest.mock('../server/lib/core/polling/DouyinChecker', () =>
-  mockCheckerFactory(/douyin\.com/i)
-);
-jest.mock('../server/lib/core/polling/KuaishouAPIChecker', () =>
-  mockCheckerFactory(/(?:^|\.)kuaishou\.com/i)
-);
+jest.mock('../server/lib/core/polling/HuyaChecker', () => mockCheckerFactory(/huya\.com/i));
+jest.mock('../server/lib/core/polling/BilibiliChecker', () => mockCheckerFactory(/live\.bilibili\.com/i));
+jest.mock('../server/lib/core/polling/DouyuChecker', () => mockCheckerFactory(/douyu\.com/i));
+jest.mock('../server/lib/core/polling/DouyinChecker', () => mockCheckerFactory(/douyin\.com/i));
+jest.mock('../server/lib/core/polling/KuaishouAPIChecker', () => mockCheckerFactory(/(?:^|\.)kuaishou\.com/i));
 
 const checkers = require('../server/lib/core/polling/checkers');
 const HuyaChecker = require('../server/lib/core/polling/HuyaChecker');
