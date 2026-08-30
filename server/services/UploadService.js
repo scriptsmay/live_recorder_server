@@ -69,6 +69,27 @@ class UploadService {
   }
 
   /**
+   * 解析投稿封面来源：模板勾选 use_room_cover 时优先直播间封面，模板固定封面兜底
+   *
+   * 两个来源都做 existsSync 检查：路径无效时静默跳过封面继续投稿，
+   * 优于把无效路径传给 biliup 导致整个投稿失败。
+   * @param {Object} tmpl - 上传模板配置对象
+   * @param {boolean} [tmpl.use_room_cover] - 是否优先使用直播间封面
+   * @param {string} [tmpl.cover] - 模板固定封面路径
+   * @param {string|null} sourceCoverPath - 直播间封面本地路径（直播 = session.cover_path，回放 = record.poster_path）
+   * @returns {{cover: string|null, source: 'room'|'template'|'none'}} source 用于预览展示与命令行排查
+   */
+  static resolveUploadCover(tmpl, sourceCoverPath) {
+    if (tmpl.use_room_cover && sourceCoverPath && fs.existsSync(sourceCoverPath)) {
+      return { cover: sourceCoverPath, source: 'room' };
+    }
+    if (tmpl.cover && fs.existsSync(tmpl.cover)) {
+      return { cover: tmpl.cover, source: 'template' };
+    }
+    return { cover: null, source: 'none' };
+  }
+
+  /**
    * 获取模板渲染所需的变量集合
    * @param {Object} room - 直播间信息对象
    * @param {string} room.room_name - 直播间名称
@@ -135,6 +156,7 @@ class UploadService {
    * @param {string} session.room_url - 直播间URL
    * @param {string} session.room_name - 直播间名称
    * @param {Date|string} session.started_at - 会话开始时间
+   * @param {string} [session.cover_path] - 会话封面本地路径（模板勾选 use_room_cover 时优先使用）
    * @param {Object} tmpl - 上传模板配置对象
    * @param {number} tmpl.id - 模板ID
    * @param {string} tmpl.name - 模板名称
@@ -146,7 +168,8 @@ class UploadService {
    * @param {number} [tmpl.tid] - 分区ID
    * @param {number} [tmpl.copyright] - 版权声明
    * @param {boolean} [tmpl.is_only_self] - 是否仅自己可见
-   * @param {string} [tmpl.cover] - 封面图片路径
+   * @param {boolean} [tmpl.use_room_cover] - 投稿优先使用直播间封面
+   * @param {string} [tmpl.cover] - 固定封面路径（use_room_cover 命中时作兜底）
    * @param {number} [tmpl.dtime] - 定时发布时间
    * @param {string} [tmpl.after_upload] - 上传后处理配置
    * @returns {Promise<void>}
@@ -242,6 +265,9 @@ class UploadService {
    */
   static async _runUpload(recordId, session, tmpl, files, title, desc, tags, source) {
     try {
+      // 封面解析：勾选 use_room_cover 时优先会话封面，模板固定封面兜底，无效路径静默跳过
+      const coverResolution = this.resolveUploadCover(tmpl, session.cover_path);
+
       const result = await biliup.upload({
         cookiesPath: tmpl.cookies_path,
         files,
@@ -252,7 +278,7 @@ class UploadService {
         tid: tmpl.tid,
         copyright: tmpl.copyright,
         isOnlySelf: tmpl.is_only_self,
-        cover: tmpl.cover,
+        cover: coverResolution.cover,
         dtime: tmpl.dtime,
         recordId,
       });
@@ -267,7 +293,7 @@ class UploadService {
       if (tmpl.tid) cmdParts.push('--tid', String(tmpl.tid));
       if (tmpl.copyright) cmdParts.push('--copyright', String(tmpl.copyright));
       if (tmpl.is_only_self) cmdParts.push('--is-only-self', String(tmpl.is_only_self));
-      if (tmpl.cover) cmdParts.push('--cover', tmpl.cover);
+      if (coverResolution.cover) cmdParts.push('--cover', coverResolution.cover);
       if (tmpl.dtime) cmdParts.push('--dtime', String(tmpl.dtime));
       cmdParts.push(...files);
       const cmdStr = cmdParts.join(' ');
