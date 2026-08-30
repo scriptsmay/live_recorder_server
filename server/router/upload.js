@@ -31,11 +31,12 @@ router.post('/upload_templates', async (req, res) => {
       cover,
       dtime,
       after_upload,
+      use_room_cover,
     } = req.body;
     const result = await pool.query(
       `INSERT INTO upload_templates
-       (name, cookies_path, title_template, desc_template, tags, source, tid, copyright, is_only_self, cover, dtime, after_upload)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       (name, cookies_path, title_template, desc_template, tags, source, tid, copyright, is_only_self, cover, dtime, after_upload, use_room_cover)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
         name,
@@ -50,6 +51,7 @@ router.post('/upload_templates', async (req, res) => {
         cover || null,
         dtime != null && dtime !== '' ? parseInt(dtime, 10) : null,
         after_upload || null,
+        use_room_cover === true,
       ]
     );
     res.json({ status: 'ok', data: result.rows[0] });
@@ -75,8 +77,11 @@ router.put('/upload_templates/:id', async (req, res) => {
       'cover',
       'dtime',
       'after_upload',
+      'use_room_cover',
     ];
     const intFields = new Set(['tid', 'copyright', 'is_only_self', 'dtime']);
+    // BOOLEAN 列严格归一，非布尔输入（'true'/1 等）不落库报错
+    const boolFields = new Set(['use_room_cover']);
     const sets = [];
     const values = [];
     for (const field of fields) {
@@ -85,6 +90,8 @@ router.put('/upload_templates/:id', async (req, res) => {
         const val = req.body[field];
         if (intFields.has(field)) {
           values.push(val != null && val !== '' ? parseInt(val, 10) : null);
+        } else if (boolFields.has(field)) {
+          values.push(val === true);
         } else {
           values.push(val);
         }

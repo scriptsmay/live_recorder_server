@@ -33,6 +33,7 @@ const form = reactive({
   cover: '',
   dtime: 0,
   after_upload: 'none',
+  use_room_cover: false,
 })
 
 function resetForm() {
@@ -50,6 +51,7 @@ function resetForm() {
   form.cover = ''
   form.dtime = 0
   form.after_upload = 'none'
+  form.use_room_cover = false
 }
 
 function openCreate() {
@@ -72,6 +74,7 @@ function openEdit(t: UploadTemplate) {
   form.cover = t.cover || ''
   form.dtime = t.dtime ?? 0
   form.after_upload = t.after_upload || 'none'
+  form.use_room_cover = t.use_room_cover ?? false
   modalVisible.value = true
 }
 
@@ -89,6 +92,7 @@ function getFormBody() {
     cover: form.cover.trim(),
     dtime: form.dtime || 0,
     after_upload: form.after_upload || 'none',
+    use_room_cover: form.use_room_cover,
   }
 }
 
@@ -123,6 +127,7 @@ async function handleCopy(t: UploadTemplate) {
       cover: t.cover || '',
       dtime: t.dtime || 0,
       after_upload: t.after_upload || 'none',
+      use_room_cover: t.use_room_cover ?? false,
     })
     toast.success('模板已复制')
     loadData()
@@ -350,6 +355,17 @@ onMounted(loadData)
                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
                   placeholder="可选"
                 />
+                <label class="flex items-center gap-2 mt-2 text-sm text-gray-700">
+                  <input
+                    v-model="form.use_room_cover"
+                    type="checkbox"
+                    class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  优先使用直播间封面
+                </label>
+                <p class="text-xs text-gray-400 mt-1">
+                  勾选后投稿优先取会话/回放封面，文件缺失时降级用上方固定封面
+                </p>
               </div>
             </div>
 

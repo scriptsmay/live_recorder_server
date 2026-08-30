@@ -108,6 +108,7 @@ export interface UploadTemplate {
   cover: string | null
   dtime: number | null
   after_upload: string | null
+  use_room_cover: boolean | null
   created_at: string
   updated_at: string
 }
@@ -125,6 +126,7 @@ export interface UploadTemplateFormData {
   cover: string
   dtime: number | null
   after_upload: string
+  use_room_cover: boolean
 }
 
 // ====== 投稿记录 ======
