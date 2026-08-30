@@ -1,11 +1,10 @@
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
-const http = require('http');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 
 const { generateOutputPath } = require('../lib/utils/tool');
+const { downloadFile } = require('../lib/utils/download');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
@@ -18,40 +17,6 @@ const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ROOM_CACHE_TTL = 300;
 const ACTIVE_TASK_TTL = 86400;
-
-const COVER_CONTENT_TYPE_MAP = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-};
-
-function downloadFile(url, destPath) {
-  return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http;
-    const req = client.get(url, { timeout: 10000 }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return downloadFile(res.headers.location, destPath).then(resolve, reject);
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        return reject(new Error(`HTTP ${res.statusCode}`));
-      }
-      const contentType = res.headers['content-type'] || '';
-      const ext = COVER_CONTENT_TYPE_MAP[contentType.split(';')[0].trim()] || 'jpg';
-      const finalPath = destPath.replace(/\.[^.]+$/, `.${ext}`);
-      const ws = fs.createWriteStream(finalPath);
-      res.pipe(ws);
-      ws.on('finish', () => resolve(finalPath));
-      ws.on('error', reject);
-    });
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('timeout'));
-    });
-  });
-}
 
 /**
  * 录制服务 - 负责直播间录制的业务逻辑协调
