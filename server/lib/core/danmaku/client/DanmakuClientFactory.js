@@ -7,11 +7,13 @@ const { createModuleLogger } = require('../../logger');
 const { HuyaDanmakuClient } = require('./platforms/huya');
 const { BilibiliDanmakuClient } = require('./platforms/bilibili');
 const { DouyuDanmakuClient } = require('./platforms/douyu');
+const { DouyinDanmakuClient } = require('./platforms/douyin');
 
 const PLATFORM_CLIENTS = {
   huya: HuyaDanmakuClient,
   bilibili: BilibiliDanmakuClient,
   douyu: DouyuDanmakuClient,
+  douyin: DouyinDanmakuClient,
 };
 
 const loggerCache = new Map();
