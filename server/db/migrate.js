@@ -147,6 +147,11 @@ async function runMigration() {
       ALTER TABLE rooms ADD COLUMN IF NOT EXISTS upload_template_id INTEGER REFERENCES upload_templates(id) ON DELETE SET NULL
     `);
 
+    // v1.9.0：投稿模板「使用直播间封面」开关（勾选后投稿优先取会话/回放侧封面，模板固定封面作兜底）
+    await client.query(`
+      ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS use_room_cover BOOLEAN DEFAULT false
+    `);
+
     // ========== upload_records ==========
 
     await client.query(`
@@ -199,6 +204,11 @@ async function runMigration() {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // v1.9.0：回放封面下载落盘路径（poster 列仍存 URL，投稿时优先用本地文件）
+    await client.query(`
+      ALTER TABLE replay_records ADD COLUMN IF NOT EXISTS poster_path VARCHAR(1024) DEFAULT ''
     `);
 
     await client.query(`
