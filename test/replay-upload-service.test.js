@@ -14,6 +14,8 @@ jest.mock('../server/services/UploadService', () => ({
   renderTemplate: jest.fn((tpl, vars = {}) =>
     tpl.replace(/\{room_name\}/g, vars.room_name || '').replace(/\{principal_name\}/g, vars.principal_name || '')
   ),
+  // 默认不带封面，封面相关用例内按需 mockReturnValue 覆盖
+  resolveUploadCover: jest.fn(() => ({ cover: null, source: 'none' })),
 }));
 
 const pool = require('../server/db/index');
@@ -204,6 +206,34 @@ describe('ReplayUploadService', () => {
     expect(result.preview.template_name).toBe('模板A');
   });
 
+  test('getUploadPreview 返回封面来源与封面路径', async () => {
+    UploadService.resolveUploadCover.mockReturnValue({ cover: '/tmp/replay/work/poster.jpg', source: 'room' });
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            principal_id: 'abc',
+            principal_name: '主播',
+            config_principal_name: '',
+            room_name: '直播间主播',
+            play_url: 'http://test',
+            poster_path: '/tmp/replay/work/poster.jpg',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ value: '1' }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 1, name: '模板A', title_template: 'title', use_room_cover: true }],
+      });
+
+    const result = await ReplayUploadService.getUploadPreview(1);
+
+    expect(result.error).toBe(false);
+    expect(result.preview.cover_source).toBe('room');
+    expect(result.preview.cover_path).toBe('/tmp/replay/work/poster.jpg');
+  });
+
   test('回放投稿变量优先配置名，否则回退 room_name 以复用直播模板', async () => {
     pool.query
       .mockResolvedValueOnce({
@@ -301,6 +331,49 @@ describe('ReplayUploadService', () => {
     const failedCall = pool.query.mock.calls.find((c) => c[0].includes("status='failed'"));
     expect(failedCall).toBeTruthy();
     expect(failedCall[1]).toContain('进程崩溃');
+  });
+
+  test('_runUpload 勾选 use_room_cover 时用回放封面投稿并在命令记录 --cover', async () => {
+    const posterPath = '/tmp/replay/work/poster.jpg';
+    UploadService.resolveUploadCover.mockReturnValue({ cover: posterPath, source: 'room' });
+    biliup.upload.mockResolvedValue({ success: false, output: 'err', error: '上传失败' });
+    pool.query.mockResolvedValue({ rows: [] });
+
+    await ReplayUploadService._runUpload(
+      10,
+      { id: 1, principal_name: '主播', play_url: 'http://test', poster_path: posterPath },
+      { id: 1, name: '模板', cookies_path: '/tmp/c', use_room_cover: true },
+      ['/tmp/a.mp4'],
+      '标题',
+      '',
+      '',
+      ''
+    );
+
+    expect(biliup.upload).toHaveBeenCalledWith(expect.objectContaining({ cover: posterPath }));
+    const failedCall = pool.query.mock.calls.find((c) => c[0].includes("status='failed'"));
+    expect(failedCall[1][0]).toContain(`--cover ${posterPath}`);
+  });
+
+  test('_runUpload 未勾选且无固定封面时投稿不带封面', async () => {
+    UploadService.resolveUploadCover.mockReturnValue({ cover: null, source: 'none' });
+    biliup.upload.mockResolvedValue({ success: false, output: 'err', error: '上传失败' });
+    pool.query.mockResolvedValue({ rows: [] });
+
+    await ReplayUploadService._runUpload(
+      10,
+      { id: 1, principal_name: '主播', play_url: 'http://test', poster_path: '' },
+      { id: 1, name: '模板', cookies_path: '/tmp/c', use_room_cover: false },
+      ['/tmp/a.mp4'],
+      '标题',
+      '',
+      '',
+      ''
+    );
+
+    expect(biliup.upload).toHaveBeenCalledWith(expect.objectContaining({ cover: null }));
+    const failedCall = pool.query.mock.calls.find((c) => c[0].includes("status='failed'"));
+    expect(failedCall[1][0]).not.toContain('--cover');
   });
 
   test('模板渲染调用 UploadService', async () => {

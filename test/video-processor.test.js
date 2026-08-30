@@ -35,6 +35,9 @@ describe('video-processor', () => {
         m3u8Url: 'https://example.com/new.m3u8',
       }),
     }));
+    jest.mock('../server/lib/utils/download', () => ({
+      downloadFile: jest.fn(),
+    }));
     videoProcessor = require('../server/lib/core/replay/video-processor');
   });
 
@@ -153,6 +156,78 @@ describe('video-processor', () => {
       expect(args).toContain('--paths');
       expect(args).toContain('temp:/tmp/yt_dlp_cache');
       expect(args[args.length - 1]).toBe('https://example.com/a.m3u8');
+    });
+
+    test('poster 存在时下载封面并在结果返回 posterPath', async () => {
+      const { spawn } = require('child_process');
+      const { downloadFile } = require('../server/lib/utils/download');
+      const proc = new EventEmitter();
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      spawn.mockImplementation(() => {
+        setImmediate(() => proc.emit('close', 0));
+        return proc;
+      });
+      downloadFile.mockResolvedValueOnce(path.join('/tmp/replay/work', 'poster.jpg'));
+
+      const result = await videoProcessor.download({
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/a.m3u8',
+        poster: 'https://img.example/cover.jpg',
+      });
+
+      expect(result.success).toBe(true);
+      expect(downloadFile).toHaveBeenCalledWith(
+        'https://img.example/cover.jpg',
+        path.join('/tmp/replay/work', 'poster.ext')
+      );
+      expect(result.posterPath).toBe(path.join('/tmp/replay/work', 'poster.jpg'));
+    });
+
+    test('poster 下载失败时不影响任务结果，posterPath 为 null', async () => {
+      const { spawn } = require('child_process');
+      const { downloadFile } = require('../server/lib/utils/download');
+      const proc = new EventEmitter();
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      spawn.mockImplementation(() => {
+        setImmediate(() => proc.emit('close', 0));
+        return proc;
+      });
+      downloadFile.mockRejectedValueOnce(new Error('HTTP 404'));
+
+      const result = await videoProcessor.download({
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/a.m3u8',
+        poster: 'https://img.example/cover.jpg',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.posterPath).toBeNull();
+    });
+
+    test('record.poster 为空时不触发封面下载', async () => {
+      const { spawn } = require('child_process');
+      const { downloadFile } = require('../server/lib/utils/download');
+      const proc = new EventEmitter();
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      spawn.mockImplementation(() => {
+        setImmediate(() => proc.emit('close', 0));
+        return proc;
+      });
+
+      const result = await videoProcessor.download({
+        id: 1,
+        replay_id: 'r1',
+        m3u8_url: 'https://example.com/a.m3u8',
+      });
+
+      expect(result.success).toBe(true);
+      expect(downloadFile).not.toHaveBeenCalled();
+      expect(result.posterPath).toBeNull();
     });
   });
 

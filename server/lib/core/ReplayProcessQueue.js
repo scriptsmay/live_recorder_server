@@ -278,6 +278,11 @@ class ReplayProcessQueue {
           file_size: result.fileSize,
           error_message: '',
         };
+        // video-processor best-effort 下载的回放封面，落库 poster_path 供投稿取用
+        if (result.posterPath) {
+          downloadFields.poster_path = result.posterPath;
+          writeLog(logStream, `download: poster_path=${result.posterPath}`);
+        }
         // 下载完成后用 ffprobe 补充分辨率（extract 阶段未获取到时兜底）
         if (!current.resolution || current.resolution === '') {
           try {

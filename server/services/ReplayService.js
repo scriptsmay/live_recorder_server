@@ -209,6 +209,7 @@ class ReplayService {
       duration: fields.duration,
       resolution: fields.resolution,
       poster: fields.poster,
+      poster_path: fields.poster_path,
     };
     const sets = ['status = $1', 'updated_at = NOW()'];
     const params = [status];

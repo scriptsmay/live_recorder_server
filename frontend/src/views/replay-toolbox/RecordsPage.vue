@@ -136,6 +136,12 @@ async function handleAction(recordId: number, action: string) {
           preview.desc_full && preview.desc_full.length > 100
             ? `【简介】${preview.desc}（完整简介见投稿模板）`
             : `【简介】${preview.desc || '（无）'}`
+        const coverSourceText =
+          preview.cover_source === 'room'
+            ? '直播间封面'
+            : preview.cover_source === 'template'
+              ? '模板固定封面'
+              : '无'
         const message = [
           '【投稿标题】',
           `  ${preview.title || '（无）'}`,
@@ -144,6 +150,7 @@ async function handleAction(recordId: number, action: string) {
           '',
           descText,
           '',
+          `封面来源：${coverSourceText}`,
           `模板：${preview.template_name || '（无）'}`,
           '',
           `确认执行 ${action}？`,

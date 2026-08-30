@@ -141,6 +141,7 @@ class ReplayUploadService {
     const vars = getReplayTemplateVars(record);
     const descFull = UploadService.renderTemplate(tmpl.desc_template || '', vars);
     const desc = descFull.length > 100 ? `${descFull.slice(0, 100)}...` : descFull;
+    const coverResolution = UploadService.resolveUploadCover(tmpl, record.poster_path);
 
     return {
       error: false,
@@ -150,6 +151,8 @@ class ReplayUploadService {
         desc_full: descFull,
         tags: UploadService.renderTemplate(tmpl.tags || '', vars),
         template_name: tmpl.name || '',
+        cover_source: coverResolution.source,
+        cover_path: coverResolution.cover || '',
       },
     };
   }
@@ -255,11 +258,15 @@ class ReplayUploadService {
   }
 
   static async _runUpload(uploadRecordId, record, tmpl, files, title, desc, tags, source) {
+    // 封面解析：勾选 use_room_cover 时优先回放封面 poster_path，模板固定封面兜底
+    const coverResolution = UploadService.resolveUploadCover(tmpl, record.poster_path);
+
     const cmdParts = [process.env.BILIUP_PATH || 'biliup', '-u', tmpl.cookies_path, 'upload'];
     if (title) cmdParts.push('--title', title);
     if (desc) cmdParts.push(`--desc=${desc}`);
     if (tags) cmdParts.push('--tag', tags);
     if (source) cmdParts.push('--source', source);
+    if (coverResolution.cover) cmdParts.push('--cover', coverResolution.cover);
     cmdParts.push(...files);
     const cmdStr = cmdParts.join(' ');
 
@@ -274,7 +281,7 @@ class ReplayUploadService {
         tid: tmpl.tid,
         copyright: tmpl.copyright,
         isOnlySelf: tmpl.is_only_self,
-        cover: tmpl.cover,
+        cover: coverResolution.cover,
         dtime: tmpl.dtime,
         recordId: `replay_${uploadRecordId}`,
       });

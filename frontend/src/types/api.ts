@@ -264,6 +264,8 @@ export interface ReplayUploadPreview {
   desc_full: string
   tags: string
   template_name: string
+  cover_source: 'room' | 'template' | 'none'
+  cover_path: string
 }
 
 // ====== 仪表盘 ======

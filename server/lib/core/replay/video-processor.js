@@ -3,6 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const ReplayService = require('../../../services/ReplayService');
 const { sanitizeFilename } = require('../../utils/tool');
+const { downloadFile } = require('../../utils/download');
 
 function ensureInside(baseDir, targetPath) {
   const base = path.resolve(baseDir);
@@ -104,7 +105,17 @@ async function download(record, options = {}) {
     finalPath = ensureInside(workDir, candidates[0]);
   }
   const stat = fs.statSync(finalPath);
-  return { success: true, rawFilePath: finalPath, fileSize: stat.size, output: result.output };
+  // 回放封面下载：best-effort，失败仅告警不阻塞任务（对齐直播侧录制封面模式）；
+  // poster_path 由调用方（ReplayProcessQueue）随 downloadFields 落库
+  let posterPath = null;
+  if (record.poster) {
+    try {
+      posterPath = await downloadFile(record.poster, path.join(workDir, 'poster.ext'));
+    } catch (err) {
+      console.warn(`[回放处理][id=${record.id}] 封面下载失败（不影响任务）: ${err.message}`);
+    }
+  }
+  return { success: true, rawFilePath: finalPath, fileSize: stat.size, posterPath, output: result.output };
 }
 
 async function cut(record, options = {}) {
