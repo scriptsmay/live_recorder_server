@@ -3,6 +3,11 @@ const path = require('path');
 const pool = require('../../../db/index');
 const DataService = require('../../../services/DataService');
 const { getDanmakuJsonlPath, getOrphanDanmakuPath } = require('../../utils/tool');
+const { createDanmakuClient } = require('./client/DanmakuClientFactory');
+
+// 原生弹幕客户端攒批参数：500ms 或 20 条，先到先触发
+const NATIVE_FLUSH_INTERVAL_MS = 500;
+const NATIVE_FLUSH_MAX_EVENTS = 20;
 
 /**
  * DanmakuRecorder — 弹幕录制器
@@ -79,11 +84,117 @@ class DanmakuRecorder {
       });
 
       console.log(`[DanmakuRecorder] 采集启动: capture_id=${captureId}, session=${sessionId}, file=${rawPath}`);
+
+      // v1.10.0：服务端原生弹幕客户端（平台白名单门控），失败绝不影响录制与采集主流程
+      this._startNativeClientIfNeeded(roomUrl, platform);
+
       return captureId;
     } catch (err) {
       console.error('[DanmakuRecorder] 启动采集失败:', err.message);
       return null;
     }
+  }
+
+  /**
+   * 按环境变量白名单启动服务端原生弹幕客户端（v1.10.0）
+   *
+   * DANMAKU_NATIVE_PLATFORMS（逗号分隔平台名，默认空 = 全关）。
+   * 门控放在这里（而非 RecorderService 钩子）对上层完全透明：白名单外行为与
+   * 既有扩展推送路径完全一致。客户端任何异常只影响弹幕采集自身。
+   *
+   * @param {string} roomUrl
+   * @param {string} platform - 录制平台（room.polling_platform）
+   * @private
+   */
+  _startNativeClientIfNeeded(roomUrl, platform) {
+    const whitelist = (process.env.DANMAKU_NATIVE_PLATFORMS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (!whitelist.includes(String(platform || '').toLowerCase())) {
+      return;
+    }
+
+    const session = this.activeSessions.get(roomUrl);
+    if (!session) return;
+
+    try {
+      const client = createDanmakuClient(platform, {
+        roomUrl,
+        onEvent: (event) => this._onNativeEvent(roomUrl, event),
+      });
+      if (!client) {
+        console.warn(`[DanmakuRecorder] 平台 ${platform} 无原生弹幕客户端实现，跳过`);
+        return;
+      }
+      session.nativeClient = client;
+      session.pendingEvents = [];
+      session.flushTimer = null;
+      client.start();
+    } catch (err) {
+      console.warn(`[DanmakuRecorder] 原生弹幕客户端启动失败(不影响录制): ${err.message}`);
+    }
+  }
+
+  /**
+   * 原生客户端事件入口：攒批后走内存调用 writeBatch（不走本机 HTTP）
+   * @private
+   */
+  _onNativeEvent(roomUrl, event) {
+    const session = this.activeSessions.get(roomUrl);
+    if (!session) return; // 会话已收口，丢弃（orphan 语义不适用于进程内路径）
+    session.pendingEvents.push(event);
+    if (session.pendingEvents.length >= NATIVE_FLUSH_MAX_EVENTS) {
+      this._flushNativeEvents(roomUrl);
+      return;
+    }
+    if (!session.flushTimer) {
+      session.flushTimer = setTimeout(() => {
+        session.flushTimer = null;
+        this._flushNativeEvents(roomUrl);
+      }, NATIVE_FLUSH_INTERVAL_MS);
+      // 不阻塞进程退出
+      if (typeof session.flushTimer.unref === 'function') {
+        session.flushTimer.unref();
+      }
+    }
+  }
+
+  /**
+   * 把攒批缓冲的事件写入 JSONL（经 _normalizeEvent 对齐视频时间轴）
+   * @private
+   */
+  _flushNativeEvents(roomUrl) {
+    const session = this.activeSessions.get(roomUrl);
+    if (!session) return;
+    if (session.flushTimer) {
+      clearTimeout(session.flushTimer);
+      session.flushTimer = null;
+    }
+    if (!session.pendingEvents || session.pendingEvents.length === 0) return;
+    const events = session.pendingEvents;
+    session.pendingEvents = [];
+    this.writeBatch(roomUrl, events).catch((err) => {
+      console.warn(`[DanmakuRecorder] 原生弹幕批次写入失败: ${err.message}`);
+    });
+  }
+
+  /**
+   * 销毁会话关联的原生客户端并冲刷攒批缓冲
+   * @private
+   */
+  _teardownNativeClient(roomUrl) {
+    const session = this.activeSessions.get(roomUrl);
+    if (!session) return;
+    if (session.nativeClient) {
+      try {
+        session.nativeClient.destroy('capture stopped');
+      } catch (err) {
+        console.warn(`[DanmakuRecorder] 原生弹幕客户端销毁失败: ${err.message}`);
+      }
+      session.nativeClient = null;
+    }
+    this._flushNativeEvents(roomUrl);
   }
 
   /**
@@ -159,6 +270,9 @@ class DanmakuRecorder {
       return { captureId: null, eventCount: 0 };
     }
 
+    // 先停原生客户端并冲刷攒批缓冲，保证尾部弹幕落盘
+    this._teardownNativeClient(roomUrl);
+
     // 关闭文件描述符
     try {
       fs.closeSync(session.fd);
@@ -196,6 +310,8 @@ class DanmakuRecorder {
   async failCapture(roomUrl, error) {
     const session = this.activeSessions.get(roomUrl);
     if (!session) return;
+
+    this._teardownNativeClient(roomUrl);
 
     try {
       fs.closeSync(session.fd);
