@@ -25,20 +25,12 @@ RUN npm install --omit=dev
 # 使用 BtbN GitHub Release（release/7.1 分支自动构建，稳定可靠）
 # v1.8.6 曾切到 Debian trixie apt 包（7.1.5-0+deb13u1），生产实测对虎牙 FLV 流
 # 出现 "Timestamps are unset" 且 segment 切割点漂移（52 号会话首段 2h35m/9.7GB），
-# 回退为 v1.8.3 同源 BtbN 静态构建
-# 注意必须钉死具体 autobuild 资源：BtbN 的 latest 发布只保留最新分支构建，
-# 2026-08 起发布里 7.1 系资源被 8.1/9.0 轮换删除，跟随 latest 的 URL 会 404
-# （v1.10.0 首次 CI 构建即因此失败）。钉版 n7.1.5-12（2026-07-31 最后一版 7.1 构建，
-# 与生产 v1.8.3 镜像内的 7.1.5 同源）；升级 FFmpeg 版本需走专门验证，不可顺手改
-FROM alpine:latest AS ffmpeg-downloader
-RUN apk add --no-cache curl tar xz
-RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1.tar.xz \
-        -o /tmp/ffmpeg.tar.xz \
-    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
-    && mv /tmp/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
-    && mv /tmp/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
-    && rm -rf /tmp/ffmpeg*
-
+# 阶段 3 已移除：FFmpeg 不再使用 BtbN 静态构建，改回 Debian 官方源 apt 包。
+# 历史：v1.8.6 首播（会话 52）出现 Timestamps are unset + segment 切割漂移，
+# 当时常怀疑为 apt 包导致而 revert 回 BtbN 静态构建（66b3501）；后续在播流对照
+# 实验裁决根因为虎牙流侧时间戳异常，与 FFmpeg 构建源无关。且 BtbN latest 发布
+# 只保留最新分支构建、会轮换删除旧资源（v1.10.0 CI 构建即 404），Debian 官方源
+# 构建更稳定可复现，故 v1.10.0 起复原 apt ffmpeg（trixie 为 7.1.5）。
 # 阶段 4: 运行环境
 FROM node:22-trixie-slim
 
@@ -49,11 +41,9 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# ffmpeg 从 BtbN 静态构建注入（阶段 3），apt 不再安装；mkvtoolnix：封装
-COPY --from=ffmpeg-downloader /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg-downloader /usr/local/bin/ffprobe /usr/local/bin/ffprobe
+# ffmpeg/mkvtoolnix：视频处理和封装（Debian 官方源，见上方阶段说明）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl mkvtoolnix python3 python3-pip \
+    ffmpeg ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \
