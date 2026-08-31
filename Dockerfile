@@ -26,13 +26,17 @@ RUN npm install --omit=dev
 # v1.8.6 曾切到 Debian trixie apt 包（7.1.5-0+deb13u1），生产实测对虎牙 FLV 流
 # 出现 "Timestamps are unset" 且 segment 切割点漂移（52 号会话首段 2h35m/9.7GB），
 # 回退为 v1.8.3 同源 BtbN 静态构建
+# 注意必须钉死具体 autobuild 资源：BtbN 的 latest 发布只保留最新分支构建，
+# 2026-08 起发布里 7.1 系资源被 8.1/9.0 轮换删除，跟随 latest 的 URL 会 404
+# （v1.10.0 首次 CI 构建即因此失败）。钉版 n7.1.5-12（2026-07-31 最后一版 7.1 构建，
+# 与生产 v1.8.3 镜像内的 7.1.5 同源）；升级 FFmpeg 版本需走专门验证，不可顺手改
 FROM alpine:latest AS ffmpeg-downloader
 RUN apk add --no-cache curl tar xz
-RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz \
+RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1.tar.xz \
         -o /tmp/ffmpeg.tar.xz \
     && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
-    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
-    && mv /tmp/ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
+    && mv /tmp/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
+    && mv /tmp/ffmpeg-n7.1.5-12-g1fdbca85aa-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
     && rm -rf /tmp/ffmpeg*
 
 # 阶段 4: 运行环境
