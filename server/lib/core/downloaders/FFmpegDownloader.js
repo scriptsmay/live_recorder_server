@@ -113,12 +113,26 @@ class FFmpegDownloader extends DownloaderInterface {
    */
   buildArgs(url, outputPath, options = {}) {
     const { streamType = 'flv' } = options;
+    const args =
+      streamType === 'hls'
+        ? this._buildHLSArgs(url, outputPath, options)
+        : this._buildStandardArgs(url, outputPath, options);
 
-    if (streamType === 'hls') {
-      return this._buildHLSArgs(url, outputPath, options);
+    const inputIndex = args.indexOf('-i');
+    if (inputIndex !== -1) {
+      args.splice(inputIndex, 0, ...this._httpHeaderArgs(url, options));
     }
+    return args;
+  }
 
-    return this._buildStandardArgs(url, outputPath, options);
+  /**
+   * 按平台注入 HTTP 请求头：B站 CDN（bilivideo.com）校验 Referer，
+   * 缺失时拉流直接 403。配置 platform=bilibili 或 URL 命中 bilivideo.com 时注入
+   */
+  _httpHeaderArgs(url, options = {}) {
+    const needsReferer = options.platform === 'bilibili' || /bilivideo\.com/i.test(url);
+    if (!needsReferer) return [];
+    return ['-headers', 'Referer: https://live.bilibili.com/\r\n'];
   }
 
   /**
