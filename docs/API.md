@@ -311,7 +311,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 ### DELETE /api/rooms/:id
 
-删除直播间（仅限 `idle` 状态）。
+删除直播间（仅限 `idle` 状态）。删除成功后同步停止该房间的内存轮询定时器（v1.10.2 起）——修复前删除带轮询的房间会泄漏定时器，房间删除后轮询器仍会检测开播并自动新建房间启动录制。
 
 ---
 
@@ -830,22 +830,22 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 
 ### 全局设置项说明
 
-| 键                           | 类型   | 默认值   | 说明                                                         |
-| ---------------------------- | ------ | -------- | ------------------------------------------------------------ |
-| `downloader`                 | string | `ffmpeg` | 下载插件（已弃用多引擎，仅 `ffmpeg`，保留键名兼容旧配置）    |
-| `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                           |
-| `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                         |
-| `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成         |
-| `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除             |
-| `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间             |
-| `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                    |
-| `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件          |
-| `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                                 |
-| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件                |
-| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                        |
-| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                           |
-| `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理           |
-| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                             |
+| 键                           | 类型   | 默认值   | 说明                                                      |
+| ---------------------------- | ------ | -------- | --------------------------------------------------------- |
+| `downloader`                 | string | `ffmpeg` | 下载插件（已弃用多引擎，仅 `ffmpeg`，保留键名兼容旧配置） |
+| `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                        |
+| `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                      |
+| `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成      |
+| `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除          |
+| `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间          |
+| `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                 |
+| `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件       |
+| `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                              |
+| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件             |
+| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                     |
+| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                        |
+| `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理        |
+| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                          |
 
 ---
 
@@ -1163,10 +1163,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数     | 类型   | 说明                                                          |
-| -------- | ------ | ------------------------------------------------------------- |
-| `status` | string | 状态筛选；缺省返回全部 `orphan_*`                             |
-| `limit`  | number | 条数，默认 100，最大 500                                      |
+| 参数     | 类型   | 说明                              |
+| -------- | ------ | --------------------------------- |
+| `status` | string | 状态筛选；缺省返回全部 `orphan_*` |
+| `limit`  | number | 条数，默认 100，最大 500          |
 
 #### POST /api/danmaku/orphan/reconcile/:recordId
 
@@ -1174,10 +1174,10 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 **查询参数：**
 
-| 参数      | 类型 | 说明                                          |
-| --------- | ---- | --------------------------------------------- |
-| `dry_run` | 0/1  | 只预览分桶结果，不落盘、不改状态              |
-| `force`   | 0/1  | 忽略置信度阈值强制回填（人工确认后使用）      |
+| 参数      | 类型 | 说明                                     |
+| --------- | ---- | ---------------------------------------- |
+| `dry_run` | 0/1  | 只预览分桶结果，不落盘、不改状态         |
+| `force`   | 0/1  | 忽略置信度阈值强制回填（人工确认后使用） |
 
 置信度不足或无命中时返回 **HTTP 409**，`data` 内含分桶预览供人工判断。
 

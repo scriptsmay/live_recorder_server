@@ -214,6 +214,9 @@ router.delete('/rooms/:id', async (req, res) => {
     if (!result.success) {
       return res.status(404).json({ status: 'Error', message: result.message });
     }
+    // 同步轮询管理器：行已删除，reloadRoom 走 stopRoomPolling 分支清除内存定时器，
+    // 防止删除带轮询的房间后留下幽灵轮询器（v1.10.1 及以前删除不会停轮询，见 09-01 误录制事件）
+    await pollingManager.reloadRoom(parseInt(id, 10));
     res.json({ status: 'ok', message: result.message });
   } catch (err) {
     console.error('[rooms] 删除失败:', err);
