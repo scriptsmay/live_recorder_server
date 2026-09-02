@@ -15,6 +15,7 @@ services:
       PORT: ${PORT:-1123}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
       REDIS_URL: ${REDIS_URL:-redis://default:password@redis:6379/1}
+      REDIS_PUBLISH_CHANNEL: ${REDIS_PUBLISH_CHANNEL:-task:completed}
       APP_DATA_DIR: ${APP_DATA_DIR:-/data}
       VIDEO_DOWNLOAD_DIR: ${VIDEO_DOWNLOAD_DIR:-/data/video_downloads}
       REPLAY_WORK_DIR: ${REPLAY_WORK_DIR:-/data/replay}

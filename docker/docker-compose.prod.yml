@@ -6,8 +6,9 @@
 # 发布/升级时同步维护此文件，使模板与生产实际部署保持一致。
 services:
   live_recorder_server:
-    # 生产使用发布版本号镜像，禁止 latest
-    image: ghcr.io/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}
+    # 生产使用发布版本号镜像，禁止 latest。
+    # APP_IMAGE 可整体覆盖镜像源（如国内加速 ghcr.io），缺失时回退 ghcr.io。
+    image: ${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}}
     environment:
       DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
       REMOTE_BROWSER_WS_ENDPOINT: ${REMOTE_BROWSER_WS_ENDPOINT:-}
@@ -18,12 +19,19 @@ services:
       DOUYIN_TTWID: ${DOUYIN_TTWID:-}
       BILIBILI_DANMAKU_COOKIE: ${BILIBILI_DANMAKU_COOKIE:-}
     volumes:
+      # 录制视频根目录（生产宿主机路径经 VIDEO_DOWNLOAD_HOST_DIR 注入，本地回退 ../data）
+      - ${VIDEO_DOWNLOAD_HOST_DIR:-../data/video_downloads}:/data/video_downloads
+      # 回放工作目录（生产宿主机路径经 REPLAY_HOST_DIR 注入，本地回退 ../data）
+      - ${REPLAY_HOST_DIR:-../data/replay}:/data/replay
       # 与主镜像 scripts 同步的 named volume（v1.8.2 起 entrypoint 会用镜像内
       # /app/scripts.image 刷新此挂载点，让 replay_cron ro 挂载能读到最新脚本）
       - shared_scripts:/app/scripts
       # 弹幕归档目录（file-manage 保护，不可自动清理）
       # 生产真实宿主机路径通过 .env 的 DANMAKU_ARCHIVE_HOST_DIR 注入
       - ${DANMAKU_ARCHIVE_HOST_DIR:-../data/danmaku_archive}:/data/danmaku_archive
+      # 弹幕压制输出目录（v1.7.0 起弹幕压制迁出至 danmaku-tool，本服务已不读写；
+      # 保留挂载以维持现网一致性，真实路径经 DANMAKU_OUTPUT_HOST_DIR 注入）
+      - ${DANMAKU_OUTPUT_HOST_DIR:-../data/danmaku_output}:/data/danmaku_output
     networks:
       - default
       - external
@@ -32,6 +40,13 @@ services:
         limits:
           cpus: ${APP_CPU_LIMIT:-2}
           memory: ${APP_MEM_LIMIT:-2G}
+
+  # replay_cron 生产 override：接入生产外部网络（external-network），
+  # 以便解析 postgresql/redis/live_recorder_server 等容器名（本地场景无 external，仍走 default）。
+  replay_cron:
+    networks:
+      - default
+      - external
 
 volumes:
   shared_scripts:

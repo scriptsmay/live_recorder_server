@@ -34,8 +34,11 @@ services:
       # 生产环境：named volume 或 bind mount 到含脚本的目录
       # 默认挂载仓库 scripts/ 目录到 /mnt/scripts
       - ${SCRIPTS_VOLUME:-../scripts}:/mnt/scripts:ro
+      # 宿主机时区（保证 cron 按本地时间触发）
+      - /etc/localtime:/etc/localtime:ro
     entrypoint: /bin/sh
     command: ${CRON_ENTRYPOINT:-/mnt/scripts/cron-entrypoint.sh}
+    stop_grace_period: 10s
     restart: unless-stopped
     depends_on:
       - live_recorder_server
