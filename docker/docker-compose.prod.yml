@@ -7,7 +7,7 @@
 services:
   live_recorder_server:
     # 生产使用发布版本号镜像，禁止 latest。
-    # APP_IMAGE 可整体覆盖镜像源（如国内加速 ghcr.io），缺失时回退 ghcr.io。
+    # APP_IMAGE 可整体覆盖镜像源（如国内镜像加速站），缺失时回退 ghcr.io。
     image: ${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}}
     environment:
       DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
@@ -41,7 +41,7 @@ services:
           cpus: ${APP_CPU_LIMIT:-2}
           memory: ${APP_MEM_LIMIT:-2G}
 
-  # replay_cron 生产 override：接入生产外部网络（external-network），
+  # replay_cron 生产 override：接入生产外部网络（名称经 EXTERNAL_NETWORK_NAME 注入），
   # 以便解析 postgresql/redis/live_recorder_server 等容器名（本地场景无 external，仍走 default）。
   replay_cron:
     networks:

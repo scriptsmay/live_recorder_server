@@ -11,7 +11,7 @@ set -euo pipefail
 #   ./scripts/import-prod-file-data.sh import
 #
 #   # 可选：路径重映射（生产路径前缀与开发不同时）
-#   PATH_REMAP_FROM="/srv/nas-data/videos/live_records" \
+#   PATH_REMAP_FROM="/path/to/prod/videos" \
 #   PATH_REMAP_TO="/data" \
 #   ./scripts/import-prod-file-data.sh import
 #
@@ -182,7 +182,7 @@ case "${1:-help}" in
   PROD_DATABASE_URL  生产数据库连接串（export 时必填）
   DEV_DATABASE_URL   开发数据库连接串（默认 localhost:5432/live_recorder）
   FAKE_FILE_SIZE     假文件大小，字节（默认 102400）
-  PATH_REMAP_FROM    生产路径前缀（如 /srv/nas-data/videos）
+  PATH_REMAP_FROM    生产路径前缀（如 /path/to/prod/videos）
   PATH_REMAP_TO      开发路径前缀（如 /data）
   CRON_API_TOKEN     API Token（scan 时需要）
 HELP
