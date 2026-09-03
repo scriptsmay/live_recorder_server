@@ -142,4 +142,4 @@ APP_VERSION=v1.8.2 docker compose -f docker-compose.yml -f docker-compose.prod.y
 
 **shared_scripts sync (v1.8.2):** Docker named volumes only seed from the image on first creation, so image updates to `scripts/` were previously masked. The production `Dockerfile` now snapshots `cp -a /app/scripts /app/scripts.image`, and `docker/scripts/docker-entrypoint.sh` refreshes `/app/scripts` from that snapshot on every boot. If a release only changes `scripts/`, force-recreate the main container to trigger the sync, then restart `replay_cron`.
 
-CI/CD: `.cnb.yml`（CNB 云原生构建）在 `v*` tag 推送时构建主服务镜像 + replay-cron 镜像并推送到 CNB 制品库 `registry.cnb.cool/scriptsmay/live_recorder_server`（主服务）与 `...-replay-cron`（试点迁移，对应知识库 ADR-001 步骤③）；`main` 分支 crontab 每周同步 FFmpeg 构建镜像到 `...-ffmpeg`。GitHub Actions 原 `ghcr.io` 流程暂并存。
+CI/CD: `.cnb.yml`（CNB 云原生构建）在 `v*` tag 推送时构建主服务镜像 + replay-cron 镜像并推送到 CNB 制品库 `registry.cnb.cool/scriptsmay/live_recorder_server`（主服务，同名制品）与 `.../live_recorder_server/replay-cron`（非同名制品，命名空间路径）试点迁移，对应知识库 ADR-001 步骤③）；`main` 分支 crontab 每周同步 FFmpeg 构建镜像到 `.../live_recorder_server/ffmpeg`。GitHub Actions 原 `ghcr.io` 流程暂并存。

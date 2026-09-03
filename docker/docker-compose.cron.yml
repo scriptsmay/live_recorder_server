@@ -8,7 +8,7 @@
 # 由主容器 entrypoint 从镜像内 /app/scripts.image 刷新（v1.8.2）。
 services:
   replay_cron:
-    image: ${REPLAY_CRON_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server-replay-cron:latest}
+    image: ${REPLAY_CRON_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server/replay-cron:latest}
     container_name: replay_cron
     environment:
       TZ: ${TZ:-Asia/Shanghai}

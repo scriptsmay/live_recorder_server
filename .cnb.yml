@@ -9,9 +9,11 @@
 #   - 每周一定时   -> 从上游 ghcr.io 拉取 FFmpeg 构建镜像并转推到 CNB 制品库（对应 ffmpeg-builder.yml）
 #
 # 镜像地址约定：
-#   主服务    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG                 -> registry.cnb.cool/scriptsmay/live_recorder_server
-#   replay-cron: $CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-replay-cron  -> registry.cnb.cool/scriptsmay/live_recorder_server-replay-cron
-#   ffmpeg    : $CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-ffmpeg        -> registry.cnb.cool/scriptsmay/live_recorder_server-ffmpeg
+#   主服务    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG              -> registry.cnb.cool/scriptsmay/live_recorder_server
+#   replay-cron: $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG/replay-cron -> registry.cnb.cool/scriptsmay/live_recorder_server/replay-cron
+#   ffmpeg    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG/ffmpeg       -> registry.cnb.cool/scriptsmay/live_recorder_server/ffmpeg
+#   注：CNB Docker 制品库用「仓库路径/镜像名」命名空间（非同名制品），镜像都落在同一个制品库下，
+#       构建令牌对已存在的 live_recorder_server 制品库可写，无需单独建库。
 #
 # 制品库登录：使用构建期临时令牌（CNB_TOKEN_USER_NAME 固定为 cnb），无需自建密钥仓库。
 # 注意：首次推送前需在 CNB 网页确认该仓库已开启「制品库」；CNB 通常会随首次推送自动创建制品仓库。
@@ -29,7 +31,7 @@ main:
         - name: pull-retag-push
           script: |
             SRC="ghcr.io/ffpresets/ffmpeg-builds/master-7.1:latest"
-            DST="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-ffmpeg:master-7.1"
+            DST="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}/ffmpeg:master-7.1"
             echo "从上游拉取 FFmpeg 镜像: $SRC"
             docker pull "$SRC"
             docker tag "$SRC" "$DST"
@@ -73,7 +75,7 @@ $:
           script: docker login -u "$CNB_TOKEN_USER_NAME" -p "$CNB_TOKEN" "$CNB_DOCKER_REGISTRY"
         - name: build-and-push
           script: |
-            IMAGE="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-replay-cron"
+            IMAGE="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}/replay-cron"
             TAG="$CNB_BRANCH"
             echo "构建 replay-cron 镜像: $IMAGE:$TAG"
             docker build -f ./docker/Dockerfile.replay-cron -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
