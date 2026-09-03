@@ -4,7 +4,7 @@
 
 ## 文件职责
 
-- `docker-compose.yml`（base）— 主服务共性：环境变量、healthcheck、ports、通用 volumes。镜像走 `${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:latest}`
+- `docker-compose.yml`（base）— 主服务共性：环境变量、healthcheck、ports、通用 volumes。镜像走 `${APP_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server:latest}`
 - `docker-compose.build.yml` — 本地全栈 override：覆盖 `build:` 指向 `Dockerfile.local`，追加 postgres 16 + redis 7 及其数据卷
 - `docker-compose.prod.yml` — 生产 override：写死版本号（`APP_VERSION` 必填）、`shared_scripts` 命名卷、外部网络（`EXTERNAL_NETWORK_NAME` 必填）、`deploy.resources` 限制、`DANMAKU_ARCHIVE_DIR` 等。**本文件已脱敏，所有生产真实路径 / 网络名走 `.env` 注入**
 - `docker-compose.cron.yml` — replay_cron overlay（回放定时 + 数据同步）

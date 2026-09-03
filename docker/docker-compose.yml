@@ -5,7 +5,7 @@
 #   生产: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
 services:
   live_recorder_server:
-    image: ${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:latest}
+    image: ${APP_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server:latest}
     container_name: live_recorder_server
     environment:
       LANG: C.UTF-8

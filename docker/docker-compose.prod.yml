@@ -8,7 +8,7 @@ services:
   live_recorder_server:
     # 生产使用发布版本号镜像，禁止 latest。
     # APP_IMAGE 可整体覆盖镜像源（如国内镜像加速站），缺失时回退 ghcr.io。
-    image: ${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}}
+    image: ${APP_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server:${APP_VERSION:?APP_VERSION is required for prod}}
     environment:
       DANMAKU_ARCHIVE_DIR: ${DANMAKU_ARCHIVE_DIR:-/data/danmaku_archive}
       REMOTE_BROWSER_WS_ENDPOINT: ${REMOTE_BROWSER_WS_ENDPOINT:-}

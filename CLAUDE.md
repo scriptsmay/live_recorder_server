@@ -124,7 +124,7 @@ Chrome Extension (danmaku)
 
 All Docker config files live in `docker/`. Composition is **base + override**, service name is always `live_recorder_server`. See `docker/README.md` for details.
 
-- `docker/docker-compose.yml` (base) — main service commonalities; image via `${APP_IMAGE:-ghcr.io/scriptsmay/live_recorder_server:latest}`
+- `docker/docker-compose.yml` (base) — main service commonalities; image via `${APP_IMAGE:-registry.cnb.cool/scriptsmay/live_recorder_server:latest}`
 - `docker/docker-compose.build.yml` — local full-stack override: builds from `Dockerfile.local`, adds PostgreSQL 16 + Redis 7
 - `docker/docker-compose.prod.yml` — production override: pinned `APP_VERSION`, `shared_scripts` volume, external network (`EXTERNAL_NETWORK_NAME`), `deploy.resources`
 - `docker/docker-compose.cron.yml` — replay cron + data sync overlay
@@ -142,4 +142,4 @@ APP_VERSION=v1.8.2 docker compose -f docker-compose.yml -f docker-compose.prod.y
 
 **shared_scripts sync (v1.8.2):** Docker named volumes only seed from the image on first creation, so image updates to `scripts/` were previously masked. The production `Dockerfile` now snapshots `cp -a /app/scripts /app/scripts.image`, and `docker/scripts/docker-entrypoint.sh` refreshes `/app/scripts` from that snapshot on every boot. If a release only changes `scripts/`, force-recreate the main container to trigger the sync, then restart `replay_cron`.
 
-CI/CD: GitHub Actions builds Docker image on `v*` tags, pushes to GHCR
+CI/CD: `.cnb.yml`（CNB 云原生构建）在 `v*` tag 推送时构建主服务镜像并推送到 CNB 制品库 `registry.cnb.cool/scriptsmay/live_recorder_server`（试点迁移，对应知识库 ADR-001 步骤③）；GitHub Actions 原 `ghcr.io` 流程暂并存。
