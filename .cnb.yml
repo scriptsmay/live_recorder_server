@@ -1,0 +1,85 @@
+# .cnb.yml — live_recorder_server 云原生构建流水线
+#
+# 试点迁移目标（对应知识库 ADR-001 步骤 ③）：
+#   用 CNB 云原生构建替代 GitHub Actions 的 docker-image.yml / replay-cron-image.yml / ffmpeg-builder.yml，
+#   镜像推送到 CNB 制品库（registry.cnb.cool），逐步退役 ghcr.io。
+#
+# 触发规则（与原 GitHub 工作流对齐）：
+#   - 推送 v* Tag  -> 构建并推送「主服务镜像」+「replay-cron 镜像」（对应 docker-image.yml / replay-cron-image.yml）
+#   - 每周一定时   -> 从上游 ghcr.io 拉取 FFmpeg 构建镜像并转推到 CNB 制品库（对应 ffmpeg-builder.yml）
+#
+# 镜像地址约定：
+#   主服务    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG                 -> registry.cnb.cool/scriptsmay/live_recorder_server
+#   replay-cron: $CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-replay-cron  -> registry.cnb.cool/scriptsmay/live_recorder_server-replay-cron
+#   ffmpeg    : $CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-ffmpeg        -> registry.cnb.cool/scriptsmay/live_recorder_server-ffmpeg
+#
+# 制品库登录：使用构建期临时令牌（CNB_TOKEN_USER_NAME 固定为 cnb），无需自建密钥仓库。
+# 注意：首次推送前需在 CNB 网页确认该仓库已开启「制品库」；CNB 通常会随首次推送自动创建制品仓库。
+
+# ---- 定时任务必须挂在具体分支名下（此处用默认分支 main）----
+main:
+  # 每周一 03:00（UTC）从上游 ghcr.io 同步 FFmpeg 构建镜像到 CNB 制品库
+  "crontab: 0 3 * * 1":
+    - name: sync-ffmpeg-image
+      services:
+        - docker
+      stages:
+        - name: login-cnb-registry
+          script: docker login -u "$CNB_TOKEN_USER_NAME" -p "$CNB_TOKEN" "$CNB_DOCKER_REGISTRY"
+        - name: pull-retag-push
+          script: |
+            SRC="ghcr.io/ffpresets/ffmpeg-builds/master-7.1:latest"
+            DST="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-ffmpeg:master-7.1"
+            echo "从上游拉取 FFmpeg 镜像: $SRC"
+            docker pull "$SRC"
+            docker tag "$SRC" "$DST"
+            docker push "$DST"
+            echo "已转推到 CNB 制品库: $DST"
+      failStages:
+        - name: notify-failure
+          script: echo "FFmpeg 镜像同步失败：$CNB_BUILD_FAILED_MSG"
+
+# ---- 仓库级事件（tag_push）必须挂在 $ 兜底分支下 ----
+$:
+  tag_push:
+    # 主服务镜像（对应 GitHub docker-image.yml）
+    - name: build-app-image
+      services:
+        - docker
+      stages:
+        - name: login-cnb-registry
+          script: docker login -u "$CNB_TOKEN_USER_NAME" -p "$CNB_TOKEN" "$CNB_DOCKER_REGISTRY"
+        - name: build-and-push
+          script: |
+            IMAGE="$CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG"
+            TAG="$CNB_BRANCH"
+            echo "构建主服务镜像: $IMAGE:$TAG"
+            docker build -f ./Dockerfile -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+            docker push "$IMAGE:$TAG"
+            docker push "$IMAGE:latest"
+            echo "已推送: $IMAGE:$TAG , $IMAGE:latest"
+      failStages:
+        - name: notify-failure
+          script: echo "主服务镜像构建失败：$CNB_BUILD_FAILED_MSG"
+
+    # replay-cron 镜像（对应 GitHub replay-cron-image.yml）
+    # 注：原 GitHub 工作流带「仅当相关文件变更才构建」的优化；试点阶段简化为每次打 tag 都构建。
+    #     若后续想省构建时长，可加 ifModify 或 git diff 判定（参考 replay-cron-image.yml 的 changed 逻辑）。
+    - name: build-replay-cron-image
+      services:
+        - docker
+      stages:
+        - name: login-cnb-registry
+          script: docker login -u "$CNB_TOKEN_USER_NAME" -p "$CNB_TOKEN" "$CNB_DOCKER_REGISTRY"
+        - name: build-and-push
+          script: |
+            IMAGE="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}-replay-cron"
+            TAG="$CNB_BRANCH"
+            echo "构建 replay-cron 镜像: $IMAGE:$TAG"
+            docker build -f ./docker/Dockerfile.replay-cron -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+            docker push "$IMAGE:$TAG"
+            docker push "$IMAGE:latest"
+            echo "已推送: $IMAGE:$TAG , $IMAGE:latest"
+      failStages:
+        - name: notify-failure
+          script: echo "replay-cron 镜像构建失败：$CNB_BUILD_FAILED_MSG"
