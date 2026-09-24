@@ -222,7 +222,7 @@ async function copyStreamUrl() {
     <div class="p-4">
       <div class="grid gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
         <div
-          class="grid gap-3 grid-cols-[112px_minmax(0,1fr)] sm:grid-cols-[144px_minmax(0,1fr)] min-w-0"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-[144px_minmax(0,1fr)] min-w-0"
         >
           <a
             v-if="coverUrl"
