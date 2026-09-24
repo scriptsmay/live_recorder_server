@@ -585,7 +585,9 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 按会话 ID 返回已下载的直播间封面图片。接口继承 `/api/*` 鉴权；浏览器必须使用 Cookie 或 Bearer Token。
 
-- 会话不存在、无 `cover_path`、文件已丢失、路径不安全或格式不受支持时返回 404
+- 会话不存在、无 `cover_path`、文件已丢失、路径不安全、格式不受支持或当前平台无法安全验证已打开文件的目标路径时返回 404
+- Linux 通过 `/proc/self/fd/<fd>` 校验已打开文件实际目标仍位于 `VIDEO_DOWNLOAD_DIR` 内，再从同一文件描述符返回内容
+- macOS 的 `/dev/fd/<fd>` 无法通过 Node.js 解析实际目标，其他无可靠 fd 目标解析能力的平台同样 fail closed 返回 404，不会降级到存在路径竞态的读取方式
 - 成功响应包含正确的图片 `Content-Type`、`Cache-Control: private, max-age=3600` 与 `X-Content-Type-Options: nosniff`
 - 前端不得直接使用 `cover_path` 作为图片 URL
 

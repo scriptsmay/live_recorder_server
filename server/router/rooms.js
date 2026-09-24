@@ -42,7 +42,29 @@ function sendCoverReadError(res, err) {
   });
 }
 
+async function resolveOpenedFileTarget(fileHandle, realVideoRoot) {
+  const descriptorLink = `/proc/self/fd/${fileHandle.fd}`;
+
+  let target;
+  try {
+    target = await fs.promises.readlink(descriptorLink);
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'EINVAL' || err.code === 'ENOTSUP') {
+      return null;
+    }
+    throw err;
+  }
+  if (!path.isAbsolute(target) || !isWithinRoot(target, realVideoRoot)) {
+    return null;
+  }
+  return fs.promises.realpath(target);
+}
+
 async function openValidatedCover(coverPath) {
+  if (process.platform !== 'linux') {
+    return null;
+  }
+
   const videoRoot = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads');
   const pathCheck = await resolveAndValidate(coverPath, [videoRoot]);
   if (!pathCheck.valid) {
@@ -66,35 +88,34 @@ async function openValidatedCover(coverPath) {
     return null;
   }
 
-  let validatedHandle;
-  let streamHandle;
+  let fileHandle;
   try {
     const openFlags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
-    validatedHandle = await fs.promises.open(realCoverPath, openFlags);
-    const validatedStats = await validatedHandle.stat();
-    if (!validatedStats.isFile()) {
+    fileHandle = await fs.promises.open(pathCheck.resolvedPath, openFlags);
+    const stats = await fileHandle.stat();
+    if (!stats.isFile()) {
       return null;
     }
 
-    streamHandle = await fs.promises.open(pathCheck.resolvedPath, openFlags);
-    const streamStats = await streamHandle.stat();
-    if (!streamStats.isFile() || streamStats.dev !== validatedStats.dev || streamStats.ino !== validatedStats.ino) {
-      await streamHandle.close();
-      streamHandle = null;
+    let openedRealPath;
+    try {
+      openedRealPath = await resolveOpenedFileTarget(fileHandle, realVideoRoot);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    }
+    if (!openedRealPath || !isWithinRoot(openedRealPath, realVideoRoot)) {
       return null;
     }
 
-    await validatedHandle.close();
-    validatedHandle = null;
-    return { fileHandle: streamHandle, size: streamStats.size };
-  } catch (err) {
-    if (streamHandle) {
-      await streamHandle.close().catch(() => {});
-    }
-    throw err;
+    const streamHandle = fileHandle;
+    fileHandle = null;
+    return { fileHandle: streamHandle, size: stats.size };
   } finally {
-    if (validatedHandle) {
-      await validatedHandle.close().catch(() => {});
+    if (fileHandle) {
+      await fileHandle.close().catch(() => {});
     }
   }
 }
