@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
@@ -7,6 +9,15 @@ const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { resolveAndValidate } = require('../lib/utils/path-safety');
+
+const COVER_CONTENT_TYPES = new Map([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+  ['.gif', 'image/gif'],
+]);
 
 router.get('/rooms', async (req, res) => {
   try {
@@ -295,6 +306,43 @@ router.get('/sessions', async (req, res) => {
   } catch (err) {
     console.error('[sessions] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+router.get('/sessions/:id/cover', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+      return res.status(400).json({ status: 'Error', message: '会话 ID 无效' });
+    }
+
+    const result = await pool.query('SELECT cover_path FROM recording_sessions WHERE id = $1', [sessionId]);
+    const coverPath = result.rows[0]?.cover_path;
+    const contentType = COVER_CONTENT_TYPES.get(path.extname(coverPath || '').toLowerCase());
+    if (!coverPath || !contentType) {
+      return res.status(404).json({ status: 'Error', message: '封面不可用' });
+    }
+
+    const videoRoot = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads');
+    const pathCheck = await resolveAndValidate(coverPath, [videoRoot]);
+    if (!pathCheck.valid || !fs.existsSync(pathCheck.resolvedPath)) {
+      return res.status(404).json({ status: 'Error', message: '封面不可用' });
+    }
+
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'private, max-age=3600',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.sendFile(pathCheck.resolvedPath, (err) => {
+      if (!err || res.headersSent) return;
+      if (!res.statusCode || res.statusCode === 200) {
+        res.status(404).json({ status: 'Error', message: '封面不可用' });
+      }
+    });
+  } catch (err) {
+    console.error('[sessions] 读取封面失败:', err.message);
+    res.status(500).json({ status: 'Error', message: '封面读取失败' });
   }
 });
 

@@ -31,6 +31,7 @@ const EXPECTED_APIS = [
   { method: 'POST', path: '/rooms/:id/resume' },
   { method: 'POST', path: '/rooms/:id/stop' },
   { method: 'GET', path: '/sessions' },
+  { method: 'GET', path: '/sessions/:id/cover' },
   { method: 'GET', path: '/sessions/:id' },
   { method: 'DELETE', path: '/sessions/:id' },
 

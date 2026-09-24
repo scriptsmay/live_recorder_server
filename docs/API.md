@@ -511,6 +511,8 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
         "total_size": 524288000,
         "danmaku_status": "completed",
         "danmaku_event_count": 1200,
+        "cover_url": "https://live.example.com/cover.jpg",
+        "cover_path": "/data/video_downloads/25/cover.jpg",
         "upload_records": [{ "id": 1, "session_id": 25, "status": "success", "bv_id": "BV1xx" }]
       }
     ],
@@ -553,13 +555,11 @@ curl http://127.0.0.1:1123/api/sessions/25
 {
   "status": "ok",
   "data": {
-    "session": {
-      "id": 25,
-      "room_url": "https://live.example.com/room1",
-      "status": "completed",
-      "total_segments": 3,
-      "total_size": 524288000
-    },
+    "id": 25,
+    "room_url": "https://live.example.com/room1",
+    "status": "completed",
+    "total_segments": 3,
+    "total_size": 524288000,
     "recordings": [
       {
         "id": 101,
@@ -576,9 +576,18 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 **说明：**
 
-- `recordings` 数组内容实际来自 `recording_files` 表，字段映射后返回（含 `segment_index: 0` 和 `ended_at`）
-- 若该会话尚无文件记录但有 `rooms.output_path`（录制中），则自动从磁盘读取文件信息
-- 受 `filtering_threshold` 设置影响，小于阈值的文件会被过滤
+- 会话字段与 `recordings` 位于同一个 `data` 对象中
+- `recordings` 数组内容来自 `recording_files` 表
+
+---
+
+### GET /api/sessions/:id/cover
+
+按会话 ID 返回已下载的直播间封面图片。接口继承 `/api/*` 鉴权；浏览器必须使用 Cookie 或 Bearer Token。
+
+- 会话不存在、无 `cover_path`、文件已丢失、路径不安全或格式不受支持时返回 404
+- 成功响应包含正确的图片 `Content-Type`、`Cache-Control: private, max-age=3600` 与 `X-Content-Type-Options: nosniff`
+- 前端不得直接使用 `cover_path` 作为图片 URL
 
 ---
 
