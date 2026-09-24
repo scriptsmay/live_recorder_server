@@ -49,4 +49,6 @@ data/
 # IDEs
 .workbuddy/
 .claude/
+.worktrees/
+.superpowers/
 qrcode.png
