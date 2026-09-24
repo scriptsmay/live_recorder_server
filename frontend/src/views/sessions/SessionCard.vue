@@ -5,7 +5,7 @@
  * 双栏布局：左栏直播录制信息，右栏弹幕信息
  * 支持展开文件列表（懒加载）、查看投稿记录、删除、投稿
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { formatBytes, formatTime } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import FilePanel from './FilePanel.vue'
@@ -26,6 +26,10 @@ const toast = useToast()
 // ---- Local State ----
 const filesExpanded = ref(false)
 const coverLoadFailed = ref(false)
+
+watch([() => props.session.id, () => props.session.cover_path], () => {
+  coverLoadFailed.value = false
+})
 
 const coverUrl = computed(() => {
   if (!props.session.cover_path || coverLoadFailed.value) return null
@@ -226,6 +230,7 @@ async function copyStreamUrl() {
             target="_blank"
             rel="noopener noreferrer"
             class="group relative block aspect-video overflow-hidden rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+            :aria-label="`在会话 #${session.id} 的新标签页查看封面原图`"
             title="在新标签页查看封面原图"
           >
             <img
