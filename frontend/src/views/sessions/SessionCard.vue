@@ -25,6 +25,16 @@ const toast = useToast()
 
 // ---- Local State ----
 const filesExpanded = ref(false)
+const coverLoadFailed = ref(false)
+
+const coverUrl = computed(() => {
+  if (!props.session.cover_path || coverLoadFailed.value) return null
+  return `/api/sessions/${props.session.id}/cover`
+})
+
+function handleCoverError() {
+  coverLoadFailed.value = true
+}
 
 // ---- Computed ----
 const uploadRecords = computed(() => props.session.upload_records ?? [])
@@ -207,47 +217,90 @@ async function copyStreamUrl() {
 
     <div class="p-4">
       <div class="grid gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
-        <div class="min-w-0">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div
-              v-for="item in metaItems"
-              :key="item.label"
-              class="rounded-lg bg-gray-50 px-2.5 py-2 min-w-0"
+        <div
+          class="grid gap-3 grid-cols-[112px_minmax(0,1fr)] sm:grid-cols-[144px_minmax(0,1fr)] min-w-0"
+        >
+          <a
+            v-if="coverUrl"
+            :href="coverUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="group relative block aspect-video overflow-hidden rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+            title="在新标签页查看封面原图"
+          >
+            <img
+              :src="coverUrl"
+              :alt="`${session.room_name || session.room_url || '直播间'}封面`"
+              class="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+              loading="lazy"
+              decoding="async"
+              @error="handleCoverError"
+            />
+          </a>
+          <div
+            v-else
+            class="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-400"
+            aria-label="暂无封面"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              class="size-5"
+              aria-hidden="true"
             >
-              <div class="text-[11px] text-gray-400">{{ item.label }}</div>
-              <div class="mt-0.5 text-gray-700 font-medium truncate">{{ item.value }}</div>
-            </div>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 012.561 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 12.75h.008v.008H18v-.008zM3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"
+              />
+            </svg>
+            <span class="mt-1 text-[10px] leading-none">暂无封面</span>
           </div>
 
-          <div class="mt-3 grid gap-2 text-xs">
-            <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)]">
-              <span class="text-gray-400">输出路径</span>
-              <div class="text-gray-700 break-all">{{ session.output_path || '-' }}</div>
-            </div>
-            <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-start">
-              <span class="text-gray-400">直播流</span>
-              <code
-                class="block text-gray-600 bg-gray-50 rounded px-2 py-1 text-xs cursor-pointer hover:bg-gray-100 break-all"
-                :title="session.stream_url || ''"
-                @click="copyStreamUrl"
-                >{{ truncatedStreamUrl || '-' }}</code
+          <div class="min-w-0">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div
+                v-for="item in metaItems"
+                :key="item.label"
+                class="rounded-lg bg-gray-50 px-2.5 py-2 min-w-0"
               >
+                <div class="text-[11px] text-gray-400">{{ item.label }}</div>
+                <div class="mt-0.5 text-gray-700 font-medium truncate">{{ item.value }}</div>
+              </div>
             </div>
-          </div>
 
-          <div v-if="uploadRecords.length > 0" class="mt-1">
-            <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-center">
-              <span class="text-xs text-gray-400">投稿记录</span>
-              <div>
-                <span
-                  v-for="u in uploadRecords"
-                  :key="u.id"
-                  class="text-xs font-medium px-2 py-0.5 rounded-full"
-                  :class="uploadBadgeCls(u.status)"
-                  :title="u.status"
+            <div class="mt-3 grid gap-2 text-xs">
+              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)]">
+                <span class="text-gray-400">输出路径</span>
+                <div class="text-gray-700 break-all">{{ session.output_path || '-' }}</div>
+              </div>
+              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-start">
+                <span class="text-gray-400">直播流</span>
+                <code
+                  class="block text-gray-600 bg-gray-50 rounded px-2 py-1 text-xs cursor-pointer hover:bg-gray-100 break-all"
+                  :title="session.stream_url || ''"
+                  @click="copyStreamUrl"
+                  >{{ truncatedStreamUrl || '-' }}</code
                 >
-                  {{ u.bv_id ? 'BV ' + u.bv_id : u.status }}
-                </span>
+              </div>
+            </div>
+
+            <div v-if="uploadRecords.length > 0" class="mt-1">
+              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-center">
+                <span class="text-xs text-gray-400">投稿记录</span>
+                <div>
+                  <span
+                    v-for="u in uploadRecords"
+                    :key="u.id"
+                    class="text-xs font-medium px-2 py-0.5 rounded-full"
+                    :class="uploadBadgeCls(u.status)"
+                    :title="u.status"
+                  >
+                    {{ u.bv_id ? 'BV ' + u.bv_id : u.status }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -60,6 +60,8 @@ export interface RecordingSession {
   ended_at: string | null
   caption: string
   output_path: string
+  cover_url: string | null
+  cover_path: string | null
   stream_url: string
   total_segments: number
   total_size: number
