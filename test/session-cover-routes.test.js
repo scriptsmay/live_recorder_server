@@ -14,6 +14,7 @@ jest.mock('../server/services/RecorderService', () => ({}));
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { Readable } = require('stream');
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -27,6 +28,7 @@ const VALID_TOKEN = 'valid-session-token';
 const ENV_KEYS = ['VIDEO_DOWNLOAD_DIR', 'AUTH_ENABLED', 'AUTH_COOKIE_NAME'];
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 const emulateLinuxFdResolution = process.platform !== 'linux';
+const mkfifoPath = ['/usr/bin/mkfifo', '/bin/mkfifo'].find((candidate) => fs.existsSync(candidate));
 let mockedOpenedFileTarget;
 let originalEnv;
 let tmpRoot;
@@ -59,6 +61,22 @@ function setTestPlatform(platform) {
 
 function setMockedOpenedFileTarget(target) {
   mockedOpenedFileTarget = fs.realpathSync(target);
+}
+
+function createDeferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function waitWithTimeout(promise, timeoutMs = 500) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('test operation timed out')), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 beforeAll(() => {
@@ -310,6 +328,102 @@ test.each([
   } else {
     expect(console.error).not.toHaveBeenCalled();
   }
+});
+
+test('校验和打开期间客户端提前断开时关闭 handle 且不创建流', async () => {
+  const coverPath = path.join(tmpRoot, 'client-abort.jpg');
+  fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  setMockedOpenedFileTarget(coverPath);
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+  const openEntered = createDeferred();
+  const releaseOpen = createDeferred();
+  const handleClosed = createDeferred();
+  const realOpen = fs.promises.open.bind(fs.promises);
+  let closeCalls = 0;
+  let streamCreated = false;
+  jest.spyOn(fs.promises, 'open').mockImplementationOnce(async (...args) => {
+    openEntered.resolve();
+    await releaseOpen.promise;
+    const fileHandle = await realOpen(...args);
+    const realClose = fileHandle.close.bind(fileHandle);
+    fileHandle.close = jest.fn(async () => {
+      closeCalls += 1;
+      try {
+        await realClose();
+      } finally {
+        handleClosed.resolve();
+      }
+    });
+    fileHandle.createReadStream = jest.fn(() => {
+      streamCreated = true;
+      return new Readable({
+        read() {},
+        destroy(error, callback) {
+          fileHandle.close().then(
+            () => callback(error),
+            () => callback(error)
+          );
+        },
+      });
+    });
+    return fileHandle;
+  });
+  const unhandledErrors = [];
+  const onUnhandledRejection = (reason) => unhandledErrors.push(reason);
+  process.on('unhandledRejection', onUnhandledRejection);
+  const pendingRequest = authed('/api/sessions/61/cover');
+  const requestOutcome = pendingRequest.then(
+    (response) => ({ response }),
+    (error) => ({ error })
+  );
+
+  try {
+    await waitWithTimeout(openEntered.promise);
+    pendingRequest.abort();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    releaseOpen.resolve();
+
+    const requestResult = await waitWithTimeout(requestOutcome);
+    await waitWithTimeout(handleClosed.promise);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(requestResult.error).toBeDefined();
+    expect(closeCalls).toBe(1);
+    expect(streamCreated).toBe(false);
+    expect(unhandledErrors).toEqual([]);
+  } finally {
+    releaseOpen.resolve();
+    try {
+      pendingRequest.abort();
+    } catch (_) {}
+    if (pendingRequest._server?.listening) {
+      await new Promise((resolve, reject) => {
+        pendingRequest._server.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+    process.removeListener('unhandledRejection', onUnhandledRejection);
+  }
+});
+
+const posixFifoTest = process.platform !== 'win32' && mkfifoPath ? test : test.skip;
+
+posixFifoTest('POSIX FIFO 使用 O_NONBLOCK 快速返回 404', async () => {
+  const fifoPath = path.join(tmpRoot, 'cover-fifo.jpg');
+  execFileSync(mkfifoPath, [fifoPath]);
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: fifoPath }] });
+  const realOpen = fs.promises.open.bind(fs.promises);
+  const openSpy = jest.spyOn(fs.promises, 'open').mockImplementationOnce((...args) => {
+    if ((args[1] & fs.constants.O_NONBLOCK) === 0) {
+      return Promise.reject(Object.assign(new Error('O_NONBLOCK required'), { code: 'EAGAIN' }));
+    }
+    return realOpen(...args);
+  });
+
+  const response = await waitWithTimeout(authed('/api/sessions/61/cover'));
+
+  expect(response.status).toBe(404);
+  expect(response.body.message).toBe('封面不可用');
+  expect(openSpy.mock.calls[0][1] & fs.constants.O_NONBLOCK).toBe(fs.constants.O_NONBLOCK);
 });
 
 test('平台无法安全解析已打开 fd 的实际目标时 fail closed 返回 404', async () => {

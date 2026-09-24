@@ -60,7 +60,7 @@ async function resolveOpenedFileTarget(fileHandle, realVideoRoot) {
   return fs.promises.realpath(target);
 }
 
-async function openValidatedCover(coverPath) {
+async function openValidatedCover(coverPath, isDisconnected) {
   if (process.platform !== 'linux') {
     return null;
   }
@@ -90,8 +90,11 @@ async function openValidatedCover(coverPath) {
 
   let fileHandle;
   try {
-    const openFlags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
+    const openFlags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK;
     fileHandle = await fs.promises.open(pathCheck.resolvedPath, openFlags);
+    if (isDisconnected()) {
+      return null;
+    }
     const stats = await fileHandle.stat();
     if (!stats.isFile()) {
       return null;
@@ -412,6 +415,16 @@ router.get('/sessions', async (req, res) => {
 
 router.get('/sessions/:id/cover', async (req, res) => {
   let openedCover = null;
+  let stream = null;
+  let clientDisconnected = false;
+  const handleClientClose = () => {
+    clientDisconnected = true;
+    if (stream && !stream.destroyed) {
+      stream.destroy();
+    }
+  };
+  res.once('close', handleClientClose);
+
   try {
     const sessionId = Number(req.params.id);
     if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
@@ -419,15 +432,26 @@ router.get('/sessions/:id/cover', async (req, res) => {
     }
 
     const result = await pool.query('SELECT cover_path FROM recording_sessions WHERE id = $1', [sessionId]);
+    if (clientDisconnected || res.destroyed) {
+      return;
+    }
     const coverPath = result.rows[0]?.cover_path;
     const contentType = COVER_CONTENT_TYPES.get(path.extname(coverPath || '').toLowerCase());
     if (!coverPath || !contentType) {
       return res.status(404).json({ status: 'Error', message: '封面不可用' });
     }
 
-    openedCover = await openValidatedCover(coverPath);
+    openedCover = await openValidatedCover(coverPath, () => clientDisconnected || res.destroyed);
     if (!openedCover) {
+      if (clientDisconnected || res.destroyed) {
+        return;
+      }
       return res.status(404).json({ status: 'Error', message: '封面不可用' });
+    }
+    if (clientDisconnected || res.destroyed) {
+      await openedCover.fileHandle.close().catch(() => {});
+      openedCover = null;
+      return;
     }
 
     res.set({
@@ -436,7 +460,7 @@ router.get('/sessions/:id/cover', async (req, res) => {
       'Cache-Control': 'private, max-age=3600',
       'X-Content-Type-Options': 'nosniff',
     });
-    const stream = openedCover.fileHandle.createReadStream({ autoClose: true });
+    stream = openedCover.fileHandle.createReadStream({ autoClose: true });
     openedCover = null;
     stream.on('error', (err) => {
       if (err.code !== 'ENOENT') {
@@ -446,20 +470,17 @@ router.get('/sessions/:id/cover', async (req, res) => {
         res.destroy(err);
       }
     });
-    res.on('close', () => {
-      if (!stream.destroyed) {
-        stream.destroy();
-      }
-    });
     stream.pipe(res);
   } catch (err) {
     if (openedCover) {
       await openedCover.fileHandle.close().catch(() => {});
+      openedCover = null;
+    }
+    if (clientDisconnected || res.destroyed) {
+      return;
     }
     if (res.headersSent) {
-      if (!res.destroyed) {
-        res.destroy(err);
-      }
+      res.destroy(err);
     } else {
       sendCoverReadError(res, err);
     }

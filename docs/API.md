@@ -583,7 +583,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 ### GET /api/sessions/:id/cover
 
-按会话 ID 返回已下载的直播间封面图片。接口继承 `/api/*` 鉴权；浏览器必须使用 Cookie 或 Bearer Token。
+按会话 ID 返回已下载的直播间封面图片。接口继承 `/api/*` 全局鉴权：鉴权开启时必须提供 Cookie 或 Bearer Token；`AUTH_ENABLED=false` 时按全局配置放行。
 
 - 会话不存在、无 `cover_path`、文件已丢失、路径不安全、格式不受支持或当前平台无法安全验证已打开文件的目标路径时返回 404
 - Linux 通过 `/proc/self/fd/<fd>` 校验已打开文件实际目标仍位于 `VIDEO_DOWNLOAD_DIR` 内，再从同一文件描述符返回内容
