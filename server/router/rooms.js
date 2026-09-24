@@ -9,7 +9,7 @@ const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
-const { resolveAndValidate } = require('../lib/utils/path-safety');
+const { isWithinRoot, resolveAndValidate } = require('../lib/utils/path-safety');
 
 const COVER_CONTENT_TYPES = new Map([
   ['.jpg', 'image/jpeg'],
@@ -18,6 +18,86 @@ const COVER_CONTENT_TYPES = new Map([
   ['.webp', 'image/webp'],
   ['.gif', 'image/gif'],
 ]);
+
+function logCoverReadError(err) {
+  console.error('[sessions] 读取封面失败:', err.message);
+}
+
+function sendCoverReadError(res, err) {
+  const unavailable = err.code === 'ENOENT' || err.code === 'ELOOP';
+  if (res.headersSent) {
+    if (!res.destroyed) {
+      res.destroy(err);
+    }
+    return;
+  }
+  if (!unavailable) {
+    logCoverReadError(err);
+  } else if (err.code === 'ELOOP') {
+    logCoverReadError(err);
+  }
+  res.status(unavailable ? 404 : 500).json({
+    status: 'Error',
+    message: unavailable ? '封面不可用' : '封面读取失败',
+  });
+}
+
+async function openValidatedCover(coverPath) {
+  const videoRoot = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads');
+  const pathCheck = await resolveAndValidate(coverPath, [videoRoot]);
+  if (!pathCheck.valid) {
+    return null;
+  }
+
+  let realVideoRoot;
+  let realCoverPath;
+  try {
+    [realVideoRoot, realCoverPath] = await Promise.all([
+      fs.promises.realpath(videoRoot),
+      fs.promises.realpath(pathCheck.resolvedPath),
+    ]);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return null;
+    }
+    throw err;
+  }
+  if (!isWithinRoot(realCoverPath, realVideoRoot)) {
+    return null;
+  }
+
+  let validatedHandle;
+  let streamHandle;
+  try {
+    const openFlags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
+    validatedHandle = await fs.promises.open(realCoverPath, openFlags);
+    const validatedStats = await validatedHandle.stat();
+    if (!validatedStats.isFile()) {
+      return null;
+    }
+
+    streamHandle = await fs.promises.open(pathCheck.resolvedPath, openFlags);
+    const streamStats = await streamHandle.stat();
+    if (!streamStats.isFile() || streamStats.dev !== validatedStats.dev || streamStats.ino !== validatedStats.ino) {
+      await streamHandle.close();
+      streamHandle = null;
+      return null;
+    }
+
+    await validatedHandle.close();
+    validatedHandle = null;
+    return { fileHandle: streamHandle, size: streamStats.size };
+  } catch (err) {
+    if (streamHandle) {
+      await streamHandle.close().catch(() => {});
+    }
+    throw err;
+  } finally {
+    if (validatedHandle) {
+      await validatedHandle.close().catch(() => {});
+    }
+  }
+}
 
 router.get('/rooms', async (req, res) => {
   try {
@@ -310,6 +390,7 @@ router.get('/sessions', async (req, res) => {
 });
 
 router.get('/sessions/:id/cover', async (req, res) => {
+  let openedCover = null;
   try {
     const sessionId = Number(req.params.id);
     if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
@@ -323,26 +404,44 @@ router.get('/sessions/:id/cover', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '封面不可用' });
     }
 
-    const videoRoot = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads');
-    const pathCheck = await resolveAndValidate(coverPath, [videoRoot]);
-    if (!pathCheck.valid || !fs.existsSync(pathCheck.resolvedPath)) {
+    openedCover = await openValidatedCover(coverPath);
+    if (!openedCover) {
       return res.status(404).json({ status: 'Error', message: '封面不可用' });
     }
 
     res.set({
       'Content-Type': contentType,
+      'Content-Length': openedCover.size,
       'Cache-Control': 'private, max-age=3600',
       'X-Content-Type-Options': 'nosniff',
     });
-    res.sendFile(pathCheck.resolvedPath, (err) => {
-      if (!err || res.headersSent) return;
-      if (!res.statusCode || res.statusCode === 200) {
-        res.status(404).json({ status: 'Error', message: '封面不可用' });
+    const stream = openedCover.fileHandle.createReadStream({ autoClose: true });
+    openedCover = null;
+    stream.on('error', (err) => {
+      if (err.code !== 'ENOENT') {
+        logCoverReadError(err);
+      }
+      if (!res.destroyed) {
+        res.destroy(err);
       }
     });
+    res.on('close', () => {
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    });
+    stream.pipe(res);
   } catch (err) {
-    console.error('[sessions] 读取封面失败:', err.message);
-    res.status(500).json({ status: 'Error', message: '封面读取失败' });
+    if (openedCover) {
+      await openedCover.fileHandle.close().catch(() => {});
+    }
+    if (res.headersSent) {
+      if (!res.destroyed) {
+        res.destroy(err);
+      }
+    } else {
+      sendCoverReadError(res, err);
+    }
   }
 });
 

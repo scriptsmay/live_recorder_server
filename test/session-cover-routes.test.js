@@ -14,6 +14,7 @@ jest.mock('../server/services/RecorderService', () => ({}));
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { Readable } = require('stream');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const request = require('supertest');
@@ -23,7 +24,10 @@ const { getSession } = require('../server/lib/core/auth-service');
 const { requireAuth } = require('../server/middleware/require-auth');
 
 const VALID_TOKEN = 'valid-session-token';
+const ENV_KEYS = ['VIDEO_DOWNLOAD_DIR', 'AUTH_ENABLED', 'AUTH_COOKIE_NAME'];
+let originalEnv;
 let tmpRoot;
+let outsideRoot;
 let app;
 
 function createApp(roomsRouter) {
@@ -38,8 +42,18 @@ function authed(url) {
   return request(app).get(url).set('Cookie', `auth_token=${VALID_TOKEN}`);
 }
 
+function restoreEnv(key, value) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
+}
+
 beforeAll(() => {
+  originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cover-'));
+  outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cover-outside-'));
   process.env.VIDEO_DOWNLOAD_DIR = tmpRoot;
   delete process.env.AUTH_ENABLED;
   delete process.env.AUTH_COOKIE_NAME;
@@ -54,12 +68,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  console.error.mockRestore();
+  jest.restoreAllMocks();
 });
 
 afterAll(() => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
-  delete process.env.VIDEO_DOWNLOAD_DIR;
+  fs.rmSync(outsideRoot, { recursive: true, force: true });
+  for (const key of ENV_KEYS) {
+    restoreEnv(key, originalEnv[key]);
+  }
 });
 
 test('无 Cookie 返回 401，数据库不访问', async () => {
@@ -92,8 +109,39 @@ test('允许目录外的 cover_path 返回 404', async () => {
   expect(JSON.stringify(response.body)).not.toContain('/tmp/not-in-video-dir');
 });
 
+test('父目录符号链接指向 VIDEO_DOWNLOAD_DIR 外时返回 404', async () => {
+  const outsideCover = path.join(outsideRoot, 'outside.jpg');
+  const linkedParent = path.join(tmpRoot, 'linked-parent');
+  const coverPath = path.join(linkedParent, 'cover.jpg');
+  fs.writeFileSync(outsideCover, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  fs.symlinkSync(outsideRoot, linkedParent, 'dir');
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+
+  const response = await authed('/api/sessions/61/cover');
+
+  expect(response.status).toBe(404);
+  expect(response.body.message).toBe('封面不可用');
+  expect(JSON.stringify(response.body)).not.toContain(outsideRoot);
+});
+
+const platformSymlinkTest = process.platform === 'win32' ? test.skip : test;
+
+platformSymlinkTest('最终路径是符号链接时返回 404', async () => {
+  const outsideCover = path.join(outsideRoot, 'outside.jpg');
+  const coverPath = path.join(tmpRoot, 'final-link.jpg');
+  fs.writeFileSync(outsideCover, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  fs.symlinkSync(outsideCover, coverPath);
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+
+  const response = await authed('/api/sessions/61/cover');
+
+  expect(response.status).toBe(404);
+  expect(response.body.message).toBe('封面不可用');
+});
+
 test.each([
   ['cover.jpg', 'image/jpeg'],
+  ['cover.jpeg', 'image/jpeg'],
   ['cover.png', 'image/png'],
   ['cover.webp', 'image/webp'],
   ['cover.gif', 'image/gif'],
@@ -107,7 +155,118 @@ test.each([
   expect(response.status).toBe(200);
   expect(response.headers['content-type']).toMatch(new RegExp(`^${contentType}`));
   expect(response.headers['cache-control']).toBe('private, max-age=3600');
+  expect(response.headers['x-content-type-options']).toBe('nosniff');
   expect(Number(response.headers['content-length'])).toBe(fs.statSync(coverPath).size);
+});
+
+test.each(['cover.txt', 'cover.svg'])('%s 返回 404', async (filename) => {
+  const coverPath = path.join(tmpRoot, filename);
+  fs.writeFileSync(coverPath, '<svg></svg>');
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+
+  const response = await authed('/api/sessions/61/cover');
+
+  expect(response.status).toBe(404);
+  expect(response.body.message).toBe('封面不可用');
+});
+
+test('cover_path 指向目录时返回 404', async () => {
+  const coverPath = path.join(tmpRoot, 'directory-cover.jpg');
+  fs.mkdirSync(coverPath);
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+
+  const response = await authed('/api/sessions/61/cover');
+
+  expect(response.status).toBe(404);
+  expect(response.body.message).toBe('封面不可用');
+});
+
+platformSymlinkTest('路径校验后打开前替换为符号链接时安全失败', async () => {
+  const coverPath = path.join(tmpRoot, 'race-cover.jpg');
+  const outsideCover = path.join(outsideRoot, 'race-outside.jpg');
+  fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  fs.writeFileSync(outsideCover, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+  const realOpen = fs.promises.open.bind(fs.promises);
+  let openCalls = 0;
+  jest.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
+    openCalls += 1;
+    if (openCalls === 2) {
+      fs.unlinkSync(coverPath);
+      fs.symlinkSync(outsideCover, coverPath);
+    }
+    return realOpen(...args);
+  });
+
+  try {
+    const response = await authed('/api/sessions/61/cover');
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toBe('封面不可用');
+    expect(JSON.stringify(response.body)).not.toContain(outsideRoot);
+  } finally {
+    if (fs.lstatSync(coverPath).isSymbolicLink()) {
+      fs.unlinkSync(coverPath);
+    }
+  }
+});
+
+test.each([
+  ['read failed', new Error('read failed'), true],
+  ['file disappeared', Object.assign(new Error('file disappeared'), { code: 'ENOENT' }), false],
+])('响应头发送后的流错误 %s 终止连接', async (message, streamError, shouldLog) => {
+  const coverPath = path.join(tmpRoot, `stream-error-${message.replace(/\s+/g, '-')}.jpg`);
+  fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+  const realOpen = fs.promises.open.bind(fs.promises);
+  let openCalls = 0;
+  jest.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
+    const fileHandle = await realOpen(...args);
+    openCalls += 1;
+    if (openCalls === 2) {
+      fileHandle.createReadStream = () => {
+        let pushed = false;
+        return new Readable({
+          read() {
+            if (pushed) return;
+            pushed = true;
+            this.push(Buffer.from([0xff]));
+            setImmediate(() => this.destroy(streamError));
+          },
+          destroy(error, callback) {
+            fileHandle.close().then(
+              () => callback(error),
+              () => callback(error)
+            );
+          },
+        });
+      };
+    }
+    return fileHandle;
+  });
+
+  await expect(authed('/api/sessions/61/cover')).rejects.toThrow();
+
+  if (shouldLog) {
+    expect(console.error).toHaveBeenCalledWith('[sessions] 读取封面失败:', message);
+  } else {
+    expect(console.error).not.toHaveBeenCalled();
+  }
+});
+
+test('canonicalize 的非 ENOENT I/O 异常返回 500 并记录服务端日志', async () => {
+  const coverPath = path.join(tmpRoot, 'io-error.jpg');
+  fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+  const ioError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  jest.spyOn(fs.promises, 'realpath').mockRejectedValueOnce(ioError);
+
+  const response = await authed('/api/sessions/61/cover');
+
+  expect(response.status).toBe(500);
+  expect(response.body).toEqual({ status: 'Error', message: '封面读取失败' });
+  expect(JSON.stringify(response.body)).not.toContain('permission denied');
+  expect(console.error).toHaveBeenCalledWith('[sessions] 读取封面失败:', 'permission denied');
 });
 
 test('数据库异常返回 500 且不泄漏异常信息', async () => {
