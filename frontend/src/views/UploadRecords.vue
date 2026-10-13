@@ -96,6 +96,15 @@ function canRetry(record: UploadRecord) {
   return !!record.bv_id && (record.season_status === 'none' || record.season_status === 'failed')
 }
 
+/**
+ * 确认框正文：合集名来自模板（列表联表带出），模板没存名字时退回 season_id 数字。
+ * 模板的合集配置是重试时的实时入参，这里显示的就是即将提交的目标。
+ */
+function retryConfirmMessage(record: UploadRecord) {
+  const target = record.season_title?.trim() || `合集 ${record.season_id ?? '未配置'}`
+  return `确定将「${record.title}」加入合集「${target}」吗？\n将按投稿模板当前的合集配置提交，结果稍后刷新查看。`
+}
+
 /** season_error 形如 `CODE: 详情`，把已知错误码翻译成可操作提示 */
 const SEASON_ERROR_HINTS: Record<string, string> = {
   AUTH_EXPIRED: '登录态已失效，请在容器内重新 biliup login 后重试',
@@ -204,10 +213,10 @@ function showFiles(record: UploadRecord) {
 
 // ---- 手动重试加入合集 ----
 async function handleRetry(record: UploadRecord) {
-  const ok = await confirm(
-    `确定要将「${record.title}」加入合集吗？\n将按投稿模板中的合集配置提交，结果稍后刷新查看。`,
-    { title: '加入合集', confirmText: '确认加入' },
-  )
+  const ok = await confirm(retryConfirmMessage(record), {
+    title: '加入合集',
+    confirmText: '确认加入',
+  })
   if (!ok) return
 
   retryingIds.value.add(record.id)

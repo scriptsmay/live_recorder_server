@@ -434,7 +434,8 @@ class DataService {
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-    let sql = `SELECT ur.*, ut.name as template_name FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id${where} ORDER BY ur.id DESC`;
+    // 联出模板的合集名与小节：记录表只存 season_id，手动重试的确认框要显示合集真名
+    let sql = `SELECT ur.*, ut.name as template_name, ut.season_title, ut.section_id FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id${where} ORDER BY ur.id DESC`;
 
     const pageSize = parseInt(limit, 10);
     let pageNum = null;

@@ -197,6 +197,9 @@ export interface UploadRecord {
   season_error: string | null
   season_attempts: number
   season_added_at: string | null
+  /** 来自投稿模板的合集名/小节，仅用于展示（记录表本身只存 season_id） */
+  season_title?: string | null
+  section_id?: string | null
   started_at: string
   completed_at: string | null
   created_at: string
@@ -288,6 +291,9 @@ export interface ReplayUploadRecord {
   season_error: string | null
   season_attempts: number
   season_added_at: string | null
+  /** 来自投稿模板的合集名/小节，仅用于展示（记录表本身只存 season_id） */
+  season_title?: string | null
+  section_id?: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string

@@ -312,9 +312,11 @@ class ReplayService {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
-      `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id
+      // 合集名取自模板（记录表只有 season_id），供前端手动重试的确认框展示合集真名
+      `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id, ut.season_title, ut.section_id
        FROM replay_upload_records rur
        LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
+       LEFT JOIN upload_templates ut ON ut.id = rur.template_id
        ${where}
        ORDER BY rur.id DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,

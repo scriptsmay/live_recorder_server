@@ -81,6 +81,22 @@ describe('ReplayService', () => {
     expect(pool.query.mock.calls[0][1]).toEqual(['abc', 'fixed', 10, 10]);
   });
 
+  test('listAllUploads 联出模板 season_title 供前端展示合集名', async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 1, season_title: '直播录像合集' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
+
+    const data = await ReplayService.listAllUploads({ page: '1', page_size: '10' });
+
+    expect(data.rows[0].season_title).toBe('直播录像合集');
+    const sql = pool.query.mock.calls[0][0];
+    // 回放记录表只有 season_id，合集名只能来自模板联表
+    expect(sql).toContain('LEFT JOIN upload_templates ut ON ut.id = rur.template_id');
+    expect(sql).toContain('ut.season_title');
+    expect(sql).toContain('ut.section_id');
+    expect(pool.query.mock.calls[1][0]).not.toContain('season_title');
+  });
+
   test('extractPrincipalId 返回 null 处理非快手 URL', () => {
     expect(ReplayService.extractPrincipalId('https://www.bilibili.com/video/BV123')).toBeNull();
     expect(ReplayService.extractPrincipalId('')).toBeNull();

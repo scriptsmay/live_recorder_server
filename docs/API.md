@@ -1001,6 +1001,10 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | total_size   | number | 总大小（字节）                  |
 | bv_id        | string | B站视频 BV 号                   |
 | output       | string | 投稿输出信息                    |
+| season_title | string | 合集名，联 `upload_templates.season_title` 带出，仅用于展示 |
+| section_id   | string | 合集小节 ID，同样来自模板       |
+
+> `season_title` / `section_id` 是模板侧的**当前**配置（不是投稿时的快照），与手动重试 `POST /api/upload_records/:id/season/retry` 实时读取的入参一致；投稿记录表本身只存 `season_id`，因此模板被删或改配后这两个字段会随之变化甚至为 `null`。前端「加入合集」确认框用它展示目标合集名，模板没存名字时退回 `season_id` 数字。
 
 ---
 
@@ -1032,7 +1036,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | page          | integer | 否   | 页码，从 1 开始                                        |
 | limit         | integer | 否   | 每页条数，默认 20，上限 100                            |
 
-**返回：** `{ status, data, total, page, page_size }`。行内含 `principal_id` / `principal_name` / `replay_id`（联表 `replay_records`）。
+**返回：** `{ status, data, total, page, page_size }`。行内含 `principal_id` / `principal_name` / `replay_id`（联表 `replay_records`），以及 `season_title` / `section_id`（联表 `upload_templates`，语义与录制侧一致：模板**当前**的合集配置，仅用于展示，模板被删或改配后会变化甚至为 `null`）。
 
 ---
 

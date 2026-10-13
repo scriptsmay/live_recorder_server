@@ -274,4 +274,16 @@ describe('DataService.getUploadRecords', () => {
     expect(params).toEqual([10, 10]);
     expect(pool.query.mock.calls[1][1]).toEqual([]);
   });
+
+  test('联出模板的 season_title/section_id 供前端展示合集名（计数查询不联表）', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValueOnce({ rows: [{ count: '1' }] });
+
+    await DataService.getUploadRecords({ limit: 10 });
+
+    const sql = pool.query.mock.calls[0][0];
+    expect(sql).toContain('ut.season_title');
+    expect(sql).toContain('ut.section_id');
+    // 计数只需要主表，联表会白搭一次 JOIN
+    expect(pool.query.mock.calls[1][0]).not.toContain('season_title');
+  });
 });
