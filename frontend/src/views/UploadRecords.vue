@@ -239,53 +239,55 @@ onMounted(fetchRecords)
     <h1 class="text-2xl font-bold text-gray-900 mb-6">录制投稿记录</h1>
 
     <!-- 筛选 -->
-    <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-500">标题：</span>
-        <input
-          v-model="titleInput"
-          type="text"
-          placeholder="模糊搜索标题，回车查询"
-          class="w-56 px-3 py-1 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-          @keyup.enter="handleTitleSearch"
-        />
+    <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500 shrink-0">标题：</span>
+          <input
+            v-model="titleInput"
+            type="text"
+            placeholder="模糊搜索标题，回车查询"
+            class="w-56 px-3 py-1 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+            @keyup.enter="handleTitleSearch"
+          />
+          <button
+            class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+            @click="handleTitleSearch"
+          >
+            查询
+          </button>
+          <button
+            v-if="titleFilter"
+            class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
+            @click="handleTitleReset"
+          >
+            清除
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500 shrink-0">合集：</span>
+          <button
+            v-for="opt in SEASON_FILTERS"
+            :key="opt.value"
+            class="px-3 py-1 text-xs font-medium rounded-full transition-colors"
+            :class="
+              seasonFilter === opt.value
+                ? 'bg-brand-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            "
+            @click="handleSeasonChange(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
         <button
-          class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-          @click="handleTitleSearch"
+          class="ml-auto px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          :disabled="loading"
+          @click="fetchRecords"
         >
-          查询
-        </button>
-        <button
-          v-if="titleFilter"
-          class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
-          @click="handleTitleReset"
-        >
-          清除
+          {{ loading ? '刷新中...' : '刷新' }}
         </button>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-500">合集：</span>
-        <button
-          v-for="opt in SEASON_FILTERS"
-          :key="opt.value"
-          class="px-3 py-1 text-sm rounded-lg border transition-colors"
-          :class="
-            seasonFilter === opt.value
-              ? 'bg-brand-600 text-white border-brand-600'
-              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-          "
-          @click="handleSeasonChange(opt.value)"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
-      <button
-        class="ml-auto px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-        :disabled="loading"
-        @click="fetchRecords"
-      >
-        {{ loading ? '刷新中...' : '刷新' }}
-      </button>
     </div>
 
     <!-- 加载中 -->
