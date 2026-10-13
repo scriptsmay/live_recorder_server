@@ -979,11 +979,11 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数       | 类型    | 必填 | 说明                                           |
-| ---------- | ------- | ---- | ---------------------------------------------- |
-| session_id | integer | 否   | 按会话 ID 筛选                                 |
-| status     | string  | 否   | 按状态筛选：`uploading` / `success` / `failed` |
-| season_status | string | 否 | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
+| 参数          | 类型    | 必填 | 说明                                                    |
+| ------------- | ------- | ---- | ------------------------------------------------------- |
+| session_id    | integer | 否   | 按会话 ID 筛选                                          |
+| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`          |
+| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
 
 **返回字段说明：**
 
@@ -1003,13 +1003,13 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数          | 类型    | 必填 | 说明                                              |
-| ------------- | ------- | ---- | ------------------------------------------------- |
-| source        | string  | 否   | `all`（默认）/ `recording` / `replay`             |
-| status        | string  | 否   | 按投稿状态筛选                                    |
-| season_status | string  | 否   | 按合集状态筛选；回放投稿无合集链路，恒为 `none`   |
-| page          | integer | 否   | 页码，从 1 开始                                   |
-| limit         | integer | 否   | 每页条数，上限 100                                |
+| 参数          | 类型    | 必填 | 说明                                            |
+| ------------- | ------- | ---- | ----------------------------------------------- |
+| source        | string  | 否   | `all`（默认）/ `recording` / `replay`           |
+| status        | string  | 否   | 按投稿状态筛选                                  |
+| season_status | string  | 否   | 按合集状态筛选；回放投稿无合集链路，恒为 `none` |
+| page          | integer | 否   | 页码，从 1 开始                                 |
+| limit         | integer | 否   | 每页条数，上限 100                              |
 
 录制分支返回 `season_id` / `season_status` / `season_error` / `season_attempts` / `season_added_at`；回放分支这些列以 `none` / `null` / `0` 占位，保证 UNION 列对齐。
 
@@ -1029,28 +1029,32 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。执行结果写在 `upload_records.season_status`：`none` / `pending` / `added` / `failed`。
 
-| 方法   | 路径                                     | 说明                                        |
-| ------ | ---------------------------------------- | ------------------------------------------- |
-| GET    | /api/upload_templates/:id/seasons        | 按模板 cookie 拉合集 + 小节列表（模板级联） |
-| POST   | /api/upload_records/:id/season/retry     | 手动重试加入合集                            |
-| GET    | /api/biliup_accounts                     | biliup 账号登记列表                         |
-| POST   | /api/biliup_accounts                     | 新增账号登记（只读校验 cookie 文件）        |
-| GET    | /api/biliup_accounts/:id                 | 账号详情，顺带刷新线上登录态                |
-| DELETE | /api/biliup_accounts/:id                 | 删除登记（cookie 文件保留）                 |
-| GET    | /api/biliup_accounts/:id/seasons         | 按账号 cookie 拉合集 + 小节列表             |
+| 方法   | 路径                                 | 说明                                        |
+| ------ | ------------------------------------ | ------------------------------------------- |
+| GET    | /api/upload_templates/:id/seasons    | 按模板 cookie 拉合集 + 小节列表（模板级联） |
+| POST   | /api/upload_records/:id/season/retry | 手动重试加入合集                            |
+| GET    | /api/biliup_accounts                 | biliup 账号登记列表                         |
+| POST   | /api/biliup_accounts                 | 新增账号登记（只读校验 cookie 文件）        |
+| GET    | /api/biliup_accounts/:id             | 账号详情，顺带刷新线上登录态                |
+| DELETE | /api/biliup_accounts/:id             | 删除登记（cookie 文件保留）                 |
+| GET    | /api/biliup_accounts/:id/seasons     | 按账号 cookie 拉合集 + 小节列表             |
 
 `?force=1` 跳过合集缓存重新拉取。
 
 **手动重试语义**：`POST /api/upload_records/:id/season/retry` 只负责原子占位（`season_status` 置 `pending`）并把执行放到后台，请求立即返回 `已触发加入合集，稍后刷新查看结果`；退避重试期间不挂住 HTTP 连接，最终结果通过记录列表的 `season_status` / `season_error` 查看。
 
+重试按**投稿模板当前**的 `cookies_path` / `season_id` / `section_id` 执行（每次调用现联表读取，占位时一并覆写记录的 `season_id`），不是投稿当时快照的目标。模板改过合集后重试，会加入新合集。
+
+**进程重启**：执行中的 `pending` 会随进程一起丢失，启动时由 `SeasonService.cleanupStalePending()` 统一回收为 `failed`（`season_error` 标注孤儿回收），并发一条 `season_orphan_recovered` 通知；回收后可直接手动重试。投稿主状态 `status` 不受影响。
+
 **模板合集字段**（`POST/PUT /api/upload_templates`）：
 
-| 字段             | 类型    | 说明                          |
-| ---------------- | ------- | ----------------------------- |
-| season_id        | number  | 合集 ID，展示与归属参考       |
-| season_title     | string  | 合集标题（冗余展示用）        |
-| section_id       | number  | 小节 ID，自动加入的实际目标   |
-| season_auto_add  | boolean | 投稿成功后是否自动加入        |
+| 字段            | 类型    | 说明                        |
+| --------------- | ------- | --------------------------- |
+| season_id       | number  | 合集 ID，展示与归属参考     |
+| season_title    | string  | 合集标题（冗余展示用）      |
+| section_id      | number  | 小节 ID，自动加入的实际目标 |
+| season_auto_add | boolean | 投稿成功后是否自动加入      |
 
 保存时做归属校验（复用合集列表缓存，不额外增加线上请求成本）：
 
@@ -1061,18 +1065,18 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **状态码约定：**
 
-| 端点                       | 情况                        | 状态码          |
-| -------------------------- | --------------------------- | --------------- |
-| /upload_templates          | 合集 ID 非法                | 400             |
-| /upload_templates          | 合集/小节归属不匹配         | 400             |
-| /upload_templates/:id/seasons | 模板不存在             | 404             |
-| /upload_templates/:id/seasons | cookie 不可用/登录态失效 | 400             |
-| /upload_templates/:id/seasons | 上游或网络异常           | 500             |
-| /upload_records/:id/season/retry | 记录不存在            | 404             |
-| /upload_records/:id/season/retry | 已在合集或正在加入     | 409             |
-| /upload_records/:id/season/retry | 未选小节 / 无 BV 号     | 400             |
-| /biliup_accounts           | 名称或 cookie 路径重复      | 409             |
-| /biliup_accounts/:id       | 被投稿模板引用              | 409 + `referenced_by` |
+| 端点                             | 情况                     | 状态码                |
+| -------------------------------- | ------------------------ | --------------------- |
+| /upload_templates                | 合集 ID 非法             | 400                   |
+| /upload_templates                | 合集/小节归属不匹配      | 400                   |
+| /upload_templates/:id/seasons    | 模板不存在               | 404                   |
+| /upload_templates/:id/seasons    | cookie 不可用/登录态失效 | 400                   |
+| /upload_templates/:id/seasons    | 上游或网络异常           | 500                   |
+| /upload_records/:id/season/retry | 记录不存在               | 404                   |
+| /upload_records/:id/season/retry | 已在合集或正在加入       | 409                   |
+| /upload_records/:id/season/retry | 未选小节 / 无 BV 号      | 400                   |
+| /biliup_accounts                 | 名称或 cookie 路径重复   | 409                   |
+| /biliup_accounts/:id             | 被投稿模板引用           | 409 + `referenced_by` |
 
 `GET /api/upload_records` 支持 `?season_status=` 筛选，返回行含 `season_status`。
 

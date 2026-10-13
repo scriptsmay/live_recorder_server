@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../db/index');
 const redis = require('../db/redis');
+const notify = require('../lib/core/notify');
 const { loadBiliupCookie } = require('../lib/utils/biliup-cookie');
 const {
   ERROR_CODES,
@@ -133,6 +134,39 @@ class SeasonService {
   static _reply(result) {
     const info = SKIP_REASONS[result.skipped] || { http: 500, message: '无法加入合集，请查看服务端日志' };
     return { ok: false, http: info.http, message: info.message, skipped: result.skipped };
+  }
+
+  /**
+   * 启动回收：把上次进程遗留的孤儿 pending 合集任务标为 failed。
+   *
+   * pending 是「已占位、执行中」的中间态，进程被杀后无人收尾，而 retryAdd 与 _claim 都拒绝 pending，
+   * 不回收就是永久死锁。语义对齐 RecorderService.cleanupStaleUploads；只改 season_* 字段，不动投稿状态。
+   * @returns {Promise<number[]>} 被回收的 upload_records.id
+   */
+  static async cleanupStalePending() {
+    const ORPHAN_NOTE = '服务重启前合集任务被中断（孤儿回收），可手动重试';
+    try {
+      const result = await pool.query(
+        `UPDATE upload_records
+            SET season_status = 'failed', season_error = $1
+          WHERE season_status = 'pending'
+          RETURNING id`,
+        [ORPHAN_NOTE]
+      );
+      const ids = result.rows.map((row) => row.id);
+      if (ids.length > 0) {
+        console.log(`[启动清理] 合集孤儿回收 ${ids.length} 条: ${ids.join(', ')}`);
+        await notify.send(
+          'season_orphan_recovered',
+          `服务重启：${ids.length} 条加入合集任务被中断`,
+          `投稿记录 ID: ${ids.join(', ')}\n已标记为失败，可在「投稿记录」页手动重试。`
+        );
+      }
+      return ids;
+    } catch (err) {
+      console.error('[启动清理] 合集孤儿回收失败:', err);
+      return [];
+    }
   }
 
   /**

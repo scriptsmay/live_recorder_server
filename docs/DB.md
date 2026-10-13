@@ -242,6 +242,7 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 > **v1.11.0 变更**：`season_*` 列描述的是「投稿成功后追加到合集小节」这一步的结果，与投稿本身的 `status` **完全解耦** —— 加入合集失败不会把 `status` 从 `success` 改回 `failed`，也不影响 `after_upload` 的后处理。
 > `season_status` 同时充当幂等锁：占位用 `UPDATE ... WHERE id=$1 AND season_status IN ('none','failed') RETURNING id`，0 行即放弃，自动与手动重试共用该入口。
+> 进程重启会让执行中的 `pending` 失去宿主，启动链里的 `SeasonService.cleanupStalePending()` 把这些孤儿行回收为 `failed` 并写入孤儿说明，之后可手动重试。
 
 ### biliup_accounts — biliup 账号登记
 

@@ -4,6 +4,7 @@ const watchdog = require('./watchdog');
 const fileCleanupScheduler = require('./FileCleanupScheduler');
 const { pollingManager } = require('./polling');
 const RecorderService = require('../../services/RecorderService');
+const SeasonService = require('../../services/SeasonService');
 const transcodeQueue = require('./TranscodeQueue');
 const replayProcessQueue = require('./ReplayProcessQueue');
 const { ensureAdminCredentials } = require('./auth-init');
@@ -25,6 +26,7 @@ async function bootstrap(app, port) {
 
     await RecorderService.cleanupStaleRecordings();
     await RecorderService.cleanupStaleUploads();
+    await SeasonService.cleanupStalePending();
     await logCleanupService.cleanup();
     logCleanupService.start();
     await transcodeQueue.init();

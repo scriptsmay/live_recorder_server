@@ -7,6 +7,7 @@
 
 jest.mock('../server/db/index', () => ({ query: jest.fn() }));
 jest.mock('../server/db/redis', () => ({ get: jest.fn(), setEx: jest.fn(), del: jest.fn() }));
+jest.mock('../server/lib/core/notify', () => ({ send: jest.fn(async () => {}) }));
 jest.mock('../server/lib/utils/biliup-cookie', () => {
   class CookieError extends Error {
     constructor(code, message) {
