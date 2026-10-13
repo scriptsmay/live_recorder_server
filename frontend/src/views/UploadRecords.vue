@@ -204,6 +204,12 @@ function showFiles(record: UploadRecord) {
 
 // ---- 手动重试加入合集 ----
 async function handleRetry(record: UploadRecord) {
+  const ok = await confirm(
+    `确定要将「${record.title}」加入合集吗？\n将按投稿模板中的合集配置提交，结果稍后刷新查看。`,
+    { title: '加入合集', confirmText: '确认加入' },
+  )
+  if (!ok) return
+
   retryingIds.value.add(record.id)
   try {
     const res = await apiPost(`/api/upload_records/${record.id}/season/retry`)
