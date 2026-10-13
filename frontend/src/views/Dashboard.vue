@@ -128,7 +128,7 @@ const statCards = computed<StatCard[]>(() => [
     to: '/sessions',
   },
   {
-    label: '今日投稿',
+    label: '今日录制投稿',
     value: hasSummary.value ? String(summary.value.uploads_today) : '--',
     sublines: hasSummary.value ? [`失败 ${summary.value.uploads_failed_today}`] : [],
     gradient: 'from-rose-500 to-rose-600',

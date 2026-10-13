@@ -411,7 +411,7 @@ class DataService {
   }
 
   static async getUploadRecords(options = {}) {
-    const { session_id, status, season_status, limit = 50, page } = options;
+    const { session_id, status, season_status, title, limit = 50, page } = options;
     const conditions = [];
     const params = [];
 
@@ -427,17 +427,24 @@ class DataService {
       conditions.push(`ur.season_status = $${params.length + 1}`);
       params.push(season_status);
     }
+    // 标题模糊查询：大小写不敏感的子串匹配，通配符由服务端包裹，入参仍走占位符
+    if (title) {
+      conditions.push(`ur.title ILIKE $${params.length + 1}`);
+      params.push(`%${title}%`);
+    }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     let sql = `SELECT ur.*, ut.name as template_name FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id${where} ORDER BY ur.id DESC`;
 
+    const pageSize = parseInt(limit, 10);
+    let pageNum = null;
     if (page) {
-      const pageSize = parseInt(limit, 10);
+      pageNum = Math.max(1, parseInt(page, 10) || 1);
       sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-      params.push(pageSize, (parseInt(page, 10) - 1) * pageSize);
+      params.push(pageSize, (pageNum - 1) * pageSize);
     } else {
       sql += ` LIMIT $${params.length + 1}`;
-      params.push(parseInt(limit, 10));
+      params.push(pageSize);
     }
 
     const result = await pool.query(sql, params);
@@ -450,6 +457,8 @@ class DataService {
     return {
       rows: result.rows,
       total: parseInt(countResult.rows[0].count, 10),
+      page: pageNum,
+      limit: pageSize,
     };
   }
 

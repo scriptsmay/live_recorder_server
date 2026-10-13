@@ -975,7 +975,9 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ### GET /api/upload_records
 
-查询投稿记录列表。
+查询**录制投稿**记录列表（只服务 `upload_records` 单表）。
+
+回放投稿是另一套端点 `GET /api/replay_upload_records`（见「回放投稿记录」）。两表 `id` 各自独立自增，同一个数字在两张表上是两个不同稿件；v1.11.2 起按路径分表，端点之间不会互相串台。
 
 **参数（Query）：**
 
@@ -984,6 +986,11 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | session_id    | integer | 否   | 按会话 ID 筛选                                          |
 | status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`          |
 | season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
+| title         | string  | 否   | 标题模糊查询，大小写不敏感的子串匹配（服务端 `ILIKE %…%`） |
+| page          | integer | 否   | 页码，从 1 开始；传了才做服务端分页                     |
+| limit         | integer | 否   | 每页条数，默认 50                                       |
+
+**返回：** `{ status, data, total, page, limit }`；未传 `page` 时 `page` 为 `null`、`limit` 为实际生效值。
 
 **返回字段说明：**
 
@@ -997,35 +1004,47 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ---
 
-### GET /api/upload_records/merged
+### DELETE /api/upload_records/:id
 
-合并「录制投稿」与「回放投稿」两张记录表，按操作时间倒序分页。
+删除**录制投稿**记录（只动 `upload_records` 单表）。目标表里查无此 id 时返回 404。
 
-**参数（Query）：**
-
-| 参数          | 类型    | 必填 | 说明                                   |
-| ------------- | ------- | ---- | -------------------------------------- |
-| source        | string  | 否   | `all`（默认）/ `recording` / `replay`  |
-| status        | string  | 否   | 按投稿状态筛选                         |
-| season_status | string  | 否   | 按合集状态筛选，录制与回放两支同样生效 |
-| page          | integer | 否   | 页码，从 1 开始                        |
-| limit         | integer | 否   | 每页条数，上限 100                     |
-
-两支都返回真实的 `season_id` / `season_status` / `season_error` / `season_attempts` / `season_added_at`（v1.11.1 起回放投稿也接入合集链路）。行上的 `source` 字段标出该记录来自哪张表，前端重试时必须回传。
+回放投稿请走 `DELETE /api/replay_upload_records/:id`。v1.11.2 起按路径分表，不再有 `?source=` 参数，也就不存在「漏传/误传删错表」的风险类别。
 
 ---
 
-### DELETE /api/upload_records/:id
+## 回放投稿记录（v1.11.2）
 
-删除投稿记录。
+回放投稿（`replay_upload_records`）拥有与录制投稿平行的单表端点，供前端独立的「回放投稿记录」页使用。两者字段结构一致（回放表额外有 `replay_record_id` 关联与主播信息），合集字段同样在 v1.11.1 起生效。
+
+### GET /api/replay_upload_records
+
+查询**回放投稿**记录列表（跨主播，只服务 `replay_upload_records` 单表）。
+
+> 与 `GET /api/replay/principals/:principalId/uploads` 不同：后者锁定单个主播、供回放工具箱内嵌使用；本端点不按主播过滤，是全局列表。
 
 **参数（Query）：**
 
-| 参数   | 类型   | 必填 | 说明                                        |
-| ------ | ------ | ---- | ------------------------------------------- |
-| source | string | 否   | `recording`（默认）/ `replay`，决定删哪张表 |
+| 参数          | 类型    | 必填 | 说明                                                    |
+| ------------- | ------- | ---- | ------------------------------------------------------- |
+| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`          |
+| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
+| title         | string  | 否   | 标题模糊查询，大小写不敏感的子串匹配（服务端 `ILIKE %…%`） |
+| page          | integer | 否   | 页码，从 1 开始                                        |
+| limit         | integer | 否   | 每页条数，默认 20，上限 100                            |
 
-与手动重试同样按 `source` 分表：`replay` 删 `replay_upload_records`，缺省或其他值一律按 `recording` 处理。两张投稿表的 `id` 各自独立自增，同一个数字在两张表上是两个不同稿件，因此前端必须把列表行的 `source` 回传；漏传不会报错，而是会删掉同号的常规投稿记录。目标表里查无此 id 时返回 404。
+**返回：** `{ status, data, total, page, page_size }`。行内含 `principal_id` / `principal_name` / `replay_id`（联表 `replay_records`）。
+
+---
+
+### DELETE /api/replay_upload_records/:id
+
+删除**回放投稿**记录（只动 `replay_upload_records` 单表）。目标表里查无此 id 时返回 404。
+
+---
+
+### POST /api/replay_upload_records/:id/season/retry
+
+手动重试「加入合集」（回放投稿），语义与录制侧 `POST /api/upload_records/:id/season/retry` 完全一致，只是固定操作 `replay_upload_records`。
 
 ---
 
@@ -1042,7 +1061,8 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | 方法   | 路径                                 | 说明                                        |
 | ------ | ------------------------------------ | ------------------------------------------- |
 | GET    | /api/upload_templates/:id/seasons    | 按模板 cookie 拉合集 + 小节列表（模板级联） |
-| POST   | /api/upload_records/:id/season/retry | 手动重试加入合集                            |
+| POST   | /api/upload_records/:id/season/retry | 手动重试加入合集（录制投稿）                |
+| POST   | /api/replay_upload_records/:id/season/retry | 手动重试加入合集（回放投稿）         |
 | GET    | /api/biliup_accounts                 | biliup 账号登记列表                         |
 | POST   | /api/biliup_accounts                 | 新增账号登记（只读校验 cookie 文件）        |
 | GET    | /api/biliup_accounts/:id             | 账号详情，顺带刷新线上登录态                |
@@ -1051,9 +1071,9 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 `?force=1` 跳过合集缓存重新拉取。
 
-**手动重试语义**：`POST /api/upload_records/:id/season/retry` 只负责原子占位（`season_status` 置 `pending`）并把执行放到后台，请求立即返回 `已触发加入合集，稍后刷新查看结果`；退避重试期间不挂住 HTTP 连接，最终结果通过记录列表的 `season_status` / `season_error` 查看。
+**手动重试语义**：`POST /api/upload_records/:id/season/retry`（录制）与 `POST /api/replay_upload_records/:id/season/retry`（回放）只负责原子占位（`season_status` 置 `pending`）并把执行放到后台，请求立即返回 `已触发加入合集，稍后刷新查看结果`；退避重试期间不挂住 HTTP 连接，最终结果通过记录列表的 `season_status` / `season_error` 查看。
 
-**`?source=` 决定重试哪张表**：`replay` 重试 `replay_upload_records`，缺省或其他值一律按 `recording` 处理。两张投稿表的 `id` 各自独立自增，同一个数字在两张表上是两个不同稿件，因此前端必须把列表行的 `source` 回传；漏传不会报错，而是会去动同号的常规投稿记录。
+**按路径分表**（v1.11.2）：录制与回放各自只有一套端点，表名按路由固定，不再有 `?source=` 参数，也就不存在「漏传/误传去动同号稿件」的风险类别。两表 `id` 各自独立自增的现状不变。
 
 重试按**投稿模板当前**的 `cookies_path` / `season_id` / `section_id` 执行（每次调用现联表读取，占位时一并覆写记录的 `season_id`），不是投稿当时快照的目标。模板改过合集后重试，会加入新合集。
 
@@ -1087,10 +1107,11 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | /upload_records/:id/season/retry | 记录不存在               | 404                   |
 | /upload_records/:id/season/retry | 已在合集或正在加入       | 409                   |
 | /upload_records/:id/season/retry | 未选小节 / 无 BV 号      | 400                   |
+| /replay_upload_records/:id/season/retry | 同上（回放表同语义） | 同上                  |
 | /biliup_accounts                 | 名称或 cookie 路径重复   | 409                   |
 | /biliup_accounts/:id             | 被投稿模板引用           | 409 + `referenced_by` |
 
-`GET /api/upload_records` 支持 `?season_status=` 筛选，返回行含 `season_status`。
+`GET /api/upload_records` 与 `GET /api/replay_upload_records` 都支持 `?season_status=` 与 `?title=` 筛选，返回行含 `season_status`。
 
 ---
 

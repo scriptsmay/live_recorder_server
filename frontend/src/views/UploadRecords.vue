@@ -1,12 +1,10 @@
 <script setup lang="ts">
 /**
- * 投稿记录 - 查看投稿历史
+ * 投稿记录 - 查看常规（录制）投稿历史
  *
- * 从 upload_records.ejs 迁移
- * - 投稿记录列表（分页，每页 50 条）
- * - 查看输出详情（弹窗）
- * - 删除记录（确认对话框）
- * - 合集状态展示与手动重试（v1.11.0）
+ * v1.11.2 起本页只服务 `upload_records` 单表，回放投稿在「回放投稿」页
+ * （`ReplayUploadRecords.vue` / `/api/replay_upload_records`）。两表 id 各自独立自增，
+ * 按路径分表后本页的删除/重试不可能命中回放同号记录。
  */
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
@@ -21,8 +19,9 @@ const toast = useToast()
 const { confirm } = useConfirm()
 
 // ---- 筛选状态 ----
-const sourceFilter = ref<'all' | 'recording' | 'replay'>('all')
 const seasonFilter = ref<'all' | SeasonStatus>('all')
+const titleInput = ref('')
+const titleFilter = ref('')
 
 // ---- 列表状态 ----
 const records = ref<UploadRecord[]>([])
@@ -67,9 +66,6 @@ function statusBadge(status: string): Badge {
 }
 
 function getLogsPath(record: UploadRecord) {
-  if (record.source === 'replay') {
-    return `/logs?file=${encodeURIComponent('biliup_replay_' + record.id + '.log')}`
-  }
   return `/logs?file=${encodeURIComponent('biliup_' + record.id + '.log')}`
 }
 
@@ -145,10 +141,10 @@ async function fetchRecords() {
     const params = new URLSearchParams({
       limit: String(pageSize),
       page: String(page.value),
-      source: sourceFilter.value,
     })
     if (seasonFilter.value !== 'all') params.set('season_status', seasonFilter.value)
-    const res = await apiGet<UploadRecord[]>(`/api/upload_records/merged?${params}`)
+    if (titleFilter.value) params.set('title', titleFilter.value)
+    const res = await apiGet<UploadRecord[]>(`/api/upload_records?${params}`)
     records.value = res.data
     total.value = res.total ?? 0
   } catch (err) {
@@ -163,14 +159,22 @@ function handlePageChange(p: number) {
   fetchRecords()
 }
 
-function handleSourceChange(val: 'all' | 'recording' | 'replay') {
-  sourceFilter.value = val
+function handleSeasonChange(val: 'all' | SeasonStatus) {
+  seasonFilter.value = val
   page.value = 1
   fetchRecords()
 }
 
-function handleSeasonChange(val: 'all' | SeasonStatus) {
-  seasonFilter.value = val
+/** 标题模糊查询：回车或点「查询」触发，翻页时保留条件 */
+function handleTitleSearch() {
+  titleFilter.value = titleInput.value.trim()
+  page.value = 1
+  fetchRecords()
+}
+
+function handleTitleReset() {
+  titleInput.value = ''
+  titleFilter.value = ''
   page.value = 1
   fetchRecords()
 }
@@ -202,9 +206,7 @@ function showFiles(record: UploadRecord) {
 async function handleRetry(record: UploadRecord) {
   retryingIds.value.add(record.id)
   try {
-    const res = await apiPost(
-      `/api/upload_records/${record.id}/season/retry?source=${record.source}`,
-    )
+    const res = await apiPost(`/api/upload_records/${record.id}/season/retry`)
     toast.success(res.message || '已触发加入合集，稍后刷新查看结果')
     await fetchRecords()
   } catch (err) {
@@ -216,14 +218,11 @@ async function handleRetry(record: UploadRecord) {
 
 // ---- 删除 ----
 async function handleDelete(record: UploadRecord) {
-  const source = record.source ?? 'recording'
-  const label = source === 'replay' ? '回放' : '录制'
-  const ok = await confirm(`确定要删除${label}投稿记录 #${record.id} 吗？`)
+  const ok = await confirm(`确定要删除录制投稿记录 #${record.id} 吗？`)
   if (!ok) return
 
   try {
-    // 两张投稿表的 id 各自独立自增，漏传 source 会删掉同号的常规投稿
-    await apiDelete(`/api/upload_records/${record.id}?source=${source}`)
+    await apiDelete(`/api/upload_records/${record.id}`)
     toast.success('删除成功')
     fetchRecords()
   } catch (err) {
@@ -237,28 +236,31 @@ onMounted(fetchRecords)
 
 <template>
   <div>
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">投稿记录</h1>
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">录制投稿记录</h1>
 
     <!-- 筛选 -->
     <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
       <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-500">来源：</span>
+        <span class="text-sm text-gray-500">标题：</span>
+        <input
+          v-model="titleInput"
+          type="text"
+          placeholder="模糊搜索标题，回车查询"
+          class="w-56 px-3 py-1 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+          @keyup.enter="handleTitleSearch"
+        />
         <button
-          v-for="opt in [
-            { value: 'all', label: '全部' },
-            { value: 'recording', label: '录制' },
-            { value: 'replay', label: '回放' },
-          ] as const"
-          :key="opt.value"
-          class="px-3 py-1 text-sm rounded-lg border transition-colors"
-          :class="
-            sourceFilter === opt.value
-              ? 'bg-brand-600 text-white border-brand-600'
-              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-          "
-          @click="handleSourceChange(opt.value)"
+          class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          @click="handleTitleSearch"
         >
-          {{ opt.label }}
+          查询
+        </button>
+        <button
+          v-if="titleFilter"
+          class="px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
+          @click="handleTitleReset"
+        >
+          清除
         </button>
       </div>
       <div class="flex items-center gap-2">
@@ -301,8 +303,7 @@ onMounted(fetchRecords)
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500">ID</th>
-              <th class="px-4 py-3 text-center font-medium text-gray-500 w-20">来源</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">关联</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500">会话</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">标题</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">投稿文件</th>
               <th class="px-4 py-3 text-center font-medium text-gray-500 w-20">状态</th>
@@ -314,32 +315,11 @@ onMounted(fetchRecords)
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="records.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
+              <td colspan="9" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
             </tr>
-            <tr
-              v-for="r in records"
-              :key="`${r.source}-${r.id}`"
-              class="hover:bg-gray-50 transition-colors"
-            >
+            <tr v-for="r in records" :key="r.id" class="hover:bg-gray-50 transition-colors">
               <td class="px-4 py-3 text-gray-900 font-medium">{{ r.id }}</td>
-              <td class="px-4 py-3 text-center">
-                <span
-                  class="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
-                  :class="
-                    r.source === 'replay'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'bg-blue-100 text-blue-700'
-                  "
-                >
-                  {{ r.source === 'replay' ? '回放' : '录制' }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-gray-600 text-xs">
-                <span v-if="r.source === 'replay'">{{
-                  r.principal_name || `#${r.session_id}`
-                }}</span>
-                <span v-else>{{ r.session_id ?? '-' }}</span>
-              </td>
+              <td class="px-4 py-3 text-gray-600 text-xs">{{ r.session_id ?? '-' }}</td>
               <td class="px-4 py-3">
                 <div class="text-gray-900">{{ r.title || '-' }}</div>
                 <div v-if="r.template_name" class="text-xs text-gray-400">

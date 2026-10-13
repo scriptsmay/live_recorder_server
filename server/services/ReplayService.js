@@ -284,6 +284,51 @@ class ReplayService {
     };
   }
 
+  /**
+   * 全表回放投稿记录（跨主播），供独立的「回放投稿」页面使用。
+   *
+   * 与 listUploads 的区别：listUploads 锁定单个 principalId（回放工具箱上下文），
+   * 这里不按主播过滤，额外支持标题 / 状态 / 合集状态筛选与分页。
+   */
+  static async listAllUploads(options = {}) {
+    const page = parsePositiveInt(options.page, 1);
+    const pageSize = Math.min(parsePositiveInt(options.page_size || options.limit, 20), 100);
+    const conditions = [];
+    const params = [];
+
+    if (options.status) {
+      conditions.push(`rur.status = $${params.length + 1}`);
+      params.push(options.status);
+    }
+    if (options.season_status) {
+      conditions.push(`rur.season_status = $${params.length + 1}`);
+      params.push(options.season_status);
+    }
+    // 标题模糊查询：大小写不敏感的子串匹配，通配符由服务端包裹，入参仍走占位符
+    if (options.title) {
+      conditions.push(`rur.title ILIKE $${params.length + 1}`);
+      params.push(`%${options.title}%`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await pool.query(
+      `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id
+       FROM replay_upload_records rur
+       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
+       ${where}
+       ORDER BY rur.id DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize]
+    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM replay_upload_records rur ${where}`, params);
+    return {
+      rows: result.rows,
+      total: parseInt(countResult.rows[0]?.count || '0', 10),
+      page,
+      page_size: pageSize,
+    };
+  }
+
   static async getSettings(principalId) {
     const defaults = {
       principal_name: '',

@@ -129,23 +129,6 @@ describe('手动重试加入合集', () => {
     expect(response.body.status).toBe('ok');
   });
 
-  test('带 source=replay 时重试回放投稿记录', async () => {
-    SeasonService.retryAdd.mockResolvedValueOnce({ ok: true, http: 200, message: '已触发加入合集，稍后刷新查看结果' });
-
-    const response = await authed('post', '/api/upload_records/101/season/retry?source=replay');
-
-    expect(response.status).toBe(200);
-    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101', 'replay');
-  });
-
-  test('source 取未知值时退回常规投稿表，不拿回放 ID 去改同号记录', async () => {
-    SeasonService.retryAdd.mockResolvedValueOnce({ ok: true, http: 200, message: 'ok' });
-
-    await authed('post', '/api/upload_records/101/season/retry?source=whatever');
-
-    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101', 'recording');
-  });
-
   test.each([
     ['记录不存在', { ok: false, http: 404, message: '投稿记录不存在' }],
     ['进行中', { ok: false, http: 409, message: '该记录正在加入中或已完成，无需重试' }],
@@ -339,7 +322,7 @@ describe('模板合集字段落库', () => {
 
 describe('投稿记录合集状态筛选', () => {
   test('season_status 透传给查询服务', async () => {
-    DataService.getUploadRecords.mockResolvedValueOnce([]);
+    DataService.getUploadRecords.mockResolvedValueOnce({ rows: [], total: 0, page: null, limit: 50 });
 
     await authed('get', '/api/upload_records?season_status=failed');
 
@@ -347,108 +330,59 @@ describe('投稿记录合集状态筛选', () => {
   });
 });
 
-describe('合并投稿记录列表的合集字段', () => {
-  function mockQueries() {
-    pool.query
-      .mockResolvedValueOnce({ rows: [{ id: 101, source: 'recording', season_status: 'failed' }] })
-      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
-  }
+describe('投稿记录列表标题模糊查询', () => {
+  test('title 透传给查询服务', async () => {
+    DataService.getUploadRecords.mockResolvedValueOnce({ rows: [], total: 0, page: 1, limit: 10 });
 
-  test('两张投稿分支都查真实合集列，回放不再用常量占位', async () => {
-    mockQueries();
-
-    const response = await authed('get', '/api/upload_records/merged');
+    const response = await authed('get', '/api/upload_records?title=%E5%9B%9E%E6%94%BE&page=2&limit=10');
 
     expect(response.status).toBe(200);
-    const [sql] = pool.query.mock.calls[0];
-    expect(sql).toContain('ur.season_status');
-    expect(sql).toContain('ur.season_error');
-    expect(sql).toContain('ur.season_added_at');
-    expect(sql).toContain('rur.season_status');
-    expect(sql).toContain('rur.season_id');
-    expect(sql).toContain('rur.season_added_at');
-    expect(sql).not.toContain("'none' AS season_status");
-    expect(response.body.data[0].season_status).toBe('failed');
+    expect(DataService.getUploadRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '回放', page: '2', limit: '10' })
+    );
   });
 
-  test('season_status 参与筛选且计数参数与之一致', async () => {
-    mockQueries();
+  test('列表返回 total 与分页字段', async () => {
+    DataService.getUploadRecords.mockResolvedValueOnce({ rows: [{ id: 1 }], total: 7, page: 1, limit: 10 });
 
-    await authed('get', '/api/upload_records/merged?season_status=failed&page=2&limit=10');
+    const response = await authed('get', '/api/upload_records');
 
-    const [dataSql, dataParams] = pool.query.mock.calls[0];
-    const [countSql, countParams] = pool.query.mock.calls[1];
-    expect(dataSql).toContain('t.season_status = $1');
-    expect(dataSql).toContain('LIMIT $2 OFFSET $3');
-    expect(dataParams).toEqual(['failed', 10, 10]);
-    expect(countSql).toContain('t.season_status = $1');
-    // 计数子查询两路都取真实列，回放筛出的 failed 才不会漏计
-    expect(countSql).toContain("SELECT id, 'replay' AS source, status, season_status FROM replay_upload_records");
-    expect(countParams).toEqual(['failed']);
-  });
-
-  test('status 与 season_status 同时筛选时按顺序占位', async () => {
-    mockQueries();
-
-    await authed('get', '/api/upload_records/merged?status=success&season_status=added');
-
-    const [, dataParams] = pool.query.mock.calls[0];
-    const [, countParams] = pool.query.mock.calls[1];
-    expect(dataParams).toEqual(['success', 'added', 20, 0]);
-    expect(countParams).toEqual(['success', 'added']);
-  });
-
-  test('无筛选条件时计数不带参数', async () => {
-    mockQueries();
-
-    await authed('get', '/api/upload_records/merged?source=replay');
-
-    const [dataSql] = pool.query.mock.calls[0];
-    const [, countParams] = pool.query.mock.calls[1];
-    expect(dataSql).toContain("WHERE t.source = 'replay'");
-    expect(countParams).toEqual([]);
+    expect(response.body).toEqual({ status: 'ok', data: [{ id: 1 }], total: 7, page: 1, limit: 10 });
   });
 });
 
-describe('删除投稿记录按 source 选表', () => {
+describe('删除投稿记录只动常规投稿表', () => {
   function deletedTable() {
     const [sql] = pool.query.mock.calls[0];
     return sql.match(/DELETE FROM (\w+)/)[1];
   }
 
-  test('source=replay 删 replay_upload_records，不碰同号的常规投稿', async () => {
-    pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
-
-    const response = await authed('delete', '/api/upload_records/5?source=replay');
-
-    expect(response.status).toBe(200);
-    expect(deletedTable()).toBe('replay_upload_records');
-    expect(pool.query).toHaveBeenCalledWith(expect.any(String), ['5']);
-  });
-
-  test('缺省仍按常规投稿表处理', async () => {
+  test('只删 upload_records，不再有 ?source= 分支', async () => {
     pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
 
     const response = await authed('delete', '/api/upload_records/5');
 
     expect(response.status).toBe(200);
     expect(deletedTable()).toBe('upload_records');
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM upload_records'), ['5']);
   });
 
-  test('未知 source 取值退回常规投稿表', async () => {
+  test('即使请求带上 source=replay 也仍只删常规表', async () => {
     pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
 
-    await authed('delete', '/api/upload_records/5?source=blob');
+    const response = await authed('delete', '/api/upload_records/5?source=replay');
 
+    expect(response.status).toBe(200);
     expect(deletedTable()).toBe('upload_records');
+    expect(response.body.data).toEqual({ id: 5 });
   });
 
   test('目标表无此行时返回 404', async () => {
     pool.query.mockResolvedValueOnce({ rows: [] });
 
-    const response = await authed('delete', '/api/upload_records/999?source=replay');
+    const response = await authed('delete', '/api/upload_records/999');
 
     expect(response.status).toBe(404);
-    expect(deletedTable()).toBe('replay_upload_records');
+    expect(deletedTable()).toBe('upload_records');
   });
 });

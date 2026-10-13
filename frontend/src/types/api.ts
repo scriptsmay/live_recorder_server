@@ -179,7 +179,6 @@ export interface BiliupAccount {
 
 export interface UploadRecord {
   id: number
-  source?: 'recording' | 'replay'
   session_id: number | null
   template_id: number | null
   template_name?: string
@@ -273,6 +272,7 @@ export interface ReplayUploadRecord {
   id: number
   replay_record_id: number
   template_id: number | null
+  template_name?: string
   title: string
   status: string
   message: string | null
@@ -281,6 +281,13 @@ export interface ReplayUploadRecord {
   file_count: number
   total_size: number
   bv_id: string | null
+  upload_files?: string
+  // 合集字段：v1.11.1 起回放投稿接入合集链路，列名与语义同 UploadRecord
+  season_id: string | null
+  season_status: SeasonStatus
+  season_error: string | null
+  season_attempts: number
+  season_added_at: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string

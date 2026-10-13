@@ -249,4 +249,29 @@ describe('DataService.getUploadRecords', () => {
     expect(pool.query.mock.calls[0][0]).not.toContain('season_status');
     expect(pool.query.mock.calls[0][1]).toEqual(['success', 50]);
   });
+
+  test('title 生成 ILIKE 子串条件且计数共用同一参数', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 1 }] }).mockResolvedValueOnce({ rows: [{ count: '1' }] });
+
+    await DataService.getUploadRecords({ title: '回放', limit: 10 });
+
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain('ur.title ILIKE $1');
+    // 通配符由服务端包裹，用户输入仍走占位符
+    expect(params).toEqual(['%回放%', 10]);
+    expect(pool.query.mock.calls[1][0]).toContain('ur.title ILIKE $1');
+    expect(pool.query.mock.calls[1][1]).toEqual(['%回放%']);
+  });
+
+  test('分页时返回 page/limit 且计数参数不含分页两项', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ count: '3' }] });
+
+    const result = await DataService.getUploadRecords({ page: '2', limit: 10 });
+
+    expect(result).toEqual({ rows: [], total: 3, page: 2, limit: 10 });
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain('LIMIT $1 OFFSET $2');
+    expect(params).toEqual([10, 10]);
+    expect(pool.query.mock.calls[1][1]).toEqual([]);
+  });
 });

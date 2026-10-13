@@ -100,7 +100,13 @@ const routes: RouteRecordRaw[] = [
     path: '/upload-records',
     name: 'UploadRecords',
     component: () => import('@/views/UploadRecords.vue'),
-    meta: { title: '投稿记录' },
+    meta: { title: '录制投稿记录' },
+  },
+  {
+    path: '/replay-upload-records',
+    name: 'ReplayUploadRecords',
+    component: () => import('@/views/ReplayUploadRecords.vue'),
+    meta: { title: '回放投稿记录' },
   },
   {
     path: '/biliup-accounts',

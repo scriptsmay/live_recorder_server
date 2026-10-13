@@ -293,159 +293,43 @@ router.post('/sessions/:id/upload', async (req, res) => {
   }
 });
 
+/**
+ * 常规（录制）投稿记录列表 —— 只服务 upload_records 单表。
+ *
+ * 回放投稿请走 `GET /api/replay_upload_records`（server/router/replay.js）。
+ * 两表 id 各自独立自增，端点按路径分表后不再有「同号稿件指错表」的可能。
+ */
 router.get('/upload_records', async (req, res) => {
   try {
-    const { session_id, status, season_status, limit = 50 } = req.query;
-    const data = await DataService.getUploadRecords({
+    const { session_id, status, season_status, title, limit = 50, page } = req.query;
+    const result = await DataService.getUploadRecords({
       session_id,
       status,
       season_status,
+      title,
       limit,
+      page,
     });
-    res.json({ status: 'ok', data });
+    res.json({ status: 'ok', data: result.rows, total: result.total, page: result.page, limit: result.limit });
   } catch (err) {
     console.error('[upload_records] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
   }
 });
 
-router.get('/upload_records/merged', async (req, res) => {
-  try {
-    const { source = 'all', status, season_status, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
-    const offset = (pageNum - 1) * limitNum;
-
-    const conditions = [];
-    const params = [];
-    let paramIdx = 1;
-
-    // source filter
-    if (source === 'recording') {
-      conditions.push(`t.source = 'recording'`);
-    } else if (source === 'replay') {
-      conditions.push(`t.source = 'replay'`);
-    }
-
-    // status filter
-    if (status) {
-      conditions.push(`t.status = $${paramIdx++}`);
-      params.push(status);
-    }
-
-    // 合集状态筛选：两张投稿表都有 season_* 列，筛选条件对常规与回放同样生效
-    if (season_status) {
-      conditions.push(`t.season_status = $${paramIdx++}`);
-      params.push(season_status);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const sql = `
-      SELECT * FROM (
-        SELECT
-          ur.id,
-          'recording' AS source,
-          ur.title,
-          ur.status,
-          ur.bv_id,
-          ur.started_at,
-          ur.completed_at,
-          ur.created_at,
-          ur.file_count,
-          ur.total_size,
-          ur.template_id,
-          ur.session_id,
-          ur.upload_files,
-          ur.output,
-          ur.season_id,
-          ur.season_status,
-          ur.season_error,
-          ur.season_attempts,
-          ur.season_added_at,
-          r.room_name AS principal_name
-        FROM upload_records ur
-        LEFT JOIN recording_sessions rs ON ur.session_id = rs.id
-        LEFT JOIN rooms r ON rs.room_url = r.room_url
-
-        UNION ALL
-
-        SELECT
-          rur.id,
-          'replay' AS source,
-          rur.title,
-          rur.status,
-          rur.bv_id,
-          rur.started_at,
-          rur.completed_at,
-          rur.created_at,
-          rur.file_count,
-          rur.total_size,
-          rur.template_id,
-          rur.replay_record_id AS session_id,
-          rur.upload_files,
-          rur.output,
-          rur.season_id,
-          rur.season_status,
-          rur.season_error,
-          rur.season_attempts,
-          rur.season_added_at,
-          rr.principal_name
-        FROM replay_upload_records rur
-        LEFT JOIN replay_records rr ON rur.replay_record_id = rr.id
-      ) t
-      ${where}
-      ORDER BY COALESCE(t.started_at, t.created_at) DESC
-      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
-    `;
-    params.push(limitNum, offset);
-
-    const countSql = `
-      SELECT COUNT(*) FROM (
-        SELECT id, 'recording' AS source, status, season_status FROM upload_records
-        UNION ALL
-        SELECT id, 'replay' AS source, status, season_status FROM replay_upload_records
-      ) t
-      ${where}
-    `;
-    const countParams = params.slice(0, params.length - 2);
-
-    const [dataResult, countResult] = await Promise.all([pool.query(sql, params), pool.query(countSql, countParams)]);
-
-    res.json({
-      status: 'ok',
-      data: dataResult.rows,
-      total: parseInt(countResult.rows[0]?.count || '0', 10),
-      page: pageNum,
-      limit: limitNum,
-    });
-  } catch (err) {
-    console.error('[upload_records/merged] 查询失败:', err);
-    res.status(500).json({ status: 'Error', message: '查询失败' });
-  }
-});
-
 /**
- * 删除投稿记录
+ * 删除常规（录制）投稿记录 —— 只动 upload_records 单表。
  *
- * source 决定删除哪张投稿表（recording=upload_records，replay=replay_upload_records），
- * 表名取自下方常量白名单，永不来自请求入参。两表 id 各自独立自增，缺省按 recording 处理；
- * 回放记录必须由前端显式带上 source，否则会删掉同号的常规投稿。
+ * 回放投稿请走 `DELETE /api/replay_upload_records/:id`（server/router/replay.js）。
+ * 按路径分表后不再有 `?source=` 参数，也就不存在「漏传/误传删错表」的风险类别。
  */
-const UPLOAD_RECORD_TABLES = {
-  recording: 'upload_records',
-  replay: 'replay_upload_records',
-};
-
 router.delete('/upload_records/:id', async (req, res) => {
   try {
-    const source = req.query.source === 'replay' ? 'replay' : 'recording';
-    const table = UPLOAD_RECORD_TABLES[source];
-    const result = await pool.query(`DELETE FROM ${table} WHERE id = $1 RETURNING id`, [req.params.id]);
+    const result = await pool.query('DELETE FROM upload_records WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '投稿记录不存在' });
     }
-    res.json({ status: 'ok', data: { id: result.rows[0].id, source } });
+    res.json({ status: 'ok', data: { id: result.rows[0].id } });
   } catch (err) {
     console.error('[upload_records] 删除失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });
@@ -484,15 +368,14 @@ router.get('/upload_templates/:id/seasons', async (req, res) => {
 });
 
 /**
- * 手动重试「加入合集」：与自动链路共用幂等编排
+ * 手动重试「加入合集」（常规/录制投稿）—— 只动 upload_records 单表。
  *
- * source 决定操作哪张投稿表（recording=upload_records，replay=replay_upload_records）。
- * 两表 id 各自独立自增，缺省按 recording 处理；回放记录必须由前端显式带上 source，否则会命中同号的常规投稿。
+ * 回放投稿请走 `POST /api/replay_upload_records/:id/season/retry`（server/router/replay.js）。
+ * 按路径分表后不再有 `?source=` 参数，两表同号稿件不可能互相串台。
  */
 router.post('/upload_records/:id/season/retry', async (req, res) => {
   try {
-    const source = req.query.source === 'replay' ? 'replay' : 'recording';
-    const result = await SeasonService.retryAdd(req.params.id, source);
+    const result = await SeasonService.retryAdd(req.params.id, 'recording');
     if (!result.ok) {
       return res.status(result.http || 500).json({ status: 'Error', message: result.message });
     }

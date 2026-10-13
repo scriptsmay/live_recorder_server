@@ -1,5 +1,7 @@
 const express = require('express');
+const pool = require('../db/index');
 const ReplayService = require('../services/ReplayService');
+const SeasonService = require('../services/SeasonService');
 const ReplayUploadService = require('../lib/core/replay/ReplayUploadService');
 const replayQueue = require('../lib/core/ReplayProcessQueue');
 
@@ -170,6 +172,59 @@ router.put('/replay/principals/:principalId/settings', async (req, res) => {
   } catch (err) {
     console.error('[replay] 配置更新失败:', err);
     res.status(500).json({ status: 'Error', message: '更新回放配置失败' });
+  }
+});
+
+/**
+ * 回放投稿记录 —— 只服务 replay_upload_records 单表（v1.11.2 按路径分表）。
+ *
+ * 与常规投稿 `/api/upload_records*` 是两套独立端点：两表 id 各自独立自增，
+ * 同一个数字在两张表上是两个不同稿件，按路径分表后不存在「同号指错表」的可能。
+ * 回放工具箱内嵌的 `/api/replay/principals/:principalId/uploads` 是主播维度的只读列表，
+ * 与此处跨主播的全表列表用途不同，两者并存。
+ */
+
+function seasonFailure(res, err) {
+  const code = (err && err.code) || 'unknown';
+  console.error(`[合集] 请求失败: ${code}`);
+  const cookieIssue = code.startsWith('COOKIE') || code === 'AUTH_EXPIRED' || code === 'CREDENTIAL_INVALID';
+  const message = cookieIssue ? 'cookie 不可用，请检查模板的 cookie 配置与登录态' : '合集信息获取失败，请稍后重试';
+  return res.status(cookieIssue ? 400 : 500).json({ status: 'Error', message });
+}
+
+router.get('/replay_upload_records', async (req, res) => {
+  try {
+    const { status, season_status, title, page, limit, page_size } = req.query;
+    const data = await ReplayService.listAllUploads({ status, season_status, title, page, limit, page_size });
+    res.json({ status: 'ok', data: data.rows, total: data.total, page: data.page, page_size: data.page_size });
+  } catch (err) {
+    console.error('[replay_upload_records] 查询失败:', err);
+    res.status(500).json({ status: 'Error', message: '查询回放投稿记录失败' });
+  }
+});
+
+router.delete('/replay_upload_records/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM replay_upload_records WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '投稿记录不存在' });
+    }
+    res.json({ status: 'ok', data: { id: result.rows[0].id } });
+  } catch (err) {
+    console.error('[replay_upload_records] 删除失败:', err);
+    res.status(500).json({ status: 'Error', message: '删除失败' });
+  }
+});
+
+router.post('/replay_upload_records/:id/season/retry', async (req, res) => {
+  try {
+    const result = await SeasonService.retryAdd(req.params.id, 'replay');
+    if (!result.ok) {
+      return res.status(result.http || 500).json({ status: 'Error', message: result.message });
+    }
+    res.json({ status: 'ok', message: result.message });
+  } catch (err) {
+    seasonFailure(res, err);
   }
 });
 
