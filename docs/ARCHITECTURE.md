@@ -29,6 +29,14 @@ Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /dat
   `/data/biliup/cookies.json`。
 - `/api/health` 用于 Docker healthcheck 和外部监控。
 
+### 前端 SPA 路由回退
+
+前端为 Vue Router history 模式，直接刷新任意页面路径时由后端 `server/router/spa.js` 兜底回退到
+`public/frontend/index.html`。该文件内维护一份 `spaRoutes` 白名单——**新增前端页面路由时必须同步
+加入该白名单**，否则直接刷新该路径会返回 404（前端构建产物与路由本身均正常，仅服务端未回退）。
+`test/spa-routes.test.js` 会自动比对 `frontend/src/router/index.ts` 的静态路由与后端白名单，
+缺失或存在死条目都会让测试失败。
+
 ## 环境变量加载
 
 环境变量统一由 `server/config/env.js` 初始化：
