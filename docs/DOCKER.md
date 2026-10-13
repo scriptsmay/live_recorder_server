@@ -93,7 +93,7 @@ v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app
 | FFmpeg | 录制、转码（Debian Trixie 软件包） |
 | mkvmerge | 视频切片（mkvtoolnix） |
 | yt-dlp | 回放下载（通过 uv tool 安装） |
-| biliup | B 站投稿（通过 uv tool 安装） |
+| biliup | B 站投稿（通过 uv tool 安装，固定 `1.2.8`；上游 1.2.10+ 无 wheel，留空会撞 Rust 构建） |
 
 ## .env 配置参考
 

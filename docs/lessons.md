@@ -859,3 +859,41 @@ BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），
 3. **FFmpeg 版本选择要匹配场景**：录制场景用 `-c copy` 不涉及编解码，7.x 稳定分支完全够用，8.x 的新特性（Vulkan 硬件加速、新编码器）对本项目无实际价值。
 4. **`ffmpeg -version` 验证是上线前必做项**：构建成功不代表运行时正常，生产容器启动后应立即验证 FFmpeg 版本和功能（如 `ffmpeg -version`、`ffmpeg -codecs | grep flv`）。
 5. **升级路径要记录**：从 nightly → Debian stable → BtbN locked，每次变更都应记录版本号和原因，方便后续回溯。
+
+## 构建期 Python 工具未固定版本：biliup 上游停发 wheel 导致镜像构建中断
+
+### 现象
+
+v1.11.0 打 tag 后 CNB 流水线 `build-app-image` 失败，`build-replay-cron-image` 正常。日志尾部：
+
+```text
+error: Failed to build `biliup==1.2.11`
+  cause: Call to `maturin.build_wheel` failed (exit status: 1)
+         Rust not found, installing into a temporary directory
+         error: linker `cc` not found
+```
+
+本次版本没有改过 `Dockerfile`（`git diff v1.10.3..HEAD -- Dockerfile` 为空），代码门禁也全绿——失败与业务变更无关。
+
+### 根因
+
+`Dockerfile` 里写的是 `uv tool install biliup`（不固定版本），构建时按 PyPI 最新解析：
+
+- `biliup` 1.2.3 ~ 1.2.9 都提供 `cp38/cp39-abi3 manylinux` wheel，直接装二进制，构建正常；
+- 上游 1.2.10 / 1.2.11 **只发 sdist、不发 wheel**，uv 退回 maturin 源码构建，需要 Rust 工具链与 `cc` 链接器，而 Debian trixie 运行阶段镜像里没有；
+- 于是「上游发版」这件事独自把构建打挂，且任何一次重新构建（哪怕是老 tag）都会复现。
+
+### 修复
+
+两处 Dockerfile 同步固定为与现网一致的 `biliup==1.2.8`（生产容器实测 `biliup-cli 1.2.8`，v1.11.0 合集功能的 T0 实证也是在 1.2.8 上做的）：
+
+- `Dockerfile` —— `uv tool install biliup==1.2.8`
+- `docker/Dockerfile.local` —— 同上，注释里指回主 Dockerfile 说明保持一致
+
+### 经验总结
+
+1. **构建期的外部工具必须固定版本**：`uv tool install <pkg>` / `pip install <pkg>` / `apt install <pkg>` 不带版本号，等于把「能不能构建」交给上游的发版节奏。本项目历史上 FFmpeg 构建源、`biliup` PATH 两次踩的都是同一类坑。
+2. **上游停发 wheel 是静默破坏性变更**：PyPI 的 `latest` 语义不变，但从「有二进制」变成「只有源码」会把纯安装步骤变成编译步骤，构建环境没有相应工具链就直接挂。判断方法是看 `https://pypi.org/pypi/<pkg>/json` 里目标版本 `files[].filename` 有没有 `manylinux` wheel。
+3. **固定版本要固定在「现网实际在跑」的那一档**：不要顺手选上游最后一个有 wheel 的版本（1.2.9），那等于在同一发布里夹带一次未验证的依赖升级。
+4. **构建失败先分清是不是自己的变更**：`git diff <上个 tag>..HEAD -- Dockerfile docker/` 为空、而流水线从 success 变 error，基本可以判定是外部漂移，别在业务代码里找原因。
+5. **镜像失败不等于版本作废**：主服务镜像挂住时 replay-cron 已产出，修复只需重打 tag；但要处理「已推送却没有产物的标签」，别把它留在远端当历史真相。

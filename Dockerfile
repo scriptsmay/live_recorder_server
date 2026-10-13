@@ -42,10 +42,12 @@ ENV LANG=C.UTF-8 \
 WORKDIR /app
 
 # ffmpeg/mkvtoolnix：视频处理和封装（Debian 官方源，见上方阶段说明）
+# biliup 必须固定版本：上游 1.2.10 起只发 sdist 不发 wheel，uv 会退回 maturin 源码构建，
+# 而本阶段没有 Rust 工具链，构建直接失败（v1.11.0 CI 实测）。1.2.8 与生产现网一致。
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
-    && uv tool install biliup --python /usr/bin/python3 \
+    && uv tool install biliup==1.2.8 --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \
     && ln -sf /root/.local/share/uv/tools/biliup/bin/biliup /usr/local/bin/biliup \
     && ln -sf /root/.local/share/uv/tools/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
