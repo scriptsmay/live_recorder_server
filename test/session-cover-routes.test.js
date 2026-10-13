@@ -426,8 +426,8 @@ posixFifoTest('POSIX FIFO 使用 O_NONBLOCK 快速返回 404', async () => {
   expect(openSpy.mock.calls[0][1] & fs.constants.O_NONBLOCK).toBe(fs.constants.O_NONBLOCK);
 });
 
-test('平台无法安全解析已打开 fd 的实际目标时 fail closed 返回 404', async () => {
-  const coverPath = path.join(tmpRoot, 'unsupported-fd-platform.jpg');
+test('非 Linux 平台用 dev/ino 复核后正常返回封面', async () => {
+  const coverPath = path.join(tmpRoot, 'darwin-ok.jpg');
   fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
   setTestPlatform('darwin');
@@ -435,8 +435,30 @@ test('平台无法安全解析已打开 fd 的实际目标时 fail closed 返回
   try {
     const response = await authed('/api/sessions/61/cover');
 
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/^image\/jpeg/);
+    expect(Number(response.headers['content-length'])).toBe(fs.statSync(coverPath).size);
+  } finally {
+    setTestPlatform('linux');
+  }
+});
+
+test('非 Linux 平台实际打开的文件与 realpath 目标不是同一个时 fail closed', async () => {
+  const coverPath = path.join(tmpRoot, 'darwin-race.jpg');
+  const outsideCover = path.join(outsideRoot, 'darwin-race-outside.jpg');
+  fs.writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  fs.writeFileSync(outsideCover, Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0x00, 0x01]));
+  pool.query.mockResolvedValueOnce({ rows: [{ cover_path: coverPath }] });
+  const realOpen = fs.promises.open.bind(fs.promises);
+  jest.spyOn(fs.promises, 'open').mockImplementationOnce((...args) => realOpen(outsideCover, args[1]));
+  setTestPlatform('darwin');
+
+  try {
+    const response = await authed('/api/sessions/61/cover');
+
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('封面不可用');
+    expect(JSON.stringify(response.body)).not.toContain(outsideRoot);
   } finally {
     setTestPlatform('linux');
   }

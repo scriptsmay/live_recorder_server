@@ -61,10 +61,6 @@ async function resolveOpenedFileTarget(fileHandle, realVideoRoot) {
 }
 
 async function openValidatedCover(coverPath, isDisconnected) {
-  if (process.platform !== 'linux') {
-    return null;
-  }
-
   const videoRoot = path.resolve(process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads');
   const pathCheck = await resolveAndValidate(coverPath, [videoRoot]);
   if (!pathCheck.valid) {
@@ -100,17 +96,26 @@ async function openValidatedCover(coverPath, isDisconnected) {
       return null;
     }
 
-    let openedRealPath;
-    try {
-      openedRealPath = await resolveOpenedFileTarget(fileHandle, realVideoRoot);
-    } catch (err) {
-      if (err.code === 'ENOENT') {
+    // 确认「实际打开的就是根目录内那个文件」：Linux 解析 fd 的真实目标，
+    // 其余平台没有 /proc/self/fd，退一步比对 fstat 与 realpath 目标的 dev/ino
+    if (process.platform === 'linux') {
+      let openedRealPath;
+      try {
+        openedRealPath = await resolveOpenedFileTarget(fileHandle, realVideoRoot);
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          return null;
+        }
+        throw err;
+      }
+      if (!openedRealPath || !isWithinRoot(openedRealPath, realVideoRoot)) {
         return null;
       }
-      throw err;
-    }
-    if (!openedRealPath || !isWithinRoot(openedRealPath, realVideoRoot)) {
-      return null;
+    } else {
+      const realStat = await fs.promises.stat(realCoverPath);
+      if (stats.ino !== realStat.ino || stats.dev !== realStat.dev) {
+        return null;
+      }
     }
 
     const streamHandle = fileHandle;
