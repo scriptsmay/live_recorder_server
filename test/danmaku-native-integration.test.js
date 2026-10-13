@@ -139,7 +139,11 @@ describe('端到端：startCapture → mock WS 推弹幕 → JSONL 落盘 → st
     await flush(900); // 500ms 攒批窗口 + 余量
     const jsonlPath = session.rawPath;
     expect(fs.existsSync(jsonlPath)).toBe(true);
-    const lines = fs.readFileSync(jsonlPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const lines = fs
+      .readFileSync(jsonlPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatchObject({
       type: 'comment',
@@ -274,7 +278,10 @@ describe('骨架行为：心跳与断线重连（测试专用平台客户端）'
     let connCount = 0;
     let clientRef = null;
     const s = await new Promise((resolve) => {
-      const srv = new WebSocketServer({ port: 0 }, () => { console.log('DBG server listening'); resolve(srv); });
+      const srv = new WebSocketServer({ port: 0 }, () => {
+        console.log('DBG server listening');
+        resolve(srv);
+      });
     });
     const port = s.address().port;
     console.log('DBG port', port);

@@ -8,7 +8,10 @@ const {
   parseDanmakuBody,
   HEARTBEAT,
 } = require('../server/lib/core/danmaku/client/platforms/huya');
-const { createDanmakuClient, getSupportedPlatforms } = require('../server/lib/core/danmaku/client/DanmakuClientFactory');
+const {
+  createDanmakuClient,
+  getSupportedPlatforms,
+} = require('../server/lib/core/danmaku/client/DanmakuClientFactory');
 
 // Task 2 抓包固化的真实帧（10 条 1400 弹幕 + 注册响应），期望值按抓包验证的布局解出
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'danmaku', 'huya', 'sample-frames.jsonl');

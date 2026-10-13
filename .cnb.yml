@@ -21,7 +21,7 @@
 # ---- 定时任务必须挂在具体分支名下（此处用默认分支 main）----
 main:
   # 每周一 03:00（UTC）从上游 ghcr.io 同步 FFmpeg 构建镜像到 CNB 制品库
-  "crontab: 0 3 * * 1":
+  'crontab: 0 3 * * 1':
     - name: sync-ffmpeg-image
       services:
         - docker

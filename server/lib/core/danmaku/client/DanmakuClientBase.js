@@ -147,14 +147,14 @@ class DanmakuClientBase {
     for (const endpoint of info.endpoints) {
       try {
         this.socket =
-          transport === 'tcp'
-            ? await this._connectTcp(endpoint)
-            : await this._connectWs(endpoint, info.headers || {});
+          transport === 'tcp' ? await this._connectTcp(endpoint) : await this._connectWs(endpoint, info.headers || {});
         lastErr = null;
         break;
       } catch (err) {
         lastErr = err;
-        this.log.warn(`[${this.platform}] 端点连接失败: ${typeof endpoint === 'string' ? endpoint : `${endpoint.host}:${endpoint.port}`} err=${err.message}`);
+        this.log.warn(
+          `[${this.platform}] 端点连接失败: ${typeof endpoint === 'string' ? endpoint : `${endpoint.host}:${endpoint.port}`} err=${err.message}`
+        );
       }
     }
     if (lastErr) {
@@ -287,9 +287,7 @@ class DanmakuClientBase {
     if (this.destroyed) return;
     this.attempt++;
     const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** (this.attempt - 1));
-    this.log.warn(
-      `[${this.platform}] ${delay}ms 后重连(第 ${this.attempt} 次): room=${this.roomUrl}`
-    );
+    this.log.warn(`[${this.platform}] ${delay}ms 后重连(第 ${this.attempt} 次): room=${this.roomUrl}`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this._connect();
@@ -308,7 +306,9 @@ class DanmakuClientBase {
       if (this.destroyed || !this.connected) return;
       // ack 超时检测：超过容许窗口未收到心跳响应 → 主动断开触发重连
       if (ackTimeoutMs && Date.now() - this.lastAckAt > ackTimeoutMs) {
-        this.log.warn(`[${this.platform}] 心跳响应超时(${Math.round((Date.now() - this.lastAckAt) / 1000)}s 无 ack)，主动重连`);
+        this.log.warn(
+          `[${this.platform}] 心跳响应超时(${Math.round((Date.now() - this.lastAckAt) / 1000)}s 无 ack)，主动重连`
+        );
         this._onConnectionLost('heartbeat timeout');
         return;
       }

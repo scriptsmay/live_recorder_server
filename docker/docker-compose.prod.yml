@@ -56,4 +56,3 @@ networks:
     # 生产实际外部网络名通过 .env 的 EXTERNAL_NETWORK_NAME 注入
     name: ${EXTERNAL_NETWORK_NAME:?EXTERNAL_NETWORK_NAME is required for prod}
     external: true
-

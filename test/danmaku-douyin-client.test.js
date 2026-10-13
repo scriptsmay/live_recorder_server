@@ -1,14 +1,7 @@
 const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 
-const {
-  ProtoReader,
-  ProtoWriter,
-  first,
-  asU64,
-  asStr,
-  asBytes,
-} = require('../server/lib/core/danmaku/codec/protobuf');
+const { ProtoReader, ProtoWriter, first, asU64, asStr, asBytes } = require('../server/lib/core/danmaku/codec/protobuf');
 const {
   DouyinDanmakuClient,
   extractRoomId,
@@ -187,7 +180,12 @@ function buildChat(nick, content) {
 
 describe('douyin: 推送解码', () => {
   test('parsePushFrame / parseChatMessage', () => {
-    const frame = buildPushFrame({ logId: 777, method: 'WebcastChatMessage', chat: buildChat('抖音用户', '你好呀'), needAck: false });
+    const frame = buildPushFrame({
+      logId: 777,
+      method: 'WebcastChatMessage',
+      chat: buildChat('抖音用户', '你好呀'),
+      needAck: false,
+    });
     const parsed = parsePushFrame(frame);
     expect(parsed.logId).toBe(777);
     // payload 解压后是 Response（含消息列表），需先取消息 payload 再解析 ChatMessage
@@ -279,7 +277,13 @@ describe('douyin: 端到端', () => {
     const ws = connections[0];
     const logId = 424242;
     ws.send(
-      buildPushFrame({ logId, method: 'WebcastChatMessage', chat: buildChat('抖友', 'ACK 测试'), needAck: true, internalExt: 'internal_src:dim|seq:9' })
+      buildPushFrame({
+        logId,
+        method: 'WebcastChatMessage',
+        chat: buildChat('抖友', 'ACK 测试'),
+        needAck: true,
+        internalExt: 'internal_src:dim|seq:9',
+      })
     );
 
     await flush(300);

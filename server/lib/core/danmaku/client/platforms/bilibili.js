@@ -46,8 +46,8 @@ const VER = {
  * body = "[object Object] "
  */
 const HEARTBEAT = Buffer.from([
-  0x00, 0x00, 0x00, 0x1f, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
-  0x5b, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x20, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x5d, 0x20,
+  0x00, 0x00, 0x00, 0x1f, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x5b, 0x6f, 0x62,
+  0x6a, 0x65, 0x63, 0x74, 0x20, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x5d, 0x20,
 ]);
 
 /** 构造 16 字节包头数据包 */
@@ -272,10 +272,10 @@ class BilibiliDanmakuClient extends DanmakuClientBase {
   }
 
   async _getRealRoomId(shortId, headers) {
-    const resp = await axios.get(
-      `https://api.live.bilibili.com/room/v1/Room/room_init?id=${shortId}`,
-      { headers, timeout: 5000 }
-    );
+    const resp = await axios.get(`https://api.live.bilibili.com/room/v1/Room/room_init?id=${shortId}`, {
+      headers,
+      timeout: 5000,
+    });
     const roomId = resp.data && resp.data.data && resp.data.data.room_id;
     if (!roomId) {
       throw new Error(`B站 room_init 失败: ${shortId}`);
@@ -298,10 +298,10 @@ class BilibiliDanmakuClient extends DanmakuClientBase {
       .join('&');
     let json;
     try {
-      const resp = await axios.get(
-        `https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo?${query}`,
-        { headers, timeout: 5000 }
-      );
+      const resp = await axios.get(`https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo?${query}`, {
+        headers,
+        timeout: 5000,
+      });
       json = resp.data;
     } catch (err) {
       this.log.warn(`[bilibili] getDanmuInfo 请求失败(${err.message})，降级默认 WS 地址`);
@@ -316,10 +316,7 @@ class BilibiliDanmakuClient extends DanmakuClientBase {
     }
     const data = json.data || {};
     const host = data.host_list && data.host_list[0];
-    const wsUrl =
-      host && host.host && host.wss_port
-        ? `wss://${host.host}:${host.wss_port}/sub`
-        : DEFAULT_WS_URL;
+    const wsUrl = host && host.host && host.wss_port ? `wss://${host.host}:${host.wss_port}/sub` : DEFAULT_WS_URL;
     return { wsUrl, token: data.token || '' };
   }
 

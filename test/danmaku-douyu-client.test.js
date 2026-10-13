@@ -12,12 +12,7 @@ jest.mock('../server/services/DataService', () => ({
 
 const pool = require('../server/db/index');
 const DanmakuRecorder = require('../server/lib/core/danmaku/DanmakuRecorder');
-const {
-  decode: sttDecode,
-  getStr,
-  encodeString,
-  decodeString,
-} = require('../server/lib/core/danmaku/codec/stt');
+const { decode: sttDecode, getStr, encodeString, decodeString } = require('../server/lib/core/danmaku/codec/stt');
 const {
   extractRoomId,
   buildPacket,
@@ -202,14 +197,20 @@ describe('douyu: 端到端（mock TCP server → DanmakuRecorder → JSONL）', 
     expect(receivedText).toContain('type@=joingroup/rid@=7777/gid@=-9999/');
 
     const socket = serverSockets[serverSockets.length - 1];
-    socket.write(Buffer.concat([
-      buildPacket('type@=chatmsg/nn@=斗鱼用户/txt@=斗鱼弹幕/uid@=1001/'),
-      buildPacket('type@=dgb/nn@=斗鱼礼物哥/uid@=1002/gfn@=超级火箭/gfcnt@=1/'),
-    ]));
+    socket.write(
+      Buffer.concat([
+        buildPacket('type@=chatmsg/nn@=斗鱼用户/txt@=斗鱼弹幕/uid@=1001/'),
+        buildPacket('type@=dgb/nn@=斗鱼礼物哥/uid@=1002/gfn@=超级火箭/gfcnt@=1/'),
+      ])
+    );
 
     await flush(900); // 攒批窗口
     const session = DanmakuRecorder.getSession('https://www.douyu.com/7777');
-    const lines = fs.readFileSync(session.rawPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const lines = fs
+      .readFileSync(session.rawPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({ type: 'comment', username: '斗鱼用户', user_id: '1001', text: '斗鱼弹幕' });
     expect(lines[1]).toMatchObject({ type: 'gift', username: '斗鱼礼物哥', gift_name: '超级火箭', count: 1 });

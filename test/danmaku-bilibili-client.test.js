@@ -145,7 +145,21 @@ describe('bilibili: 消息映射', () => {
       cmd: 'DANMU_MSG',
       info: [
         [
-          0, 1, 25, 16777215, 0, 0, 0, '', 0, 0, 0, '', 0, '{}', '{}',
+          0,
+          1,
+          25,
+          16777215,
+          0,
+          0,
+          0,
+          '',
+          0,
+          0,
+          0,
+          '',
+          0,
+          '{}',
+          '{}',
           { extra: JSON.stringify({ emoticon_unique: 'upower_emoji:123' }) },
         ],
         '原始文本会被替换',
@@ -244,7 +258,6 @@ describe('bilibili: buvid3 与 WBI', () => {
     // KEY_MAP 前 8 位: 46,47,18,2,53,8,23,32 → full[46..] = '3210','9876','7654','3210'...
     expect(key.slice(0, 8)).toBe('1022a87f');
   });
-
 });
 
 describe('DanmakuClientFactory 注册 bilibili', () => {

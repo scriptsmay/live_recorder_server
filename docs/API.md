@@ -981,28 +981,28 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数          | 类型    | 必填 | 说明                                                    |
-| ------------- | ------- | ---- | ------------------------------------------------------- |
-| session_id    | integer | 否   | 按会话 ID 筛选                                          |
-| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`          |
-| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
+| 参数          | 类型    | 必填 | 说明                                                       |
+| ------------- | ------- | ---- | ---------------------------------------------------------- |
+| session_id    | integer | 否   | 按会话 ID 筛选                                             |
+| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`             |
+| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed`    |
 | title         | string  | 否   | 标题模糊查询，大小写不敏感的子串匹配（服务端 `ILIKE %…%`） |
-| page          | integer | 否   | 页码，从 1 开始；传了才做服务端分页                     |
-| limit         | integer | 否   | 每页条数，默认 50                                       |
+| page          | integer | 否   | 页码，从 1 开始；传了才做服务端分页                        |
+| limit         | integer | 否   | 每页条数，默认 50                                          |
 
 **返回：** `{ status, data, total, page, limit }`；未传 `page` 时 `page` 为 `null`、`limit` 为实际生效值。
 
 **返回字段说明：**
 
-| 字段         | 类型   | 说明                            |
-| ------------ | ------ | ------------------------------- |
-| upload_files | string | JSON 数组，投稿时的文件路径列表 |
-| file_count   | number | 文件数量                        |
-| total_size   | number | 总大小（字节）                  |
-| bv_id        | string | B站视频 BV 号                   |
-| output       | string | 投稿输出信息                    |
+| 字段         | 类型   | 说明                                                        |
+| ------------ | ------ | ----------------------------------------------------------- |
+| upload_files | string | JSON 数组，投稿时的文件路径列表                             |
+| file_count   | number | 文件数量                                                    |
+| total_size   | number | 总大小（字节）                                              |
+| bv_id        | string | B站视频 BV 号                                               |
+| output       | string | 投稿输出信息                                                |
 | season_title | string | 合集名，联 `upload_templates.season_title` 带出，仅用于展示 |
-| section_id   | string | 合集小节 ID，同样来自模板       |
+| section_id   | string | 合集小节 ID，同样来自模板                                   |
 
 > `season_title` / `section_id` 是模板侧的**当前**配置（不是投稿时的快照），与手动重试 `POST /api/upload_records/:id/season/retry` 实时读取的入参一致；投稿记录表本身只存 `season_id`，因此模板被删或改配后这两个字段会随之变化甚至为 `null`。前端「加入合集」确认框用它展示目标合集名，模板没存名字时退回 `season_id` 数字。
 
@@ -1028,13 +1028,13 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数          | 类型    | 必填 | 说明                                                    |
-| ------------- | ------- | ---- | ------------------------------------------------------- |
-| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`          |
-| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
+| 参数          | 类型    | 必填 | 说明                                                       |
+| ------------- | ------- | ---- | ---------------------------------------------------------- |
+| status        | string  | 否   | 按状态筛选：`uploading` / `success` / `failed`             |
+| season_status | string  | 否   | 按合集状态筛选：`none` / `pending` / `added` / `failed`    |
 | title         | string  | 否   | 标题模糊查询，大小写不敏感的子串匹配（服务端 `ILIKE %…%`） |
-| page          | integer | 否   | 页码，从 1 开始                                        |
-| limit         | integer | 否   | 每页条数，默认 20，上限 100                            |
+| page          | integer | 否   | 页码，从 1 开始                                            |
+| limit         | integer | 否   | 每页条数，默认 20，上限 100                                |
 
 **返回：** `{ status, data, total, page, page_size }`。行内含 `principal_id` / `principal_name` / `replay_id`（联表 `replay_records`），以及 `season_title` / `section_id`（联表 `upload_templates`，语义与录制侧一致：模板**当前**的合集配置，仅用于展示，模板被删或改配后会变化甚至为 `null`）。
 
@@ -1062,16 +1062,16 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。常规投稿与回放投稿共用这套编排（v1.11.1 起回放也自动加入），执行结果分别写在 `upload_records.season_status` 与 `replay_upload_records.season_status`：`none` / `pending` / `added` / `failed`。
 
-| 方法   | 路径                                 | 说明                                        |
-| ------ | ------------------------------------ | ------------------------------------------- |
-| GET    | /api/upload_templates/:id/seasons    | 按模板 cookie 拉合集 + 小节列表（模板级联） |
-| POST   | /api/upload_records/:id/season/retry | 手动重试加入合集（录制投稿）                |
-| POST   | /api/replay_upload_records/:id/season/retry | 手动重试加入合集（回放投稿）         |
-| GET    | /api/biliup_accounts                 | biliup 账号登记列表                         |
-| POST   | /api/biliup_accounts                 | 新增账号登记（只读校验 cookie 文件）        |
-| GET    | /api/biliup_accounts/:id             | 账号详情，顺带刷新线上登录态                |
-| DELETE | /api/biliup_accounts/:id             | 删除登记（cookie 文件保留）                 |
-| GET    | /api/biliup_accounts/:id/seasons     | 按账号 cookie 拉合集 + 小节列表             |
+| 方法   | 路径                                        | 说明                                        |
+| ------ | ------------------------------------------- | ------------------------------------------- |
+| GET    | /api/upload_templates/:id/seasons           | 按模板 cookie 拉合集 + 小节列表（模板级联） |
+| POST   | /api/upload_records/:id/season/retry        | 手动重试加入合集（录制投稿）                |
+| POST   | /api/replay_upload_records/:id/season/retry | 手动重试加入合集（回放投稿）                |
+| GET    | /api/biliup_accounts                        | biliup 账号登记列表                         |
+| POST   | /api/biliup_accounts                        | 新增账号登记（只读校验 cookie 文件）        |
+| GET    | /api/biliup_accounts/:id                    | 账号详情，顺带刷新线上登录态                |
+| DELETE | /api/biliup_accounts/:id                    | 删除登记（cookie 文件保留）                 |
+| GET    | /api/biliup_accounts/:id/seasons            | 按账号 cookie 拉合集 + 小节列表             |
 
 `?force=1` 跳过合集缓存重新拉取。
 
@@ -1101,19 +1101,19 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **状态码约定：**
 
-| 端点                             | 情况                     | 状态码                |
-| -------------------------------- | ------------------------ | --------------------- |
-| /upload_templates                | 合集 ID 非法             | 400                   |
-| /upload_templates                | 合集/小节归属不匹配      | 400                   |
-| /upload_templates/:id/seasons    | 模板不存在               | 404                   |
-| /upload_templates/:id/seasons    | cookie 不可用/登录态失效 | 400                   |
-| /upload_templates/:id/seasons    | 上游或网络异常           | 500                   |
-| /upload_records/:id/season/retry | 记录不存在               | 404                   |
-| /upload_records/:id/season/retry | 已在合集或正在加入       | 409                   |
-| /upload_records/:id/season/retry | 未选小节 / 无 BV 号      | 400                   |
-| /replay_upload_records/:id/season/retry | 同上（回放表同语义） | 同上                  |
-| /biliup_accounts                 | 名称或 cookie 路径重复   | 409                   |
-| /biliup_accounts/:id             | 被投稿模板引用           | 409 + `referenced_by` |
+| 端点                                    | 情况                     | 状态码                |
+| --------------------------------------- | ------------------------ | --------------------- |
+| /upload_templates                       | 合集 ID 非法             | 400                   |
+| /upload_templates                       | 合集/小节归属不匹配      | 400                   |
+| /upload_templates/:id/seasons           | 模板不存在               | 404                   |
+| /upload_templates/:id/seasons           | cookie 不可用/登录态失效 | 400                   |
+| /upload_templates/:id/seasons           | 上游或网络异常           | 500                   |
+| /upload_records/:id/season/retry        | 记录不存在               | 404                   |
+| /upload_records/:id/season/retry        | 已在合集或正在加入       | 409                   |
+| /upload_records/:id/season/retry        | 未选小节 / 无 BV 号      | 400                   |
+| /replay_upload_records/:id/season/retry | 同上（回放表同语义）     | 同上                  |
+| /biliup_accounts                        | 名称或 cookie 路径重复   | 409                   |
+| /biliup_accounts/:id                    | 被投稿模板引用           | 409 + `referenced_by` |
 
 `GET /api/upload_records` 与 `GET /api/replay_upload_records` 都支持 `?season_status=` 与 `?title=` 筛选，返回行含 `season_status`。
 

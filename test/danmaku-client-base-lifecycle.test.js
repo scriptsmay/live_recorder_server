@@ -97,9 +97,10 @@ describe('DanmakuClientBase: destroy 与建连竞态', () => {
     const client = makeClient();
     let resolveInfo;
     client.getConnectionInfo = jest.fn(
-      () => new Promise((resolve) => {
-        resolveInfo = resolve;
-      })
+      () =>
+        new Promise((resolve) => {
+          resolveInfo = resolve;
+        })
     );
     client._connectWs = jest.fn(() => Promise.resolve(new FakeSocket()));
 

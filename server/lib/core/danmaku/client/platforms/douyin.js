@@ -35,10 +35,7 @@ const HEARTBEAT = Buffer.from([0x3a, 0x02, 0x68, 0x62]);
 
 // ---- X-Bogus 签名（RC4 + MD5 复刻）----
 const XBOGUS_ALPHABET = Buffer.from('Dkdpgh4ZKsQB80/Mfvw36XI1R25+WUAlEi7NLboqYTOPuzmFjJnryx9HVGcaStCe', 'binary');
-const STANDARD_ALPHABET = Buffer.from(
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/',
-  'binary'
-);
+const STANDARD_ALPHABET = Buffer.from('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', 'binary');
 const ALPHABET_LOOKUP = (() => {
   const table = new Array(128).fill(0);
   for (let i = 0; i < 64; i++) {

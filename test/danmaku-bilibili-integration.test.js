@@ -16,11 +16,7 @@ jest.mock('../server/services/DataService', () => ({
 const pool = require('../server/db/index');
 const DanmakuRecorder = require('../server/lib/core/danmaku/DanmakuRecorder');
 const axios = require('axios');
-const {
-  buildPacket,
-  buildAuthPacket,
-  OP,
-} = require('../server/lib/core/danmaku/client/platforms/bilibili');
+const { buildPacket, buildAuthPacket, OP } = require('../server/lib/core/danmaku/client/platforms/bilibili');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'danmaku-bili-'));
 let wss;
@@ -160,11 +156,21 @@ describe('端到端：B站原生弹幕链路', () => {
 
     await flush(900); // 攒批窗口
     const session = DanmakuRecorder.getSession(ROOM);
-    const lines = fs.readFileSync(session.rawPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const lines = fs
+      .readFileSync(session.rawPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({ type: 'comment', username: 'B站用户', user_id: '555', text: 'B站弹幕测试' });
     // gift 分支被激活
-    expect(lines[1]).toMatchObject({ type: 'gift', username: 'B站礼物哥', user_id: '556', gift_name: '小花花', count: 2 });
+    expect(lines[1]).toMatchObject({
+      type: 'gift',
+      username: 'B站礼物哥',
+      user_id: '556',
+      gift_name: '小花花',
+      count: 2,
+    });
     for (const line of lines) {
       expect(line.ts_ms).toBeGreaterThanOrEqual(1900);
     }
