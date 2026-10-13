@@ -79,7 +79,7 @@ class BiliupAccountService {
 
     if (name === '' || name.length > NAME_MAX) return fail(400, `账号名称需为 1-${NAME_MAX} 个字符`);
     if (cookiesPath === '' || !cookiesPath.startsWith('/') || cookiesPath.length > PATH_MAX) {
-      return fail(400, 'cookies_path 需为容器内绝对路径');
+      return fail(400, 'cookies_path 需为绝对路径（以 / 开头）');
     }
 
     try {

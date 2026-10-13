@@ -27,6 +27,43 @@ function isWithinRoot(resolvedPath, root) {
 }
 
 /**
+ * 基础路径校验：非空、无 '..' 穿越段、非符号链接。
+ *
+ * 不做 allowlist 目录限制，供「宿主机模式」下需要放宽目录范围的调用方使用
+ * （如 biliup cookie 文件在开发机上的任意绝对路径）。
+ *
+ * @param {string} filePath - 原始文件路径
+ * @returns {Promise<{valid: true, resolvedPath: string} | {valid: false, reason: string}>}
+ */
+async function validatePathBasics(filePath) {
+  if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
+    return { valid: false, reason: 'empty_path' };
+  }
+
+  // 检查路径中是否包含 '..' 段（原始输入，非 resolve 后）
+  if (filePath.includes('..')) {
+    return { valid: false, reason: 'path_traversal' };
+  }
+
+  const resolved = path.resolve(filePath);
+
+  // 符号链接检测
+  try {
+    const lstat = await fs.promises.lstat(resolved);
+    if (lstat.isSymbolicLink()) {
+      return { valid: false, reason: 'symlink' };
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      return { valid: false, reason: `stat_error: ${err.message}` };
+    }
+    // 文件不存在时仍返回 valid（路径合法），由后续读取环节报不存在
+  }
+
+  return { valid: true, resolvedPath: resolved };
+}
+
+/**
  * 解析并校验文件路径的安全性。
  *
  * 校验规则：
@@ -42,32 +79,11 @@ function isWithinRoot(resolvedPath, root) {
  * @returns {Promise<{valid: true, resolvedPath: string} | {valid: false, reason: string}>}
  */
 async function resolveAndValidate(filePath, allowlistRoots) {
+  const basic = await validatePathBasics(filePath);
+  if (!basic.valid) return basic;
+
   const roots = allowlistRoots || ALLOWLIST_ROOTS;
-
-  if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
-    return { valid: false, reason: 'empty_path' };
-  }
-
-  const resolved = path.resolve(filePath);
-
-  // 检查路径中是否包含 '..' 段（原始输入，非 resolve 后）
-  if (filePath.includes('..')) {
-    return { valid: false, reason: 'path_traversal' };
-  }
-
-  // 符号链接检测
-  try {
-    const lstat = await fs.promises.lstat(resolved);
-    if (lstat.isSymbolicLink()) {
-      return { valid: false, reason: 'symlink' };
-    }
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      // 文件不存在时仍需校验路径是否在 allowlist 内（用于删除已丢失文件的 DB 记录）
-    } else {
-      return { valid: false, reason: `stat_error: ${err.message}` };
-    }
-  }
+  const { resolvedPath: resolved } = basic;
 
   // 检查是否位于 allowlist 根目录内
   const withinRoot = roots.some((root) => isWithinRoot(resolved, root));
@@ -86,5 +102,6 @@ async function resolveAndValidate(filePath, allowlistRoots) {
 module.exports = {
   ALLOWLIST_ROOTS,
   resolveAndValidate,
+  validatePathBasics,
   isWithinRoot,
 };

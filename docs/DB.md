@@ -248,16 +248,16 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 v1.11.0 新增。把散落在模板里的 `cookies_path` 字符串变成可校验、可选择的实体；是**旁路**，不替换模板字段。
 
-| 字段            | 类型          | 约束                       | 说明                                                               |
-| --------------- | ------------- | -------------------------- | ------------------------------------------------------------------ |
-| id              | SERIAL        | PRIMARY KEY                |                                                                    |
-| name            | VARCHAR(64)   | NOT NULL UNIQUE            | 账号别名，UI 展示                                                  |
-| cookies_path    | VARCHAR(1024) | NOT NULL UNIQUE            | 容器内 biliup cookie 文件绝对路径，须在 `BILIUP_WORK_DIR` 白名单内 |
-| uid             | BIGINT        |                            | B 站 UID，来自 `x/web-interface/nav`                               |
-| nickname        | VARCHAR(128)  |                            | 昵称，来自 `nav`                                                   |
-| login_status    | VARCHAR(16)   | NOT NULL DEFAULT 'unknown' | `ok` `expired` `unknown`，探测结果                                 |
-| last_checked_at | TIMESTAMP     |                            | 最近一次 `nav` 探测时间                                            |
-| created_at      | TIMESTAMP     | DEFAULT NOW()              |                                                                    |
+| 字段            | 类型          | 约束                       | 说明                                                                                                                                     |
+| --------------- | ------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| id              | SERIAL        | PRIMARY KEY                |                                                                                                                                          |
+| name            | VARCHAR(64)   | NOT NULL UNIQUE            | 账号别名，UI 展示                                                                                                                        |
+| cookies_path    | VARCHAR(1024) | NOT NULL UNIQUE            | biliup cookie 文件绝对路径；Docker 部署须在 `BILIUP_WORK_DIR` 白名单内，宿主机直跑允许本机任意绝对路径（`BILIUP_COOKIE_PATH_MODE` 控制） |
+| uid             | BIGINT        |                            | B 站 UID，来自 `x/web-interface/nav`                                                                                                     |
+| nickname        | VARCHAR(128)  |                            | 昵称，来自 `nav`                                                                                                                         |
+| login_status    | VARCHAR(16)   | NOT NULL DEFAULT 'unknown' | `ok` `expired` `unknown`，探测结果                                                                                                       |
+| last_checked_at | TIMESTAMP     |                            | 最近一次 `nav` 探测时间                                                                                                                  |
+| created_at      | TIMESTAMP     | DEFAULT NOW()              |                                                                                                                                          |
 
 > **不落 cookie 内容**：本表只存路径与探测出的身份元数据；cookie 文件本身由 `biliup login` / `biliup renew` 产出，服务端**只读不回写**。
 > **无 UPDATE 路由**：账号仅支持新增 / 查询 / 删除。改名或换 cookie 文件一律「删除后重建」，避免被引用中的模板与投稿记录出现半更新状态。

@@ -203,6 +203,7 @@ npm run lint && npm run format && npm run test
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` —— PostgreSQL 连接
 - `BILIUP_PATH` —— biliup 可执行文件路径，默认 `biliup`
 - `BILIUP_WORK_DIR` —— biliup 工作目录，默认 `$HOME`
+- `BILIUP_COOKIE_PATH_MODE` —— cookie 文件路径策略（`auto` 默认 / `strict` / `any`）。`auto` 按运行环境判定（`server/lib/utils/runtime.js` 探测容器）：容器内仅接受 `VIDEO_DOWNLOAD_DIR` / `REPLAY_WORK_DIR` / `BILIUP_WORK_DIR` 白名单内的绝对路径；宿主机直跑（`npm start` / `npm run dev`）接受本机任意绝对路径（仍拒绝 `..` 穿越与符号链接），便于开发环境登记账号
 - **鉴权**：`AUTH_ENABLED`（设为 `false` 关闭；其他值均视为开启）、`ADMIN_USERNAME`（默认 `admin`）、`AUTH_TOKEN_TTL_HOURS`（24）、`AUTH_COOKIE_NAME`（`auth_token`）、`AUTH_COOKIE_SECURE`、`LOGIN_RATE_LIMIT`（5）、`LOGIN_LOCKOUT_MIN`（5）。首次启动 `admin_users` 表为空时，`server/lib/core/auth-init.js` 自动生成随机密码并输出到启动日志；session 存 Redis `auth:session:{token}`。启用时未带 cookie 的 curl 会被 auth wall 拦截
 - **远程浏览器 / Browserless**：`REMOTE_BROWSER_WS_ENDPOINT`（`server/lib/core/browser/RemoteBrowserClient.js`，v1.8.3 起仅用于回放 m3u8 提取）、`BROWSERLESS_TOKEN`、`BROWSERLESS_CONCURRENT`、`BROWSERLESS_QUEUED`、`BROWSERLESS_TIMEOUT_MS`
 - **快手轮询**：`KUAISHOU_CHECKER_ENABLED`（默认 true）、`KUAISHOU_API_TIMEOUT_MS`（默认 15000）、`POLLING_KUAISHOU_COOKIE`
@@ -304,4 +305,3 @@ VIDEO_DOWNLOAD_DIR/
 ### 踩坑记录
 
 开发中遇到的典型问题及解决方案见 [docs/lessons.md](docs/lessons.md)。
-

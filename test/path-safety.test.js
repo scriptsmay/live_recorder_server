@@ -15,7 +15,7 @@ afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-const { resolveAndValidate, isWithinRoot } = require('../server/lib/utils/path-safety');
+const { resolveAndValidate, validatePathBasics, isWithinRoot } = require('../server/lib/utils/path-safety');
 
 describe('isWithinRoot', () => {
   test('文件在根目录下返回 true', () => {
@@ -102,5 +102,58 @@ describe('resolveAndValidate', () => {
     const result = await resolveAndValidate('/nonexistent/file.mp4', allowlistRoots);
     expect(result.valid).toBe(false);
     expect(result.reason).toBe('outside_allowlist');
+  });
+});
+
+describe('validatePathBasics（无 allowlist 的基础校验）', () => {
+  test('allowlist 外的绝对路径返回 valid', async () => {
+    const result = await validatePathBasics('/etc/passwd');
+    expect(result.valid).toBe(true);
+    expect(result.resolvedPath).toBe('/etc/passwd');
+  });
+
+  test('tmpDir 内文件返回 valid', async () => {
+    const testFile = path.join(tmpDir, 'basics.mp4');
+    fs.writeFileSync(testFile, 'dummy');
+    const result = await validatePathBasics(testFile);
+    expect(result.valid).toBe(true);
+    expect(result.resolvedPath).toBe(testFile);
+    fs.unlinkSync(testFile);
+  });
+
+  test('空路径返回 invalid', async () => {
+    const result = await validatePathBasics('');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('empty_path');
+  });
+
+  test('null 路径返回 invalid', async () => {
+    const result = await validatePathBasics(null);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('empty_path');
+  });
+
+  test('含 .. 的路径返回 invalid', async () => {
+    // path.join 会规范化消除 ..，这里用原始字符串保留 .. 段
+    const result = await validatePathBasics(`${tmpDir}/../etc/passwd`);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('path_traversal');
+  });
+
+  test('符号链接返回 invalid', async () => {
+    const target = path.join(tmpDir, 'basics-target.mp4');
+    const link = path.join(tmpDir, 'basics-link.mp4');
+    fs.writeFileSync(target, 'dummy');
+    fs.symlinkSync(target, link);
+    const result = await validatePathBasics(link);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('symlink');
+    fs.unlinkSync(link);
+    fs.unlinkSync(target);
+  });
+
+  test('不存在的文件仍返回 valid（交给读取环节报不存在）', async () => {
+    const result = await validatePathBasics('/nonexistent/whatever.json');
+    expect(result.valid).toBe(true);
   });
 });

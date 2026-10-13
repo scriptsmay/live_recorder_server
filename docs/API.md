@@ -1027,6 +1027,8 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 凭证红线：任何响应与日志都不含 cookie 内容；cookie 类失败只回类别文案，引导去模板/账号配置排查。
 
+**cookie 路径策略**（`BILIUP_COOKIE_PATH_MODE`，默认 `auto`）：`auto` 按运行环境判定——容器内仅接受白名单根目录（`VIDEO_DOWNLOAD_DIR` / `REPLAY_WORK_DIR` / `BILIUP_WORK_DIR`）内的绝对路径，宿主机直跑（`npm start` / `npm run dev`）接受本机任意绝对路径（仍拒绝 `..` 穿越与符号链接）；`strict` / `any` 可显式覆盖。该策略对账号登记、合集拉取、投稿取 cookie 一致生效。
+
 **自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。执行结果写在 `upload_records.season_status`：`none` / `pending` / `added` / `failed`。
 
 | 方法   | 路径                                 | 说明                                        |

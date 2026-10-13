@@ -1,6 +1,7 @@
 const fs = require('fs');
 
-const { resolveAndValidate } = require('./path-safety');
+const { resolveAndValidate, validatePathBasics } = require('./path-safety');
+const { isContainerRuntime } = require('./runtime');
 
 /**
  * biliup cookie 文件只读解析
@@ -64,6 +65,26 @@ function extractUid(map, parsed) {
 }
 
 /**
+ * cookie 文件路径策略：
+ *
+ * - `strict`：仅允许白名单根目录（VIDEO_DOWNLOAD_DIR / REPLAY_WORK_DIR / BILIUP_WORK_DIR），
+ *   容器生产默认
+ * - `any`：允许任意绝对路径（仍拒绝 '..' 穿越与符号链接），宿主机直跑默认
+ * - `auto`（默认）：按运行环境判定——容器内 `strict`，宿主机 `any`
+ *
+ * 环境变量 `BILIUP_COOKIE_PATH_MODE` 可显式覆盖（strict / any / auto，大小写不敏感）；
+ * 未识别取值按 auto 处理。
+ * @returns {'strict'|'any'}
+ */
+function resolveCookiePathMode() {
+  const mode = String(process.env.BILIUP_COOKIE_PATH_MODE || '')
+    .trim()
+    .toLowerCase();
+  if (mode === 'strict' || mode === 'any') return mode;
+  return isContainerRuntime() ? 'strict' : 'any';
+}
+
+/**
  * 只读加载 biliup cookie 文件。
  * @param {string} cookiesPath - 模板配置的 cookie 文件绝对路径
  * @returns {Promise<{cookieHeader: string, csrf: string, uid: string|null}>}
@@ -74,7 +95,10 @@ async function loadBiliupCookie(cookiesPath) {
     throw new CookieError(ERROR_CODES.NOT_CONFIGURED, '未配置 cookie 文件路径');
   }
 
-  const check = await resolveAndValidate(cookiesPath);
+  // 宿主机模式（npm start / npm run dev 直跑）只做基础校验，允许开发机上的任意绝对路径；
+  // 容器内仍收敛到白名单根目录。
+  const check =
+    resolveCookiePathMode() === 'any' ? await validatePathBasics(cookiesPath) : await resolveAndValidate(cookiesPath);
   if (!check.valid) {
     throw new CookieError(ERROR_CODES.PATH_INVALID, `cookie 路径校验未通过: ${check.reason}`);
   }
@@ -112,4 +136,5 @@ module.exports = {
   ERROR_CODES,
   CookieError,
   loadBiliupCookie,
+  resolveCookiePathMode,
 };

@@ -13,9 +13,23 @@ jest.mock('../server/lib/utils/path-safety', () => ({
     if (!filePath.startsWith('/data/biliup/')) return { valid: false, reason: 'outside_allowlist' };
     return { valid: true, resolvedPath: filePath };
   }),
+  validatePathBasics: jest.fn(async (filePath) => {
+    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
+      return { valid: false, reason: 'empty_path' };
+    }
+    if (filePath.includes('..')) return { valid: false, reason: 'path_traversal' };
+    return { valid: true, resolvedPath: filePath };
+  }),
 }));
+jest.mock('../server/lib/utils/runtime', () => ({ isContainerRuntime: jest.fn(() => false) }));
 
-const { loadBiliupCookie, CookieError, ERROR_CODES } = require('../server/lib/utils/biliup-cookie');
+const {
+  loadBiliupCookie,
+  CookieError,
+  ERROR_CODES,
+  resolveCookiePathMode,
+} = require('../server/lib/utils/biliup-cookie');
+const { isContainerRuntime } = require('../server/lib/utils/runtime');
 
 const SECRETS = {
   sessdata: 'SESSDATA-SECRET-VALUE',
@@ -53,6 +67,19 @@ function mockReadJson(payload) {
 
 afterEach(() => {
   jest.restoreAllMocks();
+});
+
+// 除「路径策略」用例外，其余用例统一按容器 strict 语义运行，
+// 避免测试机自身运行环境（容器/宿主机）影响结果
+const originalCookiePathMode = process.env.BILIUP_COOKIE_PATH_MODE;
+
+beforeEach(() => {
+  process.env.BILIUP_COOKIE_PATH_MODE = 'strict';
+});
+
+afterAll(() => {
+  if (originalCookiePathMode === undefined) delete process.env.BILIUP_COOKIE_PATH_MODE;
+  else process.env.BILIUP_COOKIE_PATH_MODE = originalCookiePathMode;
 });
 
 describe('loadBiliupCookie — 正常解析', () => {
@@ -263,5 +290,99 @@ describe('loadBiliupCookie — 凭证红线', () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe('CookieError');
     expect(Object.values(ERROR_CODES)).toContain(err.code);
+  });
+});
+
+describe('loadBiliupCookie — 路径策略（宿主机 / 容器）', () => {
+  const HOST_PATH = '/Users/virola/biliup/cookies.json';
+
+  beforeEach(() => {
+    isContainerRuntime.mockReturnValue(false);
+    delete process.env.BILIUP_COOKIE_PATH_MODE;
+  });
+
+  test('auto + 宿主机：白名单外的本机绝对路径可读', async () => {
+    mockReadJson(biliupCookieFile());
+
+    const result = await loadBiliupCookie(HOST_PATH);
+
+    expect(result.csrf).toBe(SECRETS.csrf);
+    expect(result.uid).toBe(SECRETS.uid);
+  });
+
+  test('auto + 容器：白名单外路径拒绝且不触达文件系统', async () => {
+    isContainerRuntime.mockReturnValue(true);
+    mockReadFile(async () => {
+      throw new Error('白名单外不应触达文件系统');
+    });
+
+    await expect(loadBiliupCookie(HOST_PATH)).rejects.toMatchObject({ code: ERROR_CODES.PATH_INVALID });
+    expect(fs.promises.readFile).not.toHaveBeenCalled();
+  });
+
+  test('BILIUP_COOKIE_PATH_MODE=any：容器内也允许白名单外路径', async () => {
+    isContainerRuntime.mockReturnValue(true);
+    process.env.BILIUP_COOKIE_PATH_MODE = 'any';
+    mockReadJson(biliupCookieFile());
+
+    const result = await loadBiliupCookie(HOST_PATH);
+
+    expect(result.csrf).toBe(SECRETS.csrf);
+  });
+
+  test('BILIUP_COOKIE_PATH_MODE=strict：宿主机也收敛到白名单', async () => {
+    process.env.BILIUP_COOKIE_PATH_MODE = 'strict';
+    mockReadFile(async () => {
+      throw new Error('白名单外不应触达文件系统');
+    });
+
+    await expect(loadBiliupCookie(HOST_PATH)).rejects.toMatchObject({ code: ERROR_CODES.PATH_INVALID });
+    expect(fs.promises.readFile).not.toHaveBeenCalled();
+  });
+
+  test('any 模式下仍拒绝 .. 穿越', async () => {
+    process.env.BILIUP_COOKIE_PATH_MODE = 'any';
+    mockReadFile(async () => {
+      throw new Error('穿越路径不应触达文件系统');
+    });
+
+    await expect(loadBiliupCookie('/Users/virola/../etc/passwd')).rejects.toMatchObject({
+      code: ERROR_CODES.PATH_INVALID,
+    });
+    expect(fs.promises.readFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveCookiePathMode', () => {
+  beforeEach(() => {
+    isContainerRuntime.mockReturnValue(false);
+  });
+
+  test('默认 auto + 宿主机 → any', () => {
+    delete process.env.BILIUP_COOKIE_PATH_MODE;
+    expect(resolveCookiePathMode()).toBe('any');
+  });
+
+  test('默认 auto + 容器 → strict', () => {
+    delete process.env.BILIUP_COOKIE_PATH_MODE;
+    isContainerRuntime.mockReturnValue(true);
+    expect(resolveCookiePathMode()).toBe('strict');
+  });
+
+  test('显式 strict 覆盖自动判定', () => {
+    process.env.BILIUP_COOKIE_PATH_MODE = 'strict';
+    expect(resolveCookiePathMode()).toBe('strict');
+  });
+
+  test('显式 any 覆盖自动判定（大小写不敏感）', () => {
+    process.env.BILIUP_COOKIE_PATH_MODE = 'ANY';
+    isContainerRuntime.mockReturnValue(true);
+    expect(resolveCookiePathMode()).toBe('any');
+  });
+
+  test('无法识别的取值按 auto 处理', () => {
+    process.env.BILIUP_COOKIE_PATH_MODE = 'nonsense';
+    isContainerRuntime.mockReturnValue(true);
+    expect(resolveCookiePathMode()).toBe('strict');
   });
 });

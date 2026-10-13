@@ -105,7 +105,7 @@ async function handleCreate() {
     return
   }
   if (!cookiesPath.startsWith('/')) {
-    toast.error('cookie 路径需为容器内绝对路径')
+    toast.error('cookie 路径需为绝对路径（以 / 开头）')
     return
   }
 
@@ -293,7 +293,8 @@ onMounted(fetchAccounts)
             placeholder="/data/biliup/cookies.json"
           />
           <p class="mt-1 text-xs text-gray-400">
-            容器内绝对路径，需指向 biliup 已登录的 cookie 文件。保存时只读校验一次，不会回写文件。
+            绝对路径：Docker 部署填容器内路径（需位于 /data/biliup 等白名单目录）；宿主机直跑（npm
+            start / npm run dev）填本机路径。保存时只读校验一次，不会回写文件。
           </p>
         </div>
         <div class="flex justify-end gap-2 pt-2">

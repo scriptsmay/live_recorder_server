@@ -6,13 +6,13 @@
 
 采用 **base + override** 组合，统一服务名为 `live_recorder_server`。详见 `docker/README.md`。
 
-| 文件 | 职责 |
-|------|------|
-| `docker-compose.yml` | base —— 主服务共性配置（环境变量、healthcheck、ports、volumes） |
-| `docker-compose.build.yml` | 本地全栈 override —— 覆盖 build 指向 `Dockerfile.local`，追加 postgres + redis |
-| `docker-compose.prod.yml` | 生产 override —— `APP_VERSION`（必填）、`EXTERNAL_NETWORK_NAME`（必填）、shared_scripts 卷、deploy.resources |
-| `docker-compose.cron.yml` | replay_cron overlay —— 回放定时 + 数据同步 |
-| `docker-compose.browserless.yml` | browserless overlay —— 远程 Chromium |
+| 文件                             | 职责                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `docker-compose.yml`             | base —— 主服务共性配置（环境变量、healthcheck、ports、volumes）                                              |
+| `docker-compose.build.yml`       | 本地全栈 override —— 覆盖 build 指向 `Dockerfile.local`，追加 postgres + redis                               |
+| `docker-compose.prod.yml`        | 生产 override —— `APP_VERSION`（必填）、`EXTERNAL_NETWORK_NAME`（必填）、shared_scripts 卷、deploy.resources |
+| `docker-compose.cron.yml`        | replay_cron overlay —— 回放定时 + 数据同步                                                                   |
+| `docker-compose.browserless.yml` | browserless overlay —— 远程 Chromium                                                                         |
 
 常用组合：
 
@@ -76,24 +76,24 @@ v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app
 
 ### 持久化目录
 
-| `.env` 变量 | 容器路径 | 说明 |
-|---|---|---|
-| 由 base compose `../data/video_downloads` 或 prod override `${VIDEO_DOWNLOAD_HOST_DIR}` | `/data/video_downloads` | 直播录制文件 |
-| 同上 `../data/replay` 或 `${REPLAY_HOST_DIR}` | `/data/replay` | 回放工作目录 |
-| `${DANMAKU_ARCHIVE_HOST_DIR}` | `/data/danmaku_archive` | 弹幕归档 |
-| `${YTDLP_TEMP_HOST_DIR}` | `/tmp/yt_dlp_cache` | yt-dlp 临时缓存 |
-| `./data/biliup` | `/data/biliup` | biliup 登录态 |
-| `./logs` | `/app/logs` | 应用日志 |
+| `.env` 变量                                                                             | 容器路径                | 说明            |
+| --------------------------------------------------------------------------------------- | ----------------------- | --------------- |
+| 由 base compose `../data/video_downloads` 或 prod override `${VIDEO_DOWNLOAD_HOST_DIR}` | `/data/video_downloads` | 直播录制文件    |
+| 同上 `../data/replay` 或 `${REPLAY_HOST_DIR}`                                           | `/data/replay`          | 回放工作目录    |
+| `${DANMAKU_ARCHIVE_HOST_DIR}`                                                           | `/data/danmaku_archive` | 弹幕归档        |
+| `${YTDLP_TEMP_HOST_DIR}`                                                                | `/tmp/yt_dlp_cache`     | yt-dlp 临时缓存 |
+| `./data/biliup`                                                                         | `/data/biliup`          | biliup 登录态   |
+| `./logs`                                                                                | `/app/logs`             | 应用日志        |
 
 ## 镜像内置组件
 
-| 组件 | 说明 |
-|---|---|
-| Node.js 22 | 运行时 |
-| FFmpeg | 录制、转码（Debian Trixie 软件包） |
-| mkvmerge | 视频切片（mkvtoolnix） |
-| yt-dlp | 回放下载（通过 uv tool 安装） |
-| biliup | B 站投稿（通过 uv tool 安装，固定 `1.2.8`；上游 1.2.10+ 无 wheel，留空会撞 Rust 构建） |
+| 组件       | 说明                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------- |
+| Node.js 22 | 运行时                                                                                 |
+| FFmpeg     | 录制、转码（Debian Trixie 软件包）                                                     |
+| mkvmerge   | 视频切片（mkvtoolnix）                                                                 |
+| yt-dlp     | 回放下载（通过 uv tool 安装）                                                          |
+| biliup     | B 站投稿（通过 uv tool 安装，固定 `1.2.8`；上游 1.2.10+ 无 wheel，留空会撞 Rust 构建） |
 
 ## .env 配置参考
 
@@ -108,6 +108,8 @@ v1.8.2 起主容器 entrypoint 会用镜像内 `/app/scripts.image` 刷新 `/app
 
 cookie 文件放在宿主机 `./data/biliup/cookies.json`，投稿模板的 `cookies_path` 填容器内路径 `/data/biliup/cookies.json`。
 
+宿主机直跑（`npm start` / `npm run dev`，非容器）时路径策略自动放宽：`cookies_path` 可填开发机上的任意绝对路径（仍拒绝 `..` 穿越与符号链接）。两种模式由 `BILIUP_COOKIE_PATH_MODE` 控制（`auto` 默认按运行环境判定 / `strict` 强制白名单 / `any` 强制放宽），生产容器无需配置。
+
 ```bash
 docker compose exec live_recorder_server sh
 biliup --help
@@ -117,15 +119,15 @@ biliup --help
 
 投稿成功后由服务端直连 B 站创作中心接口把稿件加入指定合集小节，全部配置可选：
 
-| 环境变量 | 说明 | 默认值 |
-|---|---|---|
-| `SEASON_AUTO_ADD_ENABLED` | 总开关，仅 `false` 关闭 | `true` |
-| `SEASON_ADD_DELAY_MS` | 投稿成功后延迟入合集（毫秒），给稿件转码留时间 | `45000` |
-| `SEASON_ADD_MAX_ATTEMPTS` | 单条记录最多尝试次数（含首次） | `3` |
-| `SEASON_ADD_BACKOFF_MS` | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s） | `30000` |
-| `SEASON_HTTP_TIMEOUT_MS` | B 站接口超时（毫秒） | `10000` |
-| `SEASON_LIST_CACHE_TTL` | 合集列表 Redis 缓存 TTL（秒） | `600` |
-| `SEASON_SEASONS_PAGE_SIZE` | 合集列表分页条数 | `30` |
+| 环境变量                   | 说明                                                | 默认值  |
+| -------------------------- | --------------------------------------------------- | ------- |
+| `SEASON_AUTO_ADD_ENABLED`  | 总开关，仅 `false` 关闭                             | `true`  |
+| `SEASON_ADD_DELAY_MS`      | 投稿成功后延迟入合集（毫秒），给稿件转码留时间      | `45000` |
+| `SEASON_ADD_MAX_ATTEMPTS`  | 单条记录最多尝试次数（含首次）                      | `3`     |
+| `SEASON_ADD_BACKOFF_MS`    | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s） | `30000` |
+| `SEASON_HTTP_TIMEOUT_MS`   | B 站接口超时（毫秒）                                | `10000` |
+| `SEASON_LIST_CACHE_TTL`    | 合集列表 Redis 缓存 TTL（秒）                       | `600`   |
+| `SEASON_SEASONS_PAGE_SIZE` | 合集列表分页条数                                    | `30`    |
 
 合集与小节的选择存在投稿模板上（`season_id` / `season_title` / `section_id` / `season_auto_add`），未勾选自动加入的模板完全不受该功能影响。
 
@@ -133,45 +135,45 @@ biliup --help
 
 通知通道可选，未配置时静默跳过：
 
-| 环境变量 | 说明 |
-|---|---|
-| `MESSAGE_FEISHU_WEBHOOK` | 飞书机器人 webhook |
-| `MESSAGE_GOTIFY_SERVER` | Gotify 服务地址 |
-| `MESSAGE_GOTIFY_TOKEN` | Gotify app token |
+| 环境变量                  | 说明                    |
+| ------------------------- | ----------------------- |
+| `MESSAGE_FEISHU_WEBHOOK`  | 飞书机器人 webhook      |
+| `MESSAGE_GOTIFY_SERVER`   | Gotify 服务地址         |
+| `MESSAGE_GOTIFY_TOKEN`    | Gotify app token        |
 | `MESSAGE_GOTIFY_PRIORITY` | Gotify 优先级（默认 5） |
 
 ## 登录鉴权
 
-| 环境变量 | 说明 | 默认值 |
-|---|---|---|
-| `AUTH_ENABLED` | 鉴权总开关 | `true` |
-| `ADMIN_USERNAME` | 首次启动自动创建管理员用户名 | `admin` |
-| `AUTH_TOKEN_TTL_HOURS` | 登录态有效期（小时） | `24` |
-| `AUTH_COOKIE_NAME` | Cookie 名称 | `auth_token` |
-| `AUTH_COOKIE_SECURE` | 是否 HTTPS only | `false` |
-| `LOGIN_RATE_LIMIT` | 每分钟允许登录失败次数 | `5` |
-| `LOGIN_LOCKOUT_MIN` | 锁定时长（分钟） | `5` |
+| 环境变量               | 说明                         | 默认值       |
+| ---------------------- | ---------------------------- | ------------ |
+| `AUTH_ENABLED`         | 鉴权总开关                   | `true`       |
+| `ADMIN_USERNAME`       | 首次启动自动创建管理员用户名 | `admin`      |
+| `AUTH_TOKEN_TTL_HOURS` | 登录态有效期（小时）         | `24`         |
+| `AUTH_COOKIE_NAME`     | Cookie 名称                  | `auth_token` |
+| `AUTH_COOKIE_SECURE`   | 是否 HTTPS only              | `false`      |
+| `LOGIN_RATE_LIMIT`     | 每分钟允许登录失败次数       | `5`          |
+| `LOGIN_LOCKOUT_MIN`    | 锁定时长（分钟）             | `5`          |
 
 ## 快手轮询 + 回放工具箱
 
 两者共享配置：
 
-| 变量 | 说明 |
-|---|---|
+| 变量                         | 说明                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
 | `REMOTE_BROWSER_WS_ENDPOINT` | 远程 Chromium WebSocket 地址（CDP endpoint，回放 m3u8 提取使用） |
-| `POLLING_KUAISHOU_COOKIE` | 快手 cookie |
-| `KUAISHOU_CHECKER_ENABLED` | 是否启用快手轮询（默认 true） |
-| `KUAISHOU_API_TIMEOUT_MS` | 快手 API 请求超时（默认 15000） |
+| `POLLING_KUAISHOU_COOKIE`    | 快手 cookie                                                      |
+| `KUAISHOU_CHECKER_ENABLED`   | 是否启用快手轮询（默认 true）                                    |
+| `KUAISHOU_API_TIMEOUT_MS`    | 快手 API 请求超时（默认 15000）                                  |
 
 ## 服务端原生弹幕采集（v1.10.0）
 
 录制会话期间由服务端直连各平台弹幕服务（虎牙/斗鱼 TCP、B站/抖音 WS），弹幕落盘 `danmaku/{sessionId}.jsonl`，格式与扩展推送路径完全一致。**默认全关**，通过白名单灰度：
 
-| 变量 | 说明 |
-|---|---|
-| `DANMAKU_NATIVE_PLATFORMS` | 逗号分隔平台白名单（`huya,bilibili,douyu,douyin`），留空 = 全关（行为与 v1.9.0 一致） |
-| `DOUYIN_TTWID` | 抖音 ttwid cookie；douyin 平台必需，缺省用内置值（有时效风险）。抖音客户端定位为「尽力而为」，签名/凭证随时可能失效 |
-| `BILIBILI_DANMAKU_COOKIE` | B站 cookie（可选）；用于缓解 getDanmuInfo -352 风控 |
+| 变量                       | 说明                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `DANMAKU_NATIVE_PLATFORMS` | 逗号分隔平台白名单（`huya,bilibili,douyu,douyin`），留空 = 全关（行为与 v1.9.0 一致）                               |
+| `DOUYIN_TTWID`             | 抖音 ttwid cookie；douyin 平台必需，缺省用内置值（有时效风险）。抖音客户端定位为「尽力而为」，签名/凭证随时可能失效 |
+| `BILIBILI_DANMAKU_COOKIE`  | B站 cookie（可选）；用于缓解 getDanmuInfo -352 风控                                                                 |
 
 灰度顺序建议：先 `huya` 观察一个完整录制周期，再开 `bilibili,douyu`；`douyin` 默认不开、按需显式加白名单。弹幕采集异常只导致 JSONL 缺失 + 告警日志，绝不影响录制主流程。
 
