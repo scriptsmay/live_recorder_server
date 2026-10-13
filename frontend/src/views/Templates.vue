@@ -156,6 +156,12 @@ function onSeasonChange() {
   const hit = currentSeason()
   form.season_title = hit ? hit.title : ''
   form.section_id = ''
+  form.season_auto_add = false
+}
+
+/** 小节是加入合集的必要条件（自动与手动都一样），清掉小节就不留自动加入的假开关 */
+function onSectionChange() {
+  if (!form.section_id) form.season_auto_add = false
 }
 
 function onCookiesPathInput() {
@@ -243,7 +249,7 @@ function getFormBody() {
     season_id: form.season_id || null,
     season_title: form.season_id ? form.season_title.trim() || null : null,
     section_id: form.season_id && form.section_id ? form.section_id : null,
-    season_auto_add: form.season_auto_add && !!form.season_id,
+    season_auto_add: form.season_auto_add && !!form.season_id && !!form.section_id,
   }
 }
 
@@ -282,7 +288,7 @@ async function handleCopy(t: UploadTemplate) {
       season_id: t.season_id || null,
       season_title: t.season_id ? t.season_title || null : null,
       section_id: t.season_id && t.section_id ? t.section_id : null,
-      season_auto_add: (t.season_auto_add ?? false) && !!t.season_id,
+      season_auto_add: (t.season_auto_add ?? false) && !!t.season_id && !!t.section_id,
     })
     toast.success('模板已复制')
     loadData()
@@ -569,6 +575,7 @@ onMounted(() => {
                   v-model="form.section_id"
                   :disabled="sectionOptions().length === 0"
                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none bg-white disabled:bg-gray-100 disabled:text-gray-400"
+                  @change="onSectionChange"
                 >
                   <option value="">不指定小节</option>
                   <option
@@ -588,11 +595,17 @@ onMounted(() => {
                   <input
                     v-model="form.season_auto_add"
                     type="checkbox"
-                    :disabled="!form.season_id"
+                    :disabled="!form.season_id || !form.section_id"
                     class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
                   />
                   <span class="text-sm text-gray-700">
-                    {{ form.season_id ? form.season_title || '已选合集' : '请先选择合集' }}
+                    {{
+                      !form.season_id
+                        ? '请先选择合集'
+                        : !form.section_id
+                          ? '请先选择小节'
+                          : form.season_title || '已选合集'
+                    }}
                   </span>
                   <button
                     type="button"

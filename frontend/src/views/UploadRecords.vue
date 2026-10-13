@@ -112,6 +112,7 @@ function canRetry(record: UploadRecord) {
 /** season_error 形如 `CODE: 详情`，把已知错误码翻译成可操作提示 */
 const SEASON_ERROR_HINTS: Record<string, string> = {
   AUTH_EXPIRED: '登录态已失效，请在容器内重新 biliup login 后重试',
+  INVALID_ARGUMENT: '请求参数不合法，请检查模板里的合集与小节配置',
   CREDENTIAL_INVALID: 'cookie 缺少必要字段，请检查账号登记的 cookie 文件',
   CSRF_FAILED: 'csrf 校验失败，通常是 cookie 已失效，请重新 biliup login',
   SECTION_INVALID: '合集小节不存在或不属于该账号，请在投稿模板里重新选择合集',
@@ -120,13 +121,26 @@ const SEASON_ERROR_HINTS: Record<string, string> = {
   VIDEO_NOT_READY: '稿件尚未转码完成，请稍后重试',
   SEASON_TIMEOUT: 'B 站接口超时，请稍后重试',
   NETWORK_ERROR: '网络异常，请稍后重试',
+  HTTP_ERROR: 'B 站接口返回异常状态码，请稍后重试',
+  RESPONSE_MALFORMED: 'B 站接口返回格式异常，可能是接口变更',
+  BIZ_ERROR: 'B 站业务侧拒绝，请稍后重试或到合集页确认',
+  ALREADY_IN_SEASON: '稿件已在合集中，无需重复加入',
+  COOKIE_NOT_CONFIGURED: '模板未配置 cookie 路径，请在投稿模板里选择 biliup 账号',
+  COOKIE_PATH_INVALID: 'cookie 路径不在 biliup 工作目录白名单内，请重新登记账号',
+  COOKIE_NOT_FOUND: 'cookie 文件不存在，请确认容器内路径或重新 biliup login',
+  COOKIE_UNREADABLE: 'cookie 文件读不了，请检查文件权限（建议 600）',
+  COOKIE_MALFORMED: 'cookie 文件不是合法 JSON，请在容器内重新 biliup login',
+  COOKIE_NO_CSRF: 'cookie 缺少 bili_jct，登录态不完整，请重新 biliup login',
+  COOKIE_INVALID: 'cookie 加载失败，请检查账号登记与文件内容',
 }
+
+const SEASON_ERROR_FALLBACK_HINT = '加入合集失败，可手动重试；持续失败请查看服务端日志'
 
 function seasonTooltip(record: UploadRecord) {
   if (!hasSeasonTrack(record)) return '回放投稿不支持合集管理'
   if (record.season_status === 'failed' && record.season_error) {
-    const hint = SEASON_ERROR_HINTS[record.season_error.split(':', 1)[0].trim()]
-    return hint ? `${record.season_error}\n${hint}` : record.season_error
+    const code = record.season_error.split(':', 1)[0].trim()
+    return `${record.season_error}\n${SEASON_ERROR_HINTS[code] || SEASON_ERROR_FALLBACK_HINT}`
   }
   if (record.season_status === 'added') return `加入时间：${formatTime(record.season_added_at)}`
   if (record.season_status === 'pending') return '正在加入合集，稍后刷新查看结果'
