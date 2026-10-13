@@ -7,6 +7,25 @@ const DataService = require('../services/DataService');
 const SeasonService = require('../services/SeasonService');
 const { createProcLog } = require('../lib/utils/proc-log');
 
+/**
+ * 合集 ID（BIGINT）入参归一：空值落 null，非正整数视为非法。
+ * 直接 parseInt 会得到 NaN，落到 pg 只是 500，前端拿不到可改的提示。
+ */
+function parseSeasonId(value) {
+  if (value === undefined || value === null || value === '') return { valid: true, value: null };
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) return { valid: true, value: raw };
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed > 0) return { valid: true, value: parsed };
+  }
+  return { valid: false, value: null };
+}
+
+function invalidSeasonIdReply(res) {
+  return res.status(400).json({ status: 'Error', message: '合集 ID 必须为正整数' });
+}
+
 router.get('/upload_templates', async (req, res) => {
   try {
     const data = await DataService.getTemplates();
@@ -38,6 +57,13 @@ router.post('/upload_templates', async (req, res) => {
       section_id,
       season_auto_add,
     } = req.body;
+    const seasonId = parseSeasonId(season_id);
+    const sectionId = parseSeasonId(section_id);
+    if (!seasonId.valid || !sectionId.valid) return invalidSeasonIdReply(res);
+    if (seasonId.value || sectionId.value) {
+      const verdict = await SeasonService.validateSelection(cookies_path, seasonId.value, sectionId.value);
+      if (!verdict.ok) return res.status(verdict.http).json({ status: 'Error', message: verdict.message });
+    }
     const result = await pool.query(
       `INSERT INTO upload_templates
        (name, cookies_path, title_template, desc_template, tags, source, tid, copyright, is_only_self, cover, dtime, after_upload, use_room_cover,
@@ -58,9 +84,9 @@ router.post('/upload_templates', async (req, res) => {
         dtime != null && dtime !== '' ? parseInt(dtime, 10) : null,
         after_upload || null,
         use_room_cover === true,
-        season_id != null && season_id !== '' ? parseInt(season_id, 10) : null,
+        seasonId.value,
         season_title || null,
-        section_id != null && section_id !== '' ? parseInt(section_id, 10) : null,
+        sectionId.value,
         season_auto_add === true,
       ]
     );
@@ -93,26 +119,53 @@ router.put('/upload_templates/:id', async (req, res) => {
       'section_id',
       'season_auto_add',
     ];
-    const intFields = new Set(['tid', 'copyright', 'is_only_self', 'dtime', 'season_id', 'section_id']);
+    const intFields = new Set(['tid', 'copyright', 'is_only_self', 'dtime']);
     // BOOLEAN 列严格归一，非布尔输入（'true'/1 等）不落库报错
     const boolFields = new Set(['use_room_cover', 'season_auto_add']);
+    const seasonFields = new Set(['season_id', 'section_id']);
     const sets = [];
     const values = [];
+    const selection = {};
     for (const field of fields) {
-      if (req.body[field] !== undefined) {
-        sets.push(`${field} = $${values.length + 1}`);
-        const val = req.body[field];
-        if (intFields.has(field)) {
-          values.push(val != null && val !== '' ? parseInt(val, 10) : null);
-        } else if (boolFields.has(field)) {
-          values.push(val === true);
-        } else {
-          values.push(val);
-        }
+      if (req.body[field] === undefined) continue;
+      let value;
+      if (seasonFields.has(field)) {
+        const parsed = parseSeasonId(req.body[field]);
+        if (!parsed.valid) return invalidSeasonIdReply(res);
+        value = parsed.value;
+        selection[field] = parsed.value;
+      } else if (intFields.has(field)) {
+        const raw = req.body[field];
+        value = raw != null && raw !== '' ? parseInt(raw, 10) : null;
+      } else if (boolFields.has(field)) {
+        value = req.body[field] === true;
+      } else {
+        value = req.body[field];
       }
+      sets.push(`${field} = $${values.length + 1}`);
+      values.push(value);
     }
     if (sets.length === 0) {
       return res.status(400).json({ status: 'Error', message: '无更新字段' });
+    }
+    // 选了合集、或换了 cookie，都要按最终生效的组合校验归属；校验不过就不写库
+    const needsCheck =
+      selection.season_id !== undefined || selection.section_id !== undefined || req.body.cookies_path !== undefined;
+    if (needsCheck) {
+      const existing = await pool.query(
+        'SELECT cookies_path, season_id, section_id FROM upload_templates WHERE id = $1',
+        [id]
+      );
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ status: 'Error', message: '模板不存在' });
+      }
+      const current = existing.rows[0];
+      const verdict = await SeasonService.validateSelection(
+        req.body.cookies_path !== undefined ? req.body.cookies_path : current.cookies_path,
+        selection.season_id !== undefined ? selection.season_id : current.season_id,
+        selection.section_id !== undefined ? selection.section_id : current.section_id
+      );
+      if (!verdict.ok) return res.status(verdict.http).json({ status: 'Error', message: verdict.message });
     }
     values.push(id);
     const result = await pool.query(

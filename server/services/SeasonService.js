@@ -159,6 +159,52 @@ class SeasonService {
     return { seasons: record.seasons, cached: false, fetched_at: record.fetched_at };
   }
 
+  /**
+   * 模板保存前的归属校验：合集必须属于该 cookie 账号，小节必须属于该合集。
+   * 复用列表缓存，成本与编辑页级联下拉一致；取不到列表时按错误类别回 400 / 500。
+   * @param {string} cookiesPath - biliup cookie 文件绝对路径
+   * @param {number|string|null} seasonId - 待保存的合集 ID
+   * @param {number|string|null} sectionId - 待保存的小节 ID
+   * @returns {Promise<{ok: boolean, http: number, message: string}>}
+   */
+  static async validateSelection(cookiesPath, seasonId, sectionId) {
+    const wantedSeason = toPositiveInt(seasonId);
+    const wantedSection = toPositiveInt(sectionId);
+    if (!wantedSeason && !wantedSection) return { ok: true, http: 200, message: '' };
+    if (!wantedSeason) return { ok: false, http: 400, message: '选择小节时必须同时指定所属合集' };
+    if (!cookiesPath) return { ok: false, http: 400, message: '未配置 cookie 文件路径，无法校验合集归属' };
+
+    let payload;
+    try {
+      payload = await this.listSeasonsByCookies(cookiesPath);
+    } catch (err) {
+      return this._selectionFailure(err);
+    }
+
+    const seasons = payload && Array.isArray(payload.seasons) ? payload.seasons : [];
+    const season = seasons.find((item) => toPositiveInt(item && item.seasonId) === wantedSeason);
+    if (!season) return { ok: false, http: 400, message: '所选合集不属于该 cookie 账号，请重新选择' };
+    if (!wantedSection) return { ok: true, http: 200, message: '' };
+
+    const sections = Array.isArray(season.sections) ? season.sections : [];
+    const hit = sections.some((item) => toPositiveInt(item && item.sectionId) === wantedSection);
+    if (hit) return { ok: true, http: 200, message: '' };
+    return { ok: false, http: 400, message: '所选小节不属于该合集，请重新选择' };
+  }
+
+  static _selectionFailure(err) {
+    const code = (err && err.code) || 'unknown';
+    console.error(`${LOG} 归属校验失败: ${code}`);
+    const cookieIssue = code.startsWith('COOKIE') || code === 'AUTH_EXPIRED' || code === 'CREDENTIAL_INVALID';
+    return {
+      ok: false,
+      http: cookieIssue ? 400 : 500,
+      message: cookieIssue
+        ? 'cookie 不可用，无法校验合集归属，请检查 cookie 配置与登录态'
+        : '合集归属校验失败，请稍后重试',
+    };
+  }
+
   static async _readCache(cacheKey) {
     try {
       const raw = await redis.get(cacheKey);

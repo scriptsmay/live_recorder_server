@@ -14,6 +14,7 @@ jest.mock('../server/services/DataService', () => ({
 jest.mock('../server/services/SeasonService', () => ({
   listSeasonsByCookies: jest.fn(),
   retryAdd: jest.fn(),
+  validateSelection: jest.fn(),
 }));
 
 const express = require('express');
@@ -52,6 +53,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   getSession.mockImplementation(async (token) => (token === VALID_TOKEN ? { username: 'admin', createdAt: 1 } : null));
+  SeasonService.validateSelection.mockResolvedValue({ ok: true, http: 200, message: '' });
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -178,7 +180,9 @@ describe('模板合集字段落库', () => {
   });
 
   test('更新模板只接受白名单列并归一布尔', async () => {
-    pool.query.mockResolvedValueOnce({ rows: [{ id: 7 }] });
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ cookies_path: COOKIES_PATH, season_id: null, section_id: null }] })
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] });
 
     await authed('put', '/api/upload_templates/7').send({
       season_id: '427651',
@@ -187,11 +191,132 @@ describe('模板合集字段落库', () => {
       season_status: 'added',
     });
 
-    const [sql, params] = pool.query.mock.calls[0];
+    expect(SeasonService.validateSelection).toHaveBeenCalledWith(COOKIES_PATH, 427651, null);
+    const [sql, params] = pool.query.mock.calls[1];
     expect(sql).toContain('season_id = $1');
     expect(sql).toContain('season_auto_add = $3');
     expect(sql).not.toContain('season_status');
     expect(params).toEqual([427651, null, false, '7']);
+  });
+
+  test('切换 cookie 时按存量合集校验归属', async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ cookies_path: COOKIES_PATH, season_id: '427651', section_id: '5857201' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] });
+    const freshPath = '/data/biliup/cookies_fresh.json';
+
+    await authed('put', '/api/upload_templates/7').send({ cookies_path: freshPath });
+
+    expect(SeasonService.validateSelection).toHaveBeenCalledWith(freshPath, '427651', '5857201');
+    const [sql, params] = pool.query.mock.calls[1];
+    expect(sql).toContain('cookies_path = $1');
+    expect(params).toEqual([freshPath, '7']);
+  });
+
+  test('合集不属于新账号时拒绝保存且不写库', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [{ cookies_path: COOKIES_PATH, season_id: '999999', section_id: null }],
+    });
+    SeasonService.validateSelection.mockResolvedValueOnce({
+      ok: false,
+      http: 400,
+      message: '所选合集不属于该 cookie 账号，请重新选择',
+    });
+
+    const response = await authed('put', '/api/upload_templates/7').send({
+      cookies_path: '/data/biliup/cookies_other.json',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('所选合集不属于该 cookie 账号，请重新选择');
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('模板不存在时直接 404，不发起校验', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    const response = await authed('put', '/api/upload_templates/999').send({ season_id: '427651' });
+
+    expect(response.status).toBe(404);
+    expect(SeasonService.validateSelection).not.toHaveBeenCalled();
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['season_id', 'section_id'])('创建模板 %s 非正整数返回 400 且不落库', async (field) => {
+    const response = await authed('post', '/api/upload_templates').send({
+      name: '日常投稿',
+      cookies_path: COOKIES_PATH,
+      [field]: 'abc',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('合集 ID 必须为正整数');
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(SeasonService.validateSelection).not.toHaveBeenCalled();
+  });
+
+  test.each(['0', '-1', '1.5'])('创建模板 season_id=%s 视为非法', async (value) => {
+    const response = await authed('post', '/api/upload_templates').send({
+      name: '日常投稿',
+      cookies_path: COOKIES_PATH,
+      season_id: value,
+    });
+
+    expect(response.status).toBe(400);
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('更新模板 season_id 非法时 400，不查询也不写库', async () => {
+    const response = await authed('put', '/api/upload_templates/7').send({ season_id: 'x1' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('合集 ID 必须为正整数');
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('创建时校验小节归属，不通过则拒绝落库', async () => {
+    SeasonService.validateSelection.mockResolvedValueOnce({
+      ok: false,
+      http: 400,
+      message: '所选小节不属于该合集，请重新选择',
+    });
+
+    const response = await authed('post', '/api/upload_templates').send({
+      name: '日常投稿',
+      cookies_path: COOKIES_PATH,
+      season_id: '427651',
+      section_id: '5857201',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('所选小节不属于该合集，请重新选择');
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('未选合集时不做归属校验', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 7 }] });
+
+    await authed('post', '/api/upload_templates').send({ name: '日常投稿', cookies_path: COOKIES_PATH });
+
+    expect(SeasonService.validateSelection).not.toHaveBeenCalled();
+  });
+
+  test('校验取不到列表时按服务层状态码返回，响应不含凭证', async () => {
+    SeasonService.validateSelection.mockResolvedValueOnce({
+      ok: false,
+      http: 500,
+      message: '合集归属校验失败，请稍后重试',
+    });
+
+    const response = await authed('post', '/api/upload_templates').send({
+      name: '日常投稿',
+      cookies_path: COOKIES_PATH,
+      season_id: '427651',
+    });
+
+    expect(response.status).toBe(500);
+    expect(leakIn(response.body)).toEqual([]);
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });
 

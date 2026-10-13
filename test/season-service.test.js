@@ -504,3 +504,90 @@ describe('合集列表缓存', () => {
     });
   });
 });
+
+describe('模板保存前的归属校验', () => {
+  const PATH = '/data/biliup/cookies_a.json';
+  const ONLINE = [
+    { seasonId: 427651, title: '直播录像合集', sections: [{ sectionId: 5857201, title: '正片' }] },
+    { seasonId: 427652, title: '其他合集', sections: [] },
+  ];
+
+  beforeEach(() => {
+    redis.get.mockResolvedValue(null);
+    season.listSeasons.mockResolvedValue({ seasons: ONLINE, total: ONLINE.length });
+  });
+
+  test('合集与小节都匹配时通过', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, 427651, 5857201);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.http).toBe(200);
+  });
+
+  test('pg 回传的字符串 ID 同样能匹配', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, '427651', '5857201');
+    expect(verdict.ok).toBe(true);
+  });
+
+  test('只选合集不选小节时只校验合集归属', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, 427652, null);
+    expect(verdict.ok).toBe(true);
+  });
+
+  test('合集不属于该账号时拒绝，不静默放行', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, 123456, null);
+    expect(verdict).toEqual({ ok: false, http: 400, message: '所选合集不属于该 cookie 账号，请重新选择' });
+  });
+
+  test('小节不属于该合集时拒绝', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, 427652, 5857201);
+    expect(verdict).toEqual({ ok: false, http: 400, message: '所选小节不属于该合集，请重新选择' });
+  });
+
+  test('只给小节不给合集时拒绝', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, null, 5857201);
+    expect(verdict).toEqual({ ok: false, http: 400, message: '选择小节时必须同时指定所属合集' });
+    expect(loadBiliupCookie).not.toHaveBeenCalled();
+  });
+
+  test('未选择合集时直接通过，不碰线上', async () => {
+    const verdict = await SeasonService.validateSelection(PATH, null, null);
+    expect(verdict.ok).toBe(true);
+    expect(loadBiliupCookie).not.toHaveBeenCalled();
+    expect(season.listSeasons).not.toHaveBeenCalled();
+  });
+
+  test('缺少 cookie 路径时拒绝，提示先配置 cookie', async () => {
+    const verdict = await SeasonService.validateSelection('', 427651, null);
+    expect(verdict).toEqual({ ok: false, http: 400, message: '未配置 cookie 文件路径，无法校验合集归属' });
+  });
+
+  test('命中列表缓存时不重复拉线上', async () => {
+    redis.get.mockResolvedValue(JSON.stringify({ seasons: ONLINE, fetched_at: 1 }));
+    const verdict = await SeasonService.validateSelection(PATH, 427651, 5857201);
+    expect(verdict.ok).toBe(true);
+    expect(season.listSeasons).not.toHaveBeenCalled();
+  });
+
+  test('cookie 类失败回 400，日志与文案都不含凭证', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    loadBiliupCookie.mockRejectedValue(new CookieError('COOKIE_MALFORMED', `解析失败: ${CREDENTIAL.cookieHeader}`));
+
+    const verdict = await SeasonService.validateSelection(PATH, 427651, 5857201);
+
+    expect(verdict.ok).toBe(false);
+    expect(verdict.http).toBe(400);
+    const serialized = JSON.stringify(verdict) + console.error.mock.calls.join(' ');
+    expect(serialized).not.toContain('super_secret_value');
+    expect(serialized).not.toContain('super_secret_csrf');
+    expect(console.error).toHaveBeenCalledWith('[合集] 归属校验失败: COOKIE_MALFORMED');
+  });
+
+  test('线上不可用回 500 通用文案，不伪装成归属不匹配', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    season.listSeasons.mockRejectedValue(new season.SeasonError('RATE_LIMITED', '请求过于频繁', { retryable: true }));
+
+    const verdict = await SeasonService.validateSelection(PATH, 427651, 5857201);
+
+    expect(verdict).toEqual({ ok: false, http: 500, message: '合集归属校验失败，请稍后重试' });
+  });
+});

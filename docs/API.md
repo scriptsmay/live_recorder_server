@@ -1032,10 +1032,19 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | section_id       | number  | 小节 ID，自动加入的实际目标   |
 | season_auto_add  | boolean | 投稿成功后是否自动加入        |
 
+保存时做归属校验（复用合集列表缓存，不额外增加线上请求成本）：
+
+- `season_id` / `section_id` 必须为正整数，否则 **400**，不写库。
+- 传了 `season_id`，或本次改了 `cookies_path`，会按最终生效的合集组合校验归属：合集不属于该 cookie 账号、或小节不属于该合集时 **400** 拒绝保存，不静默保留失效 ID。
+- 只改 `cookies_path` 时，`PUT` 会先按主键读一次模板存量合集再校验。
+- 校验所依赖的列表拉取失败时按错误类别返回：cookie 类 **400**、上游/网络 **500**，与归属不匹配的错误文案区分。
+
 **状态码约定：**
 
 | 端点                       | 情况                        | 状态码          |
 | -------------------------- | --------------------------- | --------------- |
+| /upload_templates          | 合集 ID 非法                | 400             |
+| /upload_templates          | 合集/小节归属不匹配         | 400             |
 | /upload_templates/:id/seasons | 模板不存在             | 404             |
 | /upload_templates/:id/seasons | cookie 不可用/登录态失效 | 400             |
 | /upload_templates/:id/seasons | 上游或网络异常           | 500             |
