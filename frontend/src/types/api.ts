@@ -111,6 +111,10 @@ export interface UploadTemplate {
   dtime: number | null
   after_upload: string | null
   use_room_cover: boolean | null
+  season_id: string | null
+  season_title: string | null
+  section_id: string | null
+  season_auto_add: boolean
   created_at: string
   updated_at: string
 }
@@ -129,6 +133,46 @@ export interface UploadTemplateFormData {
   dtime: number | null
   after_upload: string
   use_room_cover: boolean
+  season_id: string | null
+  season_title: string | null
+  section_id: string | null
+  season_auto_add: boolean
+}
+
+// ====== 合集（season）级联选项 ======
+
+export interface SeasonSectionOption {
+  sectionId: number
+  title: string
+}
+
+export interface SeasonOption {
+  seasonId: number
+  title: string
+  sections: SeasonSectionOption[]
+}
+
+export interface SeasonListResult {
+  seasons: SeasonOption[]
+  cached: boolean
+  fetched_at: number | null
+}
+
+export type SeasonStatus = 'none' | 'pending' | 'added' | 'failed' | 'skipped'
+
+// ====== biliup 账号登记 ======
+
+export type BiliupLoginStatus = 'ok' | 'expired' | 'unknown'
+
+export interface BiliupAccount {
+  id: number
+  name: string
+  cookies_path: string
+  uid: string | null
+  nickname: string | null
+  login_status: BiliupLoginStatus
+  last_checked_at: string | null
+  created_at: string
 }
 
 // ====== 投稿记录 ======
@@ -149,6 +193,11 @@ export interface UploadRecord {
   total_size: number
   upload_files: string
   bv_id: string | null
+  season_id: string | null
+  season_status: SeasonStatus
+  season_error: string | null
+  season_attempts: number
+  season_added_at: string | null
   started_at: string
   completed_at: string | null
   created_at: string

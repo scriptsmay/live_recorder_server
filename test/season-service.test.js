@@ -112,6 +112,11 @@ function callsFor(marker) {
   return pool.query.mock.calls.filter(([sql]) => sql.includes(marker));
 }
 
+/** 排空一次微任务队列，用于等待后台 detach 的执行链推进 */
+function flush() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function lastWrite(marker) {
   const calls = callsFor(marker);
   return calls.length ? calls[calls.length - 1] : null;
@@ -386,8 +391,28 @@ describe('手动重试入口', () => {
     mockPool({ records: [recordRow({ season_status: 'failed' })] });
     const result = await SeasonService.retryAdd(101);
     expect(result.http).toBe(200);
+    await flush();
     expect(sleeps).toEqual([]);
     expect(season.addToSeason).toHaveBeenCalledTimes(1);
+  });
+
+  test('重试请求不等待执行完成，占位后立即返回', async () => {
+    mockPool({ records: [recordRow({ season_status: 'failed' })] });
+    let release;
+    season.addToSeason.mockImplementation(
+      () => new Promise((resolve) => (release = () => resolve({ added: true, alreadyAdded: false, bizCode: 0 })))
+    );
+
+    const result = await SeasonService.retryAdd(101);
+    await flush();
+
+    expect(result.ok).toBe(true);
+    expect(season.addToSeason).toHaveBeenCalledTimes(1);
+    expect(callsFor("SET season_status = 'added'")).toHaveLength(0);
+
+    release();
+    await flush();
+    expect(callsFor("SET season_status = 'added'")).toHaveLength(1);
   });
 
   test('总开关关闭时手动重试仍然可用', async () => {
@@ -395,6 +420,7 @@ describe('手动重试入口', () => {
     mockPool({ records: [recordRow({ season_status: 'failed' })] });
     const result = await SeasonService.retryAdd(101);
     expect(result.http).toBe(200);
+    await flush();
     expect(season.addToSeason).toHaveBeenCalledTimes(1);
   });
 

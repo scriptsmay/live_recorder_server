@@ -121,7 +121,7 @@ class SeasonService {
       if (ctx.season_status === STATUS.ADDED) {
         return { ok: false, http: 409, message: '稿件已在合集中，无需重试' };
       }
-      const result = await this._start(recordId, ctx, 0);
+      const result = await this._start(recordId, ctx, 0, true);
       if (result && result.skipped) return this._reply(result);
       return { ok: true, http: 200, message: '已触发加入合集，稍后刷新查看结果', result };
     } catch (err) {
@@ -237,12 +237,19 @@ class SeasonService {
     return result.rows.length ? result.rows[0] : null;
   }
 
-  static async _start(recordId, ctx, delayMs) {
+  static async _start(recordId, ctx, delayMs, detached = false) {
     if (!ctx.bv_id) return { skipped: 'no_bvid' };
     if (!ctx.cookies_path) return { skipped: 'no_cookie' };
     const sectionId = toPositiveInt(ctx.section_id);
     if (!sectionId) return { skipped: 'no_section' };
     if (!(await this._claim(recordId, ctx.season_id))) return { skipped: 'claim_conflict' };
+    if (detached) {
+      // 占位成功后放到后台：HTTP 请求不随退避重试一起挂住，状态由记录页刷新查看
+      this._execute(recordId, ctx, sectionId, delayMs).catch((err) => {
+        console.error(`${LOG} 记录 ${recordId} 后台执行异常: ${safeMessage(err)}`);
+      });
+      return { started: true };
+    }
     return this._execute(recordId, ctx, sectionId, delayMs);
   }
 

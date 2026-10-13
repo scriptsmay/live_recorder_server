@@ -102,6 +102,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/UploadRecords.vue'),
     meta: { title: '投稿记录' },
   },
+  {
+    path: '/biliup-accounts',
+    name: 'BiliupAccounts',
+    component: () => import('@/views/BiliupAccounts.vue'),
+    meta: { title: 'biliup 账号' },
+  },
   // EJS 旧路径兼容重定向
   {
     path: '/upload_records',

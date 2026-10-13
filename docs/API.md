@@ -997,6 +997,24 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ---
 
+### GET /api/upload_records/merged
+
+合并「录制投稿」与「回放投稿」两张记录表，按操作时间倒序分页。
+
+**参数（Query）：**
+
+| 参数          | 类型    | 必填 | 说明                                              |
+| ------------- | ------- | ---- | ------------------------------------------------- |
+| source        | string  | 否   | `all`（默认）/ `recording` / `replay`             |
+| status        | string  | 否   | 按投稿状态筛选                                    |
+| season_status | string  | 否   | 按合集状态筛选；回放投稿无合集链路，恒为 `none`   |
+| page          | integer | 否   | 页码，从 1 开始                                   |
+| limit         | integer | 否   | 每页条数，上限 100                                |
+
+录制分支返回 `season_id` / `season_status` / `season_error` / `season_attempts` / `season_added_at`；回放分支这些列以 `none` / `null` / `0` 占位，保证 UNION 列对齐。
+
+---
+
 ### DELETE /api/upload_records/:id
 
 删除投稿记录。
@@ -1022,6 +1040,8 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | GET    | /api/biliup_accounts/:id/seasons         | 按账号 cookie 拉合集 + 小节列表             |
 
 `?force=1` 跳过合集缓存重新拉取。
+
+**手动重试语义**：`POST /api/upload_records/:id/season/retry` 只负责原子占位（`season_status` 置 `pending`）并把执行放到后台，请求立即返回 `已触发加入合集，稍后刷新查看结果`；退避重试期间不挂住 HTTP 连接，最终结果通过记录列表的 `season_status` / `season_error` 查看。
 
 **模板合集字段**（`POST/PUT /api/upload_templates`）：
 

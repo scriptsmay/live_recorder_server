@@ -311,7 +311,7 @@ router.get('/upload_records', async (req, res) => {
 
 router.get('/upload_records/merged', async (req, res) => {
   try {
-    const { source = 'all', status, page = 1, limit = 20 } = req.query;
+    const { source = 'all', status, season_status, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const offset = (pageNum - 1) * limitNum;
@@ -333,6 +333,12 @@ router.get('/upload_records/merged', async (req, res) => {
       params.push(status);
     }
 
+    // 合集状态筛选：回放投稿没有合集链路，恒为 none
+    if (season_status) {
+      conditions.push(`t.season_status = $${paramIdx++}`);
+      params.push(season_status);
+    }
+
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const sql = `
@@ -352,6 +358,11 @@ router.get('/upload_records/merged', async (req, res) => {
           ur.session_id,
           ur.upload_files,
           ur.output,
+          ur.season_id,
+          ur.season_status,
+          ur.season_error,
+          ur.season_attempts,
+          ur.season_added_at,
           r.room_name AS principal_name
         FROM upload_records ur
         LEFT JOIN recording_sessions rs ON ur.session_id = rs.id
@@ -374,6 +385,11 @@ router.get('/upload_records/merged', async (req, res) => {
           rur.replay_record_id AS session_id,
           rur.upload_files,
           rur.output,
+          NULL AS season_id,
+          'none' AS season_status,
+          NULL AS season_error,
+          0 AS season_attempts,
+          NULL AS season_added_at,
           rr.principal_name
         FROM replay_upload_records rur
         LEFT JOIN replay_records rr ON rur.replay_record_id = rr.id
@@ -386,13 +402,13 @@ router.get('/upload_records/merged', async (req, res) => {
 
     const countSql = `
       SELECT COUNT(*) FROM (
-        SELECT id, 'recording' AS source, status FROM upload_records
+        SELECT id, 'recording' AS source, status, season_status FROM upload_records
         UNION ALL
-        SELECT id, 'replay' AS source, status FROM replay_upload_records
+        SELECT id, 'replay' AS source, status, 'none' AS season_status FROM replay_upload_records
       ) t
       ${where}
     `;
-    const countParams = status ? [status] : [];
+    const countParams = params.slice(0, params.length - 2);
 
     const [dataResult, countResult] = await Promise.all([pool.query(sql, params), pool.query(countSql, countParams)]);
 

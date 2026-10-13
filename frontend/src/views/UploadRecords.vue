@@ -6,20 +6,23 @@
  * - 投稿记录列表（分页，每页 50 条）
  * - 查看输出详情（弹窗）
  * - 删除记录（确认对话框）
+ * - 合集状态展示与手动重试（v1.11.0）
  */
 import { ref, onMounted } from 'vue'
-import { apiGet, apiDelete, ApiError } from '@/utils/api'
+import { apiGet, apiPost, apiDelete, ApiError } from '@/utils/api'
+import { formatTime } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
 import Modal from '@/components/Modal.vue'
-import type { UploadRecord } from '@/types/api'
+import type { UploadRecord, SeasonStatus } from '@/types/api'
 
 const toast = useToast()
 const { confirm } = useConfirm()
 
 // ---- 筛选状态 ----
 const sourceFilter = ref<'all' | 'recording' | 'replay'>('all')
+const seasonFilter = ref<'all' | SeasonStatus>('all')
 
 // ---- 列表状态 ----
 const records = ref<UploadRecord[]>([])
@@ -28,6 +31,9 @@ const page = ref(1)
 const loading = ref(false)
 // 每页 N 条，避免分页异常
 const pageSize = 10
+
+// ---- 合集重试状态 ----
+const retryingIds = ref(new Set<number>())
 
 // ---- 详情弹窗 ----
 const detailVisible = ref(false)
@@ -67,6 +73,67 @@ function getLogsPath(record: UploadRecord) {
   return `/logs?file=${encodeURIComponent('biliup_' + record.id + '.log')}`
 }
 
+const SEASON_FILTERS = [
+  { value: 'all', label: '全部' },
+  { value: 'none', label: '未配置' },
+  { value: 'pending', label: '加入中' },
+  { value: 'added', label: '已加入' },
+  { value: 'failed', label: '加入失败' },
+] as const
+
+function seasonBadge(status: SeasonStatus): Badge {
+  switch (status) {
+    case 'pending':
+      return { text: '加入中', cls: 'bg-blue-100 text-blue-700' }
+    case 'added':
+      return { text: '已加入', cls: 'bg-green-100 text-green-700' }
+    case 'failed':
+      return { text: '加入失败', cls: 'bg-red-100 text-red-700' }
+    case 'skipped':
+      return { text: '已跳过', cls: 'bg-amber-100 text-amber-700' }
+    default:
+      return { text: '未配置', cls: 'bg-gray-100 text-gray-500' }
+  }
+}
+
+/** 回放投稿没有合集链路，不展示状态也不提供重试 */
+function hasSeasonTrack(record: UploadRecord) {
+  return record.source === 'recording'
+}
+
+function canRetry(record: UploadRecord) {
+  return (
+    hasSeasonTrack(record) &&
+    !!record.bv_id &&
+    (record.season_status === 'none' || record.season_status === 'failed')
+  )
+}
+
+/** season_error 形如 `CODE: 详情`，把已知错误码翻译成可操作提示 */
+const SEASON_ERROR_HINTS: Record<string, string> = {
+  AUTH_EXPIRED: '登录态已失效，请在容器内重新 biliup login 后重试',
+  CREDENTIAL_INVALID: 'cookie 缺少必要字段，请检查账号登记的 cookie 文件',
+  CSRF_FAILED: 'csrf 校验失败，通常是 cookie 已失效，请重新 biliup login',
+  SECTION_INVALID: '合集小节不存在或不属于该账号，请在投稿模板里重新选择合集',
+  RATE_LIMITED: '触发 B 站风控，请稍后重试',
+  TOO_FREQUENT: '操作过于频繁，请稍后重试',
+  VIDEO_NOT_READY: '稿件尚未转码完成，请稍后重试',
+  SEASON_TIMEOUT: 'B 站接口超时，请稍后重试',
+  NETWORK_ERROR: '网络异常，请稍后重试',
+}
+
+function seasonTooltip(record: UploadRecord) {
+  if (!hasSeasonTrack(record)) return '回放投稿不支持合集管理'
+  if (record.season_status === 'failed' && record.season_error) {
+    const hint = SEASON_ERROR_HINTS[record.season_error.split(':', 1)[0].trim()]
+    return hint ? `${record.season_error}\n${hint}` : record.season_error
+  }
+  if (record.season_status === 'added') return `加入时间：${formatTime(record.season_added_at)}`
+  if (record.season_status === 'pending') return '正在加入合集，稍后刷新查看结果'
+  if (record.season_status === 'skipped') return record.season_error || '本次未自动加入合集'
+  return record.bv_id ? '未自动加入，可手动重试' : '投稿未成功，无法加入合集'
+}
+
 // ---- 数据加载 ----
 async function fetchRecords() {
   loading.value = true
@@ -76,6 +143,7 @@ async function fetchRecords() {
       page: String(page.value),
       source: sourceFilter.value,
     })
+    if (seasonFilter.value !== 'all') params.set('season_status', seasonFilter.value)
     const res = await apiGet<UploadRecord[]>(`/api/upload_records/merged?${params}`)
     records.value = res.data
     total.value = res.total ?? 0
@@ -93,6 +161,12 @@ function handlePageChange(p: number) {
 
 function handleSourceChange(val: 'all' | 'recording' | 'replay') {
   sourceFilter.value = val
+  page.value = 1
+  fetchRecords()
+}
+
+function handleSeasonChange(val: 'all' | SeasonStatus) {
+  seasonFilter.value = val
   page.value = 1
   fetchRecords()
 }
@@ -120,6 +194,20 @@ function showFiles(record: UploadRecord) {
   filesVisible.value = true
 }
 
+// ---- 手动重试加入合集 ----
+async function handleRetry(record: UploadRecord) {
+  retryingIds.value.add(record.id)
+  try {
+    const res = await apiPost(`/api/upload_records/${record.id}/season/retry`)
+    toast.success(res.message || '已触发加入合集，稍后刷新查看结果')
+    await fetchRecords()
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : '重试触发失败')
+  } finally {
+    retryingIds.value.delete(record.id)
+  }
+}
+
 // ---- 删除 ----
 async function handleDelete(record: UploadRecord) {
   const ok = await confirm(`确定要删除投稿记录 #${record.id} 吗？`)
@@ -142,25 +230,50 @@ onMounted(fetchRecords)
   <div>
     <h1 class="text-2xl font-bold text-gray-900 mb-6">投稿记录</h1>
 
-    <!-- 来源筛选 -->
-    <div class="mb-4 flex items-center gap-2">
-      <span class="text-sm text-gray-500">来源：</span>
+    <!-- 筛选 -->
+    <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-500">来源：</span>
+        <button
+          v-for="opt in [
+            { value: 'all', label: '全部' },
+            { value: 'recording', label: '录制' },
+            { value: 'replay', label: '回放' },
+          ] as const"
+          :key="opt.value"
+          class="px-3 py-1 text-sm rounded-lg border transition-colors"
+          :class="
+            sourceFilter === opt.value
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+          "
+          @click="handleSourceChange(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-500">合集：</span>
+        <button
+          v-for="opt in SEASON_FILTERS"
+          :key="opt.value"
+          class="px-3 py-1 text-sm rounded-lg border transition-colors"
+          :class="
+            seasonFilter === opt.value
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+          "
+          @click="handleSeasonChange(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
       <button
-        v-for="opt in [
-          { value: 'all', label: '全部' },
-          { value: 'recording', label: '录制' },
-          { value: 'replay', label: '回放' },
-        ] as const"
-        :key="opt.value"
-        class="px-3 py-1 text-sm rounded-lg border transition-colors"
-        :class="
-          sourceFilter === opt.value
-            ? 'bg-brand-600 text-white border-brand-600'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-        "
-        @click="handleSourceChange(opt.value)"
+        class="ml-auto px-3 py-1 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+        :disabled="loading"
+        @click="fetchRecords"
       >
-        {{ opt.label }}
+        {{ loading ? '刷新中...' : '刷新' }}
       </button>
     </div>
 
@@ -184,14 +297,15 @@ onMounted(fetchRecords)
               <th class="px-4 py-3 text-left font-medium text-gray-500">标题</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">投稿文件</th>
               <th class="px-4 py-3 text-center font-medium text-gray-500 w-20">状态</th>
+              <th class="px-4 py-3 text-center font-medium text-gray-500 w-24">合集</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-26">BV号</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-44">操作时间</th>
-              <th class="px-4 py-3 text-right font-medium text-gray-500 w-50">操作</th>
+              <th class="px-4 py-3 text-right font-medium text-gray-500 w-60">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="records.length === 0">
-              <td colspan="9" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
+              <td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无投稿记录</td>
             </tr>
             <tr
               v-for="r in records"
@@ -237,6 +351,15 @@ onMounted(fetchRecords)
                   {{ statusBadge(r.status).text }}
                 </span>
               </td>
+              <td class="px-4 py-3 text-center">
+                <span
+                  class="inline-block max-w-[7rem] truncate px-2 py-0.5 text-xs font-medium rounded-full align-middle"
+                  :class="seasonBadge(r.season_status).cls"
+                  :title="seasonTooltip(r)"
+                >
+                  {{ seasonBadge(r.season_status).text }}
+                </span>
+              </td>
               <td class="px-4 py-3">
                 <a
                   v-if="r.bv_id"
@@ -258,6 +381,15 @@ onMounted(fetchRecords)
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1">
+                  <button
+                    v-if="canRetry(r)"
+                    class="px-2.5 py-1 text-xs font-medium rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-50"
+                    :disabled="retryingIds.has(r.id)"
+                    :title="seasonTooltip(r)"
+                    @click="handleRetry(r)"
+                  >
+                    {{ retryingIds.has(r.id) ? '重试中' : '重试合集' }}
+                  </button>
                   <a
                     :href="getLogsPath(r)"
                     target="_blank"

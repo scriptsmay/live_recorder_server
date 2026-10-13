@@ -329,3 +329,62 @@ describe('投稿记录合集状态筛选', () => {
     expect(DataService.getUploadRecords).toHaveBeenCalledWith(expect.objectContaining({ season_status: 'failed' }));
   });
 });
+
+describe('合并投稿记录列表的合集字段', () => {
+  function mockQueries() {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 101, source: 'recording', season_status: 'failed' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
+  }
+
+  test('录制分支查合集列，回放分支用常量占位', async () => {
+    mockQueries();
+
+    const response = await authed('get', '/api/upload_records/merged');
+
+    expect(response.status).toBe(200);
+    const [sql] = pool.query.mock.calls[0];
+    expect(sql).toContain('ur.season_status');
+    expect(sql).toContain('ur.season_error');
+    expect(sql).toContain('ur.season_added_at');
+    expect(sql).toContain("'none' AS season_status");
+    expect(response.body.data[0].season_status).toBe('failed');
+  });
+
+  test('season_status 参与筛选且计数参数与之一致', async () => {
+    mockQueries();
+
+    await authed('get', '/api/upload_records/merged?season_status=failed&page=2&limit=10');
+
+    const [dataSql, dataParams] = pool.query.mock.calls[0];
+    const [countSql, countParams] = pool.query.mock.calls[1];
+    expect(dataSql).toContain('t.season_status = $1');
+    expect(dataSql).toContain('LIMIT $2 OFFSET $3');
+    expect(dataParams).toEqual(['failed', 10, 10]);
+    expect(countSql).toContain('t.season_status = $1');
+    expect(countSql).toContain("SELECT id, 'replay' AS source, status, 'none' AS season_status");
+    expect(countParams).toEqual(['failed']);
+  });
+
+  test('status 与 season_status 同时筛选时按顺序占位', async () => {
+    mockQueries();
+
+    await authed('get', '/api/upload_records/merged?status=success&season_status=added');
+
+    const [, dataParams] = pool.query.mock.calls[0];
+    const [, countParams] = pool.query.mock.calls[1];
+    expect(dataParams).toEqual(['success', 'added', 20, 0]);
+    expect(countParams).toEqual(['success', 'added']);
+  });
+
+  test('无筛选条件时计数不带参数', async () => {
+    mockQueries();
+
+    await authed('get', '/api/upload_records/merged?source=replay');
+
+    const [dataSql] = pool.query.mock.calls[0];
+    const [, countParams] = pool.query.mock.calls[1];
+    expect(dataSql).toContain("WHERE t.source = 'replay'");
+    expect(countParams).toEqual([]);
+  });
+});
