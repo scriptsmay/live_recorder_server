@@ -17,12 +17,17 @@ jest.mock('../server/services/UploadService', () => ({
   // 默认不带封面，封面相关用例内按需 mockReturnValue 覆盖
   resolveUploadCover: jest.fn(() => ({ cover: null, source: 'none' })),
 }));
+// 合集编排层真实实现会拉 Redis，本组用例只验证触发时机与来源参数
+jest.mock('../server/services/SeasonService', () => ({
+  scheduleAdd: jest.fn(async () => ({ skipped: 'test' })),
+}));
 
 const pool = require('../server/db/index');
 const biliup = require('../server/lib/core/biliup');
 const notify = require('../server/lib/core/notify');
 const { afterUpload } = require('../server/lib/core/backup');
 const UploadService = require('../server/services/UploadService');
+const SeasonService = require('../server/services/SeasonService');
 const ReplayUploadService = require('../server/lib/core/replay/ReplayUploadService');
 
 beforeEach(() => {
@@ -291,6 +296,8 @@ describe('ReplayUploadService', () => {
     expect(successCall).toBeTruthy();
     expect(successCall[1]).toContain('BV123');
     expect(notify.uploadComplete).toHaveBeenCalled();
+    // 来源必须是 replay，否则合集会写到同号的常规投稿记录上
+    expect(SeasonService.scheduleAdd).toHaveBeenCalledWith(10, 'replay');
   });
 
   test('_runUpload 失败时更新状态为 failed', async () => {
@@ -311,6 +318,7 @@ describe('ReplayUploadService', () => {
     const failedCall = pool.query.mock.calls.find((c) => c[0].includes("status='failed'"));
     expect(failedCall).toBeTruthy();
     expect(notify.uploadFailed).toHaveBeenCalled();
+    expect(SeasonService.scheduleAdd).not.toHaveBeenCalled();
   });
 
   test('_runUpload 异常时更新状态为 failed', async () => {

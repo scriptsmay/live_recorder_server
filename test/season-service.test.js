@@ -480,6 +480,49 @@ describe('状态回写与凭证红线', () => {
   });
 });
 
+describe('回放投稿复用同一编排', () => {
+  test('source=replay 时读上下文与三处状态写入全部落在 replay_upload_records', async () => {
+    mockPool({ records: [recordRow({ id: 201 })] });
+    const result = await SeasonService.scheduleAdd(201, 'replay');
+
+    expect(result.ok).toBe(true);
+    expect(callsFor('SELECT ur.id')[0][0]).toContain('FROM replay_upload_records ur');
+    expect(callsFor("SET season_status = 'pending'")[0][0]).toContain('UPDATE replay_upload_records');
+    expect(lastWrite("SET season_status = 'added'")[0]).toContain('UPDATE replay_upload_records');
+    // 两表 id 各自独立自增，串到常规表就是静默改错稿件
+    expect(callsFor('UPDATE upload_records')).toHaveLength(0);
+    expect(callsFor('FROM upload_records ')).toHaveLength(0);
+  });
+
+  test('手动重试同样按 source 选表', async () => {
+    mockPool({ records: [recordRow({ id: 201, season_status: 'failed' })] });
+    const result = await SeasonService.retryAdd(201, 'replay');
+
+    expect(result.ok).toBe(true);
+    expect(callsFor("SET season_status = 'pending'")[0][0]).toContain('UPDATE replay_upload_records');
+    expect(callsFor('UPDATE upload_records')).toHaveLength(0);
+  });
+
+  test('缺省与未知 source 都退回常规投稿表', async () => {
+    mockPool();
+    await SeasonService.scheduleAdd(101);
+    await SeasonService.retryAdd(101, 'nonsense');
+
+    expect(callsFor('SELECT ur.id').every(([sql]) => sql.includes('FROM upload_records ur'))).toBe(true);
+    expect(callsFor('UPDATE replay_upload_records')).toHaveLength(0);
+  });
+
+  test('失败终态写回发起的那张表，不留错误在另一张表', async () => {
+    season.getSeasonSection.mockResolvedValueOnce(emptySection());
+    season.addToSeason.mockRejectedValue(bizError(season.ERROR_CODES.RATE_LIMITED, { bizCode: 20111 }));
+    mockPool({ records: [recordRow({ id: 201 })] });
+    const result = await SeasonService.scheduleAdd(201, 'replay');
+
+    expect(result.ok).toBe(false);
+    expect(lastWrite("SET season_status = 'failed'")[0]).toContain('UPDATE replay_upload_records');
+  });
+});
+
 describe('合集列表缓存', () => {
   const SEASONS = [{ id: 1, title: 'A', sections: [{ id: 2, title: 'B' }] }];
 

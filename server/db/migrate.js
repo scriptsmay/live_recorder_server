@@ -311,6 +311,26 @@ async function runMigration() {
       CREATE INDEX IF NOT EXISTS idx_replay_upload_record ON replay_upload_records(replay_record_id, status)
     `);
 
+    // v1.11.1：回放投稿接入合集链路，列名与语义与 upload_records 的 season_* 完全一致，
+    // 供 SeasonService 按来源表复用同一套编排；同样只描述合集结果，不回写投稿 status
+    await client.query(`
+      ALTER TABLE replay_upload_records
+        ADD COLUMN IF NOT EXISTS season_id BIGINT,
+        ADD COLUMN IF NOT EXISTS season_status VARCHAR(16) NOT NULL DEFAULT 'none',
+        ADD COLUMN IF NOT EXISTS season_error TEXT,
+        ADD COLUMN IF NOT EXISTS season_attempts SMALLINT NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'replay_upload_records_season_status_check') THEN
+          ALTER TABLE replay_upload_records ADD CONSTRAINT replay_upload_records_season_status_check
+            CHECK (season_status IN ('none', 'pending', 'added', 'failed', 'skipped'));
+        END IF;
+      END $$;
+    `);
+
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_replay_upload_one_uploading
         ON replay_upload_records(replay_record_id)

@@ -96,17 +96,8 @@ function seasonBadge(status: SeasonStatus): Badge {
   }
 }
 
-/** 回放投稿没有合集链路，不展示状态也不提供重试 */
-function hasSeasonTrack(record: UploadRecord) {
-  return record.source === 'recording'
-}
-
 function canRetry(record: UploadRecord) {
-  return (
-    hasSeasonTrack(record) &&
-    !!record.bv_id &&
-    (record.season_status === 'none' || record.season_status === 'failed')
-  )
+  return !!record.bv_id && (record.season_status === 'none' || record.season_status === 'failed')
 }
 
 /** season_error 形如 `CODE: 详情`，把已知错误码翻译成可操作提示 */
@@ -137,7 +128,6 @@ const SEASON_ERROR_HINTS: Record<string, string> = {
 const SEASON_ERROR_FALLBACK_HINT = '加入合集失败，可手动重试；持续失败请查看服务端日志'
 
 function seasonTooltip(record: UploadRecord) {
-  if (!hasSeasonTrack(record)) return '回放投稿不支持合集管理'
   if (record.season_status === 'failed' && record.season_error) {
     const code = record.season_error.split(':', 1)[0].trim()
     return `${record.season_error}\n${SEASON_ERROR_HINTS[code] || SEASON_ERROR_FALLBACK_HINT}`
@@ -212,7 +202,9 @@ function showFiles(record: UploadRecord) {
 async function handleRetry(record: UploadRecord) {
   retryingIds.value.add(record.id)
   try {
-    const res = await apiPost(`/api/upload_records/${record.id}/season/retry`)
+    const res = await apiPost(
+      `/api/upload_records/${record.id}/season/retry?source=${record.source}`,
+    )
     toast.success(res.message || '已触发加入合集，稍后刷新查看结果')
     await fetchRecords()
   } catch (err) {

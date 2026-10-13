@@ -242,7 +242,7 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 > **v1.11.0 变更**：`season_*` 列描述的是「投稿成功后追加到合集小节」这一步的结果，与投稿本身的 `status` **完全解耦** —— 加入合集失败不会把 `status` 从 `success` 改回 `failed`，也不影响 `after_upload` 的后处理。
 > `season_status` 同时充当幂等锁：占位用 `UPDATE ... WHERE id=$1 AND season_status IN ('none','failed') RETURNING id`，0 行即放弃，自动与手动重试共用该入口。
-> 进程重启会让执行中的 `pending` 失去宿主，启动链里的 `SeasonService.cleanupStalePending()` 把这些孤儿行回收为 `failed` 并写入孤儿说明，之后可手动重试。
+> 进程重启会让执行中的 `pending` 失去宿主，启动链里的 `SeasonService.cleanupStalePending()` 把这些孤儿行回收为 `failed` 并写入孤儿说明，之后可手动重试。v1.11.1 起该清理同时覆盖 `replay_upload_records`。
 
 ### biliup_accounts — biliup 账号登记
 
@@ -515,9 +515,16 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 | total_size       | BIGINT       | DEFAULT 0                                    | 投稿文件总大小                                 |
 | bv_id            | VARCHAR(50)  |                                              | BV 号                                          |
 | upload_files     | TEXT         | JSON 字符串                                  | 投稿文件路径数组                               |
+| season_id        | BIGINT       |                                              | 本次实际操作的合集小节所属合集 ID              |
+| season_status    | VARCHAR(16)  | NOT NULL DEFAULT 'none' CHECK                | 加入合集状态，取值同 `upload_records`          |
+| season_error     | TEXT         |                                              | 失败原因（错误码 + 类别，不含 cookie 等凭证）  |
+| season_attempts  | SMALLINT     | NOT NULL DEFAULT 0                           | 加入合集的累计尝试次数（含自动退避重试）       |
+| season_added_at  | TIMESTAMP    |                                              | 加入成功时间                                   |
 | started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
 | completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
 | created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
+
+> **v1.11.1 变更**：回放投稿接入合集链路，`season_*` 五列与 `upload_records` 同名同语义同约束，由 `SeasonService` 按来源表复用同一套编排。两表的 `id` 各自独立自增，**跨表同号是不同稿件**，因此来源（`recording` / `replay`）必须一路透传到终态写入；SQL 里的表名取自 `SeasonService` 内部的常量白名单，永不来自请求入参。
 
 ---
 

@@ -125,8 +125,25 @@ describe('手动重试加入合集', () => {
     const response = await authed('post', '/api/upload_records/101/season/retry');
 
     expect(response.status).toBe(200);
-    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101');
+    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101', 'recording');
     expect(response.body.status).toBe('ok');
+  });
+
+  test('带 source=replay 时重试回放投稿记录', async () => {
+    SeasonService.retryAdd.mockResolvedValueOnce({ ok: true, http: 200, message: '已触发加入合集，稍后刷新查看结果' });
+
+    const response = await authed('post', '/api/upload_records/101/season/retry?source=replay');
+
+    expect(response.status).toBe(200);
+    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101', 'replay');
+  });
+
+  test('source 取未知值时退回常规投稿表，不拿回放 ID 去改同号记录', async () => {
+    SeasonService.retryAdd.mockResolvedValueOnce({ ok: true, http: 200, message: 'ok' });
+
+    await authed('post', '/api/upload_records/101/season/retry?source=whatever');
+
+    expect(SeasonService.retryAdd).toHaveBeenCalledWith('101', 'recording');
   });
 
   test.each([
@@ -337,7 +354,7 @@ describe('合并投稿记录列表的合集字段', () => {
       .mockResolvedValueOnce({ rows: [{ count: '1' }] });
   }
 
-  test('录制分支查合集列，回放分支用常量占位', async () => {
+  test('两张投稿分支都查真实合集列，回放不再用常量占位', async () => {
     mockQueries();
 
     const response = await authed('get', '/api/upload_records/merged');
@@ -347,7 +364,10 @@ describe('合并投稿记录列表的合集字段', () => {
     expect(sql).toContain('ur.season_status');
     expect(sql).toContain('ur.season_error');
     expect(sql).toContain('ur.season_added_at');
-    expect(sql).toContain("'none' AS season_status");
+    expect(sql).toContain('rur.season_status');
+    expect(sql).toContain('rur.season_id');
+    expect(sql).toContain('rur.season_added_at');
+    expect(sql).not.toContain("'none' AS season_status");
     expect(response.body.data[0].season_status).toBe('failed');
   });
 
@@ -362,7 +382,8 @@ describe('合并投稿记录列表的合集字段', () => {
     expect(dataSql).toContain('LIMIT $2 OFFSET $3');
     expect(dataParams).toEqual(['failed', 10, 10]);
     expect(countSql).toContain('t.season_status = $1');
-    expect(countSql).toContain("SELECT id, 'replay' AS source, status, 'none' AS season_status");
+    // 计数子查询两路都取真实列，回放筛出的 failed 才不会漏计
+    expect(countSql).toContain("SELECT id, 'replay' AS source, status, season_status FROM replay_upload_records");
     expect(countParams).toEqual(['failed']);
   });
 

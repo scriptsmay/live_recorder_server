@@ -25,11 +25,12 @@ const SeasonService = require('../server/services/SeasonService');
 const ORPHAN_NOTE = '服务重启前合集任务被中断（孤儿回收），可手动重试';
 
 /**
- * @param {{ids: number[], failure?: Error}} options - 被回收的记录 ID，或抛出的 DB 异常
+ * @param {{recording?: number[], replay?: number[], failure?: Error}} options - 两张表各自被回收的 ID，或抛出的 DB 异常
  */
-function mockSeasonSweep({ ids = [], failure = null } = {}) {
-  pool.query.mockImplementation(async () => {
+function mockSeasonSweep({ recording = [], replay = [], failure = null } = {}) {
+  pool.query.mockImplementation(async (sql) => {
     if (failure) throw failure;
+    const ids = String(sql).includes('replay_upload_records') ? replay : recording;
     return { rows: ids.map((id) => ({ id })) };
   });
 }
@@ -40,12 +41,11 @@ beforeEach(() => {
 
 describe('cleanupStalePending', () => {
   test('pending 回收为 failed，字段与文案齐全', async () => {
-    mockSeasonSweep({ ids: [101, 102] });
+    mockSeasonSweep({ recording: [101, 102] });
 
     const recovered = await SeasonService.cleanupStalePending();
 
     expect(recovered).toEqual([101, 102]);
-    expect(pool.query).toHaveBeenCalledTimes(1);
     const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain("SET season_status = 'failed'");
     expect(sql).toContain('season_error = $1');
@@ -53,19 +53,38 @@ describe('cleanupStalePending', () => {
     expect(params).toEqual([ORPHAN_NOTE]);
   });
 
+  test('两张投稿表都扫，回收结果按表标注不会指错稿件', async () => {
+    mockSeasonSweep({ recording: [101], replay: [101] });
+
+    const recovered = await SeasonService.cleanupStalePending();
+
+    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(pool.query.mock.calls.map(([sql]) => sql)).toEqual([
+      expect.stringContaining('UPDATE upload_records'),
+      expect.stringContaining('UPDATE replay_upload_records'),
+    ]);
+    // 跨表同号是两条不同稿件，合并计数与标注都要如实反映
+    expect(recovered).toEqual([101, 101]);
+    const [, title, content] = notify.send.mock.calls[0];
+    expect(title).toContain('2 条加入合集任务被中断');
+    expect(content).toContain('常规投稿（ID: 101）');
+    expect(content).toContain('回放投稿（ID: 101）');
+  });
+
   test('只回收 pending，不碰 added / failed，也不改投稿主状态', async () => {
-    mockSeasonSweep({ ids: [] });
+    mockSeasonSweep();
 
     await SeasonService.cleanupStalePending();
 
-    const [sql] = pool.query.mock.calls[0];
-    expect(sql).not.toContain("'added'");
-    expect(sql).not.toContain("'none'");
-    expect(sql).not.toMatch(/\bstatus\s*=/);
+    for (const [sql] of pool.query.mock.calls) {
+      expect(sql).not.toContain("'added'");
+      expect(sql).not.toContain("'none'");
+      expect(sql).not.toMatch(/\bstatus\s*=/);
+    }
   });
 
   test('无孤儿时不发通知，返回空数组', async () => {
-    mockSeasonSweep({ ids: [] });
+    mockSeasonSweep();
 
     const recovered = await SeasonService.cleanupStalePending();
 
@@ -74,7 +93,7 @@ describe('cleanupStalePending', () => {
   });
 
   test('有孤儿时只发一条通知，内容含 ID 与手动重试指引', async () => {
-    mockSeasonSweep({ ids: [101, 102] });
+    mockSeasonSweep({ recording: [101, 102] });
 
     await SeasonService.cleanupStalePending();
 
@@ -82,7 +101,7 @@ describe('cleanupStalePending', () => {
     const [eventType, title, content] = notify.send.mock.calls[0];
     expect(eventType).toBe('season_orphan_recovered');
     expect(title).toContain('2 条加入合集任务被中断');
-    expect(content).toContain('投稿记录 ID: 101, 102');
+    expect(content).toContain('常规投稿（ID: 101, 102）');
     expect(content).toContain('手动重试');
   });
 

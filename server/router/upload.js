@@ -333,7 +333,7 @@ router.get('/upload_records/merged', async (req, res) => {
       params.push(status);
     }
 
-    // 合集状态筛选：回放投稿没有合集链路，恒为 none
+    // 合集状态筛选：两张投稿表都有 season_* 列，筛选条件对常规与回放同样生效
     if (season_status) {
       conditions.push(`t.season_status = $${paramIdx++}`);
       params.push(season_status);
@@ -385,11 +385,11 @@ router.get('/upload_records/merged', async (req, res) => {
           rur.replay_record_id AS session_id,
           rur.upload_files,
           rur.output,
-          NULL AS season_id,
-          'none' AS season_status,
-          NULL AS season_error,
-          0 AS season_attempts,
-          NULL AS season_added_at,
+          rur.season_id,
+          rur.season_status,
+          rur.season_error,
+          rur.season_attempts,
+          rur.season_added_at,
           rr.principal_name
         FROM replay_upload_records rur
         LEFT JOIN replay_records rr ON rur.replay_record_id = rr.id
@@ -404,7 +404,7 @@ router.get('/upload_records/merged', async (req, res) => {
       SELECT COUNT(*) FROM (
         SELECT id, 'recording' AS source, status, season_status FROM upload_records
         UNION ALL
-        SELECT id, 'replay' AS source, status, 'none' AS season_status FROM replay_upload_records
+        SELECT id, 'replay' AS source, status, season_status FROM replay_upload_records
       ) t
       ${where}
     `;
@@ -469,10 +469,14 @@ router.get('/upload_templates/:id/seasons', async (req, res) => {
 
 /**
  * 手动重试「加入合集」：与自动链路共用幂等编排
+ *
+ * source 决定操作哪张投稿表（recording=upload_records，replay=replay_upload_records）。
+ * 两表 id 各自独立自增，缺省按 recording 处理；回放记录必须由前端显式带上 source，否则会命中同号的常规投稿。
  */
 router.post('/upload_records/:id/season/retry', async (req, res) => {
   try {
-    const result = await SeasonService.retryAdd(req.params.id);
+    const source = req.query.source === 'replay' ? 'replay' : 'recording';
+    const result = await SeasonService.retryAdd(req.params.id, source);
     if (!result.ok) {
       return res.status(result.http || 500).json({ status: 'Error', message: result.message });
     }

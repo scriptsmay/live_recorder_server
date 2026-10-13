@@ -4,6 +4,7 @@ const pool = require('../../../db/index');
 const notify = require('../notify');
 const biliup = require('../biliup');
 const UploadService = require('../../../services/UploadService');
+const SeasonService = require('../../../services/SeasonService');
 const { afterUpload } = require('../backup');
 
 function formatDuration(seconds) {
@@ -300,6 +301,10 @@ class ReplayUploadService {
 
         const displayName = resolveDisplayName(record);
         notify.uploadComplete(displayName, title, result.bvId, record.play_url);
+        // 自动加入合集：与常规投稿同一编排层，仅来源表不同；内部含延迟与重试，不 await，自带 catch 防未处理拒绝
+        SeasonService.scheduleAdd(uploadRecordId, 'replay').catch((err) =>
+          console.error('[合集] 触发失败:', err.message)
+        );
 
         // 投稿后处理：备份/删除（含所有中间产物文件）
         if (tmpl.after_upload && tmpl.after_upload !== 'none') {

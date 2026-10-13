@@ -1003,15 +1003,15 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **参数（Query）：**
 
-| 参数          | 类型    | 必填 | 说明                                            |
-| ------------- | ------- | ---- | ----------------------------------------------- |
-| source        | string  | 否   | `all`（默认）/ `recording` / `replay`           |
-| status        | string  | 否   | 按投稿状态筛选                                  |
-| season_status | string  | 否   | 按合集状态筛选；回放投稿无合集链路，恒为 `none` |
-| page          | integer | 否   | 页码，从 1 开始                                 |
-| limit         | integer | 否   | 每页条数，上限 100                              |
+| 参数          | 类型    | 必填 | 说明                                   |
+| ------------- | ------- | ---- | -------------------------------------- |
+| source        | string  | 否   | `all`（默认）/ `recording` / `replay`  |
+| status        | string  | 否   | 按投稿状态筛选                         |
+| season_status | string  | 否   | 按合集状态筛选，录制与回放两支同样生效 |
+| page          | integer | 否   | 页码，从 1 开始                        |
+| limit         | integer | 否   | 每页条数，上限 100                     |
 
-录制分支返回 `season_id` / `season_status` / `season_error` / `season_attempts` / `season_added_at`；回放分支这些列以 `none` / `null` / `0` 占位，保证 UNION 列对齐。
+两支都返回真实的 `season_id` / `season_status` / `season_error` / `season_attempts` / `season_added_at`（v1.11.1 起回放投稿也接入合集链路）。行上的 `source` 字段标出该记录来自哪张表，前端重试时必须回传。
 
 ---
 
@@ -1029,7 +1029,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **cookie 路径策略**（`BILIUP_COOKIE_PATH_MODE`，默认 `auto`）：`auto` 按运行环境判定——容器内仅接受白名单根目录（`VIDEO_DOWNLOAD_DIR` / `REPLAY_WORK_DIR` / `BILIUP_WORK_DIR`）内的绝对路径，宿主机直跑（`npm start` / `npm run dev`）接受本机任意绝对路径（仍拒绝 `..` 穿越与符号链接）；`strict` / `any` 可显式覆盖。该策略对账号登记、合集拉取、投稿取 cookie 一致生效。
 
-**自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。执行结果写在 `upload_records.season_status`：`none` / `pending` / `added` / `failed`。
+**自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。常规投稿与回放投稿共用这套编排（v1.11.1 起回放也自动加入），执行结果分别写在 `upload_records.season_status` 与 `replay_upload_records.season_status`：`none` / `pending` / `added` / `failed`。
 
 | 方法   | 路径                                 | 说明                                        |
 | ------ | ------------------------------------ | ------------------------------------------- |
@@ -1045,9 +1045,11 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **手动重试语义**：`POST /api/upload_records/:id/season/retry` 只负责原子占位（`season_status` 置 `pending`）并把执行放到后台，请求立即返回 `已触发加入合集，稍后刷新查看结果`；退避重试期间不挂住 HTTP 连接，最终结果通过记录列表的 `season_status` / `season_error` 查看。
 
+**`?source=` 决定重试哪张表**：`replay` 重试 `replay_upload_records`，缺省或其他值一律按 `recording` 处理。两张投稿表的 `id` 各自独立自增，同一个数字在两张表上是两个不同稿件，因此前端必须把列表行的 `source` 回传；漏传不会报错，而是会去动同号的常规投稿记录。
+
 重试按**投稿模板当前**的 `cookies_path` / `season_id` / `section_id` 执行（每次调用现联表读取，占位时一并覆写记录的 `season_id`），不是投稿当时快照的目标。模板改过合集后重试，会加入新合集。
 
-**进程重启**：执行中的 `pending` 会随进程一起丢失，启动时由 `SeasonService.cleanupStalePending()` 统一回收为 `failed`（`season_error` 标注孤儿回收），并发一条 `season_orphan_recovered` 通知；回收后可直接手动重试。投稿主状态 `status` 不受影响。
+**进程重启**：执行中的 `pending` 会随进程一起丢失，启动时由 `SeasonService.cleanupStalePending()` 统一回收为 `failed`（`season_error` 标注孤儿回收），并只发一条 `season_orphan_recovered` 通知（两张表的孤儿合并计数）；两张投稿表都会被扫到，通知按表标注 ID，避免两表同号指错稿件。回收后可直接手动重试。投稿主状态 `status` 不受影响。
 
 **模板合集字段**（`POST/PUT /api/upload_templates`）：
 
