@@ -7,4 +7,16 @@ describe('SPA route fallback', () => {
 
     expect(spaRouter).toContain("'/files'");
   });
+
+  test('biliup accounts page is included in server-side history fallback', () => {
+    const spaRouter = fs.readFileSync(path.join(__dirname, '../server/router/spa.js'), 'utf8');
+
+    expect(spaRouter).toContain("'/biliup-accounts'");
+  });
+
+  test('change password page is included in server-side history fallback', () => {
+    const spaRouter = fs.readFileSync(path.join(__dirname, '../server/router/spa.js'), 'utf8');
+
+    expect(spaRouter).toContain("'/change-password'");
+  });
 });

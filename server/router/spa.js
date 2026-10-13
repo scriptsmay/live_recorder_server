@@ -52,6 +52,8 @@ if (spaExists) {
       '/replay-toolbox',
       '/templates',
       '/upload-records',
+      '/biliup-accounts',
+      '/change-password',
       '/settings',
       '/logs',
       '/api-doc',

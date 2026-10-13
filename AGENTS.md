@@ -191,6 +191,8 @@ npm run lint && npm run format && npm run test
 - `/transcode` —— 转码记录
 - `/templates` —— 投稿模板管理
 - `/upload-records` —— 投稿记录（注：EJS 旧路径为 `/upload_records`）
+- `/biliup-accounts` —— biliup 账号管理
+- `/files` —— 文件管理
 - `/settings` —— 全局设置
 - `/logs` —— 日志查看
 

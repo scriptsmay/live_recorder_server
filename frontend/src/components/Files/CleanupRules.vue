@@ -70,7 +70,11 @@ async function selectRule(rule: CleanupRule) {
   deleteTaskStatus.value = null
 
   const filters: Record<string, unknown> = { ...rule.filters }
-  if (rule.filters.safe_to_delete || rule.filters.category || rule.filters.type === 'hls_directory') {
+  if (
+    rule.filters.safe_to_delete ||
+    rule.filters.category ||
+    rule.filters.type === 'hls_directory'
+  ) {
     filters.older_than_days = olderThanDays.value
   }
   const plan = await fileStore.generateDeletePlan({ filters })
