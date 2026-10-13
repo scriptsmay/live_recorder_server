@@ -71,8 +71,8 @@ node scripts/cleanup-dev.js
 ### 存量数据迁移（一次性）
 
 ```bash
-# 0. 先停服并备份数据库
-sudo docker stop live_recorder_server && bash scripts/backup-db.sh
+# 0. 先停服并备份数据库（sidecar 已注入 DATABASE_URL，主容器内没有 pg_dump）
+sudo docker stop live_recorder_server && docker exec replay_cron sh /mnt/scripts/backup-db.sh
 
 # 1. dry-run：只输出报告，不动磁盘和 DB（默认行为）
 node scripts/migrate-danmaku-paths.js

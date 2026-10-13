@@ -208,6 +208,7 @@ npm run lint && npm run format && npm run test
 - **远程浏览器 / Browserless**：`REMOTE_BROWSER_WS_ENDPOINT`（`server/lib/core/browser/RemoteBrowserClient.js`，v1.8.3 起仅用于回放 m3u8 提取）、`BROWSERLESS_TOKEN`、`BROWSERLESS_CONCURRENT`、`BROWSERLESS_QUEUED`、`BROWSERLESS_TIMEOUT_MS`
 - **快手轮询**：`KUAISHOU_CHECKER_ENABLED`（默认 true）、`KUAISHOU_API_TIMEOUT_MS`（默认 15000）、`POLLING_KUAISHOU_COOKIE`
 - **弹幕归档**：`DANMAKU_ARCHIVE_DIR`（生产 `/data/danmaku_archive`）—— 未废弃。FileManageService 以 `file_type=danmaku_archive` 索引归档 JSONL 并标记不可自动清理。v1.8.0 只删除了 `DANMAKU_OUTPUT_DIR`
+- **定时备份（compose 层，Node 应用不读取）**：`BACKUP_CRON_ENABLED`（默认 false）、`BACKUP_CRON_EXPR`（默认 `30 2 * * *`）、`BACKUP_RETENTION_DAYS`（默认 7）、`BACKUP_OUTPUT_DIR`（容器内路径，默认 `/data/db_backups`）、`DB_BACKUP_HOST_DIR`（宿主机产物目录，默认 `./backups`）。与 `REPLAY_CRON_*` / `SYNC_CRON_*` 一样注入 `replay_cron` sidecar；crontab 在容器启动时由 `scripts/cron-entrypoint.sh` 按这些 env 拼装，改动需重启 sidecar
 
 ## 直播轮询 (Polling)
 
@@ -292,7 +293,8 @@ VIDEO_DOWNLOAD_DIR/
 - `replay-cron.sh` —— 回放定时任务（`docker-compose.cron.yml` 使用，依赖 `/mnt/scripts/cron-entrypoint.sh`）
 - `sync-records.sh` / `sync-db-tables.sh` —— 生产/开发数据库记录与表结构同步
 - `migrate-danmaku-paths.js` —— 弹幕 JSONL 存量路径迁移（ADR-011 扁平路径，手动执行）
-- `ensure-db.js` / `backup-db.sh` —— 数据库就绪检查 / 备份
+- `ensure-db.js` —— 数据库就绪检查
+- `backup-db.sh` —— 数据库全量备份（`pg_dump -Fc` + 归档校验 + 按天保留），由 `replay_cron` 定时调度；POSIX sh，依赖 `DATABASE_URL`，主应用镜像内没有 `pg_dump`，不要放到主容器里跑
 - `test-checker.js` —— 各平台 checker 独立冒烟测试脚本
 - `release.js` —— 版本号发布（patch/minor/major bump）
 

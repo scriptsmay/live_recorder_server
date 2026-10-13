@@ -7,6 +7,7 @@ CRONTAB_FILE=/tmp/crontab
 SCRIPTS_DIR="${SCRIPTS_DIR:-/mnt/scripts}"
 REPLAY_CRON_SCRIPT="$SCRIPTS_DIR/replay-cron.sh"
 SYNC_RECORDS_SCRIPT="$SCRIPTS_DIR/sync-records.sh"
+BACKUP_DB_SCRIPT="$SCRIPTS_DIR/backup-db.sh"
 
 # ── 回放定时任务 ──
 if [ "$REPLAY_CRON_ENABLED" = "true" ]; then
@@ -22,6 +23,16 @@ if [ "$SYNC_CRON_ENABLED" = "true" ] && [ -n "$SUPABASE_URL" ]; then
   echo "$SYNC_CRON_EXPR $SYNC_RECORDS_SCRIPT >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
 else
   echo "[sync-cron] 已禁用（SYNC_CRON_ENABLED=$SYNC_CRON_ENABLED）"
+fi
+
+# ── 数据库定时备份 ──
+# 全部用 ${VAR:-} 内联默认值：本文件是 set -eu，任何一个未定义变量都会让容器启动即崩，
+# 连带回放/同步定时任务一起停摆。compose 层的 :- 是第一道，这里是第二道。
+if [ "${BACKUP_CRON_ENABLED:-false}" = "true" ]; then
+  echo "[db-backup] 启用，表达式: ${BACKUP_CRON_EXPR:-30 2 * * *}"
+  echo "${BACKUP_CRON_EXPR:-30 2 * * *} $BACKUP_DB_SCRIPT >> /proc/1/fd/1 2>&1" >> "$CRONTAB_FILE"
+else
+  echo "[db-backup] 已禁用"
 fi
 
 # ── Redis 事件监听 ──

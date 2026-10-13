@@ -191,13 +191,44 @@ biliup --help
 
 `replay_cron` 容器同时监听 Redis `REDIS_PUBLISH_CHANNEL`。后端在回放记录 `duration` 更新时发布事件，监听器解析 `record_id` 执行增量同步。
 
+### 数据库定时备份
+
+`backup-db.sh` 由同一个 `replay_cron` sidecar 调度（镜像自带 `postgresql17-client`，主应用镜像里没有 `pg_dump`），每日把整库导出为 `pg_dump -Fc` 自定义格式归档，本地落盘。启用：`.env` 中设置 `BACKUP_CRON_ENABLED=true`，并把 `DB_BACKUP_HOST_DIR` 指向宿主机目录。
+
+| 变量                    | 默认值       | 说明                                            |
+| ----------------------- | ------------ | ----------------------------------------------- |
+| `BACKUP_CRON_ENABLED`   | `false`      | 总开关                                          |
+| `BACKUP_CRON_EXPR`      | `30 2 * * *` | crontab 表达式（与回放 03:00、同步 04:00 错峰） |
+| `BACKUP_RETENTION_DAYS` | `7`          | 产物保留天数，超期自动清理                      |
+| `DB_BACKUP_HOST_DIR`    | `./backups`  | 宿主机产物目录，挂载到容器 `/data/db_backups`   |
+
+导出前会检查磁盘水位（可用空间需 ≥ 库大小的 1.5 倍），产物先写 `.partial` 再通过 `pg_restore --list` 校验、校验通过才 `mv` 成正式档，避免半档被当成可用备份。失败与每周日一次成功心跳都经 `/api/notify/feishu_webhook` 推送，sidecar 本身不持有通知密钥。
+
+> 默认落盘目录与数据库在同一存储池，能应对误删，扛不住整盘损坏。需要异地留存时改 `DB_BACKUP_HOST_DIR` 即可，脚本无需改动。
+
 ## 数据库备份
 
+定时备份见上一节；下面是手动跑一次与恢复的流程。
+
 ```bash
-docker compose exec postgres pg_dump -U postgres live_recorder > backup.sql
-# 恢复
-docker compose exec -T postgres psql -U postgres live_recorder < backup.sql
+# 立即执行一次备份（不等排期）
+docker exec replay_cron sh /mnt/scripts/backup-db.sh
+
+# 确认调度已注册
+docker exec replay_cron crontab -l
 ```
+
+恢复前先确认归档内容与目标库：
+
+```bash
+pg_restore --list backups/backup_YYYYMMDD_HHMMSS.dump   # 先看 TOC，确认可读、条目符合预期
+pg_restore -d "$DATABASE_URL" --clean --if-exists -Fc backups/backup_YYYYMMDD_HHMMSS.dump
+```
+
+- `-d` 必须传**连接串**（或显式 `-U`）。只写库名时会用当前操作系统用户名当角色，报 `role "xxx" does not exist`。
+- `--clean` 会先 DROP 目标库里的同名对象再重建，属于破坏性操作；执行前确认目标库，演练请指向开发库。
+- 只想恢复个别表，用 `pg_restore -d "$DATABASE_URL" -t <table> --clean -Fc <dump>`，不要整库覆盖。
+- 未演练过恢复的备份等于没有备份：发版后至少做一次「导出 → 在开发库恢复」的闭环。
 
 ## 本地开发部署
 

@@ -359,7 +359,7 @@ KV 结构的全局配置表。
 | `recording_files.danmaku_ass_path` | 列   | `DROP COLUMN IF EXISTS`（约 L328） |
 | `danmaku_capture_records.ass_path` | 列   | `DROP COLUMN IF EXISTS`（约 L384） |
 
-- 这是**不可逆的数据删除**，升级前请 `bash scripts/backup-db.sh` 或 `pg_dump` 备份。
+- 这是**不可逆的数据删除**，升级前请先做一次全量备份（`docker exec replay_cron sh /mnt/scripts/backup-db.sh`，或直接 `pg_dump -Fc`）。
 - 列结构需从 `pg_dump` 备份还原（v1.8.3 起独立回滚脚本已移除，DROP 已稳定运行多版本）。
 - 弹幕 JSONL 的存量路径迁移是**独立的手动步骤**，见 `scripts/migrate-danmaku-paths.js`（详见 `docs/DEV.md`）。
 

@@ -24,16 +24,23 @@ services:
       REPLAY_CRON_ENABLED: ${REPLAY_CRON_ENABLED:-false}
       REPLAY_PRINCIPAL_ID: ${REPLAY_PRINCIPAL_ID:-}
       REPLAY_CRON_COUNT: ${REPLAY_CRON_COUNT:-1}
-      # 数据同步
+      # 数据同步 / 数据库备份共用这份连接串
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgres:5432/live_recorder}
       SUPABASE_URL: ${SUPABASE_URL:-}
       REMOTE_TABLE: ${REMOTE_TABLE:-test_records}
       SYNC_CRON_EXPR: ${SYNC_CRON_EXPR:-0 4 * * *}
       SYNC_CRON_ENABLED: ${SYNC_CRON_ENABLED:-false}
+      # 数据库定时备份（BACKUP_CRON_ENABLED 默认关闭；BACKUP_OUTPUT_DIR 需与下方挂载一致）
+      BACKUP_CRON_ENABLED: ${BACKUP_CRON_ENABLED:-false}
+      BACKUP_CRON_EXPR: ${BACKUP_CRON_EXPR:-30 2 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_OUTPUT_DIR: ${BACKUP_OUTPUT_DIR:-/data/db_backups}
     volumes:
       # 生产环境：named volume 或 bind mount 到含脚本的目录
       # 默认挂载仓库 scripts/ 目录到 /mnt/scripts
       - ${SCRIPTS_VOLUME:-../scripts}:/mnt/scripts:ro
+      # 数据库备份产物目录（必须 rw；宿主机路径经 DB_BACKUP_HOST_DIR 注入，本地回退 ../backups）
+      - ${DB_BACKUP_HOST_DIR:-../backups}:/data/db_backups:rw
       # 宿主机时区（保证 cron 按本地时间触发）
       - /etc/localtime:/etc/localtime:ro
     entrypoint: /bin/sh
