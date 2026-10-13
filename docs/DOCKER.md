@@ -113,6 +113,22 @@ docker compose exec live_recorder_server sh
 biliup --help
 ```
 
+## 投稿后自动加入合集（v1.11.0）
+
+投稿成功后由服务端直连 B 站创作中心接口把稿件加入指定合集小节，全部配置可选：
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `SEASON_AUTO_ADD_ENABLED` | 总开关，仅 `false` 关闭 | `true` |
+| `SEASON_ADD_DELAY_MS` | 投稿成功后延迟入合集（毫秒），给稿件转码留时间 | `45000` |
+| `SEASON_ADD_MAX_ATTEMPTS` | 单条记录最多尝试次数（含首次） | `3` |
+| `SEASON_ADD_BACKOFF_MS` | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s） | `30000` |
+| `SEASON_HTTP_TIMEOUT_MS` | B 站接口超时（毫秒） | `10000` |
+| `SEASON_LIST_CACHE_TTL` | 合集列表 Redis 缓存 TTL（秒） | `600` |
+| `SEASON_SEASONS_PAGE_SIZE` | 合集列表分页条数 | `30` |
+
+合集与小节的选择存在投稿模板上（`season_id` / `season_title` / `section_id` / `season_auto_add`），未勾选自动加入的模板完全不受该功能影响。
+
 ## 消息通知
 
 通知通道可选，未配置时静默跳过：

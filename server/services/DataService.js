@@ -411,7 +411,7 @@ class DataService {
   }
 
   static async getUploadRecords(options = {}) {
-    const { session_id, status, limit = 50, page } = options;
+    const { session_id, status, season_status, limit = 50, page } = options;
     const conditions = [];
     const params = [];
 
@@ -422,6 +422,10 @@ class DataService {
     if (status) {
       conditions.push(`ur.status = $${params.length + 1}`);
       params.push(status);
+    }
+    if (season_status) {
+      conditions.push(`ur.season_status = $${params.length + 1}`);
+      params.push(season_status);
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';

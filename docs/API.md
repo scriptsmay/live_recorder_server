@@ -983,6 +983,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 | ---------- | ------- | ---- | ---------------------------------------------- |
 | session_id | integer | 否   | 按会话 ID 筛选                                 |
 | status     | string  | 否   | 按状态筛选：`uploading` / `success` / `failed` |
+| season_status | string | 否 | 按合集状态筛选：`none` / `pending` / `added` / `failed` |
 
 **返回字段说明：**
 
@@ -999,6 +1000,52 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 ### DELETE /api/upload_records/:id
 
 删除投稿记录。
+
+---
+
+## 合集与 biliup 账号（v1.11.0）
+
+投稿成功后可按模板配置自动把稿件加入 B 站合集小节。服务端直连 B 站创作中心接口，与 biliup 进程解耦；所有端点挂在 `/api/*`，继承登录鉴权。
+
+凭证红线：任何响应与日志都不含 cookie 内容；cookie 类失败只回类别文案，引导去模板/账号配置排查。
+
+**自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。执行结果写在 `upload_records.season_status`：`none` / `pending` / `added` / `failed`。
+
+| 方法   | 路径                                     | 说明                                        |
+| ------ | ---------------------------------------- | ------------------------------------------- |
+| GET    | /api/upload_templates/:id/seasons        | 按模板 cookie 拉合集 + 小节列表（模板级联） |
+| POST   | /api/upload_records/:id/season/retry     | 手动重试加入合集                            |
+| GET    | /api/biliup_accounts                     | biliup 账号登记列表                         |
+| POST   | /api/biliup_accounts                     | 新增账号登记（只读校验 cookie 文件）        |
+| GET    | /api/biliup_accounts/:id                 | 账号详情，顺带刷新线上登录态                |
+| DELETE | /api/biliup_accounts/:id                 | 删除登记（cookie 文件保留）                 |
+| GET    | /api/biliup_accounts/:id/seasons         | 按账号 cookie 拉合集 + 小节列表             |
+
+`?force=1` 跳过合集缓存重新拉取。
+
+**模板合集字段**（`POST/PUT /api/upload_templates`）：
+
+| 字段             | 类型    | 说明                          |
+| ---------------- | ------- | ----------------------------- |
+| season_id        | number  | 合集 ID，展示与归属参考       |
+| season_title     | string  | 合集标题（冗余展示用）        |
+| section_id       | number  | 小节 ID，自动加入的实际目标   |
+| season_auto_add  | boolean | 投稿成功后是否自动加入        |
+
+**状态码约定：**
+
+| 端点                       | 情况                        | 状态码          |
+| -------------------------- | --------------------------- | --------------- |
+| /upload_templates/:id/seasons | 模板不存在             | 404             |
+| /upload_templates/:id/seasons | cookie 不可用/登录态失效 | 400             |
+| /upload_templates/:id/seasons | 上游或网络异常           | 500             |
+| /upload_records/:id/season/retry | 记录不存在            | 404             |
+| /upload_records/:id/season/retry | 已在合集或正在加入     | 409             |
+| /upload_records/:id/season/retry | 未选小节 / 无 BV 号     | 400             |
+| /biliup_accounts           | 名称或 cookie 路径重复      | 409             |
+| /biliup_accounts/:id       | 被投稿模板引用              | 409 + `referenced_by` |
+
+`GET /api/upload_records` 支持 `?season_status=` 筛选，返回行含 `season_status`。
 
 ---
 

@@ -851,6 +851,55 @@ class RecorderService {
       console.error('[启动清理] 失败:', err);
     }
   }
+
+  /**
+   * 启动回收：把上次进程遗留的孤儿 uploading 投稿标记为 failed
+   *
+   * biliup 子进程随进程被杀，而 enqueue / executeUpload 对 uploading 一律跳过（含 force），
+   * 不回收就永久死锁。语义对齐录制侧「recording → interrupted」；只标失败，不自动重投。
+   * @returns {Promise<{upload_records: number[], replay_upload_records: number[]}>} 各表回收的记录 ID
+   */
+  static async cleanupStaleUploads() {
+    const ORPHAN_NOTE = '服务重启前上传中断（孤儿回收）';
+    // 表名来自本常量白名单，不来自请求参数；两张表列名一致，可用同一语句模板
+    const targets = [
+      { table: 'upload_records', label: '常规投稿' },
+      { table: 'replay_upload_records', label: '回放投稿' },
+    ];
+    const recovered = { upload_records: [], replay_upload_records: [] };
+
+    try {
+      for (const target of targets) {
+        const result = await pool.query(
+          `UPDATE ${target.table}
+              SET status = 'failed', error_message = $1, completed_at = NOW()
+            WHERE status = 'uploading'
+            RETURNING id`,
+          [ORPHAN_NOTE]
+        );
+        recovered[target.table] = result.rows.map((row) => row.id);
+        if (result.rows.length > 0) {
+          console.log(
+            `[启动清理] ${target.label}回收孤儿投稿 ${result.rows.length} 条: ${result.rows.map((r) => r.id).join(', ')}`
+          );
+        }
+      }
+
+      const total = recovered.upload_records.length + recovered.replay_upload_records.length;
+      if (total > 0) {
+        const lines = [
+          `常规投稿 ${recovered.upload_records.length} 条${recovered.upload_records.length ? `（ID: ${recovered.upload_records.join(', ')}）` : ''}`,
+          `回放投稿 ${recovered.replay_upload_records.length} 条${recovered.replay_upload_records.length ? `（ID: ${recovered.replay_upload_records.join(', ')}）` : ''}`,
+          '已标记为失败，可在对应页面手动重试；文件可能已变动，不自动重投。',
+        ];
+        await notify.send('upload_orphan_recovered', `服务重启：${total} 条投稿任务被中断`, lines.join('\n'));
+      }
+    } catch (err) {
+      console.error('[启动清理] 投稿孤儿回收失败:', err);
+    }
+
+    return recovered;
+  }
 }
 
 module.exports = RecorderService;

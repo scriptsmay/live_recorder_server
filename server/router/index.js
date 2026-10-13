@@ -13,6 +13,7 @@ const transcodeRouter = require('./transcode');
 const danmakuRouter = require('./danmaku');
 const replayRouter = require('./replay');
 const fileManageRouter = require('./file-manage');
+const biliupAccountsRouter = require('./biliup-accounts');
 const { requireAuth } = require('../middleware/require-auth');
 
 const CRON_AUTH_PATHS = new Set([
@@ -61,6 +62,7 @@ function createRoutes() {
   router.use('/api', danmakuRouter);
   router.use('/api', replayRouter);
   router.use('/api', fileManageRouter);
+  router.use('/api', biliupAccountsRouter);
   // Vue SPA 路由（静态资源 + history 模式回退）
   router.use(spaRouter);
 

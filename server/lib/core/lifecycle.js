@@ -24,6 +24,7 @@ async function bootstrap(app, port) {
     }
 
     await RecorderService.cleanupStaleRecordings();
+    await RecorderService.cleanupStaleUploads();
     await logCleanupService.cleanup();
     logCleanupService.start();
     await transcodeQueue.init();

@@ -220,3 +220,33 @@ describe('DataService dashboard helpers', () => {
     expect(pool.query).toHaveBeenCalledWith('SELECT COUNT(*) FROM rooms');
   });
 });
+
+describe('DataService.getUploadRecords', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('按 season_status 过滤且计数查询共用同一条件', async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 101, season_status: 'failed' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] });
+
+    const { total } = await DataService.getUploadRecords({ season_status: 'failed', limit: 50 });
+
+    expect(total).toBe(1);
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain('ur.season_status = $1');
+    expect(params).toEqual(['failed', 50]);
+    expect(pool.query.mock.calls[1][0]).toContain('ur.season_status = $1');
+    expect(pool.query.mock.calls[1][1]).toEqual(['failed']);
+  });
+
+  test('未传 season_status 时不生成该条件', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ count: '0' }] });
+
+    await DataService.getUploadRecords({ status: 'success', limit: 50 });
+
+    expect(pool.query.mock.calls[0][0]).not.toContain('season_status');
+    expect(pool.query.mock.calls[0][1]).toEqual(['success', 50]);
+  });
+});

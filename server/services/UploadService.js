@@ -7,6 +7,7 @@ const notify = require('../lib/core/notify');
 const biliup = require('../lib/core/biliup');
 const { afterUpload } = require('../lib/core/backup');
 const DataService = require('./DataService');
+const SeasonService = require('./SeasonService');
 
 /**
  * 上传服务类
@@ -304,6 +305,8 @@ class UploadService {
           [cmdStr, result.output, result.bvId, recordId]
         );
         notify.uploadComplete(session.room_name, title, result.bvId, session.room_url);
+        // 自动加入合集：内部含延迟与重试，不 await；自带 catch 防未处理拒绝触发进程退出
+        SeasonService.scheduleAdd(recordId).catch((err) => console.error('[合集] 触发失败:', err.message));
 
         await new Promise((r) => setTimeout(r, 10000));
         const postResult = await afterUpload(

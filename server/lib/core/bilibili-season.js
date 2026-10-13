@@ -41,6 +41,8 @@ const BIZ_CODE_MAP = {
 };
 
 const BIZ_OK = 0;
+// nav 在未登录时返回 -101：属于「探测成功、结论为否」，不作为异常
+const BIZ_NOT_LOGGED_IN = -101;
 
 class SeasonError extends Error {
   constructor(code, message, extra = {}) {
@@ -333,6 +335,28 @@ async function addToSeason(credential, params = {}) {
   return { added: true, alreadyAdded: false, bizCode: payload.code ?? BIZ_OK };
 }
 
+/**
+ * 登录态探测：`x/web-interface/nav`。返回 UID 与昵称，供账号登记与列表展示。
+ * @returns {Promise<{isLogin: boolean, uid: string|null, nickname: string|null}>}
+ */
+async function checkLogin(credential, options = {}) {
+  const url = buildUrl(API_BASE, '/x/web-interface/nav', {});
+  const payload = await request(url, credential, { timeoutMs: options.timeoutMs });
+
+  if (payload.code === BIZ_NOT_LOGGED_IN) {
+    return { isLogin: false, uid: null, nickname: null };
+  }
+  assertBizOk(payload, '登录态探测');
+
+  const data = payload.data || {};
+  const mid = asNumber(data.mid);
+  return {
+    isLogin: data.isLogin === true,
+    uid: mid === null ? null : String(mid),
+    nickname: typeof data.uname === 'string' && data.uname !== '' ? data.uname : null,
+  };
+}
+
 module.exports = {
   ERROR_CODES,
   SeasonError,
@@ -340,4 +364,5 @@ module.exports = {
   getSeasonSection,
   getVideoInfo,
   addToSeason,
+  checkLogin,
 };

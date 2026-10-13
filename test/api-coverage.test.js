@@ -50,6 +50,15 @@ const EXPECTED_APIS = [
   { method: 'GET', path: '/upload_records' },
   { method: 'GET', path: '/upload_records/merged' },
   { method: 'DELETE', path: '/upload_records/:id' },
+  { method: 'GET', path: '/upload_templates/:id/seasons' },
+  { method: 'POST', path: '/upload_records/:id/season/retry' },
+
+  // ===== biliup-accounts.js =====
+  { method: 'GET', path: '/biliup_accounts' },
+  { method: 'POST', path: '/biliup_accounts' },
+  { method: 'GET', path: '/biliup_accounts/:id' },
+  { method: 'DELETE', path: '/biliup_accounts/:id' },
+  { method: 'GET', path: '/biliup_accounts/:id/seasons' },
 
   // ===== replay.js =====
   { method: 'GET', path: '/replay/principals' },
@@ -167,6 +176,7 @@ describe('API接口完整性检查', () => {
       { file: 'transcode.js', prefix: '' },
       { file: 'logs.js', prefix: '' },
       { file: 'file-manage.js', prefix: '' },
+      { file: 'biliup-accounts.js', prefix: '' },
       // 跳过 hls.js（regex 路由，非标准 API）和 spa.js（前端兜底）
     ];
 
