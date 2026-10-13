@@ -216,11 +216,14 @@ async function handleRetry(record: UploadRecord) {
 
 // ---- 删除 ----
 async function handleDelete(record: UploadRecord) {
-  const ok = await confirm(`确定要删除投稿记录 #${record.id} 吗？`)
+  const source = record.source ?? 'recording'
+  const label = source === 'replay' ? '回放' : '录制'
+  const ok = await confirm(`确定要删除${label}投稿记录 #${record.id} 吗？`)
   if (!ok) return
 
   try {
-    await apiDelete(`/api/upload_records/${record.id}`)
+    // 两张投稿表的 id 各自独立自增，漏传 source 会删掉同号的常规投稿
+    await apiDelete(`/api/upload_records/${record.id}?source=${source}`)
     toast.success('删除成功')
     fetchRecords()
   } catch (err) {

@@ -425,11 +425,27 @@ router.get('/upload_records/merged', async (req, res) => {
   }
 });
 
+/**
+ * 删除投稿记录
+ *
+ * source 决定删除哪张投稿表（recording=upload_records，replay=replay_upload_records），
+ * 表名取自下方常量白名单，永不来自请求入参。两表 id 各自独立自增，缺省按 recording 处理；
+ * 回放记录必须由前端显式带上 source，否则会删掉同号的常规投稿。
+ */
+const UPLOAD_RECORD_TABLES = {
+  recording: 'upload_records',
+  replay: 'replay_upload_records',
+};
+
 router.delete('/upload_records/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    await pool.query('DELETE FROM upload_records WHERE id = $1', [id]);
-    res.json({ status: 'ok' });
+    const source = req.query.source === 'replay' ? 'replay' : 'recording';
+    const table = UPLOAD_RECORD_TABLES[source];
+    const result = await pool.query(`DELETE FROM ${table} WHERE id = $1 RETURNING id`, [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '投稿记录不存在' });
+    }
+    res.json({ status: 'ok', data: { id: result.rows[0].id, source } });
   } catch (err) {
     console.error('[upload_records] 删除失败:', err);
     res.status(500).json({ status: 'Error', message: '删除失败' });

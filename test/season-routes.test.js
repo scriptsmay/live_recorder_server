@@ -409,3 +409,46 @@ describe('合并投稿记录列表的合集字段', () => {
     expect(countParams).toEqual([]);
   });
 });
+
+describe('删除投稿记录按 source 选表', () => {
+  function deletedTable() {
+    const [sql] = pool.query.mock.calls[0];
+    return sql.match(/DELETE FROM (\w+)/)[1];
+  }
+
+  test('source=replay 删 replay_upload_records，不碰同号的常规投稿', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
+
+    const response = await authed('delete', '/api/upload_records/5?source=replay');
+
+    expect(response.status).toBe(200);
+    expect(deletedTable()).toBe('replay_upload_records');
+    expect(pool.query).toHaveBeenCalledWith(expect.any(String), ['5']);
+  });
+
+  test('缺省仍按常规投稿表处理', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
+
+    const response = await authed('delete', '/api/upload_records/5');
+
+    expect(response.status).toBe(200);
+    expect(deletedTable()).toBe('upload_records');
+  });
+
+  test('未知 source 取值退回常规投稿表', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: 5 }] });
+
+    await authed('delete', '/api/upload_records/5?source=blob');
+
+    expect(deletedTable()).toBe('upload_records');
+  });
+
+  test('目标表无此行时返回 404', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    const response = await authed('delete', '/api/upload_records/999?source=replay');
+
+    expect(response.status).toBe(404);
+    expect(deletedTable()).toBe('replay_upload_records');
+  });
+});
