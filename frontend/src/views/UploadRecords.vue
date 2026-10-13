@@ -312,7 +312,7 @@ onMounted(fetchRecords)
               <th class="px-4 py-3 text-center font-medium text-gray-500 w-24">合集</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-26">BV号</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-44">操作时间</th>
-              <th class="px-4 py-3 text-right font-medium text-gray-500 w-60">操作</th>
+              <th class="px-4 py-3 text-right font-medium text-gray-500 w-80">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -379,7 +379,7 @@ onMounted(fetchRecords)
                     :title="seasonTooltip(r)"
                     @click="handleRetry(r)"
                   >
-                    {{ retryingIds.has(r.id) ? '重试中' : '重试合集' }}
+                    {{ retryingIds.has(r.id) ? '重试中' : '加合集' }}
                   </button>
                   <a
                     :href="getLogsPath(r)"
