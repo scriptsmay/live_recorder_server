@@ -186,23 +186,27 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 投稿参数模板，支持变量替换。
 
-| 字段                    | 类型          | 约束           | 说明                                                                                                                                                     |
-| ----------------------- | ------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                      | SERIAL        | PRIMARY KEY    |                                                                                                                                                          |
-| name                    | VARCHAR(255)  | NOT NULL       | 模板名称                                                                                                                                                 |
-| title_template          | VARCHAR(1024) |                | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                                                             |
-| desc_template           | TEXT          |                | 简介模板                                                                                                                                                 |
-| tid                     | INTEGER       | DEFAULT 171    | B站分区 ID                                                                                                                                               |
-| tags                    | VARCHAR(1024) |                | 标签，逗号分隔                                                                                                                                           |
-| copyright               | INTEGER       | DEFAULT 2      | 1-自制 2-转载                                                                                                                                            |
-| source                  | VARCHAR(1024) | DEFAULT ''     | 转载来源（支持模板变量）                                                                                                                                 |
-| cover                   | VARCHAR(1024) |                | 封面路径                                                                                                                                                 |
-| use_room_cover          | BOOLEAN       | DEFAULT false  | 投稿优先用直播间封面（直播 = 会话 `cover_path` / 回放 = `poster_path`），文件缺失时降级到 `cover` 固定封面                                               |
-| is_only_self            | INTEGER       | DEFAULT 0      | 仅自己可见，0-关闭 1-开启                                                                                                                                |
-| cookies_path            | VARCHAR(1024) |                | biliup 账户文件绝对路径（必填）                                                                                                                          |
-| dtime                   | INTEGER       | DEFAULT 0      | 延迟发布时间，10 位 Unix 时间戳                                                                                                                          |
-| after_upload            | VARCHAR(20)   | DEFAULT 'none' | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件；未配置 `NAS_*` 时备份类动作会跳过 |
-| created_at / updated_at | TIMESTAMP     |                |                                                                                                                                                          |
+| 字段                    | 类型          | 约束                   | 说明                                                                                                                                                     |
+| ----------------------- | ------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                      | SERIAL        | PRIMARY KEY            |                                                                                                                                                          |
+| name                    | VARCHAR(255)  | NOT NULL               | 模板名称                                                                                                                                                 |
+| title_template          | VARCHAR(1024) |                        | 标题模板，默认 `{room_name} 直播录像 {date}`                                                                                                             |
+| desc_template           | TEXT          |                        | 简介模板                                                                                                                                                 |
+| tid                     | INTEGER       | DEFAULT 171            | B站分区 ID                                                                                                                                               |
+| tags                    | VARCHAR(1024) |                        | 标签，逗号分隔                                                                                                                                           |
+| copyright               | INTEGER       | DEFAULT 2              | 1-自制 2-转载                                                                                                                                            |
+| source                  | VARCHAR(1024) | DEFAULT ''             | 转载来源（支持模板变量）                                                                                                                                 |
+| cover                   | VARCHAR(1024) |                        | 封面路径                                                                                                                                                 |
+| use_room_cover          | BOOLEAN       | DEFAULT false          | 投稿优先用直播间封面（直播 = 会话 `cover_path` / 回放 = `poster_path`），文件缺失时降级到 `cover` 固定封面                                               |
+| is_only_self            | INTEGER       | DEFAULT 0              | 仅自己可见，0-关闭 1-开启                                                                                                                                |
+| cookies_path            | VARCHAR(1024) |                        | biliup 账户文件绝对路径（必填）                                                                                                                          |
+| dtime                   | INTEGER       | DEFAULT 0              | 延迟发布时间，10 位 Unix 时间戳                                                                                                                          |
+| after_upload            | VARCHAR(20)   | DEFAULT 'none'         | 投稿后处理方式：`none` 无操作、`backup` 备份到NAS、`delete` 删除本地文件、`backup_and_delete` 备份到NAS后删除本地文件；未配置 `NAS_*` 时备份类动作会跳过 |
+| season_id               | BIGINT        |                        | 合集 ID（投稿后自动加入合集）。仅用于归属校验与展示，写接口真正入参是 `section_id`                                                                       |
+| season_title            | VARCHAR(255)  |                        | 合集名称快照，仅 UI 展示，接口每次以线上为准                                                                                                             |
+| section_id              | BIGINT        |                        | 合集小节 ID。B 站「加入合集」的实际操作对象                                                                                                              |
+| season_auto_add         | BOOLEAN       | NOT NULL DEFAULT false | 是否在投稿成功后自动加入合集。false 时只做状态记录，不发写请求                                                                                           |
+| created_at / updated_at | TIMESTAMP     |                        |                                                                                                                                                          |
 
 > **v1.7.0 变更**：`room_url` 列已删除。模板不再与特定直播间绑定，改为由 `rooms.upload_template_id` 反向引用。
 
@@ -214,22 +218,48 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 每次投稿操作的执行记录。
 
-| 字段                                   | 类型         | 约束                        | 说明                                     |
-| -------------------------------------- | ------------ | --------------------------- | ---------------------------------------- |
-| id                                     | SERIAL       | PRIMARY KEY                 |                                          |
-| session_id                             | INTEGER      | FK → recording_sessions(id) | 关联录制会话                             |
-| template_id                            | INTEGER      | FK → upload_templates(id)   | 使用的模板                               |
-| room_url                               | VARCHAR(512) |                             | 直播间地址                               |
-| title                                  | VARCHAR(512) |                             | 实际投稿标题                             |
-| status                                 | VARCHAR(20)  | DEFAULT 'pending'           | `pending` `uploading` `success` `failed` |
-| command                                | TEXT         |                             | 实际执行的命令                           |
-| output                                 | TEXT         |                             | 命令输出                                 |
-| error_message                          | TEXT         |                             | 错误信息                                 |
-| file_count                             | INTEGER      |                             | 文件数                                   |
-| total_size                             | BIGINT       |                             | 总大小                                   |
-| bv_id                                  | VARCHAR(50)  | DEFAULT ''                  | B站 BV 号，投稿成功后从输出中提取        |
-| upload_files                           | TEXT         | DEFAULT '[]'                | 投稿文件路径列表（JSON 数组）            |
-| started_at / completed_at / created_at | TIMESTAMP    |                             |                                          |
+| 字段                                   | 类型         | 约束                          | 说明                                                                                              |
+| -------------------------------------- | ------------ | ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| id                                     | SERIAL       | PRIMARY KEY                   |                                                                                                   |
+| session_id                             | INTEGER      | FK → recording_sessions(id)   | 关联录制会话                                                                                      |
+| template_id                            | INTEGER      | FK → upload_templates(id)     | 使用的模板                                                                                        |
+| room_url                               | VARCHAR(512) |                               | 直播间地址                                                                                        |
+| title                                  | VARCHAR(512) |                               | 实际投稿标题                                                                                      |
+| status                                 | VARCHAR(20)  | DEFAULT 'pending'             | `pending` `uploading` `success` `failed`                                                          |
+| command                                | TEXT         |                               | 实际执行的命令                                                                                    |
+| output                                 | TEXT         |                               | 命令输出                                                                                          |
+| error_message                          | TEXT         |                               | 错误信息                                                                                          |
+| file_count                             | INTEGER      |                               | 文件数                                                                                            |
+| total_size                             | BIGINT       |                               | 总大小                                                                                            |
+| bv_id                                  | VARCHAR(50)  | DEFAULT ''                    | B站 BV 号，投稿成功后从输出中提取                                                                 |
+| upload_files                           | TEXT         | DEFAULT '[]'                  | 投稿文件路径列表（JSON 数组）                                                                     |
+| season_id                              | BIGINT       |                               | 本次实际操作的合集小节所属合集 ID                                                                 |
+| season_status                          | VARCHAR(16)  | NOT NULL DEFAULT 'none' CHECK | 加入合集状态：`none` 未配置 `pending` 占位/执行中 `added` 已加入 `failed` 失败 `skipped` 主动跳过 |
+| season_error                           | TEXT         |                               | 失败原因（错误码 + 类别，不含 cookie 等凭证）                                                     |
+| season_attempts                        | SMALLINT     | NOT NULL DEFAULT 0            | 加入合集的累计尝试次数（含自动退避重试）                                                          |
+| season_added_at                        | TIMESTAMP    |                               | 加入成功时间                                                                                      |
+| started_at / completed_at / created_at | TIMESTAMP    |                               |                                                                                                   |
+
+> **v1.11.0 变更**：`season_*` 列描述的是「投稿成功后追加到合集小节」这一步的结果，与投稿本身的 `status` **完全解耦** —— 加入合集失败不会把 `status` 从 `success` 改回 `failed`，也不影响 `after_upload` 的后处理。
+> `season_status` 同时充当幂等锁：占位用 `UPDATE ... WHERE id=$1 AND season_status IN ('none','failed') RETURNING id`，0 行即放弃，自动与手动重试共用该入口。
+
+### biliup_accounts — biliup 账号登记
+
+v1.11.0 新增。把散落在模板里的 `cookies_path` 字符串变成可校验、可选择的实体；是**旁路**，不替换模板字段。
+
+| 字段            | 类型          | 约束                       | 说明                                                               |
+| --------------- | ------------- | -------------------------- | ------------------------------------------------------------------ |
+| id              | SERIAL        | PRIMARY KEY                |                                                                    |
+| name            | VARCHAR(64)   | NOT NULL UNIQUE            | 账号别名，UI 展示                                                  |
+| cookies_path    | VARCHAR(1024) | NOT NULL UNIQUE            | 容器内 biliup cookie 文件绝对路径，须在 `BILIUP_WORK_DIR` 白名单内 |
+| uid             | BIGINT        |                            | B 站 UID，来自 `x/web-interface/nav`                               |
+| nickname        | VARCHAR(128)  |                            | 昵称，来自 `nav`                                                   |
+| login_status    | VARCHAR(16)   | NOT NULL DEFAULT 'unknown' | `ok` `expired` `unknown`，探测结果                                 |
+| last_checked_at | TIMESTAMP     |                            | 最近一次 `nav` 探测时间                                            |
+| created_at      | TIMESTAMP     | DEFAULT NOW()              |                                                                    |
+
+> **不落 cookie 内容**：本表只存路径与探测出的身份元数据；cookie 文件本身由 `biliup login` / `biliup renew` 产出，服务端**只读不回写**。
+> **无 UPDATE 路由**：账号仅支持新增 / 查询 / 删除。改名或换 cookie 文件一律「删除后重建」，避免被引用中的模板与投稿记录出现半更新状态。
 
 ### transcode_records — 转码记录
 

@@ -152,6 +152,16 @@ async function runMigration() {
       ALTER TABLE upload_templates ADD COLUMN IF NOT EXISTS use_room_cover BOOLEAN DEFAULT false
     `);
 
+    // v1.11.0：投稿后自动加入合集（Season → Section）模板配置
+    // season_title 仅用于展示，归属与有效性以线上接口为准；写操作真正入参是 section_id
+    await client.query(`
+      ALTER TABLE upload_templates
+        ADD COLUMN IF NOT EXISTS season_id BIGINT,
+        ADD COLUMN IF NOT EXISTS season_title VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS section_id BIGINT,
+        ADD COLUMN IF NOT EXISTS season_auto_add BOOLEAN NOT NULL DEFAULT false
+    `);
+
     // ========== upload_records ==========
 
     await client.query(`
@@ -172,6 +182,42 @@ async function runMigration() {
         completed_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         upload_files TEXT DEFAULT '[]'
+      )
+    `);
+
+    // v1.11.0：投稿后加入合集的状态机（幂等占位 + 失败原因 + 尝试计数）
+    // 仅描述合集追加结果，与投稿本身的 status 完全解耦，失败不回写 status
+    await client.query(`
+      ALTER TABLE upload_records
+        ADD COLUMN IF NOT EXISTS season_id BIGINT,
+        ADD COLUMN IF NOT EXISTS season_status VARCHAR(16) NOT NULL DEFAULT 'none',
+        ADD COLUMN IF NOT EXISTS season_error TEXT,
+        ADD COLUMN IF NOT EXISTS season_attempts SMALLINT NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'upload_records_season_status_check') THEN
+          ALTER TABLE upload_records ADD CONSTRAINT upload_records_season_status_check
+            CHECK (season_status IN ('none', 'pending', 'added', 'failed', 'skipped'));
+        END IF;
+      END $$;
+    `);
+
+    // ========== biliup_accounts ==========
+    // v1.11.0：biliup 账号登记（仅新增/查询/删除，无 UPDATE 路由）。
+    // cookies_path 是模板既有字段的旁路引用，不改变模板语义；cookie 内容一律不入库。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS biliup_accounts (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(64) NOT NULL UNIQUE,
+        cookies_path VARCHAR(1024) NOT NULL UNIQUE,
+        uid BIGINT,
+        nickname VARCHAR(128),
+        login_status VARCHAR(16) NOT NULL DEFAULT 'unknown',
+        last_checked_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `);
 
