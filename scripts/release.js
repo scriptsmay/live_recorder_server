@@ -182,6 +182,30 @@ function cleanupOldTags() {
   return toDelete.map((t) => t.tag);
 }
 
+function deleteRemoteTags(remote, tags) {
+  if (!tags || !tags.length) return;
+  try {
+    const remoteTagsOutput = execSync(`git ls-remote --tags ${remote}`, { encoding: 'utf8' });
+    const existingRemoteTags = new Set(
+      remoteTagsOutput
+        .split('\n')
+        .map((line) => line.split('\t')[1])
+        .filter(Boolean)
+        .map((ref) => ref.replace('refs/tags/', '').replace(/\^{}$/, '')),
+    );
+    const tagsToDelete = tags.filter((t) => existingRemoteTags.has(t));
+    if (tagsToDelete.length) {
+      console.log(`\n--- Deleting old tags on ${remote}: ${tagsToDelete.join(' ')} ---`);
+      execSync(`git push ${remote} --delete ${tagsToDelete.join(' ')}`, {
+        encoding: 'utf8',
+        stdio: 'inherit',
+      });
+    }
+  } catch (err) {
+    console.warn(`⚠️ 无法清理 ${remote} 上的旧 tag:`, err.message);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const versionType = args.find((arg) => ['patch', 'minor', 'major'].includes(arg));
@@ -259,9 +283,7 @@ async function main() {
     const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
     runCommand(`git push origin ${branch}`);
     runCommand(`git push origin v${newVersion}`);
-    if (deletedTags.length) {
-      runCommand(`git push origin --delete ${deletedTags.join(' ')}`);
-    }
+    deleteRemoteTags('origin', deletedTags);
 
     // dev 分支自动合并到 main 并推送
     if (branch === 'dev') {
@@ -279,9 +301,7 @@ async function main() {
       console.log('\n--- Pushing to CNB ---');
       runCommand(`git push cnb v${newVersion}`);
       runCommand(`git push cnb main dev`);
-      if (deletedTags.length) {
-        runCommand(`git push cnb --delete ${deletedTags.join(' ')}`);
-      }
+      deleteRemoteTags('cnb', deletedTags);
     } else {
       console.warn('\n⚠️ 未检测到 cnb remote，跳过 CNB 推送（tag 将无法触发镜像构建）。');
     }
