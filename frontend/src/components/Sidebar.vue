@@ -179,7 +179,7 @@ function hideTooltip() {
 <template>
   <!-- 移动端汉堡按钮 -->
   <button
-    class="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg text-gray-300 bg-black/40 hover:text-white hover:bg-black/60 transition-colors"
+    class="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg text-gray-600 glass-panel hover:text-gray-900 transition-colors"
     @click="mobileOpen = true"
   >
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,31 +196,33 @@ function hideTooltip() {
   <Transition name="fade">
     <div
       v-if="mobileOpen"
-      class="sidebar-overlay lg:hidden fixed inset-0 bg-black/50 z-40"
+      class="sidebar-overlay lg:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
       @click="closeMobile"
     />
   </Transition>
 
   <!-- 侧边栏 -->
   <aside
-    class="fixed top-0 left-0 h-full bg-gray-900 border-r border-gray-700 z-50 flex flex-col transition-all duration-200"
+    class="fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 bg-[#0a0a0d]/85 backdrop-blur-2xl border-r border-white/[0.06] shadow-[inset_-1px_0_0_rgba(255,255,255,0.02)]"
     :class="[
       collapsed ? 'w-16' : 'w-56',
       mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
     ]"
   >
     <!-- Logo -->
-    <div class="flex items-center h-14 px-4 border-b border-gray-700 shrink-0">
+    <div class="flex items-center h-14 px-4 border-b border-white/[0.06] shrink-0">
       <router-link
         to="/dashboard"
-        class="flex items-center gap-2 text-white hover:text-brand-400 transition-colors"
+        class="flex items-center gap-2 text-white hover:text-brand-300 transition-colors"
       >
         <img src="/logo.svg" alt="K-Recorder" class="h-6 shrink-0" />
-        <span v-if="!collapsed" class="font-semibold text-lg tracking-wide">K-Recorder</span>
+        <span v-if="!collapsed" class="font-semibold text-[0.95rem] tracking-tight"
+          >K-Recorder</span
+        >
       </router-link>
       <button
         v-if="!collapsed"
-        class="ml-auto hidden lg:block p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+        class="ml-auto hidden lg:block p-1.5 rounded-md text-[#71717a] hover:text-white hover:bg-white/[0.06] transition-colors"
         @click="toggleCollapsed"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,7 +236,7 @@ function hideTooltip() {
       </button>
       <button
         v-else
-        class="ml-auto hidden lg:block p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+        class="ml-auto hidden lg:block p-1.5 rounded-md text-[#71717a] hover:text-white hover:bg-white/[0.06] transition-colors"
         @click="toggleCollapsed"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,22 +251,32 @@ function hideTooltip() {
     </div>
 
     <!-- 菜单 -->
-    <nav class="flex-1 overflow-y-auto py-2 px-2">
+    <nav class="flex-1 overflow-y-auto py-3 px-2">
       <template v-for="group in menuGroups" :key="group.label">
         <!-- 无子菜单（概览） -->
         <div v-if="!group.children" class="mb-1">
           <router-link
             :to="group.to!"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+            class="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             :class="
               route.path === group.to
-                ? 'text-white bg-brand-600'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'text-white bg-white/[0.07]'
+                : 'text-[#a1a1aa] hover:text-white hover:bg-white/[0.04]'
             "
             @mouseenter="collapsed ? showTooltip($event, group.label) : undefined"
             @mouseleave="hideTooltip"
           >
-            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span
+              v-if="route.path === group.to"
+              class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-full bg-brand-400 shadow-[0_0_12px_0_var(--color-brand-500)]"
+            />
+            <svg
+              class="w-5 h-5 shrink-0"
+              :class="route.path === group.to ? 'text-brand-300' : ''"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -282,7 +294,9 @@ function hideTooltip() {
           <button
             class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             :class="
-              isInGroup(group) ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              isInGroup(group)
+                ? 'text-white bg-white/[0.04]'
+                : 'text-[#a1a1aa] hover:text-white hover:bg-white/[0.04]'
             "
             @click="
               collapsed && group.children?.length
@@ -322,17 +336,17 @@ function hideTooltip() {
           <Transition name="slide">
             <div
               v-if="!collapsed && !collapsedGroups[group.label]"
-              class="ml-5 pl-3 border-l border-gray-700"
+              class="ml-4 mt-0.5 pl-3 border-l border-white/[0.06]"
             >
               <router-link
                 v-for="item in group.children"
                 :key="item.to"
                 :to="item.to"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors"
                 :class="
                   isActive(item)
-                    ? 'text-white bg-brand-600/50'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    ? 'text-brand-300 bg-brand-500/10'
+                    : 'text-[#8b8b94] hover:text-[#e4e4e7] hover:bg-white/[0.04]'
                 "
               >
                 <span>{{ item.label }}</span>
@@ -344,10 +358,10 @@ function hideTooltip() {
     </nav>
 
     <!-- 底部 -->
-    <div class="border-t border-gray-700 px-4 py-3 shrink-0 overflow-visible relative z-10">
+    <div class="border-t border-white/[0.06] px-4 py-3 shrink-0 overflow-visible relative z-10">
       <div v-if="!collapsed" class="flex items-center justify-between">
         <UserMenu />
-        <span class="text-xs text-gray-500">v{{ appStore.appVersion || '—' }}</span>
+        <span class="text-xs text-[#8b8b94]">v{{ appStore.appVersion || '—' }}</span>
       </div>
       <div v-else class="flex justify-center">
         <UserMenu />
@@ -359,7 +373,7 @@ function hideTooltip() {
       <Transition name="fade">
         <div
           v-if="tooltip && collapsed"
-          class="fixed left-[4.5rem] px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap z-[60] pointer-events-none"
+          class="fixed left-[4.5rem] px-2.5 py-1 text-gray-100 text-xs rounded-lg bg-[#15151a]/95 backdrop-blur-xl border border-white/10 shadow-xl whitespace-nowrap z-[60] pointer-events-none"
           :style="{ top: tooltip.top + 'px', transform: 'translateY(-50%)' }"
         >
           {{ tooltip.text }}

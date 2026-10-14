@@ -108,7 +108,7 @@ const pageItems = computed<PageItem[]>(() => {
           class="px-2.5 py-1 text-sm rounded border transition-colors"
           :class="
             item.num === current
-              ? 'bg-brand-600 text-white border-brand-600'
+              ? 'bg-brand-600 text-white border-brand-600 glow-accent'
               : 'border-gray-300 text-gray-600 hover:bg-gray-100'
           "
           @click="emit('change', item.num)"
