@@ -31,7 +31,7 @@ async function logout() {
   <div v-if="auth.user" class="relative">
     <button
       type="button"
-      class="cursor-pointer rounded px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+      class="cursor-pointer rounded-md px-3 py-1.5 text-sm text-[#d4d4d8] transition-colors hover:bg-white/[0.06] hover:text-white"
       @click="toggle"
     >
       {{ auth.user.username }}
@@ -39,22 +39,22 @@ async function logout() {
     <Transition name="menu">
       <div
         v-if="open"
-        class="absolute left-0 bottom-full mb-2 w-44 rounded-lg border border-gray-700 bg-gray-800 py-2 shadow-xl"
+        class="absolute left-0 bottom-full mb-2 w-44 rounded-xl border border-white/10 bg-[#15151a]/95 py-2 shadow-2xl backdrop-blur-xl"
       >
-        <div class="px-4 py-2 text-xs text-gray-400">
+        <div class="px-4 py-2 text-xs text-[#8b8b94]">
           当前：<span class="text-white font-medium">{{ auth.user.username }}</span>
         </div>
-        <div class="border-t border-gray-700 my-1" />
+        <div class="border-t border-white/10 my-1" />
         <button
           type="button"
-          class="block w-full px-4 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+          class="block w-full px-4 py-2 text-left text-sm text-[#d4d4d8] transition-colors hover:bg-white/[0.06] hover:text-white"
           @click="goChangePassword"
         >
           修改密码
         </button>
         <button
           type="button"
-          class="block w-full px-4 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+          class="block w-full px-4 py-2 text-left text-sm text-[#d4d4d8] transition-colors hover:bg-white/[0.06] hover:text-white"
           @click="logout"
         >
           退出登录

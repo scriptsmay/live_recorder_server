@@ -13,10 +13,12 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
         @click.self="onCancel"
       >
         <!-- 遮罩层 -->
-        <div class="absolute inset-0 bg-black/40" />
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
         <!-- 对话框 -->
-        <div class="relative bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+        <div
+          class="relative glass-panel rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-[0_24px_60px_-16px_rgba(0,0,0,0.7),0_0_40px_-14px_rgba(99,102,241,0.45)]"
+        >
           <!-- 头部 -->
           <div class="px-6 pt-5 pb-3">
             <h3 class="text-lg font-semibold text-gray-900">
@@ -32,7 +34,7 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
           </div>
 
           <!-- 操作按钮 -->
-          <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+          <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
             <button
               class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               @click="onCancel"
@@ -40,7 +42,7 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
               {{ confirmState.cancelText }}
             </button>
             <button
-              class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors"
+              class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 glow-accent transition-colors"
               @click="onConfirm"
             >
               {{ confirmState.confirmText }}

@@ -10,6 +10,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ActivityTimeline from '@/components/ActivityTimeline.vue'
+import StatCard from '@/components/ui/StatCard.vue'
 import { useAppStore } from '@/stores/app'
 import { apiGet } from '@/utils/api'
 import { formatBytes } from '@/utils/lib'
@@ -20,12 +21,11 @@ import type {
   DashboardSummary,
 } from '@/types/api'
 
-interface StatCard {
+interface StatCardData {
   label: string
   value: string
   sublines: string[]
-  gradient: string
-  accent: string
+  tone: string
   iconPath: string
   warning?: string
   to?: string
@@ -72,13 +72,12 @@ const hasPolling = computed(() => dashboard.value?.polling !== undefined)
 const hasDanmaku = computed(() => dashboard.value?.danmaku !== undefined)
 const hasSummary = computed(() => dashboard.value?.summary !== undefined)
 
-const statCards = computed<StatCard[]>(() => [
+const statCards = computed<StatCardData[]>(() => [
   {
     label: '活跃录制',
     value: String(dashboard.value?.active_count ?? 0),
     sublines: [`线程池 ${dashboard.value?.active_count ?? 0}/${dashboard.value?.pool_size ?? 0}`],
-    gradient: 'from-blue-500 to-blue-600',
-    accent: 'text-blue-100',
+    tone: 'blue',
     iconPath:
       'm15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z',
   },
@@ -90,8 +89,7 @@ const statCards = computed<StatCard[]>(() => [
         dashboard.value?.transcode.concurrency ?? 0
       }`,
     ],
-    gradient: 'from-amber-500 to-amber-600',
-    accent: 'text-amber-100',
+    tone: 'amber',
     iconPath:
       'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z',
   },
@@ -101,16 +99,14 @@ const statCards = computed<StatCard[]>(() => [
     sublines: hasPolling.value
       ? [`直播中 ${polling.value.currently_live} / 已配置 ${polling.value.total_rooms}`]
       : [],
-    gradient: 'from-indigo-500 to-indigo-600',
-    accent: 'text-indigo-100',
+    tone: 'indigo',
     iconPath: 'M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25V4.875H3.375v12.375Z',
   },
   {
     label: '弹幕状态',
     value: hasDanmaku.value ? String(danmaku.value.active_captures) : '--',
     sublines: hasDanmaku.value ? [`采集 ${danmaku.value.active_captures}`] : [],
-    gradient: 'from-cyan-500 to-cyan-600',
-    accent: 'text-cyan-100',
+    tone: 'cyan',
     iconPath:
       'M7.5 8.25h9m-9 3H12m-7.5 3.75V5.25A2.25 2.25 0 0 1 6.75 3h10.5a2.25 2.25 0 0 1 2.25 2.25v6.75a2.25 2.25 0 0 1-2.25 2.25H9.75L4.5 18Z',
   },
@@ -118,8 +114,7 @@ const statCards = computed<StatCard[]>(() => [
     label: '今日录制',
     value: hasSummary.value ? String(summary.value.sessions_today) : '--',
     sublines: hasSummary.value ? [formatBytes(summary.value.sessions_today_total_size)] : [],
-    gradient: 'from-teal-500 to-teal-600',
-    accent: 'text-teal-100',
+    tone: 'teal',
     iconPath: 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12',
     warning:
       hasSummary.value && summary.value.interrupted_today > 0
@@ -131,8 +126,7 @@ const statCards = computed<StatCard[]>(() => [
     label: '今日录制投稿',
     value: hasSummary.value ? String(summary.value.uploads_today) : '--',
     sublines: hasSummary.value ? [`失败 ${summary.value.uploads_failed_today}`] : [],
-    gradient: 'from-rose-500 to-rose-600',
-    accent: 'text-rose-100',
+    tone: 'rose',
     iconPath:
       'M6 12 3.269 3.126A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.876L6 12Zm0 0h7.5',
     to: '/upload-records',
@@ -143,8 +137,7 @@ const statCards = computed<StatCard[]>(() => [
     sublines: [
       `队列 ${dashboard.value?.replay?.queue_length ?? 0} / 处理中 ${dashboard.value?.replay?.processing ?? 0}/${dashboard.value?.replay?.concurrency ?? 1}`,
     ],
-    gradient: 'from-purple-500 to-purple-600',
-    accent: 'text-purple-100',
+    tone: 'purple',
     iconPath: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
     to: '/replay-toolbox',
   },
@@ -152,8 +145,7 @@ const statCards = computed<StatCard[]>(() => [
     label: '今日回放',
     value: hasSummary.value ? String(summary.value.replay_completed_today) : '--',
     sublines: hasSummary.value ? [formatBytes(summary.value.replay_completed_today_size)] : [],
-    gradient: 'from-emerald-500 to-emerald-600',
-    accent: 'text-emerald-100',
+    tone: 'emerald',
     iconPath:
       'M5.25 5.653c0-.856.917-1.402 1.669-.981l11.662 6.847a1.121 1.121 0 0 1 0 1.948l-11.662 6.847a1.121 1.121 0 0 1-1.669-.981V5.653Z',
     to: '/replay-toolbox',
@@ -264,57 +256,24 @@ onUnmounted(() => {
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <component
-        :is="card.to ? 'router-link' : 'div'"
+      <StatCard
         v-for="card in statCards"
         :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :sublines="card.sublines"
+        :warning="card.warning"
         :to="card.to"
-        class="rounded-xl bg-gradient-to-br text-white p-5 shadow-sm min-h-[136px] block"
-        :class="[
-          card.gradient,
-          card.to ? 'cursor-pointer hover:opacity-90 transition-opacity' : '',
-        ]"
-      >
-        <div v-if="loading" class="animate-pulse">
-          <div class="h-3 w-20 rounded bg-white/30 mb-4"></div>
-          <div class="h-8 w-14 rounded bg-white/30 mb-3"></div>
-          <div class="h-3 w-28 rounded bg-white/20"></div>
-        </div>
-
-        <div v-else class="flex items-start justify-between gap-4">
-          <div class="min-w-0">
-            <div class="text-sm font-medium" :class="card.accent">{{ card.label }}</div>
-            <div class="text-3xl font-bold mt-1">{{ card.value }}</div>
-            <div class="mt-1 space-y-0.5">
-              <div v-for="line in card.sublines" :key="line" class="text-xs text-white/80">
-                {{ line }}
-              </div>
-              <div v-if="card.warning" class="text-xs font-semibold text-yellow-100">
-                {{ card.warning }}
-              </div>
-            </div>
-          </div>
-          <div class="w-12 h-12 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-            <svg
-              class="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" :d="card.iconPath" />
-            </svg>
-          </div>
-        </div>
-      </component>
+        :tone="card.tone"
+        :icon-path="card.iconPath"
+        :loading="loading"
+      />
     </div>
 
     <!-- 活跃录制 + 近期活动 横向布局 -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
       <!-- 左侧：活跃录制 -->
-      <section
-        class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden xl:sticky xl:top-20 xl:self-start"
-      >
+      <section class="hairline-card rounded-xl overflow-hidden xl:sticky xl:top-20 xl:self-start">
         <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-gray-900">活跃录制进程</h2>
           <span v-if="!loading" class="text-xs text-gray-400">
@@ -344,7 +303,7 @@ onUnmounted(() => {
               <tr v-else-if="activeRecordings.length === 0">
                 <td colspan="5" class="px-4 py-8 text-center text-gray-400">
                   <svg
-                    class="w-8 h-8 mx-auto mb-2 text-gray-200"
+                    class="w-8 h-8 mx-auto mb-2 text-gray-500"
                     fill="none"
                     stroke="currentColor"
                     stroke-width="1.5"
@@ -357,7 +316,7 @@ onUnmounted(() => {
                     />
                   </svg>
                   <div class="text-xs text-gray-400">暂无活跃录制</div>
-                  <div v-if="hasPolling" class="text-xs text-gray-300 mt-1">
+                  <div v-if="hasPolling" class="text-xs text-gray-500 mt-1">
                     {{ polling.currently_live }}/{{ polling.total_polled }} 在线
                   </div>
                 </td>
@@ -414,7 +373,7 @@ onUnmounted(() => {
       />
     </div>
 
-    <section class="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4">
+    <section class="mt-6 hairline-card rounded-xl px-6 py-4">
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div class="flex items-center gap-2">
           <span

@@ -29,9 +29,9 @@ function close() {
 <template>
   <Teleport to="body">
     <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center">
-      <div class="fixed inset-0 bg-black/40" @click="close" />
+      <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" @click="close" />
       <div
-        class="relative bg-white rounded-xl shadow-xl w-full mx-4 max-h-[88vh] flex flex-col"
+        class="relative glass-panel rounded-2xl shadow-2xl w-full mx-4 max-h-[88vh] flex flex-col overflow-hidden"
         :class="maxWidth"
       >
         <div

@@ -42,7 +42,7 @@ function activityKey(item: ActivityItem) {
 </script>
 
 <template>
-  <section class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <section class="hairline-card rounded-xl overflow-hidden">
     <div class="px-6 py-3 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-900">近期活动</h2>
     </div>

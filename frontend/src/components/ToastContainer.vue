@@ -25,7 +25,7 @@ const typeIcons: Record<string, string> = {
         <div
           v-for="toast in toasts"
           :key="toast.id"
-          class="flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg cursor-pointer transition-opacity"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-xl shadow-2xl cursor-pointer transition-opacity"
           :class="typeStyles[toast.type]"
           @click="remove(toast.id)"
         >
