@@ -50,6 +50,8 @@
 
 ## 表结构
 
+> **软删除约定（v1.12.0）**：关键业务表统一使用 `deleted_at TIMESTAMP`（`NULL` = 未删除）——`rooms`、`upload_templates`、`upload_records`、`replay_upload_records`、`replay_records`、`transcode_records`、`recording_files`、`biliup_accounts`、`danmaku_capture_records`（`recording_sessions` / `managed_files` 此前已是同一惯例）。删除端点打标记而非物理删除，业务查询默认过滤 `deleted_at IS NULL`；除 `rooms.room_url` 外的唯一约束降级为**部分唯一索引**（`WHERE deleted_at IS NULL`），软删记录不占用唯一键，可重建同名/同路径记录。`rooms.room_url` 例外：`recording_sessions.room_url` 与 `recording_files.room_url` 两个外键引用它，PostgreSQL 要求引用列保持全表唯一约束，故保留全表唯一，「软删后重建」走复活语义（清 `deleted_at` + 应用新配置，保持房间 id 连续）。恢复方式为手动 SQL（`UPDATE … SET deleted_at = NULL`），无恢复 UI。例外：`recording_files` 的 `missing` 批量清理（`DELETE /api/recording_files/missing`）保留物理删除；磁盘文件删除（`delete_file=true`、日志、孤儿弹幕归档）与 DB 软删无关，保持现状；`admin_users` / `settings` / `replay_settings` / `file_delete_audit_logs` 为配置与审计表，不纳入。
+
 ### admin_users — 管理员账户
 
 后台登录的管理员账户。
@@ -68,24 +70,25 @@
 
 记录直播间状态和配置。
 
-| 字段                 | 类型          | 约束                              | 说明                                                                                            |
-| -------------------- | ------------- | --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| id                   | SERIAL        | PRIMARY KEY                       | 自增主键                                                                                        |
-| room_url             | VARCHAR(512)  | UNIQUE NOT NULL                   | 直播间地址（唯一标识）                                                                          |
-| room_name            | VARCHAR(255)  | DEFAULT ''                        | 直播间名称                                                                                      |
-| status               | VARCHAR(20)   | DEFAULT 'idle'                    | 状态：`idle` / `recording` / `paused`                                                           |
-| filename_template    | VARCHAR(255)  | DEFAULT '{room_name}\_{datetime}' | 文件名模板                                                                                      |
-| output_path          | VARCHAR(1024) | DEFAULT ''                        | 最新录制文件路径                                                                                |
-| ffmpeg_pid           | INTEGER       |                                   | ffmpeg 进程 ID（用于暂停/恢复）                                                                 |
-| segment_duration     | INTEGER       | DEFAULT 0                         | 分段录制时长（秒），0 表示不分段                                                                |
-| notification_enabled | BOOLEAN       | DEFAULT TRUE                      | 通知开关，关闭后不发送录制/投稿通知                                                             |
-| monitoring_enabled   | BOOLEAN       | DEFAULT TRUE                      | 监听开关，关闭后 API 触发时不启动 ffmpeg                                                        |
-| upload_template_id   | INTEGER       | FK → upload_templates(id)         | 关联的投稿模板                                                                                  |
-| polling_enabled      | BOOLEAN       | DEFAULT FALSE                     | 轮询开关，启用后定期检测开播状态                                                                |
-| polling_platform     | VARCHAR(50)   |                                   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`（已实现），`douyu`（不可用-平台流2分钟超时） |
-| polling_interval     | INTEGER       | DEFAULT 60                        | 轮询间隔（秒）                                                                                  |
-| created_at           | TIMESTAMP     | DEFAULT NOW()                     | 创建时间                                                                                        |
-| updated_at           | TIMESTAMP     | DEFAULT NOW()                     | 更新时间                                                                                        |
+| 字段                 | 类型          | 约束                              | 说明                                                                                                       |
+| -------------------- | ------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| id                   | SERIAL        | PRIMARY KEY                       | 自增主键                                                                                                   |
+| room_url             | VARCHAR(512)  | UNIQUE NOT NULL                   | 直播间地址（唯一标识）；v1.12.0 软删后仍占用该 URL（外键依赖要求全表唯一约束），重新添加同名房间走复活语义 |
+| room_name            | VARCHAR(255)  | DEFAULT ''                        | 直播间名称                                                                                                 |
+| status               | VARCHAR(20)   | DEFAULT 'idle'                    | 状态：`idle` / `recording` / `paused`                                                                      |
+| filename_template    | VARCHAR(255)  | DEFAULT '{room_name}\_{datetime}' | 文件名模板                                                                                                 |
+| output_path          | VARCHAR(1024) | DEFAULT ''                        | 最新录制文件路径                                                                                           |
+| ffmpeg_pid           | INTEGER       |                                   | ffmpeg 进程 ID（用于暂停/恢复）                                                                            |
+| segment_duration     | INTEGER       | DEFAULT 0                         | 分段录制时长（秒），0 表示不分段                                                                           |
+| notification_enabled | BOOLEAN       | DEFAULT TRUE                      | 通知开关，关闭后不发送录制/投稿通知                                                                        |
+| monitoring_enabled   | BOOLEAN       | DEFAULT TRUE                      | 监听开关，关闭后 API 触发时不启动 ffmpeg                                                                   |
+| upload_template_id   | INTEGER       | FK → upload_templates(id)         | 关联的投稿模板                                                                                             |
+| polling_enabled      | BOOLEAN       | DEFAULT FALSE                     | 轮询开关，启用后定期检测开播状态                                                                           |
+| polling_platform     | VARCHAR(50)   |                                   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`（已实现），`douyu`（不可用-平台流2分钟超时）            |
+| polling_interval     | INTEGER       | DEFAULT 60                        | 轮询间隔（秒）                                                                                             |
+| created_at           | TIMESTAMP     | DEFAULT NOW()                     | 创建时间                                                                                                   |
+| updated_at           | TIMESTAMP     | DEFAULT NOW()                     | 更新时间                                                                                                   |
+| deleted_at           | TIMESTAMP     |                                   | 软删除时间（v1.12.0）；删除房间时连带软删其会话                                                            |
 
 ### recording_sessions — 录制会话
 
@@ -118,29 +121,30 @@
 
 **会话详情、投稿操作、流媒体播放、文件统计均以此表作为数据源。** 记录磁盘上每个录制文件的完整生命周期，支持启动时扫描比对磁盘实际状态。
 
-| 字段              | 类型          | 约束                                           | 说明                               |
-| ----------------- | ------------- | ---------------------------------------------- | ---------------------------------- |
-| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                           |
-| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）          |
-| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                         |
-| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径                       |
-| file_name         | VARCHAR(512)  |                                                | 文件名                             |
-| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                   |
-| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                       |
-| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                           |
-| ended_at          | TIMESTAMP     |                                                | 结束时间                           |
-| completed_at      | TIMESTAMP     |                                                | 完成时间                           |
-| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                   |
-| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                           |
-| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                         |
-| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                     |
-| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                   |
-| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                       |
-| hls_status        | VARCHAR(20)   | NOT NULL DEFAULT 'pending'                     | HLS 生命周期状态，见下             |
-| hls_deleted_at    | TIMESTAMP     |                                                | HLS 因保留期或用户操作被删除的时间 |
-| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）               |
-| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）               |
-| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                           |
+| 字段              | 类型          | 约束                                           | 说明                                                                                            |
+| ----------------- | ------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| id                | SERIAL        | PRIMARY KEY                                    | 自增主键                                                                                        |
+| session_id        | INTEGER       | FK → recording_sessions(id) ON DELETE SET NULL | 所属会话（孤文件为 NULL）                                                                       |
+| room_url          | VARCHAR(512)  | FK → rooms(room_url) ON DELETE SET NULL        | 关联直播间                                                                                      |
+| file_path         | VARCHAR(1024) | NOT NULL UNIQUE                                | 文件绝对路径；v1.12.0 起唯一约束为部分唯一索引（仅约束未删除行），软删后同路径可重新入账        |
+| file_name         | VARCHAR(512)  |                                                | 文件名                                                                                          |
+| file_size         | BIGINT        | DEFAULT 0                                      | 文件大小（字节）                                                                                |
+| status            | VARCHAR(20)   | DEFAULT 'pending'                              | 状态流转见下                                                                                    |
+| started_at        | TIMESTAMP     | DEFAULT NOW()                                  | 写入时间                                                                                        |
+| ended_at          | TIMESTAMP     |                                                | 结束时间                                                                                        |
+| completed_at      | TIMESTAMP     |                                                | 完成时间                                                                                        |
+| checked_at        | TIMESTAMP     | DEFAULT NOW()                                  | 上次磁盘校验时间                                                                                |
+| segment_index     | INTEGER       | DEFAULT 0                                      | 分片序号                                                                                        |
+| duration_seconds  | INTEGER       | DEFAULT 0                                      | 时长（秒）                                                                                      |
+| is_hls_ready      | BOOLEAN       | DEFAULT FALSE                                  | HLS 是否已生成                                                                                  |
+| hls_playlist_path | VARCHAR(1024) | DEFAULT ''                                     | HLS 播放列表路径                                                                                |
+| hls_generated_at  | TIMESTAMP     |                                                | HLS 生成时间                                                                                    |
+| hls_status        | VARCHAR(20)   | NOT NULL DEFAULT 'pending'                     | HLS 生命周期状态，见下                                                                          |
+| hls_deleted_at    | TIMESTAMP     |                                                | HLS 因保留期或用户操作被删除的时间                                                              |
+| segment_start_ms  | INTEGER       | DEFAULT 0                                      | 分段起始时间（毫秒）                                                                            |
+| segment_end_ms    | INTEGER       | DEFAULT 0                                      | 分段结束时间（毫秒）                                                                            |
+| created_at        | TIMESTAMP     | DEFAULT NOW()                                  | 创建时间                                                                                        |
+| deleted_at        | TIMESTAMP     |                                                | 软删除时间（v1.12.0）；`DELETE /api/recordings/:id` 打标记，`delete_file=true` 仍物理删本地文件 |
 
 **状态流转：**
 
@@ -239,6 +243,7 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 | season_attempts                        | SMALLINT     | NOT NULL DEFAULT 0            | 加入合集的累计尝试次数（含自动退避重试）                                                          |
 | season_added_at                        | TIMESTAMP    |                               | 加入成功时间                                                                                      |
 | started_at / completed_at / created_at | TIMESTAMP    |                               |                                                                                                   |
+| deleted_at                             | TIMESTAMP    |                               | 软删除时间（v1.12.0）                                                                             |
 
 > **v1.11.0 变更**：`season_*` 列描述的是「投稿成功后追加到合集小节」这一步的结果，与投稿本身的 `status` **完全解耦** —— 加入合集失败不会把 `status` 从 `success` 改回 `failed`，也不影响 `after_upload` 的后处理。
 > `season_status` 同时充当幂等锁：占位用 `UPDATE ... WHERE id=$1 AND season_status IN ('none','failed') RETURNING id`，0 行即放弃，自动与手动重试共用该入口。
@@ -266,17 +271,18 @@ v1.11.0 新增。把散落在模板里的 `cookies_path` 字符串变成可校�
 
 每次转码任务的执行记录，记录 FLV 到 MP4 的转换。
 
-| 字段            | 类型          | 约束             | 说明                                       |
-| --------------- | ------------- | ---------------- | ------------------------------------------ |
-| id              | SERIAL        | PRIMARY KEY      |                                            |
-| session_id      | INTEGER       |                  | 关联的录制会话 ID                          |
-| original_path   | VARCHAR(1024) | NOT NULL UNIQUE  | 原文件路径（FLV）                          |
-| transcoded_path | VARCHAR(1024) |                  | 转码后文件路径（MP4）                      |
-| status          | VARCHAR(20)   | DEFAULT 'queued' | `queued` `processing` `completed` `failed` |
-| enqueued_at     | TIMESTAMP     | DEFAULT NOW()    | 入队时间                                   |
-| started_at      | TIMESTAMP     |                  | 开始转码时间                               |
-| completed_at    | TIMESTAMP     |                  | 完成转码时间                               |
-| created_at      | TIMESTAMP     | DEFAULT NOW()    |                                            |
+| 字段            | 类型          | 约束             | 说明                                                                                  |
+| --------------- | ------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| id              | SERIAL        | PRIMARY KEY      |                                                                                       |
+| session_id      | INTEGER       |                  | 关联的录制会话 ID                                                                     |
+| original_path   | VARCHAR(1024) | NOT NULL UNIQUE  | 原文件路径（FLV）；v1.12.0 起为部分唯一索引（仅约束未删除行），软删后可同路径重新入队 |
+| transcoded_path | VARCHAR(1024) |                  | 转码后文件路径（MP4）                                                                 |
+| status          | VARCHAR(20)   | DEFAULT 'queued' | `queued` `processing` `completed` `failed`                                            |
+| enqueued_at     | TIMESTAMP     | DEFAULT NOW()    | 入队时间                                                                              |
+| started_at      | TIMESTAMP     |                  | 开始转码时间                                                                          |
+| completed_at    | TIMESTAMP     |                  | 完成转码时间                                                                          |
+| created_at      | TIMESTAMP     | DEFAULT NOW()    |                                                                                       |
+| deleted_at      | TIMESTAMP     |                  | 软删除时间（v1.12.0）                                                                 |
 
 ---
 
@@ -387,6 +393,7 @@ v1.9.0 起该表同时承载**孤儿弹幕**记录（ADR-012）：无活跃采�
 | ended_at    | TIMESTAMP     |                     | 采集结束时间；孤儿记录为该批 `ts_abs_ms` 的最大值                                                                                                 |
 | error       | TEXT          | DEFAULT ''          | 失败时的错误信息                                                                                                                                  |
 | created_at  | TIMESTAMP     | DEFAULT NOW()       | 记录创建时间                                                                                                                                      |
+| deleted_at  | TIMESTAMP     |                     | 软删除时间（v1.12.0）；查询默认过滤，无删除端点（v1.12.0 仅统一列与过滤口径）                                                                     |
 
 **写入时机：**
 
@@ -429,7 +436,7 @@ VIDEO_DOWNLOAD_DIR/danmaku/
 
 ### replay_records — 回放记录
 
-记录快手主播回放的抓取、下载、剪切、修复、投稿和备份状态。`principal_id + replay_id` 在 `replay_id` 非空时保持唯一。
+记录快手主播回放的抓取、下载、剪切、修复、投稿和备份状态。`principal_id + replay_id` 在 `replay_id` 非空时保持唯一（v1.12.0 起唯一索引追加 `deleted_at IS NULL`，仅约束未删除行）。
 
 | 字段             | 类型          | 约束          | 说明                                                                                                                               |
 | ---------------- | ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -458,6 +465,7 @@ VIDEO_DOWNLOAD_DIR/danmaku/
 | error_message    | TEXT          |               | 失败原因                                                                                                                           |
 | created_at       | TIMESTAMP     | DEFAULT NOW() | 创建时间                                                                                                                           |
 | updated_at       | TIMESTAMP     | DEFAULT NOW() | 更新时间                                                                                                                           |
+| deleted_at       | TIMESTAMP     |               | 软删除时间（v1.12.0）；查询默认过滤，无删除端点                                                                                    |
 
 **状态流转：**
 
@@ -523,8 +531,10 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 | started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
 | completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
 | created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
+| deleted_at       | TIMESTAMP    |                                              | 软删除时间（v1.12.0）                          |
 
 > **v1.11.1 变更**：回放投稿接入合集链路，`season_*` 五列与 `upload_records` 同名同语义同约束，由 `SeasonService` 按来源表复用同一套编排。两表的 `id` 各自独立自增，**跨表同号是不同稿件**，因此来源（`recording` / `replay`）必须一路透传到终态写入；SQL 里的表名取自 `SeasonService` 内部的常量白名单，永不来自请求入参。
+> **v1.12.0 变更**：`idx_replay_upload_one_uploading` 部分唯一索引追加 `deleted_at IS NULL`——软删的 `uploading` 记录不再永久阻断同一回放再次投稿。
 
 ---
 

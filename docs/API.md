@@ -313,6 +313,8 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 删除直播间（仅限 `idle` 状态）。删除成功后同步停止该房间的内存轮询定时器（v1.10.2 起）——修复前删除带轮询的房间会泄漏定时器，房间删除后轮询器仍会检测开播并自动新建房间启动录制。
 
+**v1.12.0 起为软删除**：房间行打 `deleted_at` 标记而非物理删除，其名下录制会话连带软删；业务查询（列表/轮询/统计）默认不再出现该房间。恢复有两条路：手动 SQL（`UPDATE rooms SET deleted_at = NULL WHERE id = $1`，会话同理），或经 `POST /api/rooms` 重新添加同一 `room_url`——走复活语义（清 `deleted_at` + 应用新配置，保持房间 id 连续；因外键依赖，`room_url` 的全表唯一约束保留，软删行仍占用该 URL）。重复 DELETE 同一房间返回 404。
+
 ---
 
 ## 录制控制
@@ -606,7 +608,7 @@ curl http://127.0.0.1:1123/api/sessions/25
 
 ### DELETE /api/recordings/:id
 
-删除录制文件记录。
+删除录制文件记录。**v1.12.0 起数据库记录为软删除**（打 `deleted_at` 标记，可从业务面恢复）；`delete_file=true` 时本地文件仍物理删除（磁盘空间诉求），两者语义独立。
 
 **参数（Query）：**
 
@@ -936,7 +938,7 @@ curl -X POST http://127.0.0.1:1123/api/upload_templates \
 
 ### DELETE /api/upload_templates/:id
 
-删除投稿模板。
+删除投稿模板。**v1.12.0 起为软删除**（打 `deleted_at` 标记）：模板从列表与投稿选择中消失，重复删除仍返回 ok；被引用的 `season_*` 配置随行保留，可手动 SQL 恢复。
 
 ---
 
@@ -1042,7 +1044,7 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 ### DELETE /api/replay_upload_records/:id
 
-删除**回放投稿**记录（只动 `replay_upload_records` 单表）。目标表里查无此 id 时返回 404。
+删除**回放投稿**记录（只动 `replay_upload_records` 单表）。目标表里查无此 id 时返回 404。**v1.12.0 起为软删除**（打 `deleted_at` 标记，可手动 SQL 恢复）；重复删除同一 id 返回 404。
 
 ---
 
@@ -1062,16 +1064,16 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **自动加入触发条件**（全部满足才会执行）：环境变量 `SEASON_AUTO_ADD_ENABLED` 不为 `false`、模板 `season_auto_add=true` 且选了 `section_id`、投稿成功并拿到 `bv_id`。常规投稿与回放投稿共用这套编排（v1.11.1 起回放也自动加入），执行结果分别写在 `upload_records.season_status` 与 `replay_upload_records.season_status`：`none` / `pending` / `added` / `failed`。
 
-| 方法   | 路径                                        | 说明                                        |
-| ------ | ------------------------------------------- | ------------------------------------------- |
-| GET    | /api/upload_templates/:id/seasons           | 按模板 cookie 拉合集 + 小节列表（模板级联） |
-| POST   | /api/upload_records/:id/season/retry        | 手动重试加入合集（录制投稿）                |
-| POST   | /api/replay_upload_records/:id/season/retry | 手动重试加入合集（回放投稿）                |
-| GET    | /api/biliup_accounts                        | biliup 账号登记列表                         |
-| POST   | /api/biliup_accounts                        | 新增账号登记（只读校验 cookie 文件）        |
-| GET    | /api/biliup_accounts/:id                    | 账号详情，顺带刷新线上登录态                |
-| DELETE | /api/biliup_accounts/:id                    | 删除登记（cookie 文件保留）                 |
-| GET    | /api/biliup_accounts/:id/seasons            | 按账号 cookie 拉合集 + 小节列表             |
+| 方法   | 路径                                        | 说明                                            |
+| ------ | ------------------------------------------- | ----------------------------------------------- |
+| GET    | /api/upload_templates/:id/seasons           | 按模板 cookie 拉合集 + 小节列表（模板级联）     |
+| POST   | /api/upload_records/:id/season/retry        | 手动重试加入合集（录制投稿）                    |
+| POST   | /api/replay_upload_records/:id/season/retry | 手动重试加入合集（回放投稿）                    |
+| GET    | /api/biliup_accounts                        | biliup 账号登记列表                             |
+| POST   | /api/biliup_accounts                        | 新增账号登记（只读校验 cookie 文件）            |
+| GET    | /api/biliup_accounts/:id                    | 账号详情，顺带刷新线上登录态                    |
+| DELETE | /api/biliup_accounts/:id                    | 删除登记（cookie 文件保留；v1.12.0 起为软删除） |
+| GET    | /api/biliup_accounts/:id/seasons            | 按账号 cookie 拉合集 + 小节列表                 |
 
 `?force=1` 跳过合集缓存重新拉取。
 
@@ -1168,7 +1170,7 @@ curl http://127.0.0.1:1123/api/transcode_records?status=completed&page=2&limit=2
 
 ### DELETE /api/transcode_records/:id
 
-删除转码记录。
+删除转码记录。**v1.12.0 起为软删除**（打 `deleted_at` 标记）：记录从列表消失但保留供排查；同 `original_path` 的文件可重新入队转码（软删行不占用唯一键），重复删除同一 id 返回 404。
 
 **示例：**
 
