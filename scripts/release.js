@@ -142,6 +142,11 @@ function runCommand(cmd) {
   }
 }
 
+function hasRemote(name) {
+  const remotes = execSync('git remote', { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  return remotes.includes(name);
+}
+
 function checkGitStatus() {
   const status = execSync('git status --porcelain', { encoding: 'utf8' });
   if (status.trim()) {
@@ -269,12 +274,33 @@ async function main() {
       console.log('✅ dev 已合并到 main 并推送');
     }
 
+    // CNB 双推：tag 触发 CNB 镜像构建，分支同步 CNB 网页仓库（缺一都会漏发版）
+    if (hasRemote('cnb')) {
+      console.log('\n--- Pushing to CNB ---');
+      runCommand(`git push cnb v${newVersion}`);
+      runCommand(`git push cnb main dev`);
+      if (deletedTags.length) {
+        runCommand(`git push cnb --delete ${deletedTags.join(' ')}`);
+      }
+    } else {
+      console.warn('\n⚠️ 未检测到 cnb remote，跳过 CNB 推送（tag 将无法触发镜像构建）。');
+    }
+
     console.log(`\n=== ✅ Auto Release v${newVersion} complete! ===`);
   } else {
     console.log('\n=== ✅ Release complete! ===');
     console.log('Next steps:');
     console.log(`  git push origin $(git rev-parse --abbrev-ref HEAD)`);
     console.log(`  git push origin v${newVersion}`);
+    if (hasRemote('cnb')) {
+      console.log(`  git push cnb v${newVersion}`);
+      console.log(`  git push cnb main dev`);
+      if (deletedTags.length) {
+        console.log(`  git push cnb --delete ${deletedTags.join(' ')}`);
+      }
+    } else {
+      console.log('  (未检测到 cnb remote，跳过 CNB 推送)');
+    }
     if (deletedTags.length) {
       console.log(`  git push origin --delete ${deletedTags.join(' ')}`);
     }
