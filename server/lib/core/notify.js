@@ -123,7 +123,10 @@ async function shouldNotify(roomUrl) {
   if (!roomUrl) return true;
   try {
     const pool = require('../../db/index');
-    const r = await pool.query('SELECT notification_enabled FROM rooms WHERE room_url = $1', [roomUrl]);
+    // v1.12.0：软删房间不再发通知
+    const r = await pool.query('SELECT notification_enabled FROM rooms WHERE room_url = $1 AND deleted_at IS NULL', [
+      roomUrl,
+    ]);
     return r.rows.length === 0 || r.rows[0].notification_enabled !== false;
   } catch (_) {
     return true;

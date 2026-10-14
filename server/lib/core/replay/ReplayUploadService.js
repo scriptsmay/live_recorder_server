@@ -85,6 +85,7 @@ function collectAllReplayFiles(record) {
 }
 
 async function getReplayRecordForUpload(replayRecordId) {
+  // v1.12.0：软删回放记录不可投稿；JOIN 的房间同样过滤（房间名仅作展示）
   const result = await pool.query(
     `SELECT rr.*,
             NULLIF(rs.value, '') AS config_principal_name,
@@ -96,7 +97,8 @@ async function getReplayRecordForUpload(replayRecordId) {
      LEFT JOIN rooms
        ON rooms.room_url ILIKE '%' || rr.principal_id || '%'
       AND rooms.room_url ILIKE '%live.kuaishou.com%'
-     WHERE rr.id = $1
+      AND rooms.deleted_at IS NULL
+     WHERE rr.id = $1 AND rr.deleted_at IS NULL
      ORDER BY rooms.id DESC
      LIMIT 1`,
     [replayRecordId]
@@ -106,11 +108,13 @@ async function getReplayRecordForUpload(replayRecordId) {
 
 class ReplayUploadService {
   static async getBlockingUploadRecord(replayRecordId) {
+    // v1.12.0：软删投稿记录不构成阻塞
     const result = await pool.query(
       `SELECT id, status, bv_id
        FROM replay_upload_records
        WHERE replay_record_id = $1
          AND status IN ('uploading', 'success')
+         AND deleted_at IS NULL
        ORDER BY CASE WHEN status = 'uploading' THEN 0 ELSE 1 END, id DESC
        LIMIT 1`,
       [replayRecordId]
@@ -133,7 +137,10 @@ class ReplayUploadService {
       return { error: true, message: '未配置回放投稿模板' };
     }
 
-    const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [templateId]);
+    // v1.12.0：软删模板视为未配置（预览与执行同一口径）
+    const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1 AND deleted_at IS NULL', [
+      templateId,
+    ]);
     const tmpl = tmplResult.rows[0];
     if (!tmpl) {
       return { error: true, message: '回放投稿模板不存在或已删除' };
@@ -190,7 +197,10 @@ class ReplayUploadService {
       return { error: true, message: '未配置回放投稿模板' };
     }
 
-    const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [templateId]);
+    // v1.12.0：软删模板视为未配置（预览与执行同一口径）
+    const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1 AND deleted_at IS NULL', [
+      templateId,
+    ]);
     const tmpl = tmplResult.rows[0];
     if (!tmpl) {
       return { error: true, message: '回放投稿模板不存在或已删除' };

@@ -80,7 +80,8 @@ router.get('/danmaku_capture_records', async (req, res) => {
     const { session_id, status } = req.query;
     let query = 'SELECT * FROM danmaku_capture_records';
     const params = [];
-    const conditions = [];
+    // v1.12.0：弹幕采集记录列表过滤软删行
+    const conditions = ['deleted_at IS NULL'];
 
     if (session_id) {
       params.push(session_id);
@@ -207,7 +208,7 @@ router.get('/danmaku/sessions/:id/raw', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'SELECT raw_path FROM danmaku_capture_records WHERE session_id = $1 ORDER BY id DESC LIMIT 1',
+      'SELECT raw_path FROM danmaku_capture_records WHERE session_id = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
       [parseInt(id, 10)]
     );
 

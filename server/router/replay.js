@@ -205,7 +205,11 @@ router.get('/replay_upload_records', async (req, res) => {
 
 router.delete('/replay_upload_records/:id', async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM replay_upload_records WHERE id = $1 RETURNING id', [req.params.id]);
+    // v1.12.0：物理删除改软删除；重复删除返回 404（记录已不存在于未删除集合）
+    const result = await pool.query(
+      'UPDATE replay_upload_records SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id',
+      [req.params.id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '投稿记录不存在' });
     }

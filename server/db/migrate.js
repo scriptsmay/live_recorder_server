@@ -211,8 +211,8 @@ async function runMigration() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS biliup_accounts (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(64) NOT NULL UNIQUE,
-        cookies_path VARCHAR(1024) NOT NULL UNIQUE,
+        name VARCHAR(64) NOT NULL,
+        cookies_path VARCHAR(1024) NOT NULL,
         uid BIGINT,
         nickname VARCHAR(128),
         login_status VARCHAR(16) NOT NULL DEFAULT 'unknown',
@@ -387,13 +387,7 @@ async function runMigration() {
     // recordings 表已废弃，数据已迁移至 recording_files，清理残留
     await client.query(`DROP TABLE IF EXISTS recordings`);
 
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recording_files_file_path_key') THEN
-          ALTER TABLE recording_files ADD CONSTRAINT recording_files_file_path_key UNIQUE (file_path);
-        END IF;
-      END $$;
-    `);
+    // file_path 唯一约束由文末 v1.12.0 软删除迁移段接管（部分唯一索引，仅约束未删除行）
 
     // ========== v1.8.0：弹幕压制遗留结构清理 ==========
     // 弹幕压制已于 v1.7.0 迁出至 danmaku-tool，以下列/表不再被任何代码写入或读取。
@@ -431,13 +425,7 @@ async function runMigration() {
       )
     `);
 
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transcode_records_original_path_key') THEN
-          ALTER TABLE transcode_records ADD CONSTRAINT transcode_records_original_path_key UNIQUE (original_path);
-        END IF;
-      END $$;
-    `);
+    // original_path 唯一约束由文末 v1.12.0 软删除迁移段接管（部分唯一索引，仅约束未删除行）
 
     // ========== 弹幕相关表 ==========
 
@@ -653,6 +641,75 @@ async function runMigration() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_file_delete_audit_logs_created_at
         ON file_delete_audit_logs(created_at DESC);
+    `);
+
+    // ========== v1.12.0：关键业务表软删除（deleted_at）==========
+    // 删除语义从物理 DELETE 改为打标记，业务查询默认过滤 deleted_at IS NULL；
+    // 唯一约束降级为部分唯一索引，软删记录不再占用唯一键，可重建同名/同路径记录。
+    // 例外：rooms.room_url 因两张表的外键依赖必须保留全表唯一约束（见下方注释），
+    // 「软删后重建」走复活语义。恢复方式：手动 UPDATE ... SET deleted_at = NULL（不提供恢复 UI）。
+    // recording_sessions / managed_files 此前已是同一惯例，不重复迁移；
+    // admin_users / settings / replay_settings / file_delete_audit_logs 为配置与审计表，不纳入。
+    // recording_files 的 missing 批量清理保留物理删除（看门狗僵尸行，见删除端点说明）。
+
+    const softDeleteTables = [
+      'rooms',
+      'upload_templates',
+      'upload_records',
+      'replay_upload_records',
+      'replay_records',
+      'transcode_records',
+      'recording_files',
+      'biliup_accounts',
+      'danmaku_capture_records',
+    ];
+    for (const table of softDeleteTables) {
+      await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`);
+    }
+
+    // 存量库归一化：DROP 旧全表唯一约束（新建库的 CREATE TABLE 已不含 inline UNIQUE）
+    // ⚠️ rooms.room_url 例外：recording_sessions.room_url 与 recording_files.room_url 两个外键
+    // 都引用它，PostgreSQL 要求外键引用列保持全表唯一约束，部分唯一索引不满足——
+    // 故 rooms 保留 rooms_room_url_key，「软删后重建」走复活语义（清 deleted_at + 应用新配置），
+    // 由 upsertRoom / POST /rooms / getOrCreateRoom 的 revive 分支实现。
+    await client.query(`ALTER TABLE biliup_accounts DROP CONSTRAINT IF EXISTS biliup_accounts_name_key`);
+    await client.query(`ALTER TABLE biliup_accounts DROP CONSTRAINT IF EXISTS biliup_accounts_cookies_path_key`);
+    await client.query(`ALTER TABLE recording_files DROP CONSTRAINT IF EXISTS recording_files_file_path_key`);
+    await client.query(`ALTER TABLE transcode_records DROP CONSTRAINT IF EXISTS transcode_records_original_path_key`);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_biliup_accounts_name_active
+        ON biliup_accounts(name) WHERE deleted_at IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_biliup_accounts_cookies_path_active
+        ON biliup_accounts(cookies_path) WHERE deleted_at IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_recording_files_file_path_active
+        ON recording_files(file_path) WHERE deleted_at IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_transcode_records_original_path_active
+        ON transcode_records(original_path) WHERE deleted_at IS NULL
+    `);
+
+    // replay_records(principal_id, replay_id)：追加 deleted_at IS NULL。
+    // 注意：ON CONFLICT 推断要求子句谓词与索引谓词逐字一致，写入侧已同步。
+    await client.query(`DROP INDEX IF EXISTS idx_replay_records_principal_replay_id`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_replay_records_principal_replay_id
+        ON replay_records(principal_id, replay_id)
+        WHERE replay_id IS NOT NULL AND replay_id <> '' AND deleted_at IS NULL
+    `);
+
+    // 「同一回放仅一条 uploading」：同样排除软删行，
+    // 否则软删的 uploading 记录会永久阻断同回放再次投稿。
+    await client.query(`DROP INDEX IF EXISTS idx_replay_upload_one_uploading`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_replay_upload_one_uploading
+        ON replay_upload_records(replay_record_id)
+        WHERE replay_record_id IS NOT NULL AND status = 'uploading' AND deleted_at IS NULL
     `);
 
     await client.query('COMMIT');

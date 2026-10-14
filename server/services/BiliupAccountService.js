@@ -30,8 +30,11 @@ function fail(http, message) {
 }
 
 class BiliupAccountService {
+  // v1.12.0：账号登记改软删除，所有查询默认过滤软删行
   static async list() {
-    const result = await pool.query(`SELECT ${SELECT_COLUMNS} FROM biliup_accounts ORDER BY id ASC`);
+    const result = await pool.query(
+      `SELECT ${SELECT_COLUMNS} FROM biliup_accounts WHERE deleted_at IS NULL ORDER BY id ASC`
+    );
     return { ok: true, http: 200, data: result.rows };
   }
 
@@ -43,7 +46,10 @@ class BiliupAccountService {
     const accountId = toPositiveInt(id);
     if (accountId === null) return fail(400, '账号 ID 非法');
 
-    const found = await pool.query(`SELECT ${SELECT_COLUMNS} FROM biliup_accounts WHERE id = $1`, [accountId]);
+    const found = await pool.query(
+      `SELECT ${SELECT_COLUMNS} FROM biliup_accounts WHERE id = $1 AND deleted_at IS NULL`,
+      [accountId]
+    );
     if (!found.rows.length) return fail(404, '账号不存在');
 
     const row = found.rows[0];
@@ -109,18 +115,23 @@ class BiliupAccountService {
 
   /**
    * 删除：仅删登记记录，cookie 文件默认保留；被投稿模板引用时拒绝。
+   * v1.12.0：物理删除改软删除（UPDATE deleted_at），引用检查同样只算未删除模板——
+   * 软删账号可被同名/同路径新登记顶替（部分唯一索引不约束软删行）。
    * @param {number|string} id - 账号 ID
    */
   static async remove(id) {
     const accountId = toPositiveInt(id);
     if (accountId === null) return fail(400, '账号 ID 非法');
 
-    const found = await pool.query('SELECT cookies_path FROM biliup_accounts WHERE id = $1', [accountId]);
+    const found = await pool.query('SELECT cookies_path FROM biliup_accounts WHERE id = $1 AND deleted_at IS NULL', [
+      accountId,
+    ]);
     if (!found.rows.length) return fail(404, '账号不存在');
 
-    const refs = await pool.query('SELECT COUNT(*)::int AS count FROM upload_templates WHERE cookies_path = $1', [
-      found.rows[0].cookies_path,
-    ]);
+    const refs = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM upload_templates WHERE cookies_path = $1 AND deleted_at IS NULL',
+      [found.rows[0].cookies_path]
+    );
     const count = Number(refs.rows[0] ? refs.rows[0].count : 0) || 0;
     if (count > 0) {
       return {
@@ -131,10 +142,13 @@ class BiliupAccountService {
       };
     }
 
-    const deleted = await pool.query('DELETE FROM biliup_accounts WHERE id = $1 RETURNING id', [accountId]);
+    const deleted = await pool.query(
+      'UPDATE biliup_accounts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id',
+      [accountId]
+    );
     if (!deleted.rows.length) return fail(404, '账号不存在');
 
-    console.log(`${LOG} 账号 ${accountId} 登记已删除，cookie 文件保留`);
+    console.log(`${LOG} 账号 ${accountId} 登记已删除（软删除），cookie 文件保留`);
     return { ok: true, http: 200, message: '账号登记已删除，cookie 文件保留' };
   }
 
@@ -147,7 +161,9 @@ class BiliupAccountService {
     const accountId = toPositiveInt(id);
     if (accountId === null) return fail(400, '账号 ID 非法');
 
-    const found = await pool.query('SELECT cookies_path FROM biliup_accounts WHERE id = $1', [accountId]);
+    const found = await pool.query('SELECT cookies_path FROM biliup_accounts WHERE id = $1 AND deleted_at IS NULL', [
+      accountId,
+    ]);
     if (!found.rows.length) return fail(404, '账号不存在');
 
     const payload = await SeasonService.listSeasonsByCookies(found.rows[0].cookies_path, options);

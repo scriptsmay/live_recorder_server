@@ -10,7 +10,7 @@ class DataService {
   }
 
   static async getTemplates() {
-    const result = await pool.query('SELECT * FROM upload_templates ORDER BY id');
+    const result = await pool.query('SELECT * FROM upload_templates WHERE deleted_at IS NULL ORDER BY id');
     return result.rows;
   }
 
@@ -23,19 +23,18 @@ class DataService {
       conditions.push(`r.status = $${params.length + 1}`);
       params.push(status);
     }
+    // v1.12.0：软删房间不出现在列表；两条查询共用同一 where，计数查询补别名 r
+    conditions.push('r.deleted_at IS NULL');
 
-    let sql = `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id`;
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    let sql = `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id AND t.deleted_at IS NULL`;
+    sql += ' WHERE ' + conditions.join(' AND ');
     sql += ` ORDER BY r.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit, 10), (parseInt(page, 10) - 1) * parseInt(limit, 10));
 
     const result = await pool.query(sql, params);
 
     const countParams = params.slice(0, params.length - 2);
-    const countResult = await pool.query(
-      'SELECT COUNT(*) FROM rooms' + (conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''),
-      countParams
-    );
+    const countResult = await pool.query('SELECT COUNT(*) FROM rooms r WHERE ' + conditions.join(' AND '), countParams);
 
     const rows = await this._enrichWithLiveStatus(result.rows);
 
@@ -47,7 +46,7 @@ class DataService {
 
   static async getRoomById(id) {
     const result = await pool.query(
-      `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id WHERE r.id = $1`,
+      `SELECT r.*, t.name as upload_template_name FROM rooms r LEFT JOIN upload_templates t ON r.upload_template_id = t.id AND t.deleted_at IS NULL WHERE r.id = $1 AND r.deleted_at IS NULL`,
       [id]
     );
     if (!result.rows[0]) return null;
@@ -89,12 +88,14 @@ class DataService {
   }
 
   static async getRoomByUrl(roomUrl) {
-    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
+    const result = await pool.query('SELECT * FROM rooms WHERE room_url = $1 AND deleted_at IS NULL', [roomUrl]);
     return result.rows[0] || null;
   }
 
   static async getRoomList() {
-    const result = await pool.query('SELECT id, room_url, room_name FROM rooms ORDER BY id DESC');
+    const result = await pool.query(
+      'SELECT id, room_url, room_name FROM rooms WHERE deleted_at IS NULL ORDER BY id DESC'
+    );
     return result.rows;
   }
 
@@ -116,11 +117,12 @@ class DataService {
   }
 
   static async getRoomTotal() {
-    const result = await pool.query('SELECT COUNT(*) FROM rooms');
+    const result = await pool.query('SELECT COUNT(*) FROM rooms WHERE deleted_at IS NULL');
     return parseInt(result.rows[0]?.count || '0', 10);
   }
 
   static async getDashboardSummary(todayStart) {
+    // v1.12.0：统计口径同步过滤软删行（recording_sessions 为既有惯例，此处不动）
     const [sessionStats, uploadStats, orphanedStats, replayStats] = await Promise.all([
       pool.query(
         `SELECT
@@ -136,16 +138,19 @@ class DataService {
            COUNT(*) FILTER (WHERE status = 'success') AS uploads_today,
            COUNT(*) FILTER (WHERE status = 'failed') AS uploads_failed_today
          FROM upload_records
-         WHERE created_at >= $1`,
+         WHERE created_at >= $1 AND deleted_at IS NULL`,
         [todayStart]
       ),
-      pool.query(`SELECT COUNT(*) AS orphaned_files FROM recording_files WHERE status = 'orphaned'`),
+      pool.query(
+        `SELECT COUNT(*) AS orphaned_files FROM recording_files WHERE status = 'orphaned' AND deleted_at IS NULL`
+      ),
       pool.query(
         `SELECT
            COUNT(*) FILTER (WHERE status IN ('pending', 'extracted')) AS replay_pending,
            COUNT(*) FILTER (WHERE status = 'completed' AND completed_at >= $1) AS replay_completed_today,
            COALESCE(SUM(file_size) FILTER (WHERE status = 'completed' AND completed_at >= $1), 0) AS replay_completed_today_size
-         FROM replay_records`,
+         FROM replay_records
+         WHERE deleted_at IS NULL`,
         [todayStart]
       ),
     ]);
@@ -169,6 +174,8 @@ class DataService {
   }
 
   static async getRecentActivity(limit = 10) {
+    // v1.12.0：动态流过滤软删行（upload_records / transcode_records / replay_records /
+    // transcode 分支 JOIN 的 recording_files）；recording_sessions 两分支为既有口径不动
     const result = await pool.query(
       `SELECT type, title, detail, timestamp, link
        FROM (
@@ -203,6 +210,7 @@ class DataService {
                 '/upload-records' AS link
          FROM upload_records ur
          WHERE ur.status IN ('success', 'failed') AND ur.completed_at IS NOT NULL
+           AND ur.deleted_at IS NULL
 
          UNION ALL
 
@@ -217,8 +225,9 @@ class DataService {
                 tr.completed_at AS timestamp,
                 '/transcode' AS link
          FROM transcode_records tr
-        LEFT JOIN recording_files rf ON rf.file_path = tr.original_path
+        LEFT JOIN recording_files rf ON rf.file_path = tr.original_path AND rf.deleted_at IS NULL
         WHERE tr.status IN ('completed', 'failed') AND tr.completed_at IS NOT NULL
+          AND tr.deleted_at IS NULL
         UNION ALL
         SELECT 'replay_completed' AS type,
                COALESCE(NULLIF(rs.value, ''), NULLIF(rr.principal_name, ''), rr.principal_id, 'unknown') || ' 回放完成' AS title,
@@ -232,6 +241,7 @@ class DataService {
           ON rs.principal_id = rr.principal_id
          AND rs.key = 'principal_name'
         WHERE rr.status = 'completed' AND rr.completed_at IS NOT NULL
+          AND rr.deleted_at IS NULL
         UNION ALL
         SELECT 'replay_failed' AS type,
                COALESCE(NULLIF(rs.value, ''), NULLIF(rr.principal_name, ''), rr.principal_id, 'unknown') || ' 回放失败' AS title,
@@ -243,6 +253,7 @@ class DataService {
           ON rs.principal_id = rr.principal_id
          AND rs.key = 'principal_name'
         WHERE rr.status = 'failed'
+          AND rr.deleted_at IS NULL
       ) activities
         ORDER BY timestamp DESC
         LIMIT $1`,
@@ -303,7 +314,8 @@ class DataService {
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     // danmaku_capture_records 使用子查询取每个 session 最新的一条，避免一对多 JOIN 导致行扇出
-    let sql = `SELECT s.*, rm.id as room_id, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.error as danmaku_error FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id${where} ORDER BY s.id DESC`;
+    // v1.12.0：子查询过滤软删采集记录
+    let sql = `SELECT s.*, rm.id as room_id, rm.room_name, dcr.status as danmaku_status, dcr.event_count as danmaku_event_count, dcr.raw_path as danmaku_raw_path, dcr.error as danmaku_error FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url LEFT JOIN (SELECT DISTINCT ON (session_id) * FROM danmaku_capture_records WHERE deleted_at IS NULL ORDER BY session_id, id DESC) dcr ON s.id = dcr.session_id${where} ORDER BY s.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
@@ -325,8 +337,9 @@ class DataService {
     const rows = result.rows;
     if (rows.length > 0) {
       const sessionIds = rows.map((r) => r.id);
+      // v1.12.0：软删投稿记录不进会话的关联列表
       const uploadResult = await pool.query(
-        `SELECT id, session_id, status, bv_id FROM upload_records WHERE session_id = ANY($1) ORDER BY id DESC`,
+        `SELECT id, session_id, status, bv_id FROM upload_records WHERE session_id = ANY($1) AND deleted_at IS NULL ORDER BY id DESC`,
         [sessionIds]
       );
       // 按 session_id 分组
@@ -359,10 +372,14 @@ class DataService {
 
     const [sessionRes, captureRes, filesRes, roomRes] = await Promise.all([
       pool.query('SELECT * FROM recording_sessions WHERE id = $1', [sid]),
-      pool.query('SELECT * FROM danmaku_capture_records WHERE session_id = $1 ORDER BY id DESC LIMIT 1', [sid]),
-      pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id ASC', [sid]),
+      // v1.12.0：采集记录与分段文件过滤软删行；房间 JOIN 同样过滤（软删房间的会话已随删）
       pool.query(
-        'SELECT rm.* FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url WHERE s.id = $1',
+        'SELECT * FROM danmaku_capture_records WHERE session_id = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+        [sid]
+      ),
+      pool.query('SELECT * FROM recording_files WHERE session_id = $1 AND deleted_at IS NULL ORDER BY id ASC', [sid]),
+      pool.query(
+        'SELECT rm.* FROM recording_sessions s LEFT JOIN rooms rm ON s.room_url = rm.room_url AND rm.deleted_at IS NULL WHERE s.id = $1',
         [sid]
       ),
     ]);
@@ -412,7 +429,8 @@ class DataService {
 
   static async getUploadRecords(options = {}) {
     const { session_id, status, season_status, title, limit = 50, page } = options;
-    const conditions = [];
+    // v1.12.0：软删投稿记录不出现在列表（两条查询共用 conditions，计数查询带 ur 别名）
+    const conditions = ['ur.deleted_at IS NULL'];
     const params = [];
 
     if (session_id) {
@@ -435,7 +453,8 @@ class DataService {
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
     // 联出模板的合集名与小节：记录表只存 season_id，手动重试的确认框要显示合集真名
-    let sql = `SELECT ur.*, ut.name as template_name, ut.season_title, ut.section_id FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id${where} ORDER BY ur.id DESC`;
+    // v1.12.0：模板 JOIN 过滤软删模板
+    let sql = `SELECT ur.*, ut.name as template_name, ut.season_title, ut.section_id FROM upload_records ur LEFT JOIN upload_templates ut ON ur.template_id = ut.id AND ut.deleted_at IS NULL${where} ORDER BY ur.id DESC`;
 
     const pageSize = parseInt(limit, 10);
     let pageNum = null;
@@ -525,7 +544,8 @@ class DataService {
   static async getRecordingFiles(options = {}) {
     const { status, room_url, thresholdBytes = 0, limit, page, order = 'desc' } = options;
     const sessionId = options.session_id ?? options.sessionId;
-    const conditions = [];
+    // v1.12.0：软删录制文件不出现在列表（两条查询共用 conditions，均带 rf 别名）
+    const conditions = ['rf.deleted_at IS NULL'];
     const params = [];
 
     // 构建动态查询条件
@@ -593,7 +613,8 @@ class DataService {
 
   static async getTranscodeRecords(options = {}) {
     const { status, limit = 50, page } = options;
-    const conditions = [];
+    // v1.12.0：软删转码记录不出现在列表（两条查询共用 conditions，均带 tr 别名）
+    const conditions = ['tr.deleted_at IS NULL'];
     const params = [];
 
     if (status) {
@@ -605,7 +626,7 @@ class DataService {
     let sql = `SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name
        FROM transcode_records tr
        LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
-       LEFT JOIN rooms rm ON rs.room_url = rm.room_url${where} ORDER BY tr.id DESC`;
+       LEFT JOIN rooms rm ON rs.room_url = rm.room_url AND rm.deleted_at IS NULL${where} ORDER BY tr.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);
@@ -669,7 +690,7 @@ class DataService {
          LEFT JOIN (
            SELECT session_id, MAX(COALESCE(ended_at, completed_at)) AS last_file_at
            FROM recording_files
-           WHERE session_id IS NOT NULL
+           WHERE session_id IS NOT NULL AND deleted_at IS NULL
            GROUP BY session_id
          ) f ON f.session_id = rs.id
          WHERE rs.room_url = $1 AND rs.deleted_at IS NULL
@@ -696,7 +717,9 @@ class DataService {
    * @returns {Promise<Object|null>}
    */
   static async getDanmakuCaptureRecord(id) {
-    const result = await pool.query('SELECT * FROM danmaku_capture_records WHERE id = $1', [parseInt(id, 10)]);
+    const result = await pool.query('SELECT * FROM danmaku_capture_records WHERE id = $1 AND deleted_at IS NULL', [
+      parseInt(id, 10),
+    ]);
     return result.rows[0] || null;
   }
 
@@ -711,10 +734,11 @@ class DataService {
   static async listOrphanDanmakuRecords(options = {}) {
     const { status, limit = 100 } = options;
     const params = [];
-    let where = `WHERE status LIKE 'orphan\\_%'`;
+    // v1.12.0：软删采集记录不进孤儿列表
+    let where = `WHERE status LIKE 'orphan\\_%' AND dcr.deleted_at IS NULL`;
     if (status) {
       params.push(status);
-      where = `WHERE status = $${params.length}`;
+      where = `WHERE status = $${params.length} AND dcr.deleted_at IS NULL`;
     }
     params.push(parseInt(limit, 10) || 100);
 

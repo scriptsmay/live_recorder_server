@@ -50,12 +50,13 @@ async function getFilteringThreshold() {
 async function checkStaleRecordings() {
   try {
     const STALE_TIMEOUT_MS = parseInt(await DataService.getSetting('watchdog_timeout', '60'), 10) * 1000;
+    // v1.12.0：软删房间不参与僵死检测——残留 ffmpeg_pid 可能已被复用
     const { rows: rooms } = await pool.query(
       `SELECT r.id, r.room_url, r.room_name, r.ffmpeg_pid, r.output_path, r.polling_platform, r.segment_duration,
               rs.id AS session_id
        FROM rooms r
        LEFT JOIN recording_sessions rs ON rs.room_url = r.room_url AND rs.status = 'recording'
-       WHERE r.status = 'recording'`
+       WHERE r.status = 'recording' AND r.deleted_at IS NULL`
     );
 
     for (const room of rooms) {
@@ -179,6 +180,7 @@ async function scanActiveSegments() {
     const thresholdMB = await getFilteringThreshold();
     const thresholdBytes = thresholdMB * 1024 * 1024;
 
+    // v1.12.0：JOIN 过滤软删房间（其会话已随房间软删，不再扫描追踪）
     const { rows: sessions } = await pool.query(
       `SELECT rs.id AS session_id, rs.total_segments, rs.output_dir, rs.ended_at,
               r.id AS room_id, r.room_url, r.room_name, r.output_path
@@ -186,7 +188,8 @@ async function scanActiveSegments() {
        JOIN rooms r ON rs.room_url = r.room_url
        WHERE (rs.status = 'recording' OR
               (rs.status = 'completed' AND rs.ended_at >= NOW() - INTERVAL '5 minutes'))
-         AND rs.output_dir IS NOT NULL`
+         AND rs.output_dir IS NOT NULL
+         AND r.deleted_at IS NULL`
     );
 
     for (const session of sessions) {
@@ -221,7 +224,11 @@ async function scanActiveSegments() {
           continue;
         }
 
-        const tracked = await pool.query('SELECT id, file_size FROM recording_files WHERE file_path = $1', [fp]);
+        // v1.12.0：软删行不视为已跟踪——否则同路径的软删行会阻断重新入账
+        const tracked = await pool.query(
+          'SELECT id, file_size FROM recording_files WHERE file_path = $1 AND deleted_at IS NULL',
+          [fp]
+        );
 
         if (tracked.rows.length > 0) {
           const fileId = tracked.rows[0].id;
@@ -275,10 +282,11 @@ async function scanActiveSegments() {
         if (managedCheck.rows.length > 0) continue;
 
         // segment times 已由 recordSegment() 写入，watchdog 只补充运行时数据
+        // v1.12.0：ON CONFLICT 谓词与部分唯一索引一致——软删同路径行不冲突，建新行
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, duration_seconds, checked_at)
            VALUES ($1, $2, $3, $4, $5, 'completed', NOW(), NOW(), $6, $7, NOW())
-           ON CONFLICT (file_path) DO UPDATE SET
+           ON CONFLICT (file_path) WHERE deleted_at IS NULL DO UPDATE SET
              duration_seconds = EXCLUDED.duration_seconds,
              file_size = EXCLUDED.file_size,
              status = 'completed',
@@ -379,9 +387,10 @@ async function cleanupFragmentFiles() {
           }
 
           // 软删除：标记为 deleted 而非硬 DELETE，与 managed_files 协调
+          // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
           const rec = await pool.query(
             `UPDATE recording_files SET status = 'deleted', checked_at = NOW()
-             WHERE file_path = $1 AND status != 'deleted'
+             WHERE file_path = $1 AND status != 'deleted' AND deleted_at IS NULL
              RETURNING session_id, file_size`,
             [fp]
           );
@@ -424,11 +433,13 @@ async function cleanupFragmentFiles() {
 async function syncMissingFiles() {
   try {
     // 跳过已被文件管理模块标记为 deleting/deleted 的文件，避免覆写删除状态
+    // v1.12.0：软删行不参与缺失同步（不再回写 status）
     const { rows: files } = await pool.query(`
       SELECT rf.id, rf.file_path
       FROM recording_files rf
       LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
       WHERE rf.status NOT IN ('missing', 'deleted')
+        AND rf.deleted_at IS NULL
         AND (mf.id IS NULL OR mf.status NOT IN ('deleting', 'deleted'))
     `);
     let count = 0;
@@ -509,6 +520,7 @@ async function checkSessionTranscode() {
 
     // 联合查询 recording_sessions 和 recording_files 表
     // 只处理已完成的录制文件，排除已删除/缺失的文件
+    // v1.12.0：软删文件不转码
     const { rows: files } = await pool.query(
       `SELECT r.id AS session_id, r.room_url, r.ended_at, rf.id AS file_id, rf.file_path
        FROM recording_sessions r
@@ -516,6 +528,7 @@ async function checkSessionTranscode() {
        LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
        WHERE r.status = 'completed' AND r.ended_at IS NOT NULL
          AND rf.status = 'completed'
+         AND rf.deleted_at IS NULL
          AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
     for (const file of files) {
@@ -553,6 +566,7 @@ async function checkSessionHLS() {
        LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
        WHERE rf.status = 'completed' AND rf.file_path IS NOT NULL
          AND rf.hls_status IN ('pending', 'ready')
+         AND rf.deleted_at IS NULL
          AND (mf.status IS NULL OR mf.status NOT IN ('deleting', 'deleted'))`
     );
 
@@ -713,7 +727,7 @@ async function backfillSegmentTimes(sessionId, pool) {
     const missing = await pool.query(
       `SELECT COUNT(*) AS cnt
        FROM recording_files
-       WHERE session_id = $1
+       WHERE session_id = $1 AND deleted_at IS NULL
          AND (segment_end_ms = 0 OR (segment_index > 1 AND segment_start_ms = 0))`,
       [sessionId]
     );
@@ -723,7 +737,7 @@ async function backfillSegmentTimes(sessionId, pool) {
     const rows = await pool.query(
       `SELECT file_path, segment_index, segment_start_ms, segment_end_ms
        FROM recording_files
-       WHERE session_id = $1
+       WHERE session_id = $1 AND deleted_at IS NULL
        ORDER BY id ASC`,
       [sessionId]
     );
@@ -744,7 +758,7 @@ async function backfillSegmentTimes(sessionId, pool) {
         await pool.query(
           `UPDATE recording_files
            SET segment_start_ms = $1, segment_end_ms = $2
-           WHERE file_path = $3`,
+           WHERE file_path = $3 AND deleted_at IS NULL`,
           [accumulatedMs, endMs, row.file_path]
         );
         accumulatedMs = endMs;

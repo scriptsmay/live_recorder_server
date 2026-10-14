@@ -287,13 +287,14 @@ class SeasonService {
 
   static async _loadContext(recordId, source = 'recording') {
     const table = seasonTable(source);
+    // v1.12.0：合集上下文查询过滤软删行（投稿记录与其模板）
     const result = await pool.query(
       `SELECT ur.id, ur.bv_id, ur.season_status, ur.season_attempts,
               ut.id AS template_id, ut.name AS template_name, ut.cookies_path,
               ut.season_id, ut.season_title, ut.section_id, ut.season_auto_add
          FROM ${table} ur
-         LEFT JOIN upload_templates ut ON ut.id = ur.template_id
-        WHERE ur.id = $1`,
+         LEFT JOIN upload_templates ut ON ut.id = ur.template_id AND ut.deleted_at IS NULL
+        WHERE ur.id = $1 AND ur.deleted_at IS NULL`,
       [recordId]
     );
     if (!result.rows.length) return null;

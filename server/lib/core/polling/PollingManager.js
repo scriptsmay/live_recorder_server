@@ -123,7 +123,7 @@ class PollingManager {
         SELECT id, room_url, room_name, polling_enabled, polling_platform,
                polling_interval, monitoring_enabled, notification_enabled, status
         FROM rooms
-        WHERE polling_enabled = true
+        WHERE polling_enabled = true AND deleted_at IS NULL
       `);
       for (const room of result.rows) {
         try {
@@ -211,7 +211,11 @@ class PollingManager {
 
       this.roomLiveStatus.set(id, isLive);
 
-      const freshRoom = await pool.query('SELECT status, ffmpeg_pid FROM rooms WHERE id = $1', [id]);
+      // v1.12.0：软删房间视为不存在——currentStatus 为 undefined，
+      // 不等于 'recording'，且不再具备可录制语义，轮询循环下次 reload 时即被清掉
+      const freshRoom = await pool.query('SELECT status, ffmpeg_pid FROM rooms WHERE id = $1 AND deleted_at IS NULL', [
+        id,
+      ]);
       const currentStatus = freshRoom.rows[0]?.status;
 
       const cooldownKey = `polling:recording_cooldown:${id}`;
@@ -251,13 +255,19 @@ class PollingManager {
     const { id, room_url, room_name } = room;
 
     try {
-      const freshRoom = await pool.query('SELECT status, ffmpeg_pid FROM rooms WHERE id = $1', [id]);
+      const freshRoom = await pool.query('SELECT status, ffmpeg_pid FROM rooms WHERE id = $1 AND deleted_at IS NULL', [
+        id,
+      ]);
       if (freshRoom.rows.length > 0) {
         const currentStatus = freshRoom.rows[0].status;
         if (currentStatus === 'recording') {
           log.info(`[PollingManager] 房间已在录制中，跳过: ${room_name || room_url}`);
           return;
         }
+      } else {
+        // v1.12.0：轮询进行中房间已被（软）删除——中止，避免借 getOrCreateRoom 复活房间
+        log.warn(`[PollingManager] 房间已删除，跳过录制: ${room_name || room_url}`);
+        return;
       }
 
       let streamUrl = checkResult.streamUrl;
@@ -424,7 +434,8 @@ class PollingManager {
    * @returns {Promise<void>}
    */
   async reloadRoom(roomId) {
-    const result = await pool.query('SELECT * FROM rooms WHERE id = $1', [roomId]);
+    // v1.12.0：软删房间查不到 → 走 stopRoomPolling 清除内存定时器（防幽灵轮询）
+    const result = await pool.query('SELECT * FROM rooms WHERE id = $1 AND deleted_at IS NULL', [roomId]);
     if (result.rows.length === 0) {
       await this.stopRoomPolling(roomId);
       return;

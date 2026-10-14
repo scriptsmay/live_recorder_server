@@ -346,7 +346,8 @@ router.put('/recording_files/:id/associate', async (req, res) => {
     const { session_id } = req.body;
     if (!session_id) return res.status(400).json({ status: 'Error', message: '缺少 session_id' });
 
-    const file = await pool.query('SELECT * FROM recording_files WHERE id = $1', [id]);
+    // v1.12.0：仅关联未删除文件行
+    const file = await pool.query('SELECT * FROM recording_files WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (file.rows.length === 0) return res.status(404).json({ status: 'Error', message: '文件不存在' });
     if (file.rows[0].status !== 'orphaned') return res.status(400).json({ status: 'Error', message: '仅孤文件可关联' });
 
@@ -370,6 +371,8 @@ router.put('/recording_files/:id/associate', async (req, res) => {
 
 router.delete('/recording_files/missing', async (req, res) => {
   try {
+    // v1.12.0：missing 批量清理保留物理删除（看门狗僵尸行，量大且无恢复价值，
+    // 用户 2026-10-13 拍板）；软删行同路径重新入账后建新行，不受影响
     const result = await pool.query('DELETE FROM recording_files WHERE status = $1', ['missing']);
     res.json({ status: 'ok', deleted_count: result.rowCount });
   } catch (err) {
@@ -383,10 +386,10 @@ router.delete('/recordings/:id', async (req, res) => {
     const { id } = req.params;
     const deleteFile = req.query.delete_file === 'true';
 
-    // 先查询记录，获取文件路径信息
+    // 先查询记录，获取文件路径信息（v1.12.0：仅查未删除行，重复删除返回 404）
     const fileResult = await pool.query(
       `SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_status
-       FROM recording_files WHERE id = $1`,
+       FROM recording_files WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
 
@@ -427,8 +430,8 @@ router.delete('/recordings/:id', async (req, res) => {
       console.log(`[api] 已删除本地文件: ${deletedPaths.join(', ') || '(无)'}`);
     }
 
-    // 删除数据库记录
-    await pool.query('DELETE FROM recording_files WHERE id = $1', [id]);
+    // v1.12.0：DB 行改软删除；本地文件仍物理删（磁盘空间诉求，delete_file=true 时）
+    await pool.query('UPDATE recording_files SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
 
     res.json({ status: 'ok', deletedFile: deleteFile });
   } catch (err) {
@@ -453,7 +456,10 @@ router.get('/recordings/:id/stream', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1', [id]);
+    // v1.12.0：软删文件不提供播放
+    const fileResult = await pool.query('SELECT file_path FROM recording_files WHERE id = $1 AND deleted_at IS NULL', [
+      id,
+    ]);
     const filePath = fileResult.rows[0]?.file_path;
 
     if (!filePath) {
@@ -519,7 +525,7 @@ router.get('/recordings/:id/hls', async (req, res) => {
 
     const result = await pool.query(
       `SELECT id, file_path, is_hls_ready, hls_playlist_path, hls_generated_at, hls_status
-       FROM recording_files WHERE id = $1`,
+       FROM recording_files WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
     const recording = result.rows[0];
@@ -568,7 +574,11 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const recordingResult = await pool.query('SELECT id, file_path FROM recording_files WHERE id = $1', [id]);
+    // v1.12.0：软删文件不生成 HLS
+    const recordingResult = await pool.query(
+      'SELECT id, file_path FROM recording_files WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
 
     if (recordingResult.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '录制不存在' });
@@ -608,7 +618,7 @@ router.post('/recordings/:id/transcode', async (req, res) => {
     const result = await pool.query(
       `SELECT rf.id, rf.file_path, rf.session_id
        FROM recording_files rf
-       WHERE rf.id = $1`,
+       WHERE rf.id = $1 AND rf.deleted_at IS NULL`,
       [id]
     );
 
@@ -627,8 +637,9 @@ router.post('/recordings/:id/transcode', async (req, res) => {
     }
 
     // 检查是否已存在转码记录（queued 或 processing 状态）
+    // v1.12.0：软删的转码记录不视为在队——同路径重新转码建新行
     const existingRecord = await pool.query(
-      `SELECT id, status FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing')`,
+      `SELECT id, status FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing') AND deleted_at IS NULL`,
       [file.file_path]
     );
 

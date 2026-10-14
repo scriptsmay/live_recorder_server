@@ -194,16 +194,17 @@ class EmptyDirectoryCleanupService {
     const protectedPaths = new Set();
     const [recordings, hls, replays, activeTaskKeys, replayLockKeys, replayQueueKeys] = await Promise.all([
       pool.query(`SELECT output_dir FROM recording_sessions WHERE status = 'recording' AND output_dir IS NOT NULL`),
+      // v1.12.0：软删文件的 HLS 目录不再受保护（文件已从业务面删除）
       pool.query(
         `SELECT rf.hls_playlist_path, rs.output_dir
          FROM recording_files rf
          LEFT JOIN recording_sessions rs ON rs.id = rf.session_id
-         WHERE rf.hls_status IN ('pending', 'generating', 'ready')`
+         WHERE rf.hls_status IN ('pending', 'generating', 'ready') AND rf.deleted_at IS NULL`
       ),
       pool.query(
         `SELECT id, principal_id, replay_id
          FROM replay_records
-         WHERE status != ALL($1::text[])`,
+         WHERE status != ALL($1::text[]) AND deleted_at IS NULL`,
         [TERMINAL_REPLAY_STATUSES]
       ),
       redis.keys('active_task:*').catch(() => []),
@@ -236,7 +237,7 @@ class EmptyDirectoryCleanupService {
     const missingIds = lockedIds.filter((id) => !replayRows.has(id));
     if (missingIds.length > 0) {
       const { rows } = await pool.query(
-        `SELECT id, principal_id, replay_id FROM replay_records WHERE id = ANY($1::int[])`,
+        `SELECT id, principal_id, replay_id FROM replay_records WHERE id = ANY($1::int[]) AND deleted_at IS NULL`,
         [missingIds]
       );
       for (const row of rows) replayRows.set(Number(row.id), row);

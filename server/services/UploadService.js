@@ -195,10 +195,11 @@ class UploadService {
     const source = this.renderTemplate(tmpl.source || '{room_url}', vars);
 
     // 查询会话的录制文件
+    // v1.12.0：DISTINCT ON 同样只取未删除行（软删行与重建行可能同路径）
     let files = [];
     const recs = await pool.query(
       `SELECT DISTINCT ON (file_path) * FROM recording_files
-       WHERE session_id = $1 AND status IN ('completed', 'interrupted')
+       WHERE session_id = $1 AND status IN ('completed', 'interrupted') AND deleted_at IS NULL
        ORDER BY file_path`,
       [session.id]
     );
@@ -348,8 +349,9 @@ class UploadService {
    * @returns {Promise<boolean>} 如果存在阻塞记录返回true，否则返回false
    */
   static async hasBlockingUploadRecord(sessionId) {
+    // v1.12.0：软删投稿记录不构成阻塞
     const r = await pool.query(
-      `SELECT 1 FROM upload_records WHERE session_id = $1 AND status IN ('uploading', 'success') LIMIT 1`,
+      `SELECT 1 FROM upload_records WHERE session_id = $1 AND status IN ('uploading', 'success') AND deleted_at IS NULL LIMIT 1`,
       [sessionId]
     );
     return r.rows.length > 0;
@@ -367,9 +369,10 @@ class UploadService {
     if (await transcodeQueue.hasSessionPending(sessionId)) return false;
 
     // 从recording_files表获取文件路径
+    // v1.12.0：软删文件不参与转码就绪判断
     const files = await pool.query(
       `SELECT file_path FROM recording_files
-       WHERE session_id = $1 AND status NOT IN ('missing', 'deleted')`,
+       WHERE session_id = $1 AND status NOT IN ('missing', 'deleted') AND deleted_at IS NULL`,
       [sessionId]
     );
     const paths = files.rows.map((r) => r.file_path).filter(Boolean);
@@ -399,7 +402,7 @@ class UploadService {
       const { rows } = await pool.query(
         `SELECT rs.*, r.room_name, r.upload_template_id
          FROM recording_sessions rs
-         INNER JOIN rooms r ON r.room_url = rs.room_url
+         INNER JOIN rooms r ON r.room_url = rs.room_url AND r.deleted_at IS NULL
          WHERE rs.status = 'completed'
            AND rs.deleted_at IS NULL
            AND r.upload_template_id IS NOT NULL
@@ -407,6 +410,7 @@ class UploadService {
            AND NOT EXISTS (
              SELECT 1 FROM upload_records ur
              WHERE ur.session_id = rs.id AND ur.status IN ('uploading', 'success')
+               AND ur.deleted_at IS NULL
            )
          ORDER BY rs.ended_at DESC
          LIMIT 20`
@@ -419,7 +423,10 @@ class UploadService {
         }
         if (!(await this.isSessionTranscodeComplete(row.id))) continue;
 
-        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [row.upload_template_id]);
+        // v1.12.0：软删模板不触发自动投稿
+        const tmplResult = await pool.query('SELECT * FROM upload_templates WHERE id = $1 AND deleted_at IS NULL', [
+          row.upload_template_id,
+        ]);
         if (tmplResult.rows.length === 0) continue;
 
         const tmpl = tmplResult.rows[0];

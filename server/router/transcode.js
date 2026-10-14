@@ -21,7 +21,11 @@ router.get('/transcode_records', async (req, res) => {
 router.delete('/transcode_records/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM transcode_records WHERE id = $1', [id]);
+    // v1.12.0：物理删除改软删除；重复删除返回 404（记录已不存在于未删除集合）
+    const result = await pool.query(
+      'UPDATE transcode_records SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ status: 'Error', message: '记录不存在' });
     }

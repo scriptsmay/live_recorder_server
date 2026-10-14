@@ -135,9 +135,16 @@ class RecorderService {
     const cached = await this.getRoomCache(roomUrl);
     if (cached) return cached;
 
+    // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
+    // 查到时若为软删行则复活（清 deleted_at）；轮询路径的复活由 PollingManager
+    // 「房间已删除，跳过录制」分支拦截，不会经此重建。
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
     if (exist.rows.length > 0) {
       const room = exist.rows[0];
+      if (room.deleted_at != null) {
+        await pool.query('UPDATE rooms SET deleted_at = NULL, updated_at = NOW() WHERE id = $1', [room.id]);
+        room.deleted_at = null;
+      }
       await this.setRoomCache(room);
       return room;
     }
@@ -349,9 +356,10 @@ class RecorderService {
         fileExists = true;
 
         // 有文件，更新数据库记录
+        // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
         await pool.query(
           `UPDATE recording_files SET file_size = $1, status = 'completed', ended_at = NOW(), completed_at = NOW()
-           WHERE session_id = $2 AND file_path = $3`,
+           WHERE session_id = $2 AND file_path = $3 AND deleted_at IS NULL`,
           [stat.size, sessionId, file.file_path]
         );
 
@@ -385,7 +393,7 @@ class RecorderService {
             await pool.query(
               `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, checked_at)
                VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), $7, NOW())
-               ON CONFLICT (file_path) DO NOTHING`,
+               ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
               [sessionId, sessRow.room_url, fp, name, stat.size, sessRow.started_at, segIdx]
             );
 
@@ -802,8 +810,9 @@ class RecorderService {
    */
   static async cleanupStaleRecordings() {
     try {
+      // v1.12.0：软删房间不参与启动清理——其残留 ffmpeg_pid 可能已被系统复用，不能贸然 kill
       const staleRooms = await pool.query(
-        `SELECT id, room_url, room_name, ffmpeg_pid, polling_platform, output_path FROM rooms WHERE status IN ('recording', 'paused')`
+        `SELECT id, room_url, room_name, ffmpeg_pid, polling_platform, output_path FROM rooms WHERE status IN ('recording', 'paused') AND deleted_at IS NULL`
       );
 
       for (const row of staleRooms.rows) {
@@ -832,8 +841,9 @@ class RecorderService {
       // 录制中状态的会话：统一标记为 interrupted。
       // 会话恢复能力已由启动清理链中的「延迟续播」机制（checkReuseSession）承担，
       // 此处不再尝试 resumeSession，避免与续播逻辑重复。
+      // v1.12.0：JOIN 过滤软删房间（其会话已随房间软删，不再回写 interrupted）
       const staleSessions = await pool.query(
-        `SELECT rs.*, r.id as room_id, r.room_name, r.polling_platform FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording'`
+        `SELECT rs.*, r.id as room_id, r.room_name, r.polling_platform FROM recording_sessions rs JOIN rooms r ON rs.room_url = r.room_url WHERE rs.status = 'recording' AND r.deleted_at IS NULL`
       );
 
       for (const session of staleSessions.rows) {
@@ -873,7 +883,7 @@ class RecorderService {
         const result = await pool.query(
           `UPDATE ${target.table}
               SET status = 'failed', error_message = $1, completed_at = NOW()
-            WHERE status = 'uploading'
+            WHERE status = 'uploading' AND deleted_at IS NULL
             RETURNING id`,
           [ORPHAN_NOTE]
         );

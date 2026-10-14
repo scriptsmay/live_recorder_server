@@ -87,7 +87,7 @@ class RecordingManager {
       .query(
         `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status, started_at, segment_index, checked_at)
          VALUES ($1, $2, $3, $4, 'recording', to_timestamp($5 / 1000.0), $6, NOW())
-         ON CONFLICT (file_path) DO NOTHING`,
+         ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
         [sessionId, tracker.roomUrl, filePath, fileName, tracker.sessionStartMs + elapsedMs, segIndex]
       )
       .catch((err) => {
@@ -111,11 +111,12 @@ class RecordingManager {
     }));
 
     // 写入分段时间（行已由 recordSegment() 保证存在）
+    // v1.12.0：仅写未删除行——软删行与重建行可能同路径
     for (const seg of segments) {
       await pool.query(
         `UPDATE recording_files
          SET segment_start_ms = $1, segment_end_ms = $2
-         WHERE file_path = $3`,
+         WHERE file_path = $3 AND deleted_at IS NULL`,
         [seg.startMs, seg.endMs || 0, seg.filePath]
       );
     }

@@ -87,9 +87,10 @@ class HLSGenerator {
     const { manual = false } = options;
     let transitionedToGenerating = false;
     try {
+      // v1.12.0：软删文件不生成 HLS
       const result = await pool.query(
         `SELECT file_path, is_hls_ready, hls_playlist_path, hls_status, session_id
-         FROM recording_files WHERE id = $1`,
+         FROM recording_files WHERE id = $1 AND deleted_at IS NULL`,
         [recordingId]
       );
 
@@ -173,7 +174,10 @@ class HLSGenerator {
 
       const hlsDir = path.dirname(playlistPath);
       const stats = await getDirectoryStats(hlsDir);
-      const recordingResult = await pool.query(`SELECT session_id FROM recording_files WHERE id = $1`, [recordingId]);
+      const recordingResult = await pool.query(
+        `SELECT session_id FROM recording_files WHERE id = $1 AND deleted_at IS NULL`,
+        [recordingId]
+      );
       const sessionId = recordingResult.rows[0]?.session_id;
       await pool.query(
         `INSERT INTO managed_files

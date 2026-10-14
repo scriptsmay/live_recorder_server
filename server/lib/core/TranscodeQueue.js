@@ -75,13 +75,15 @@ class TranscodeQueue {
 
   /**
    * 创建转码记录
+   * v1.12.0：ON CONFLICT 谓词与部分唯一索引一致——软删行不占位，
+   * 同路径文件重新入队建新行（旧行保留供恢复）
    */
   async createTranscodeRecord(taskData) {
     try {
       await pool.query(
         `INSERT INTO transcode_records (session_id, original_path, transcoded_path, status, enqueued_at)
          VALUES ($1, $2, $3, 'queued', NOW())
-         ON CONFLICT (original_path) DO NOTHING`,
+         ON CONFLICT (original_path) WHERE deleted_at IS NULL DO NOTHING`,
         [taskData.sessionId, taskData.videoPathToTrans, taskData.mp4Path]
       );
     } catch (err) {
@@ -91,11 +93,13 @@ class TranscodeQueue {
 
   /**
    * 更新转码记录为进行中
+   * v1.12.0：仅更新未删除行——软删行与重建行可能同路径
    */
   async startTranscodeRecord(videoPathToTrans) {
     try {
       await pool.query(
-        `UPDATE transcode_records SET status = 'processing', started_at = NOW() WHERE original_path = $1`,
+        `UPDATE transcode_records SET status = 'processing', started_at = NOW()
+         WHERE original_path = $1 AND deleted_at IS NULL`,
         [videoPathToTrans]
       );
     } catch (err) {
@@ -110,7 +114,8 @@ class TranscodeQueue {
     try {
       const status = success ? 'completed' : 'failed';
       await pool.query(
-        `UPDATE transcode_records SET status = $1, transcoded_path = $2, completed_at = NOW() WHERE original_path = $3`,
+        `UPDATE transcode_records SET status = $1, transcoded_path = $2, completed_at = NOW()
+         WHERE original_path = $3 AND deleted_at IS NULL`,
         [status, mp4Path, videoPathToTrans]
       );
     } catch (err) {
@@ -241,8 +246,10 @@ class TranscodeQueue {
    */
   async updateDatabasePaths(videoPathToTrans, mp4Path, outputSize, _sessionId) {
     try {
+      // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
       await pool.query(
-        `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3 WHERE file_path = $4`,
+        `UPDATE recording_files SET file_path = $1, file_name = $2, file_size = $3
+         WHERE file_path = $4 AND deleted_at IS NULL`,
         [mp4Path, path.basename(mp4Path), outputSize, videoPathToTrans]
       );
     } catch (err) {
@@ -315,7 +322,11 @@ class TranscodeQueue {
         return;
       }
 
-      const result = await pool.query(`SELECT id FROM recording_files WHERE file_path = $1 LIMIT 1`, [mp4Path]);
+      // v1.12.0：软删行不触发 HLS
+      const result = await pool.query(
+        `SELECT id FROM recording_files WHERE file_path = $1 AND deleted_at IS NULL LIMIT 1`,
+        [mp4Path]
+      );
 
       if (result.rows.length > 0) {
         const recordingId = result.rows[0].id;

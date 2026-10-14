@@ -33,10 +33,11 @@ class ReplayService {
   }
 
   static async getPrincipals() {
+    // v1.12.0：主播列表只取未软删房间；回放统计同步过滤软删记录
     const rooms = await pool.query(
       `SELECT id, room_url, room_name
        FROM rooms
-       WHERE room_url ILIKE '%live.kuaishou.com%'
+       WHERE room_url ILIKE '%live.kuaishou.com%' AND deleted_at IS NULL
        ORDER BY id DESC`
     );
 
@@ -61,7 +62,7 @@ class ReplayService {
               MAX(start_time) AS latest_replay_time,
               (ARRAY_AGG(status ORDER BY COALESCE(start_time, created_at) DESC, id DESC))[1] AS latest_status
        FROM replay_records
-       WHERE principal_id = ANY($1)
+       WHERE principal_id = ANY($1) AND deleted_at IS NULL
        GROUP BY principal_id`,
       [ids]
     );
@@ -86,7 +87,8 @@ class ReplayService {
   static async listRecords(principalId, options = {}) {
     const page = parsePositiveInt(options.page, 1);
     const pageSize = Math.min(parsePositiveInt(options.page_size || options.limit, 20), 100);
-    const conditions = ['principal_id = $1'];
+    // v1.12.0：列表与计数共用 conditions，均过滤软删行
+    const conditions = ['principal_id = $1', 'deleted_at IS NULL'];
     const params = [principalId];
 
     if (options.status && options.status !== 'all') {
@@ -123,15 +125,15 @@ class ReplayService {
   }
 
   static async getRecord(id) {
-    const result = await pool.query('SELECT * FROM replay_records WHERE id = $1', [id]);
+    const result = await pool.query('SELECT * FROM replay_records WHERE id = $1 AND deleted_at IS NULL', [id]);
     return result.rows[0] || null;
   }
 
   static async getRecordByReplayId(principalId, replayId) {
-    const result = await pool.query('SELECT * FROM replay_records WHERE principal_id = $1 AND replay_id = $2 LIMIT 1', [
-      principalId,
-      replayId,
-    ]);
+    const result = await pool.query(
+      'SELECT * FROM replay_records WHERE principal_id = $1 AND replay_id = $2 AND deleted_at IS NULL LIMIT 1',
+      [principalId, replayId]
+    );
     return result.rows[0] || null;
   }
 
@@ -140,11 +142,13 @@ class ReplayService {
     if (!principalId) throw new Error('缺少 principal_id');
     const replayId = record.replay_id || '';
 
+    // v1.12.0：ON CONFLICT 谓词必须与部分唯一索引逐字一致（追加 deleted_at IS NULL）——
+    // 不一致 PostgreSQL 直接报 42P10；软删行的同键回放改为插入新行
     const result = await pool.query(
       `INSERT INTO replay_records
        (principal_id, principal_name, replay_id, play_url, m3u8_url, poster, video_file_name, status, start_time, duration, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-       ON CONFLICT (principal_id, replay_id) WHERE replay_id IS NOT NULL AND replay_id <> ''
+       ON CONFLICT (principal_id, replay_id) WHERE replay_id IS NOT NULL AND replay_id <> '' AND deleted_at IS NULL
        DO UPDATE SET
          principal_name = COALESCE(NULLIF(EXCLUDED.principal_name, ''), replay_records.principal_name),
          play_url = COALESCE(NULLIF(EXCLUDED.play_url, ''), replay_records.play_url),
@@ -261,19 +265,20 @@ class ReplayService {
   static async listUploads(principalId, options = {}) {
     const page = parsePositiveInt(options.page, 1);
     const pageSize = Math.min(parsePositiveInt(options.page_size || options.limit, 20), 100);
+    // v1.12.0：投稿记录与关联回放记录均过滤软删行
     const result = await pool.query(
       `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id
        FROM replay_upload_records rur
-       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
-       WHERE rr.principal_id = $1
+       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id AND rr.deleted_at IS NULL
+       WHERE rr.principal_id = $1 AND rur.deleted_at IS NULL
        ORDER BY rur.id DESC
        LIMIT $2 OFFSET $3`,
       [principalId, pageSize, (page - 1) * pageSize]
     );
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM replay_upload_records rur
-       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
-       WHERE rr.principal_id = $1`,
+       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id AND rr.deleted_at IS NULL
+       WHERE rr.principal_id = $1 AND rur.deleted_at IS NULL`,
       [principalId]
     );
     return {
@@ -293,7 +298,8 @@ class ReplayService {
   static async listAllUploads(options = {}) {
     const page = parsePositiveInt(options.page, 1);
     const pageSize = Math.min(parsePositiveInt(options.page_size || options.limit, 20), 100);
-    const conditions = [];
+    // v1.12.0：列表与计数共用 conditions，均过滤软删投稿记录
+    const conditions = ['rur.deleted_at IS NULL'];
     const params = [];
 
     if (options.status) {
@@ -313,10 +319,11 @@ class ReplayService {
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(
       // 合集名取自模板（记录表只有 season_id），供前端手动重试的确认框展示合集真名
+      // v1.12.0：模板 JOIN 过滤软删模板
       `SELECT rur.*, rr.principal_id, rr.principal_name, rr.replay_id, ut.season_title, ut.section_id
        FROM replay_upload_records rur
-       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id
-       LEFT JOIN upload_templates ut ON ut.id = rur.template_id
+       LEFT JOIN replay_records rr ON rr.id = rur.replay_record_id AND rr.deleted_at IS NULL
+       LEFT JOIN upload_templates ut ON ut.id = rur.template_id AND ut.deleted_at IS NULL
        ${where}
        ORDER BY rur.id DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,

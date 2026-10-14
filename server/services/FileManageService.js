@@ -114,7 +114,7 @@ class FileManageService {
               rf.session_id, rf.room_url, rs.output_dir, rf.created_at
        FROM recording_files rf
        LEFT JOIN recording_sessions rs ON rf.session_id = rs.id
-       WHERE rf.status NOT IN ('deleted', 'missing')`,
+       WHERE rf.status NOT IN ('deleted', 'missing') AND rf.deleted_at IS NULL`,
       [],
       UPSERT_SQL,
       (row) => {
@@ -171,7 +171,8 @@ class FileManageService {
       `SELECT rf.id AS source_id, rf.session_id, rf.hls_playlist_path, rf.hls_generated_at
        FROM recording_files rf
        WHERE rf.hls_status = 'ready'
-         AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''`
+         AND rf.hls_playlist_path IS NOT NULL AND rf.hls_playlist_path != ''
+         AND rf.deleted_at IS NULL`
     );
 
     for (const row of rows) {
@@ -232,11 +233,12 @@ class FileManageService {
     ];
 
     // 将每条 replay_record 展开为多条（每种路径类型一条）
+    // v1.12.0：软删回放记录的文件不索引进 managed_files
     const { rows } = await pool.query(`
       SELECT id, principal_id, principal_name, raw_file_path, cut_file_paths,
              fixed_file_paths, final_file_paths, status, created_at
       FROM replay_records
-      WHERE status NOT IN ('pending', 'cancelled')
+      WHERE status NOT IN ('pending', 'cancelled') AND deleted_at IS NULL
     `);
 
     const expanded = [];
@@ -291,7 +293,7 @@ class FileManageService {
       results,
       `SELECT dcr.id AS source_id, dcr.raw_path, dcr.session_id, dcr.status, dcr.created_at
        FROM danmaku_capture_records dcr
-       WHERE dcr.raw_path IS NOT NULL AND dcr.raw_path != ''`,
+       WHERE dcr.raw_path IS NOT NULL AND dcr.raw_path != '' AND dcr.deleted_at IS NULL`,
       [],
       UPSERT_SQL,
       (row) => {
@@ -401,15 +403,20 @@ class FileManageService {
       return { safeToDelete: true, blockReason: null };
     }
     if (row.source_table === 'recording_files') {
-      const { rows: src } = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [row.source_id]);
-      if (src.length > 0 && RF_DELETABLE_STATUSES.includes(src[0].status)) {
+      const { rows: src } = await pool.query(`SELECT status, deleted_at FROM recording_files WHERE id = $1`, [
+        row.source_id,
+      ]);
+      // v1.12.0：软删源行视为业务面已无此文件——索引行可安全清理
+      if (src.length > 0 && (src[0].deleted_at != null || RF_DELETABLE_STATUSES.includes(src[0].status))) {
         return { safeToDelete: true, blockReason: null };
       }
       return { safeToDelete: false, blockReason: 'file_not_found' };
     }
     if (row.source_table === 'replay_records') {
-      const { rows: src } = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [row.source_id]);
-      if (src.length > 0 && REPLAY_DELETABLE_STATUSES.includes(src[0].status)) {
+      const { rows: src } = await pool.query(`SELECT status, deleted_at FROM replay_records WHERE id = $1`, [
+        row.source_id,
+      ]);
+      if (src.length > 0 && (src[0].deleted_at != null || REPLAY_DELETABLE_STATUSES.includes(src[0].status))) {
         return { safeToDelete: true, blockReason: null };
       }
       return { safeToDelete: false, blockReason: 'file_not_found' };
@@ -613,7 +620,10 @@ class FileManageService {
     let resolution = null;
     if (file.source_table === 'replay_records' && file.source_id) {
       try {
-        const rr = await pool.query('SELECT resolution FROM replay_records WHERE id = $1', [file.source_id]);
+        // v1.12.0：软删回放记录不展示分辨率（业务面已删除）
+        const rr = await pool.query('SELECT resolution FROM replay_records WHERE id = $1 AND deleted_at IS NULL', [
+          file.source_id,
+        ]);
         resolution = rr.rows[0]?.resolution || null;
       } catch {
         /* ignore */
@@ -1065,10 +1075,12 @@ class FileManageService {
 
     // 5. 不属于 recording 会话
     if (source_table === 'recording_files' && source_id) {
+      // v1.12.0：JOIN 过滤软删文件与软删会话——软删后不拦截清理
       const sessionCheck = await pool.query(
         `SELECT rs.status FROM recording_sessions rs
          JOIN recording_files rf ON rf.session_id = rs.id
-         WHERE rf.id = $1 AND rs.status = 'recording'`,
+         WHERE rf.id = $1 AND rs.status = 'recording'
+           AND rf.deleted_at IS NULL AND rs.deleted_at IS NULL`,
         [source_id]
       );
       if (sessionCheck.rows.length > 0) {
@@ -1087,19 +1099,24 @@ class FileManageService {
     // 7. 业务记录已完成/失败/取消（终态均可安全删除；仅进行中状态拦截）
     // 注意：'missing' 表示录制文件已丢失，其 HLS 目录/录制文件属于孤儿记录，应允许清理；
     // 仅当录制仍在进行中（如 status='recording'）时才拦截，避免误删活跃数据。
+    // v1.12.0：软删业务行视为终态——不再拦截清理（与 _evaluateMissingSafety 口径一致）
     if (source_table === 'recording_files' && source_id) {
-      const rfCheck = await pool.query(`SELECT status FROM recording_files WHERE id = $1`, [source_id]);
+      const rfCheck = await pool.query(`SELECT status, deleted_at FROM recording_files WHERE id = $1`, [source_id]);
       if (rfCheck.rows.length > 0) {
         const rfStatus = rfCheck.rows[0].status;
-        if (!RF_DELETABLE_STATUSES.includes(rfStatus)) {
+        if (rfCheck.rows[0].deleted_at == null && !RF_DELETABLE_STATUSES.includes(rfStatus)) {
           return { safe: false, reason: `recording_status_${rfStatus}` };
         }
       }
     }
 
     if (source_table === 'replay_records' && source_id) {
-      const rrCheck = await pool.query(`SELECT status FROM replay_records WHERE id = $1`, [source_id]);
-      if (rrCheck.rows.length > 0 && !REPLAY_DELETABLE_STATUSES.includes(rrCheck.rows[0].status)) {
+      const rrCheck = await pool.query(`SELECT status, deleted_at FROM replay_records WHERE id = $1`, [source_id]);
+      if (
+        rrCheck.rows.length > 0 &&
+        rrCheck.rows[0].deleted_at == null &&
+        !REPLAY_DELETABLE_STATUSES.includes(rrCheck.rows[0].status)
+      ) {
         return { safe: false, reason: `replay_status_${rrCheck.rows[0].status}` };
       }
     }
@@ -1114,10 +1131,12 @@ class FileManageService {
    */
   static async isFileInActiveTask(filePath) {
     // 录制中：recording_sessions.status = 'recording' 的文件
+    // v1.12.0：三条检查均过滤软删行——软删后不构成活跃任务
     const recordingCheck = await pool.query(
       `SELECT rf.id FROM recording_files rf
        JOIN recording_sessions rs ON rf.session_id = rs.id
-       WHERE rf.file_path = $1 AND rs.status = 'recording'`,
+       WHERE rf.file_path = $1 AND rs.status = 'recording'
+         AND rf.deleted_at IS NULL AND rs.deleted_at IS NULL`,
       [filePath]
     );
     if (recordingCheck.rows.length > 0) {
@@ -1127,7 +1146,8 @@ class FileManageService {
     // 转码中
     const transcodeCheck = await pool.query(
       `SELECT id FROM transcode_records
-       WHERE (original_path = $1 OR transcoded_path = $1) AND status IN ('queued', 'processing')`,
+       WHERE (original_path = $1 OR transcoded_path = $1) AND status IN ('queued', 'processing')
+         AND deleted_at IS NULL`,
       [filePath]
     );
     if (transcodeCheck.rows.length > 0) {
@@ -1137,7 +1157,7 @@ class FileManageService {
     // 投稿中：精确匹配 JSON 数组中的路径，避免子串误匹配
     const uploadCheck = await pool.query(
       `SELECT id FROM upload_records
-       WHERE status IN ('pending', 'uploading')
+       WHERE status IN ('pending', 'uploading') AND deleted_at IS NULL
          AND EXISTS (SELECT 1 FROM json_array_elements_text(upload_files::json) elem WHERE elem = $1)`,
       [filePath]
     );

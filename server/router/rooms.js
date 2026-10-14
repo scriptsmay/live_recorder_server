@@ -166,8 +166,15 @@ router.post('/rooms', async (req, res) => {
     // 直接根据room_url自动检测平台
     const polling_platform = detectPlatform(room_url) || null;
 
+    // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
+    // 重新添加同名房间走复活语义：清 deleted_at 后按提交字段更新（保持房间 id 连续）。
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
     if (exist.rows.length > 0) {
+      if (exist.rows[0].deleted_at != null) {
+        await pool.query('UPDATE rooms SET deleted_at = NULL, updated_at = NOW() WHERE room_url = $1', [room_url]);
+        // 复活后清房间缓存，避免 TTL 内继续拿到软删前的旧配置
+        await redis.del(`room:${room_url}`).catch(() => {});
+      }
       const fields = [];
       const values = [];
       const fieldsList = [
@@ -270,7 +277,7 @@ const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id
 router.put('/rooms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await pool.query('SELECT status, room_url FROM rooms WHERE id = $1', [id]);
+    const existing = await pool.query('SELECT status, room_url FROM rooms WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
@@ -334,8 +341,9 @@ router.delete('/rooms/:id', async (req, res) => {
     if (!result.success) {
       return res.status(404).json({ status: 'Error', message: result.message });
     }
-    // 同步轮询管理器：行已删除，reloadRoom 走 stopRoomPolling 分支清除内存定时器，
-    // 防止删除带轮询的房间后留下幽灵轮询器（v1.10.1 及以前删除不会停轮询，见 09-01 误录制事件）
+    // 同步轮询管理器：v1.12.0 起房间为软删除，reloadRoom 的查询过滤软删行后
+    // 走 stopRoomPolling 分支清除内存定时器，防止删除带轮询的房间后留下幽灵轮询器
+    // （v1.10.1 及以前删除不会停轮询，见 09-01 误录制事件）
     await pollingManager.reloadRoom(parseInt(id, 10));
     res.json({ status: 'ok', message: result.message });
   } catch (err) {
@@ -499,7 +507,10 @@ router.get('/sessions/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
-    const recordings = await pool.query('SELECT * FROM recording_files WHERE session_id = $1 ORDER BY id', [id]);
+    const recordings = await pool.query(
+      'SELECT * FROM recording_files WHERE session_id = $1 AND deleted_at IS NULL ORDER BY id',
+      [id]
+    );
     // 检查文件是否存在
     const recordingsWithExists = recordings.rows.map((rec) => ({
       ...rec,

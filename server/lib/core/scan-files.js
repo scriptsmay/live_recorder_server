@@ -46,11 +46,13 @@ async function scanRecordingFiles(force = false) {
 
   // 从数据库中获取所有非缺失且非删除状态的已跟踪文件，构建文件路径到记录的映射
   // 跳过已被文件管理模块标记为 deleting/deleted 的文件，避免与文件管理竞争
+  // v1.12.0：软删的 tracking 行不参与匹配——磁盘上仍在的文件按孤儿重新入账
   const tracked = await pool.query(`
     SELECT rf.id, rf.file_path, rf.status
     FROM recording_files rf
     LEFT JOIN managed_files mf ON mf.file_path = rf.file_path
     WHERE rf.status NOT IN ('missing', 'deleted')
+      AND rf.deleted_at IS NULL
       AND (mf.id IS NULL OR mf.status NOT IN ('deleting', 'deleted'))
   `);
   const trackedSet = new Map();
@@ -82,7 +84,7 @@ async function scanRecordingFiles(force = false) {
   // 获取所有房间信息，用于根据 roomId 匹配房间
   const roomsById = new Map();
   try {
-    const rooms = await pool.query(`SELECT id, room_url, room_name FROM rooms`);
+    const rooms = await pool.query(`SELECT id, room_url, room_name FROM rooms WHERE deleted_at IS NULL`);
     for (const row of rooms.rows) {
       roomsById.set(String(row.id), row);
     }
@@ -155,10 +157,12 @@ async function scanRecordingFiles(force = false) {
 
     if (matchedSession && roomUrl) {
       // 如果找到匹配的会话，则将文件标记为已完成并关联到会话
+      // v1.12.0：ON CONFLICT 谓词必须与部分唯一索引一致（仅约束未删除行），
+      // 软删同行路径的文件重新入账建新行，不再被 DO NOTHING 静默跳过
       const insertRes = await pool.query(
         `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, checked_at)
          VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), 0, NOW())
-         ON CONFLICT (file_path) DO NOTHING`,
+         ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
         [matchedSession.id, roomUrl, fp, path.basename(fp), stat.size, matchedSession.started_at]
       );
 
@@ -173,9 +177,11 @@ async function scanRecordingFiles(force = false) {
       associated++;
     } else {
       // 如果未找到匹配的会话，则标记为孤立文件
+      // v1.12.0：补 ON CONFLICT 谓词——软删/历史行占用同一路径时不再抛 23505
       await pool.query(
         `INSERT INTO recording_files (file_path, file_name, file_size, status, checked_at)
-         VALUES ($1, $2, $3, 'orphaned', NOW())`,
+         VALUES ($1, $2, $3, 'orphaned', NOW())
+         ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
         [fp, path.basename(fp), stat.size]
       );
       orphanCount++;

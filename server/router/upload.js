@@ -153,7 +153,7 @@ router.put('/upload_templates/:id', async (req, res) => {
       selection.season_id !== undefined || selection.section_id !== undefined || req.body.cookies_path !== undefined;
     if (needsCheck) {
       const existing = await pool.query(
-        'SELECT cookies_path, season_id, section_id FROM upload_templates WHERE id = $1',
+        'SELECT cookies_path, season_id, section_id FROM upload_templates WHERE id = $1 AND deleted_at IS NULL',
         [id]
       );
       if (existing.rows.length === 0) {
@@ -168,8 +168,9 @@ router.put('/upload_templates/:id', async (req, res) => {
       if (!verdict.ok) return res.status(verdict.http).json({ status: 'Error', message: verdict.message });
     }
     values.push(id);
+    // v1.12.0：仅更新未删除模板（软删模板的 PUT 走 404）
     const result = await pool.query(
-      `UPDATE upload_templates SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
+      `UPDATE upload_templates SET ${sets.join(', ')} WHERE id = $${values.length} AND deleted_at IS NULL RETURNING *`,
       values
     );
     if (result.rows.length === 0) {
@@ -185,7 +186,8 @@ router.put('/upload_templates/:id', async (req, res) => {
 router.delete('/upload_templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM upload_templates WHERE id = $1', [id]);
+    // v1.12.0：物理删除改软删除；幂等——重复删除同一模板仍返回 ok
+    await pool.query('UPDATE upload_templates SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[templates] 删除失败:', err);
@@ -276,7 +278,7 @@ router.post('/sessions/:id/upload', async (req, res) => {
       return res.status(404).json({ status: 'Error', message: '会话不存在' });
     }
 
-    const tmpl = await pool.query('SELECT * FROM upload_templates WHERE id = $1', [template_id]);
+    const tmpl = await pool.query('SELECT * FROM upload_templates WHERE id = $1 AND deleted_at IS NULL', [template_id]);
     if (tmpl.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '模板不存在' });
     }
@@ -325,7 +327,11 @@ router.get('/upload_records', async (req, res) => {
  */
 router.delete('/upload_records/:id', async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM upload_records WHERE id = $1 RETURNING id', [req.params.id]);
+    // v1.12.0：物理删除改软删除；重复删除返回 404（记录已不存在于未删除集合）
+    const result = await pool.query(
+      'UPDATE upload_records SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id',
+      [req.params.id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '投稿记录不存在' });
     }
@@ -354,7 +360,9 @@ function seasonFailure(res, err) {
  */
 router.get('/upload_templates/:id/seasons', async (req, res) => {
   try {
-    const tmpl = await pool.query('SELECT cookies_path FROM upload_templates WHERE id = $1', [req.params.id]);
+    const tmpl = await pool.query('SELECT cookies_path FROM upload_templates WHERE id = $1 AND deleted_at IS NULL', [
+      req.params.id,
+    ]);
     if (tmpl.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '模板不存在' });
     }

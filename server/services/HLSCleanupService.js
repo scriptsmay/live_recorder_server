@@ -42,7 +42,7 @@ class HLSCleanupService {
            ON mf.source_table = 'recording_files'
           AND mf.source_id = rf.id
           AND mf.file_type = 'hls_directory'
-         WHERE rf.id = $1`,
+         WHERE rf.id = $1 AND rf.deleted_at IS NULL`,
         [recordingFileId]
       );
 
@@ -304,9 +304,10 @@ class HLSCleanupService {
     }
 
     const cutoff = new Date(Date.now() - normalizedDays * 24 * 60 * 60 * 1000);
+    // v1.12.0：软删文件的 HLS 不纳入保留期清理（其 HLS 目录已随文件删除路径处理）
     const { rows } = await pool.query(
       `SELECT id FROM recording_files
-       WHERE hls_status = 'ready' AND hls_generated_at < $1
+       WHERE hls_status = 'ready' AND hls_generated_at < $1 AND deleted_at IS NULL
        ORDER BY hls_generated_at ASC, id ASC`,
       [cutoff]
     );

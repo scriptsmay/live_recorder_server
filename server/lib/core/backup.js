@@ -65,8 +65,10 @@ async function deleteLocalFiles(files, logKey, sessionId) {
         logStream.write(`[删除] ${fp}\n`);
         results.deleted++;
         try {
+          // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
           await pool.query(
-            `UPDATE recording_files SET status = 'deleted', checked_at = NOW() WHERE file_path = $1 AND status != 'deleted'`,
+            `UPDATE recording_files SET status = 'deleted', checked_at = NOW()
+             WHERE file_path = $1 AND status != 'deleted' AND deleted_at IS NULL`,
             [fp]
           );
         } catch (dbErr) {
@@ -76,7 +78,8 @@ async function deleteLocalFiles(files, logKey, sessionId) {
         logStream.write(`[跳过-不存在] ${fp}\n`);
         try {
           await pool.query(
-            `UPDATE recording_files SET status = 'deleted', checked_at = NOW() WHERE file_path = $1 AND status != 'deleted'`,
+            `UPDATE recording_files SET status = 'deleted', checked_at = NOW()
+             WHERE file_path = $1 AND status != 'deleted' AND deleted_at IS NULL`,
             [fp]
           );
         } catch (dbErr) {
@@ -91,7 +94,8 @@ async function deleteLocalFiles(files, logKey, sessionId) {
   if (sessionId) {
     try {
       await pool.query(
-        `UPDATE recording_files SET status = 'deleted', checked_at = NOW() WHERE session_id = $1 AND status NOT IN ('deleted', 'missing')`,
+        `UPDATE recording_files SET status = 'deleted', checked_at = NOW()
+         WHERE session_id = $1 AND status NOT IN ('deleted', 'missing') AND deleted_at IS NULL`,
         [sessionId]
       );
     } catch (dbErr) {
