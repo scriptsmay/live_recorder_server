@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError } from '@/utils/api'
 import { useAuthStore } from '@/stores/auth'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +41,11 @@ async function submit() {
 
 <template>
   <div class="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">
+    <!-- 右上角主题切换 -->
+    <div class="absolute top-4 right-4 z-10">
+      <ThemeToggle />
+    </div>
+
     <!-- 环境光斑 -->
     <div
       class="pointer-events-none absolute -top-40 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-brand-500/20 blur-[130px]"

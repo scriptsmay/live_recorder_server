@@ -6,8 +6,12 @@ export type ThemeMode = 'light' | 'dark'
 const STORAGE_KEY = 'theme'
 
 function initialTheme(): ThemeMode {
-  const saved = localStorage.getItem(STORAGE_KEY)
-  if (saved === 'light' || saved === 'dark') return saved
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved === 'light' || saved === 'dark') return saved
+  } catch {
+    // 忽略私有模式或受限环境下的 Storage 异常
+  }
   return 'light'
 }
 
@@ -24,7 +28,11 @@ export const useThemeStore = defineStore('theme', () => {
 
   function setTheme(next: ThemeMode) {
     theme.value = next
-    localStorage.setItem(STORAGE_KEY, next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // 忽略写入失败
+    }
     apply()
   }
 

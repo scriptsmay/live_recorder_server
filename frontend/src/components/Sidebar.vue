@@ -179,6 +179,7 @@ function hideTooltip() {
 <template>
   <!-- 移动端汉堡按钮 -->
   <button
+    v-if="!mobileOpen"
     class="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg text-gray-600 glass-panel hover:text-gray-900 transition-colors"
     @click="mobileOpen = true"
   >

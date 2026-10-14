@@ -44,7 +44,7 @@ onMounted(() => {
     >
       <header class="sticky top-0 z-40 border-b border-gray-200 bg-surface/80 backdrop-blur-xl">
         <div
-          class="mx-auto flex h-14 w-full max-w-[1600px] items-center justify-between pl-14 pr-4 sm:px-6 lg:px-8"
+          class="mx-auto flex h-14 w-full max-w-[1600px] items-center justify-between pl-14 pr-4 sm:pl-14 sm:pr-6 lg:px-8"
         >
           <h2 class="truncate text-sm font-medium text-gray-900">{{ pageTitle }}</h2>
           <ThemeToggle />

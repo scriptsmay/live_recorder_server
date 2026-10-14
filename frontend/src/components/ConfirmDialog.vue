@@ -17,7 +17,7 @@ const { confirmState, onConfirm, onCancel } = useConfirm()
 
         <!-- 对话框 -->
         <div
-          class="relative glass-panel rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-[0_24px_60px_-16px_rgba(0,0,0,0.7),0_0_40px_-14px_rgba(99,102,241,0.45)]"
+          class="relative glass-panel rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl"
         >
           <!-- 头部 -->
           <div class="px-6 pt-5 pb-3">

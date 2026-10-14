@@ -22,14 +22,14 @@ const props = withDefaults(
 )
 
 const toneMap: Record<string, { icon: string; glow: string; wrap: string }> = {
-  indigo: { icon: 'text-indigo-400', glow: 'bg-indigo-500/50', wrap: 'bg-indigo-500/10' },
-  blue: { icon: 'text-blue-400', glow: 'bg-blue-500/50', wrap: 'bg-blue-500/10' },
-  amber: { icon: 'text-amber-400', glow: 'bg-amber-500/50', wrap: 'bg-amber-500/10' },
-  cyan: { icon: 'text-cyan-400', glow: 'bg-cyan-500/50', wrap: 'bg-cyan-500/10' },
-  teal: { icon: 'text-teal-400', glow: 'bg-teal-500/50', wrap: 'bg-teal-500/10' },
-  rose: { icon: 'text-rose-400', glow: 'bg-rose-500/50', wrap: 'bg-rose-500/10' },
-  purple: { icon: 'text-purple-400', glow: 'bg-purple-500/50', wrap: 'bg-purple-500/10' },
-  emerald: { icon: 'text-emerald-400', glow: 'bg-emerald-500/50', wrap: 'bg-emerald-500/10' },
+  indigo: { icon: 'text-indigo-600', glow: 'bg-indigo-500/50', wrap: 'bg-indigo-500/10' },
+  blue: { icon: 'text-blue-600', glow: 'bg-blue-500/50', wrap: 'bg-blue-500/10' },
+  amber: { icon: 'text-amber-600', glow: 'bg-amber-500/50', wrap: 'bg-amber-500/10' },
+  cyan: { icon: 'text-cyan-600', glow: 'bg-cyan-500/50', wrap: 'bg-cyan-500/10' },
+  teal: { icon: 'text-teal-600', glow: 'bg-teal-500/50', wrap: 'bg-teal-500/10' },
+  rose: { icon: 'text-rose-600', glow: 'bg-rose-500/50', wrap: 'bg-rose-500/10' },
+  purple: { icon: 'text-purple-600', glow: 'bg-purple-500/50', wrap: 'bg-purple-500/10' },
+  emerald: { icon: 'text-emerald-600', glow: 'bg-emerald-500/50', wrap: 'bg-emerald-500/10' },
 }
 
 const palette = computed(() => toneMap[props.tone] ?? toneMap.indigo)
@@ -55,7 +55,7 @@ const palette = computed(() => toneMap[props.tone] ?? toneMap.indigo)
 
     <div v-else class="relative flex items-start justify-between gap-4">
       <div class="min-w-0">
-        <div class="text-[0.8rem] font-medium text-gray-400">{{ label }}</div>
+        <div class="text-[0.8rem] font-medium text-gray-500">{{ label }}</div>
         <div class="mt-1.5 text-3xl font-semibold tracking-tight text-gray-900 tabular-nums">
           {{ value }}
         </div>
@@ -63,7 +63,7 @@ const palette = computed(() => toneMap[props.tone] ?? toneMap.indigo)
           <div v-for="line in sublines" :key="line" class="text-xs text-gray-500">
             {{ line }}
           </div>
-          <div v-if="warning" class="text-xs font-medium text-amber-400">{{ warning }}</div>
+          <div v-if="warning" class="text-xs font-medium text-amber-600">{{ warning }}</div>
         </div>
       </div>
       <div

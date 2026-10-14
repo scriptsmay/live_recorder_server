@@ -37,6 +37,13 @@ Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /dat
 `test/spa-routes.test.js` 会自动比对 `frontend/src/router/index.ts` 的静态路由与后端白名单，
 缺失或存在死条目都会让测试失败。
 
+### 前端主题系统
+
+前端采用 Tailwind CSS v4 与 CSS 变量实现亮色（默认暖橙 + 暖白）与深色（近黑与微光玻璃拟态）双主题架构：
+- **状态与持久化**：主题状态由 Pinia Store（`frontend/src/stores/theme.ts`）管理，持久化在 `localStorage`，向 `<html>` 注入 `data-theme="light|dark"`。
+- **首屏防白闪**：`frontend/index.html` 包含内联脚本，在 DOM 渲染前提前读取主题偏好设置。
+- **样式换肤**：配色通过 `frontend/src/style.css` 在 `html[data-theme='dark']` 作用域覆盖设计 token（中性色反转与语义色亮化），无需侵入式改写业务页面的 Tailwind 类名。
+
 ## 环境变量加载
 
 环境变量统一由 `server/config/env.js` 初始化：
