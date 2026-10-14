@@ -217,6 +217,7 @@ describe('新增登记', () => {
 });
 
 describe('删除登记', () => {
+  // v1.12.0：删除改软删除（UPDATE deleted_at），断言同步更新
   test('未被模板引用时删除并保留 cookie 文件', async () => {
     pool.query
       .mockResolvedValueOnce({ rows: [{ cookies_path: COOKIES_PATH }] })
@@ -226,7 +227,7 @@ describe('删除登记', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.message).toBe('账号登记已删除，cookie 文件保留');
-    expect(pool.query.mock.calls[2][0]).toContain('DELETE FROM biliup_accounts');
+    expect(pool.query.mock.calls[2][0]).toContain('UPDATE biliup_accounts SET deleted_at = NOW()');
   });
 
   test('被投稿模板引用时 409 并回引用数', async () => {
@@ -238,7 +239,7 @@ describe('删除登记', () => {
     expect(response.status).toBe(409);
     expect(response.body.referenced_by).toBe(2);
     expect(response.body.message).toContain('2 个投稿模板');
-    expect(pool.query.mock.calls.some(([sql]) => sql.includes('DELETE'))).toBe(false);
+    expect(pool.query.mock.calls.some(([sql]) => sql.includes('UPDATE biliup_accounts'))).toBe(false);
   });
 
   test('账号不存在返回 404', async () => {

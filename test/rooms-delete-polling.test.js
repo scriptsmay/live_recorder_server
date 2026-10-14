@@ -2,8 +2,8 @@
 // 背景：v1.10.1 及以前，DELETE 路由只调 RoomService.deleteRoom()，不触碰 PollingManager。
 // 2026-08-31 冒烟清理 DELETE /api/rooms/18 后定时器泄漏成"幽灵轮询器"，
 // 2026-09-01 检测到斗鱼 12451579 开播并误启动录制（会话 62）。
-// 修复：删除成功后调用 pollingManager.reloadRoom(id)——行已不存在时走
-// stopRoomPolling 分支清除定时器与元数据，天然幂等。
+// 修复：删除成功后调用 pollingManager.reloadRoom(id)——v1.12.0 起房间为软删除，
+// reloadRoom 的查询过滤软删行后返回空，同样走 stopRoomPolling 分支清除定时器与元数据，天然幂等。
 jest.mock('../server/services/RoomService', () => ({
   deleteRoom: jest.fn(),
 }));
@@ -68,7 +68,7 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     pollingManager.roomLiveStatus.set(18, false);
 
     RoomService.deleteRoom.mockResolvedValue({ success: true, message: '删除成功' });
-    // reloadRoom 查询 rooms 表：行已删除，返回空
+    // reloadRoom 查询 rooms 表：v1.12.0 软删行被过滤，返回空
     pool.query.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app).delete('/api/rooms/18');
@@ -76,8 +76,8 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok', message: '删除成功' });
     expect(RoomService.deleteRoom).toHaveBeenCalledWith('18');
-    // reloadRoom 按数值 id 查库确认行已不存在 → stopRoomPolling 清理
-    expect(pool.query).toHaveBeenCalledWith('SELECT * FROM rooms WHERE id = $1', [18]);
+    // reloadRoom 按数值 id 查库（过滤软删行）确认行不存在 → stopRoomPolling 清理
+    expect(pool.query).toHaveBeenCalledWith('SELECT * FROM rooms WHERE id = $1 AND deleted_at IS NULL', [18]);
     expect(pollingManager.timers.has('room:18')).toBe(false);
     expect(pollingManager.roomPollingMeta.has(18)).toBe(false);
   });

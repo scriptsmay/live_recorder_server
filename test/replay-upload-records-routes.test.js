@@ -116,9 +116,10 @@ describe('回放投稿记录列表', () => {
 });
 
 describe('删除回放投稿记录', () => {
+  // v1.12.0：删除改软删除（UPDATE … SET deleted_at），正则同步更新
   function deletedTable() {
     const [sql] = pool.query.mock.calls[0];
-    return sql.match(/DELETE FROM (\w+)/)[1];
+    return sql.match(/UPDATE (\w+) SET deleted_at/)[1];
   }
 
   test('只删 replay_upload_records，不碰同号的常规投稿', async () => {
@@ -128,7 +129,10 @@ describe('删除回放投稿记录', () => {
 
     expect(response.status).toBe(200);
     expect(deletedTable()).toBe('replay_upload_records');
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM replay_upload_records'), ['12']);
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE replay_upload_records SET deleted_at = NOW()'),
+      ['12']
+    );
     expect(response.body.data).toEqual({ id: 12 });
   });
 

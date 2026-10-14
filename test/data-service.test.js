@@ -217,7 +217,8 @@ describe('DataService dashboard helpers', () => {
     pool.query.mockResolvedValueOnce({ rows: [{ count: '8' }] });
 
     await expect(DataService.getRoomTotal()).resolves.toBe(8);
-    expect(pool.query).toHaveBeenCalledWith('SELECT COUNT(*) FROM rooms');
+    // v1.12.0：软删房间不计入总数
+    expect(pool.query).toHaveBeenCalledWith('SELECT COUNT(*) FROM rooms WHERE deleted_at IS NULL');
   });
 });
 

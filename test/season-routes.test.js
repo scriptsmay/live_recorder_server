@@ -352,9 +352,10 @@ describe('投稿记录列表标题模糊查询', () => {
 });
 
 describe('删除投稿记录只动常规投稿表', () => {
+  // v1.12.0：删除改软删除（UPDATE … SET deleted_at），正则同步更新
   function deletedTable() {
     const [sql] = pool.query.mock.calls[0];
-    return sql.match(/DELETE FROM (\w+)/)[1];
+    return sql.match(/UPDATE (\w+) SET deleted_at/)[1];
   }
 
   test('只删 upload_records，不再有 ?source= 分支', async () => {
@@ -364,7 +365,9 @@ describe('删除投稿记录只动常规投稿表', () => {
 
     expect(response.status).toBe(200);
     expect(deletedTable()).toBe('upload_records');
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM upload_records'), ['5']);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE upload_records SET deleted_at = NOW()'), [
+      '5',
+    ]);
   });
 
   test('即使请求带上 source=replay 也仍只删常规表', async () => {

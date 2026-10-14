@@ -124,7 +124,8 @@ describe('ReplayService', () => {
     const record = await ReplayService.getRecord(5);
 
     expect(record).toEqual({ id: 5, principal_id: 'abc', status: 'pending' });
-    expect(pool.query).toHaveBeenCalledWith('SELECT * FROM replay_records WHERE id = $1', [5]);
+    // v1.12.0：软删回放记录查不到
+    expect(pool.query).toHaveBeenCalledWith('SELECT * FROM replay_records WHERE id = $1 AND deleted_at IS NULL', [5]);
   });
 
   test('getRecord 不存在时返回 null', async () => {
@@ -141,8 +142,9 @@ describe('ReplayService', () => {
     const record = await ReplayService.getRecordByReplayId('abc', 'r1');
 
     expect(record).toEqual({ id: 5, principal_id: 'abc', replay_id: 'r1' });
+    // v1.12.0：软删回放记录查不到
     expect(pool.query).toHaveBeenCalledWith(
-      'SELECT * FROM replay_records WHERE principal_id = $1 AND replay_id = $2 LIMIT 1',
+      'SELECT * FROM replay_records WHERE principal_id = $1 AND replay_id = $2 AND deleted_at IS NULL LIMIT 1',
       ['abc', 'r1']
     );
   });
