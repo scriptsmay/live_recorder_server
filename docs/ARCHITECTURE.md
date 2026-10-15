@@ -44,7 +44,8 @@ Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /dat
 - **状态与持久化**：主题状态由 Pinia Store（`frontend/src/stores/theme.ts`）管理，持久化在 `localStorage`，向 `<html>` 注入 `data-theme="light|dark"`。
 - **首屏防白闪**：`frontend/index.html` 包含内联脚本，在 DOM 渲染前提前读取主题偏好设置。
 - **样式换肤**：配色通过 `frontend/src/style.css` 在 `html[data-theme='dark']` 作用域覆盖设计 token（中性色反转与语义色亮化），无需侵入式改写业务页面的 Tailwind 类名。
-- **侧边栏配色 token**：侧边栏（`frontend/src/components/Sidebar.vue`，移动端抽屉与 PC 侧栏为同一元素，仅靠 `lg:` 断点切换显隐）不自持硬编码色值，改用 `--sidebar-*` 一族变量（`bg`/`hairline`/`ink`/`muted`/`sub`/`dim`/`hover`/`active`/`accent`/`inset-shadow`），在 `:root` 定义亮色、`html[data-theme='dark']` 覆盖深色。新增主题配色时改 token 即可，两套端与两套主题自动同步。
+- **侧边栏配色 token**：侧边栏（`frontend/src/components/Sidebar.vue`，移动端抽屉与 PC 侧栏为同一元素，仅靠 `lg:` 断点切换显隐）不自持硬编码色值，改用 `--sidebar-*` 一族变量（`bg`/`hairline`/`ink`/`muted`/`sub`/`dim`/`hover`/`active`/`accent`/`inset-shadow`），在 `:root` 定义亮色、`html[data-theme='dark']` 覆盖深色。位于侧边栏底部的用户菜单（`frontend/src/components/UserMenu.vue`）同样走这族变量，故也可在深色侧栏顶栏（`Navbar.vue`）中复用。
+- **上下文相关的共享组件**：`UserMenu` 这类同时挂在侧栏与顶栏的组件，配色取所在容器的 token（侧栏里用 `--sidebar-*`），**弹层例外**——其下拉气泡脱离容器、直接叠在页面内容上，必须用可换肤的全局 token（`bg-surface-alt` / `border-gray-200` / `text-gray-*`），否则会在亮色主题下渲染出深色气泡。
 
 ## 环境变量加载
 
