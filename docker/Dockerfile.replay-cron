@@ -6,12 +6,19 @@
 # - redis-cli   : Redis Pub/Sub 监听（事件驱动同步）
 # - psql        : PostgreSQL 客户端（sync-records.sh 数据同步）
 # - crond       : 定时任务调度（Alpine busybox 内置）
+# - tzdata      : 时区数据库，让 compose 注入的 TZ=Asia/Shanghai 真正生效
+#                 busybox crond 按 localtime 判定触发点，缺 tzdata 时 TZ 会被静默忽略，
+#                 所有表达式退化成 UTC（BACKUP_CRON_EXPR=30 2 实际跑在北京时间 10:30）
 FROM alpine:3.21
 
 RUN apk add --no-cache \
     curl \
     redis \
     postgresql17-client \
+    tzdata \
     && rm -rf /var/cache/apk/*
+
+# 构建期自检：TZ 不生效时这里就失败，不会把一个只会按 UTC 调度的镜像推上制品库
+RUN [ "$(TZ=Asia/Shanghai date '+%z')" = "+0800" ]
 
 ENTRYPOINT ["/bin/sh"]

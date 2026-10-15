@@ -402,5 +402,22 @@ onUnmounted(() => {
         </div>
       </div>
     </section>
+
+    <footer
+      class="text-center text-xs text-gray-400 py-4 border-t border-gray-200 flex flex-wrap items-center justify-center gap-x-6 gap-y-1"
+    >
+      <span>
+        <strong class="text-gray-500 font-medium">系统启动时间:</strong>
+        {{ $formatTime(appStore.serverStartTime) }}
+      </span>
+      <span>
+        <strong class="text-gray-500 font-medium">应用版本:</strong>
+        v{{ appStore.appVersion || '-' }}
+      </span>
+      <span>
+        <strong class="text-gray-500 font-medium">Docker 镜像版本:</strong>
+        {{ appStore.dockerImageVersion || '-' }}
+      </span>
+    </footer>
   </div>
 </template>

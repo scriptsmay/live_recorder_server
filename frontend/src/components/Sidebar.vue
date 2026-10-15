@@ -347,7 +347,7 @@ function hideTooltip() {
                 :class="
                   isActive(item)
                     ? 'text-brand-300 bg-brand-500/10'
-                    : 'text-[#8b8b94] hover:text-[#e4e4e7] hover:bg-white/[0.04]'
+                    : 'text-[#e0e0e5] hover:text-[#e4e4e7] hover:bg-white/[0.04]'
                 "
               >
                 <span>{{ item.label }}</span>
