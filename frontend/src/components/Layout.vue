@@ -57,7 +57,6 @@ onMounted(() => {
           </div>
         </Transition>
       </main>
-      
     </div>
   </div>
 </template>
