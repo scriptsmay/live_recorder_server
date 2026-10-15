@@ -42,7 +42,9 @@ function activityKey(item: ActivityItem) {
 </script>
 
 <template>
-  <section class="hairline-card rounded-xl overflow-hidden">
+  <!-- relative：为列表折叠动画的 .activity-list-leave-active{position:absolute} 提供定位上下文，
+       原先由 .hairline-card 隐式提供（该隐式 position 已移除，见 style.css） -->
+  <section class="relative hairline-card rounded-xl overflow-hidden">
     <div class="px-6 py-3 border-b border-gray-200">
       <h2 class="text-sm font-semibold text-gray-900">近期活动</h2>
     </div>

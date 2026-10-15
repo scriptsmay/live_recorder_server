@@ -350,9 +350,13 @@
     border: 1px solid var(--hairline);
   }
 
-  /* 超细描边卡片 */
+  /* 超细描边卡片
+   * 注意：这里不得声明 position——utilities 层内本规则排在 Tailwind 生成的
+   * 变体类（如 @media(xl){.xl\:sticky}）之后，同优先级下会静默覆盖它们。
+   * 曾因 `position: relative` 覆盖 `.xl:sticky`，使侧栏卡片上的 `top-20`
+   * 从吸附偏移退化为「相对自身下移 80px」。需要定位上下文的话，在调用处
+   * 自加 `relative`（如 StatCard.vue）。 */
   .hairline-card {
-    position: relative;
     background:
       linear-gradient(180deg, var(--hairline-highlight), transparent 42%), var(--color-surface-alt);
     border: 1px solid var(--hairline);
