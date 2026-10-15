@@ -897,3 +897,42 @@ error: Failed to build `biliup==1.2.11`
 3. **固定版本要固定在「现网实际在跑」的那一档**：不要顺手选上游最后一个有 wheel 的版本（1.2.9），那等于在同一发布里夹带一次未验证的依赖升级。
 4. **构建失败先分清是不是自己的变更**：`git diff <上个 tag>..HEAD -- Dockerfile docker/` 为空、而流水线从 success 变 error，基本可以判定是外部漂移，别在业务代码里找原因。
 5. **镜像失败不等于版本作废**：主服务镜像挂住时 replay-cron 已产出，修复只需重打 tag；但要处理「已推送却没有产物的标签」，别把它留在远端当历史真相。
+
+## @layer utilities 中的自定义类会静默覆盖 Tailwind 变体类
+
+### 现象
+
+仪表盘「活跃录制进程」卡片在 xl 断点（两栏布局）下比右侧「近期活动」低 80px，看起来像没做顶部对齐；但该类上明明写着 `xl:self-start`（父容器没有 `items-center`，grid 默认就是 `stretch`/`start` 语义），代码层面找不到"居中"或"下移"的理由。
+
+### 根因
+
+CSS 层叠顺序，不是 class 名的问题：
+
+```css
+/* 编译产物中的实际顺序 */
+@media (width>=80rem) { .xl\:sticky { position: sticky } }   /* ← 先 */
+.hairline-card { position: relative; … }                      /* ← 后，胜出 */
+```
+
+`style.css` 的 `@layer utilities` 里定义的 `.hairline-card` 排在 Tailwind 生成的变体类**之后**。二者同为**单类选择器**（`0,1,0`，优先级相同），同层同优先级下"后写的赢"，于是 `position: relative` 静默压掉 `xl:sticky`。
+
+`position` 从 `sticky` 退化为 `relative` 后，`top-20` 的语义完全不同：
+
+- `position: sticky` + `top: 5rem` → 滚动到距视口顶 5rem 时**吸附**；
+- `position: relative` + `top: 5rem` → **相对自身原位置下移 5rem**（80px）。
+
+卡片因此整体下移，与右栏错位——一个"布局没对齐"的表象，根因是一次层叠覆盖。
+
+### 修复
+
+1. 从 `.hairline-card` 移除 `position`，并在规则上方注释该陷阱；
+2. 需要定位上下文的调用处**自显式声明** `relative`：`ActivityTimeline.vue` 的列表折叠动画用到 `.activity-list-leave-active{position:absolute}`（原先靠 `hairline-card` 隐式提供 containing block），改后在 section 上补 `relative`；`StatCard.vue` 本就有 `relative`（装饰光斑是 absolute），不受影响；
+3. 加回归用例 `test/frontend-utility-cascade.test.js`：断言 `hairline-card` 规则体不含 `position`，且依赖定位上下文的调用处显式声明 `relative`。
+
+### 经验总结
+
+1. **自定义 utility 里不要写会与变体冲突的属性**。`position` / `display` / `grid-template-columns` 这类"结构属性"最危险——它们会被调用处的响应式变体类（`xl:sticky`、`md:flex`）覆盖或反过来覆盖变体，方向取决于编译产物中的书写顺序，而那个顺序由 Tailwind 的层内排序决定、不受调用处控制。
+2. **"优先级相同就是书写顺序决定"**，别指望 `@layer` 能救：`@layer utilities` 只把它和 `@layer components` 之类分层，**层内**仍是普通层叠。自定义类和 Tailwind 生成的类同在 utilities 层，就是拼顺序。
+3. **诊断方法**：`getComputedStyle` 读到"意外但又合法"的值（`sticky` 期望却得到 `relative`）时，立即怀疑层叠覆盖——用 `element.className = '去掉可疑类'` 现场对比，值随之变化即证实。定位产物顺序用构建出的 CSS 文件里 `indexOf` 两个选择器比大小，比读源码可靠（源码里的书写位置不等于层内生成位置）。
+4. **测量脚本自身的 bug 会伪装成结论**：第一次测量写成 `if (variant === 'fixed') remove('xl:self-start')`，但循环里复用了 `nomstart` 分支的类操作，导致"current"档也被删掉了 `self-start`，量出"两个卡片顶部差 80px、align-self 却是 flex-start"这种自相矛盾的结果。数值自相矛盾时先查量具，不要沿着错误数据往下推。
+5. **`.hairline-card` 改名/重构时的检查项**：调用处若含 `absolute` 子元素（装饰光斑、折叠动画、角标），必须显式带 `relative`。
