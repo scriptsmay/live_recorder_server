@@ -180,7 +180,7 @@ function hideTooltip() {
   <!-- 移动端汉堡按钮 -->
   <button
     v-if="!mobileOpen"
-    class="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg text-gray-600 glass-panel hover:text-gray-900 transition-colors"
+    class="lg:hidden fixed top-2 left-3 z-50 p-2 rounded-lg text-[var(--sidebar-muted)] glass-panel hover:text-[var(--sidebar-ink)] transition-colors"
     @click="mobileOpen = true"
   >
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,17 +204,17 @@ function hideTooltip() {
 
   <!-- 侧边栏 -->
   <aside
-    class="fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 bg-[#0a0a0d]/85 backdrop-blur-2xl border-r border-white/[0.06] shadow-[inset_-1px_0_0_rgba(255,255,255,0.02)]"
+    class="fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 bg-[var(--sidebar-bg)] backdrop-blur-2xl border-r border-[var(--sidebar-hairline)] shadow-[var(--sidebar-inset-shadow)]"
     :class="[
       collapsed ? 'w-16' : 'w-56',
       mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
     ]"
   >
     <!-- Logo -->
-    <div class="flex items-center h-14 px-4 border-b border-white/[0.06] shrink-0">
+    <div class="flex items-center h-14 px-4 border-b border-[var(--sidebar-hairline)] shrink-0">
       <router-link
         to="/dashboard"
-        class="flex items-center gap-2 text-white hover:text-brand-300 transition-colors"
+        class="flex items-center gap-2 text-[var(--sidebar-ink)] hover:text-[var(--sidebar-accent)] transition-colors"
       >
         <img src="/logo.svg" alt="K-Recorder" class="h-6 shrink-0" />
         <span v-if="!collapsed" class="font-semibold text-[0.95rem] tracking-tight"
@@ -223,7 +223,7 @@ function hideTooltip() {
       </router-link>
       <button
         v-if="!collapsed"
-        class="ml-auto hidden lg:block p-1.5 rounded-md text-[#71717a] hover:text-white hover:bg-white/[0.06] transition-colors"
+        class="ml-auto hidden lg:block p-1.5 rounded-md text-[var(--sidebar-dim)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-active)] transition-colors"
         @click="toggleCollapsed"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,7 +237,7 @@ function hideTooltip() {
       </button>
       <button
         v-else
-        class="ml-auto hidden lg:block p-1.5 rounded-md text-[#71717a] hover:text-white hover:bg-white/[0.06] transition-colors"
+        class="ml-auto hidden lg:block p-1.5 rounded-md text-[var(--sidebar-dim)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-active)] transition-colors"
         @click="toggleCollapsed"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -261,8 +261,8 @@ function hideTooltip() {
             class="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             :class="
               route.path === group.to
-                ? 'text-white bg-white/[0.07]'
-                : 'text-[#a1a1aa] hover:text-white hover:bg-white/[0.04]'
+                ? 'text-[var(--sidebar-ink)] bg-[var(--sidebar-active)]'
+                : 'text-[var(--sidebar-muted)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
             "
             @mouseenter="collapsed ? showTooltip($event, group.label) : undefined"
             @mouseleave="hideTooltip"
@@ -273,7 +273,7 @@ function hideTooltip() {
             />
             <svg
               class="w-5 h-5 shrink-0"
-              :class="route.path === group.to ? 'text-brand-300' : ''"
+              :class="route.path === group.to ? 'text-[var(--sidebar-accent)]' : ''"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -296,8 +296,8 @@ function hideTooltip() {
             class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
             :class="
               isInGroup(group)
-                ? 'text-white bg-white/[0.04]'
-                : 'text-[#a1a1aa] hover:text-white hover:bg-white/[0.04]'
+                ? 'text-[var(--sidebar-ink)] bg-[var(--sidebar-hover)]'
+                : 'text-[var(--sidebar-muted)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
             "
             @click="
               collapsed && group.children?.length
@@ -337,7 +337,7 @@ function hideTooltip() {
           <Transition name="slide">
             <div
               v-if="!collapsed && !collapsedGroups[group.label]"
-              class="ml-4 mt-0.5 pl-3 border-l border-white/[0.06]"
+              class="ml-4 mt-0.5 pl-3 border-l border-[var(--sidebar-hairline)]"
             >
               <router-link
                 v-for="item in group.children"
@@ -346,8 +346,8 @@ function hideTooltip() {
                 class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors"
                 :class="
                   isActive(item)
-                    ? 'text-brand-300 bg-brand-500/10'
-                    : 'text-[#e0e0e5] hover:text-[#e4e4e7] hover:bg-white/[0.04]'
+                    ? 'text-[var(--sidebar-accent)] bg-brand-500/10'
+                    : 'text-[var(--sidebar-sub)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
                 "
               >
                 <span>{{ item.label }}</span>
@@ -359,10 +359,12 @@ function hideTooltip() {
     </nav>
 
     <!-- 底部 -->
-    <div class="border-t border-white/[0.06] px-4 py-3 shrink-0 overflow-visible relative z-10">
+    <div
+      class="border-t border-[var(--sidebar-hairline)] px-4 py-3 shrink-0 overflow-visible relative z-10"
+    >
       <div v-if="!collapsed" class="flex items-center justify-between">
         <UserMenu />
-        <span class="text-xs text-[#8b8b94]">v{{ appStore.appVersion || '—' }}</span>
+        <span class="text-xs text-[var(--sidebar-sub)]">v{{ appStore.appVersion || '—' }}</span>
       </div>
       <div v-else class="flex justify-center">
         <UserMenu />
@@ -374,7 +376,7 @@ function hideTooltip() {
       <Transition name="fade">
         <div
           v-if="tooltip && collapsed"
-          class="fixed left-[4.5rem] px-2.5 py-1 text-gray-100 text-xs rounded-lg bg-[#15151a]/95 backdrop-blur-xl border border-white/10 shadow-xl whitespace-nowrap z-[60] pointer-events-none"
+          class="fixed left-[4.5rem] px-2.5 py-1 text-[#f4f4f5] text-xs rounded-lg bg-[#15151a]/95 backdrop-blur-xl border border-white/10 shadow-xl whitespace-nowrap z-[60] pointer-events-none"
           :style="{ top: tooltip.top + 'px', transform: 'translateY(-50%)' }"
         >
           {{ tooltip.text }}

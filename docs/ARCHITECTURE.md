@@ -40,9 +40,11 @@ Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /dat
 ### 前端主题系统
 
 前端采用 Tailwind CSS v4 与 CSS 变量实现亮色（默认暖橙 + 暖白）与深色（近黑与微光玻璃拟态）双主题架构：
+
 - **状态与持久化**：主题状态由 Pinia Store（`frontend/src/stores/theme.ts`）管理，持久化在 `localStorage`，向 `<html>` 注入 `data-theme="light|dark"`。
 - **首屏防白闪**：`frontend/index.html` 包含内联脚本，在 DOM 渲染前提前读取主题偏好设置。
 - **样式换肤**：配色通过 `frontend/src/style.css` 在 `html[data-theme='dark']` 作用域覆盖设计 token（中性色反转与语义色亮化），无需侵入式改写业务页面的 Tailwind 类名。
+- **侧边栏配色 token**：侧边栏（`frontend/src/components/Sidebar.vue`，移动端抽屉与 PC 侧栏为同一元素，仅靠 `lg:` 断点切换显隐）不自持硬编码色值，改用 `--sidebar-*` 一族变量（`bg`/`hairline`/`ink`/`muted`/`sub`/`dim`/`hover`/`active`/`accent`/`inset-shadow`），在 `:root` 定义亮色、`html[data-theme='dark']` 覆盖深色。新增主题配色时改 token 即可，两套端与两套主题自动同步。
 
 ## 环境变量加载
 
