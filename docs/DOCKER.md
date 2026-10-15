@@ -195,6 +195,8 @@ biliup --help
 
 `backup-db.sh` 由同一个 `replay_cron` sidecar 调度（镜像自带 `postgresql17-client`，主应用镜像里没有 `pg_dump`），每日把整库导出为 `pg_dump -Fc` 自定义格式归档，本地落盘。启用：`.env` 中设置 `BACKUP_CRON_ENABLED=true`，并把 `DB_BACKUP_HOST_DIR` 指向宿主机目录。
 
+> 表里的 crontab 表达式按 **北京时间** 判定：sidecar 镜像装了 `tzdata`，`TZ=Asia/Shanghai` 才会生效。缺 `tzdata` 时 busybox crond 会静默忽略 `TZ`、退回 UTC，排期整体偏移 8 小时（`30 2 * * *` 实际在北京时间上午 10:30 触发），且日志与产物文件名的时间戳一并偏成 UTC，从表面上看不出错。该约束由 `test/cron-env-defaults.test.js` 静态锁定。
+
 | 变量                    | 默认值       | 说明                                            |
 | ----------------------- | ------------ | ----------------------------------------------- |
 | `BACKUP_CRON_ENABLED`   | `false`      | 总开关                                          |

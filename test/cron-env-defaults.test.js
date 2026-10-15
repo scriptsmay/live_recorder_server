@@ -11,10 +11,12 @@ const path = require('path');
 const ENTRYPOINT = path.join(__dirname, '..', 'scripts', 'cron-entrypoint.sh');
 const COMPOSE = path.join(__dirname, '..', 'docker', 'docker-compose.cron.yml');
 const BACKUP_SCRIPT = path.join(__dirname, '..', 'scripts', 'backup-db.sh');
+const DOCKERFILE = path.join(__dirname, '..', 'docker', 'Dockerfile.replay-cron');
 
 const entrypoint = fs.readFileSync(ENTRYPOINT, 'utf8');
 const compose = fs.readFileSync(COMPOSE, 'utf8');
 const backupScript = fs.readFileSync(BACKUP_SCRIPT, 'utf8');
+const dockerfile = fs.readFileSync(DOCKERFILE, 'utf8');
 
 // 注释里的示例（例如 `${VAR:-}`）不参与判定，否则会掩盖真实的裸引用
 function code(script) {
@@ -96,5 +98,23 @@ describe('replay_cron sidecar 启动默认值', () => {
     // Dockerfile.replay-cron 是 alpine + postgresql17-client + curl，无 bash
     expect(backupScript.startsWith('#!/bin/sh')).toBe(true);
     expect(backupScript).toContain('set -eu');
+  });
+});
+
+// busybox crond 用 localtime 判分钟，镜像里没有 tzdata 时 TZ 会被静默忽略，
+// 排期整体偏到 UTC（备份从凌晨 02:30 变成上午 10:30），日志和产物名却看不出来。
+describe('replay_cron sidecar 时区', () => {
+  it('compose 注入带默认值的 TZ', () => {
+    expect(defaultedComposeKeys.has('TZ')).toBe(true);
+    expect(compose).toMatch(/^\s+TZ: \$\{TZ:-Asia\/Shanghai\}/m);
+  });
+
+  it('镜像装 tzdata 并带构建期 TZ 自检', () => {
+    const apkBlock = dockerfile.match(/apk add[\s\S]*?(?=\n\n)/);
+    expect(apkBlock).not.toBeNull();
+    expect(apkBlock[0]).toContain('tzdata');
+    // 自检断的是 UTC+8 偏移：没有 tzdata 时这行会失败，坏镜像构建不出来
+    expect(dockerfile).toContain('TZ=Asia/Shanghai date');
+    expect(dockerfile).toContain('+0800');
   });
 });
