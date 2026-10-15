@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import Layout from '@/components/Layout.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import RouteProgress from '@/components/RouteProgress.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -13,6 +14,7 @@ const isPublicRoute = computed(() => route.meta.public === true)
 </script>
 
 <template>
+  <RouteProgress />
   <div v-if="!auth.ready" class="min-h-screen flex items-center justify-center">
     <div class="flex flex-col items-center gap-4 text-gray-400">
       <div class="relative h-11 w-11">

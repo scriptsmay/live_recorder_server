@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { finishProgress, startProgress } from '@/utils/route-progress'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -158,6 +159,8 @@ const router = createRouter({
 
 // 路由守卫：自动设置页面标题
 router.beforeEach(async (to) => {
+  startProgress()
+
   const title = to.meta.title as string | undefined
   document.title = title ? `${title} - K-Recorder` : 'K-Recorder'
 
@@ -176,6 +179,14 @@ router.beforeEach(async (to) => {
   }
 
   return true
+})
+
+router.afterEach(() => {
+  finishProgress()
+})
+
+router.onError(() => {
+  finishProgress()
 })
 
 export default router

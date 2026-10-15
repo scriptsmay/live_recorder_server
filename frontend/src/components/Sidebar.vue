@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import UserMenu from './UserMenu.vue'
 import { useAppStore } from '@/stores/app'
@@ -18,6 +18,21 @@ watch(collapsed, (val) => {
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
+
+// ---- 移动端检测 ----
+// 移动端抽屉始终完整展开：忽略桌面折叠态，否则二级菜单会被隐藏且无法点击
+const isMobile = ref(window.innerWidth < 1024)
+const effectiveCollapsed = computed(() => !isMobile.value && collapsed.value)
+function updateIsMobile() {
+  isMobile.value = window.innerWidth < 1024
+}
+onMounted(() => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
+})
 
 // ---- 分组折叠状态 ----
 const collapsedGroups = ref<Record<string, boolean>>({})
@@ -206,7 +221,7 @@ function hideTooltip() {
   <aside
     class="fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 bg-[var(--sidebar-bg)] backdrop-blur-2xl border-r border-[var(--sidebar-hairline)] shadow-[var(--sidebar-inset-shadow)]"
     :class="[
-      collapsed ? 'w-16' : 'w-56',
+      effectiveCollapsed ? 'w-16' : 'w-56',
       mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
     ]"
   >
@@ -217,12 +232,12 @@ function hideTooltip() {
         class="flex items-center gap-2 text-[var(--sidebar-ink)] hover:text-[var(--sidebar-accent)] transition-colors"
       >
         <img src="/logo.svg" alt="K-Recorder" class="h-6 shrink-0" />
-        <span v-if="!collapsed" class="font-semibold text-[0.95rem] tracking-tight"
+        <span v-if="!effectiveCollapsed" class="font-semibold text-[0.95rem] tracking-tight"
           >K-Recorder</span
         >
       </router-link>
       <button
-        v-if="!collapsed"
+        v-if="!effectiveCollapsed"
         class="ml-auto hidden lg:block p-1.5 rounded-md text-[var(--sidebar-dim)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-active)] transition-colors"
         @click="toggleCollapsed"
       >
@@ -264,8 +279,9 @@ function hideTooltip() {
                 ? 'text-[var(--sidebar-ink)] bg-[var(--sidebar-active)]'
                 : 'text-[var(--sidebar-muted)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
             "
-            @mouseenter="collapsed ? showTooltip($event, group.label) : undefined"
+            @mouseenter="effectiveCollapsed ? showTooltip($event, group.label) : undefined"
             @mouseleave="hideTooltip"
+            @click="closeMobile"
           >
             <span
               v-if="route.path === group.to"
@@ -285,7 +301,7 @@ function hideTooltip() {
                 :d="group.icon"
               />
             </svg>
-            <span v-if="!collapsed">{{ group.label }}</span>
+            <span v-if="!effectiveCollapsed">{{ group.label }}</span>
           </router-link>
         </div>
 
@@ -300,11 +316,11 @@ function hideTooltip() {
                 : 'text-[var(--sidebar-muted)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
             "
             @click="
-              collapsed && group.children?.length
+              effectiveCollapsed && group.children?.length
                 ? router.push(group.children[0].to)
                 : toggleGroup(group.label)
             "
-            @mouseenter="collapsed ? showTooltip($event, group.label) : undefined"
+            @mouseenter="effectiveCollapsed ? showTooltip($event, group.label) : undefined"
             @mouseleave="hideTooltip"
           >
             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -315,9 +331,9 @@ function hideTooltip() {
                 :d="group.icon"
               />
             </svg>
-            <span v-if="!collapsed" class="flex-1 text-left">{{ group.label }}</span>
+            <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ group.label }}</span>
             <svg
-              v-if="!collapsed"
+              v-if="!effectiveCollapsed"
               class="w-4 h-4 shrink-0 transition-transform duration-200"
               :class="collapsedGroups[group.label] ? '' : 'rotate-90'"
               fill="none"
@@ -336,7 +352,7 @@ function hideTooltip() {
           <!-- 子菜单 -->
           <Transition name="slide">
             <div
-              v-if="!collapsed && !collapsedGroups[group.label]"
+              v-if="!effectiveCollapsed && !collapsedGroups[group.label]"
               class="ml-4 mt-0.5 pl-3 border-l border-[var(--sidebar-hairline)]"
             >
               <router-link
@@ -349,6 +365,7 @@ function hideTooltip() {
                     ? 'text-[var(--sidebar-accent)] bg-brand-500/10'
                     : 'text-[var(--sidebar-sub)] hover:text-[var(--sidebar-ink)] hover:bg-[var(--sidebar-hover)]'
                 "
+                @click="closeMobile"
               >
                 <span>{{ item.label }}</span>
               </router-link>
@@ -362,7 +379,7 @@ function hideTooltip() {
     <div
       class="border-t border-[var(--sidebar-hairline)] px-4 py-3 shrink-0 overflow-visible relative z-10"
     >
-      <div v-if="!collapsed" class="flex items-center justify-between">
+      <div v-if="!effectiveCollapsed" class="flex items-center justify-between">
         <UserMenu />
         <span class="text-xs text-[var(--sidebar-sub)]">v{{ appStore.appVersion || '—' }}</span>
       </div>
@@ -375,7 +392,7 @@ function hideTooltip() {
     <Teleport to="body">
       <Transition name="fade">
         <div
-          v-if="tooltip && collapsed"
+          v-if="tooltip && effectiveCollapsed"
           class="fixed left-[4.5rem] px-2.5 py-1 text-[#f4f4f5] text-xs rounded-lg bg-[#15151a]/95 backdrop-blur-xl border border-white/10 shadow-xl whitespace-nowrap z-[60] pointer-events-none"
           :style="{ top: tooltip.top + 'px', transform: 'translateY(-50%)' }"
         >
