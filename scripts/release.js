@@ -191,7 +191,7 @@ function deleteRemoteTags(remote, tags) {
         .split('\n')
         .map((line) => line.split('\t')[1])
         .filter(Boolean)
-        .map((ref) => ref.replace('refs/tags/', '').replace(/\^{}$/, '')),
+        .map((ref) => ref.replace('refs/tags/', '').replace(/\^{}$/, ''))
     );
     const tagsToDelete = tags.filter((t) => existingRemoteTags.has(t));
     if (tagsToDelete.length) {
