@@ -49,6 +49,7 @@ if (spaExists) {
       '/sessions',
       '/recordings',
       '/transcode',
+      '/danmaku-analysis',
       '/replay-toolbox',
       '/templates',
       '/upload-records',

@@ -9,6 +9,7 @@ const { getActiveDownloader } = require('./downloaders/DownloaderFactory');
 const { scanRecordingFiles } = require('./scan-files');
 const transcodeQueue = require('./TranscodeQueue');
 const hlsGenerator = require('./hls-generator');
+const analysisService = require('../../services/DanmakuAnalysisService');
 
 const { createModuleLogger } = require('./logger');
 const log = createModuleLogger('watchdog');
@@ -606,6 +607,61 @@ async function checkSessionHLS() {
 }
 
 /**
+ * 检查已完成且未分析的快手会话，入队 AI 弹幕分析（v1.13.0 / ADR-017）
+ *
+ * 去重三重：SQL 的 NOT EXISTS 排掉已入表场次；服务内 _inFlight 与 running 状态排掉
+ * 同期重入；completed 无 force 直接拒绝。进程崩溃遗留的僵尸 running 行会永久挡该场次
+ * 重析，量级极小，不引入超时回收（手动 force 可解）。
+ * 只处理快手：房间轮询平台为准，采集记录（platform 默认 kuaishou）兜底房间被删/改平台的存量场次。
+ * 入队即返回，不 await 单场分析——分析分钟级耗时，不能拖慢看门狗节拍。
+ */
+async function checkSessionAnalysis() {
+  try {
+    const enabled = await DataService.getSetting('ai_analysis_enabled', 'false');
+    const autoEnabled = await DataService.getSetting('ai_analysis_auto_enabled', 'false');
+    if (enabled !== 'true' || autoEnabled !== 'true') return;
+
+    const { rows } = await pool.query(
+      `SELECT rs.id, rs.room_url
+       FROM recording_sessions rs
+       WHERE rs.status = 'completed'
+         AND rs.deleted_at IS NULL
+         AND rs.ended_at > NOW() - INTERVAL '7 days'
+         AND NOT EXISTS (
+           SELECT 1 FROM danmaku_analysis_records dar
+           WHERE dar.session_id = rs.id AND dar.deleted_at IS NULL
+         )
+         AND (
+           EXISTS (
+             SELECT 1 FROM rooms r
+             WHERE r.room_url = rs.room_url AND r.polling_platform = 'kuaishou'
+               AND r.deleted_at IS NULL
+           )
+           OR EXISTS (
+             SELECT 1 FROM danmaku_capture_records dcr
+             WHERE dcr.session_id = rs.id AND dcr.platform = 'kuaishou'
+               AND dcr.deleted_at IS NULL
+           )
+         )
+       ORDER BY rs.ended_at DESC
+       LIMIT 5`
+    );
+
+    for (const row of rows) {
+      analysisService
+        .requestAnalysis(row.id)
+        .then((r) => {
+          if (r.accepted) log.info(`[看门狗][弹幕分析] 会话 ${row.id} 已入队分析`);
+          else log.debug(`[看门狗][弹幕分析] 会话 ${row.id} 跳过: ${r.message || r.state}`);
+        })
+        .catch((err) => log.error(`[看门狗][弹幕分析] 会话 ${row.id} 入队异常:`, err.message));
+    }
+  } catch (err) {
+    log.error('[看门狗][检查待分析会话] 失败:', err.message);
+  }
+}
+
+/**
  * 执行文件扫描任务，检查录制文件的关联状态和孤立状态。
  * 扫描完成后会在控制台输出统计结果，若发生错误则记录错误信息。
  *
@@ -638,7 +694,8 @@ async function runFileScan() {
  * 7. 执行自动转码队列。
  * 8. 执行自动 HLS 生成。
  * 9. 扫描待自动投稿的文件。
- * 10. 设置定时器以指定的间隔再次执行本函数。
+ * 10. 扫描待 AI 弹幕分析的快手已完成会话（只入队，不等待）。
+ * 11. 设置定时器以指定的间隔再次执行本函数。
  *
  * @returns {Promise<void>} 无返回值，错误会在内部捕获并打印日志
  */
@@ -656,6 +713,7 @@ async function runWatchdog() {
     await checkSessionTranscode();
     await checkSessionHLS();
     await UploadService.scanPendingAutoUpload();
+    await checkSessionAnalysis();
   } catch (err) {
     log.error('[看门狗] 异常:', err.message);
   } finally {
@@ -784,5 +842,6 @@ module.exports = {
   syncMissingFiles,
   finalizeInterruptedSessions,
   checkSessionHLS,
+  checkSessionAnalysis,
   backfillSegmentTimes,
 };

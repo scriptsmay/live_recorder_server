@@ -1321,6 +1321,55 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ---
 
+## AI 弹幕分析（ADR-017，v1.13.0）
+
+对快手会话的弹幕 JSONL 做确定性统计高光检测 + LLM 语义总结，产出自包含 HTML/JSON 报告
+（`VIDEO_DOWNLOAD_DIR/danmaku_analysis/{sessionId}.html|.json`）。
+LLM API Key 只走环境变量 `AI_ANALYSIS_API_KEY`（不入库、不进前端、不落日志）；
+缺 key 或全链失败时自动降级为纯统计报告。
+
+### GET /api/danmaku-analysis
+
+分析记录列表（软删过滤，关联会话/房间，分页惯例同转码记录）。
+
+**查询参数：**
+
+| 参数     | 类型   | 说明                         |
+| -------- | ------ | ---------------------------- |
+| `status` | string | 按状态筛选                   |
+| `limit`  | number | 每页条数，默认 50            |
+| `page`   | number | 页码（传入时返回真实 total） |
+
+状态取值：`pending` / `running` / `completed` / `failed` / `no_danmaku`。
+
+---
+
+### POST /api/danmaku-analysis/:sessionId
+
+手动触发分析（异步受理，立即返回 `running`，进程内并发 2）。
+需 `ai_analysis_enabled=true`；同一会话在跑时返回 **HTTP 409**。
+
+**查询参数：**
+
+| 参数    | 类型   | 说明                      |
+| ------- | ------ | ------------------------- |
+| `force` | string | `true` 时已完成场次也重算 |
+
+---
+
+### GET /api/danmaku-analysis/:sessionId
+
+单场分析结果（高光点数组 `highlights` + 统计 `stats`（含 `series_10s` 曲线）+ 总结）。无记录返回 404。
+
+---
+
+### GET /api/danmaku-analysis/:sessionId/report
+
+鉴权内联返回 HTML 报告（自包含，零 JS 零外链，可新窗口直接打开）。
+路径一律由数字 sessionId 经 `getDanmakuAnalysisHtmlPath()` 唯一推导，不信任库内 `report_path`。
+
+---
+
 ## 回放工具箱
 
 > 回放工具箱已接通数据库、API、队列、前端工作台和快手回放客户端（`KuaishouReplayClient`）。`POST /api/replay/records/sync` 通过快手 `playback/list` API 拉取回放列表并自动 upsert；`extract` 步骤采用两级降级策略：先调用 `playback/detail` HTTP API 获取 playUrlV3，失败时自动降级到 Playwright 浏览器方案（`m3u8-extractor.js`）拦截网络 m3u8 流。快手访问态复用直播轮询的 `POLLING_KUAISHOU_COOKIE`。浏览器方案需配置 `REMOTE_BROWSER_WS_ENDPOINT`。回放下载、剪切和修复产物写入 `REPLAY_WORK_DIR`；未配置时默认使用 `VIDEO_DOWNLOAD_DIR` 同级的 `replay` 目录。

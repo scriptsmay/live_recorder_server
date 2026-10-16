@@ -134,6 +134,7 @@ _handleDanmakuFinish()
     ├── GET /api/danmaku/search              搜索 JSONL 内容
     ├── GET /api/sessions/:id/danmaku-page   会话弹幕详情
     ├── GET /api/danmaku/sessions/:id/raw    下载原始 JSONL
+    ├── AI 弹幕分析（v1.13.0，ADR-017）       统计高光 + LLM 总结 → HTML/JSON 报告
     └── danmaku-tool（外部项目）              批量压制，直接读取 JSONL 路径
 ```
 
@@ -154,6 +155,35 @@ VIDEO_DOWNLOAD_DIR/
 - 弹幕 JSONL 集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0）；路径由 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)` 唯一推导，读取与写入均走该函数，不再兼容会话子目录旧路径（历史数据由 `scripts/migrate-danmaku-paths.js` 一次性迁移）
 - **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool（见知识库 ADR-011）
 - 已于 v1.8.0 DROP：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列；废弃环境变量 `DANMAKU_OUTPUT_DIR` 一并移除。`DANMAKU_ARCHIVE_DIR` 未废弃 —— 仍在生产挂载（`/data/danmaku_archive`），file-manage 以 `file_type=danmaku_archive` 索引归档文件并标记不可自动清理
+
+### AI 弹幕分析（v1.13.0，ADR-017）
+
+对快手会话做「确定性统计高光 + LLM 语义总结」，算法为离线批量工具 danmaku-batch/analyze.py 的逐分支移植（回归口径以 golden 单测锁死）。
+
+```text
+下播（watchdog checkSessionAnalysis，双开关门控）      手动 POST /api/danmaku-analysis/:sessionId
+    │  只入队不等待，NOT EXISTS 排重                        │
+    └──────────────┬────────────────────────────────────────┘
+                   ▼
+      DanmakuAnalysisService.requestAnalysis()   进程内 Promise 池（并发 2）+ _inFlight 防重入
+                   ▼
+      analyzeSession()  读 danmaku/{sid}.jsonl
+        ├── 统计层  三层降级阈值（mean×2.5 → mean×1.5 → 绝对峰值）+ 不足 5 段按加权补足
+        │           （score=区间均值加权；系统事件双分支剔除；统计口径与加权检测口径分离）
+        ├── LLM 层  litellm-client.completeWithFallback()：每模型普通+strict 两试、
+        │           每试 3 次 HTTP 线性退避、temperature 拒收自愈、回退链；
+        │           缺 key/全链失败 → 纯统计报告照出（llm_ok=false）
+        └── 产物    danmaku_analysis/{sid}.html（自包含，零 JS 零外链）+ {sid}.json → 落 danmaku_analysis_records
+                   ▼
+      notify danmaku_analysis_complete（ai_analysis_notify_enabled + 房间通知开关）
+```
+
+**关键设计决策**：
+
+- **api_key 只走环境变量 `AI_ANALYSIS_API_KEY`**，base_url/model 走 settings 表；key 绝不入库、不落日志、不进前端
+- 报告读取端点由数字 sessionId 经 `getDanmakuAnalysisHtmlPath()` 唯一推导，不信任库内 `report_path` 列（对齐 ADR-011 路径唯一推导惯例）
+- 轻量原则：不引入 Redis 队列/chokidar，进程内 Promise 池即可；watchdog 崩溃遗留的 `running` 僵尸行只会永久挡住该场自动重算，人工 force 可解
+- 历史批量产出经 `scripts/import-danmaku-analysis.js`（默认 dry-run，`--apply` 落库）导入后，watchdog 经表排重天然不重算
 
 ## 1. 会话生命周期
 
@@ -419,14 +449,15 @@ await transcodeQueue.getCurrentProcessingCount();
 
 ### 属于看门狗（`server/lib/core/watchdog.js`）
 
-| 函数                      | 触发        | 职责                                                                   |
-| ------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `checkStaleRecordings()`  | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                      |
-| `scanActiveSegments()`    | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）            |
-| `cleanupFragmentFiles()`  | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                           |
-| `syncMissingFiles()`      | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                        |
-| `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`） |
-| `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件        |
+| 函数                      | 触发        | 职责                                                                                                           |
+| ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------- |
+| `checkStaleRecordings()`  | 每周期      | 检查进程是否存活 + mtime 文件僵死检查，清理死录制                                                              |
+| `scanActiveSegments()`    | 每周期      | 追踪已完成的分段（mtime 稳定 2 分钟以上才标记 `completed`）                                                    |
+| `cleanupFragmentFiles()`  | 每周期      | 同步 fs 遍历下载目录，删除小于阈值的碎片文件                                                                   |
+| `syncMissingFiles()`      | 每周期      | 检测 DB 中有但磁盘已删除的文件 → 标记 `missing`                                                                |
+| `scanPendingAutoUpload()` | 每周期      | 已完成且转码就绪的会话，按直播间模板尝试自动投稿（见 `UploadService`）                                         |
+| `checkSessionAnalysis()`  | 每周期      | 近 7 天已完成快手会话且无分析记录的，入队 AI 弹幕分析（双开关门控，只入队不等待，见 `DanmakuAnalysisService`） |
+| `runFileScan()`           | 启动 + 手动 | 调用 `scanRecordingFiles()` 扫描下载目录，标记孤文件 / 缺失文件                                                |
 
 ### 不属于看门狗（但在 `server/app.js` 启动时通过 `lifecycle.js` 运行）
 
@@ -448,6 +479,7 @@ watchdog.start()
        ├─ cleanupFragmentFiles()    ← 同步 fs 清理
        ├─ syncMissingFiles()        ← 检测被删除文件
        ├─ scanPendingAutoUpload()  ← 转码完成后自动投稿
+       ├─ checkSessionAnalysis()   ← 下播后自动入队 AI 弹幕分析
        └─ setTimeout(runWatchdog, interval)  ← 下次周期
 ```
 

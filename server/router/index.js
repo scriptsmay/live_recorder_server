@@ -11,6 +11,7 @@ const uploadRouter = require('./upload');
 const settingsRouter = require('./settings');
 const transcodeRouter = require('./transcode');
 const danmakuRouter = require('./danmaku');
+const danmakuAnalysisRouter = require('./danmaku-analysis');
 const replayRouter = require('./replay');
 const fileManageRouter = require('./file-manage');
 const biliupAccountsRouter = require('./biliup-accounts');
@@ -60,6 +61,7 @@ function createRoutes() {
   router.use('/api', settingsRouter);
   router.use('/api', transcodeRouter);
   router.use('/api', danmakuRouter);
+  router.use('/api', danmakuAnalysisRouter);
   router.use('/api', replayRouter);
   router.use('/api', fileManageRouter);
   router.use('/api', biliupAccountsRouter);

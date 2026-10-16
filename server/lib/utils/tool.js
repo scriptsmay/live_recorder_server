@@ -162,6 +162,65 @@ function getDanmakuDir() {
 }
 
 /**
+ * 弹幕 AI 分析产物目录名（VIDEO_DOWNLOAD_DIR 下的保留目录名，ADR-017 D4）
+ *
+ * 存放 `{sessionId}.html` 报告与 `{sessionId}.json` 结果，与会话目录同级。
+ * scan-files 必须显式跳过该目录，否则会被判定为孤儿会话目录。
+ */
+const DANMAKU_ANALYSIS_DIR_NAME = 'danmaku_analysis';
+
+/**
+ * 获取弹幕 AI 分析产物目录（展示/统计场景，缺 env 时回落，同 getDanmakuDir）
+ *
+ * @returns {string} VIDEO_DOWNLOAD_DIR/danmaku_analysis 绝对路径
+ */
+function getDanmakuAnalysisDir() {
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR || '/data/video_downloads';
+  return path.join(downloadDir, DANMAKU_ANALYSIS_DIR_NAME);
+}
+
+function getAnalysisPaths(sessionId) {
+  if (sessionId === null || sessionId === undefined || sessionId === '') {
+    throw new Error('danmaku_analysis 路径: sessionId 不能为空');
+  }
+  if (!/^\d+$/.test(String(sessionId))) {
+    throw new Error('danmaku_analysis 路径: sessionId 必须为数字');
+  }
+  const downloadDir = process.env.VIDEO_DOWNLOAD_DIR;
+  if (!downloadDir) {
+    throw new Error('danmaku_analysis 路径: 环境变量 VIDEO_DOWNLOAD_DIR 未配置');
+  }
+  const dir = path.join(downloadDir, DANMAKU_ANALYSIS_DIR_NAME);
+  return {
+    dir,
+    html: path.join(dir, `${sessionId}.html`),
+    json: path.join(dir, `${sessionId}.json`),
+  };
+}
+
+/**
+ * 生成弹幕 AI 分析 HTML 报告路径（唯一入口，ADR-017 D4）
+ *
+ * 路径结构：VIDEO_DOWNLOAD_DIR/danmaku_analysis/[sessionId].html
+ *
+ * @param {string|number} sessionId - 录制会话 ID
+ * @returns {string} HTML 报告绝对路径
+ */
+function getDanmakuAnalysisHtmlPath(sessionId) {
+  return getAnalysisPaths(sessionId).html;
+}
+
+/**
+ * 生成弹幕 AI 分析 JSON 结果路径（唯一入口，与报告同名同目录）
+ *
+ * @param {string|number} sessionId - 录制会话 ID
+ * @returns {string} JSON 结果绝对路径
+ */
+function getDanmakuAnalysisJsonPath(sessionId) {
+  return getAnalysisPaths(sessionId).json;
+}
+
+/**
  * 孤儿弹幕目录名（下划线前缀，显式区别于 sessionId 命名的正常 JSONL）
  *
  * `danmaku/` 目录下除 `_orphan/` 外全是 `{sessionId}.jsonl`。下划线前缀让
@@ -297,6 +356,9 @@ module.exports = {
   generateOutputPath,
   getDanmakuJsonlPath,
   getDanmakuDir,
+  getDanmakuAnalysisDir,
+  getDanmakuAnalysisHtmlPath,
+  getDanmakuAnalysisJsonPath,
   getOrphanDanmakuDir,
   getOrphanDanmakuPath,
   getDiscardedOrphanDanmakuDir,
@@ -304,6 +366,7 @@ module.exports = {
   parseJsonlContent,
   readJsonlLines,
   DANMAKU_DIR_NAME,
+  DANMAKU_ANALYSIS_DIR_NAME,
   ORPHAN_DIR_NAME,
   DISCARDED_DIR_NAME,
 };

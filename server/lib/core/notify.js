@@ -155,6 +155,16 @@ async function recordingComplete(roomName, fileCount, totalMB, sessionId, roomUr
   }
 }
 
+async function danmakuAnalysisComplete({ roomUrl, sessionId, roomName, highlightCount, summary, llmOk, elapsedS }) {
+  if (!(await shouldNotify(roomUrl))) return;
+  const brief = String(summary || '').slice(0, 80);
+  send(
+    'danmaku_analysis_complete',
+    llmOk ? '🧠 弹幕分析完成' : '🧮 弹幕分析完成（纯统计）',
+    `直播间：${roomName || '未知'}\n会话ID：${sessionId}\n高光点：${highlightCount} 个\n耗时：${elapsedS ?? '-'}s${brief ? `\n总结：${brief}` : ''}\n入口：/danmaku-analysis`
+  );
+}
+
 async function uploadStart(roomName, tmplName, fileCount, roomUrl) {
   if (!(await shouldNotify(roomUrl))) return;
   send(
@@ -328,6 +338,7 @@ module.exports = {
   testNotify,
   recordingStart,
   recordingComplete,
+  danmakuAnalysisComplete,
   uploadStart,
   uploadComplete,
   uploadFailed,

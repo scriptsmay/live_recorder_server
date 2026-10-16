@@ -7,7 +7,7 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { apiGet, ApiError } from '@/utils/api'
+import { apiGet, apiPost, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { formatBytes } from '@/utils/lib'
 import DanmakuSearchPanel from '@/components/Danmaku/DanmakuSearchPanel.vue'
@@ -51,6 +51,63 @@ interface SessionDetail {
 const detail = ref<SessionDetail | null>(null)
 const loading = ref(false)
 const notFound = ref(false)
+
+// ---- AI 弹幕分析（ADR-017 内嵌区块）----
+interface AiHighlight {
+  start_ms: number
+  end_ms: number
+  score: number
+  peak_weighted: number
+  label?: string
+  reason?: string
+  samples?: string[]
+}
+interface AiRecord {
+  session_id: number
+  status: string
+  summary: string | null
+  model: string | null
+  llm_ok: boolean
+  llm_error: string | null
+  threshold_mode: string | null
+  highlights: AiHighlight[] | null
+  stats: Record<string, unknown> | null
+}
+
+const aiRecord = ref<AiRecord | null>(null)
+const aiLoading = ref(false)
+
+function fmtHMS(ms: number) {
+  const t = Math.max(0, Math.floor(ms / 1000))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(t / 3600))}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`
+}
+
+async function fetchAiRecord() {
+  aiLoading.value = true
+  try {
+    const res = await apiGet<AiRecord>(`/api/danmaku-analysis/${sessionId.value}`)
+    aiRecord.value = res.data
+  } catch (err) {
+    if (err instanceof ApiError && err.statusCode === 404) {
+      aiRecord.value = null
+    } else {
+      toast.error('加载 AI 分析失败: ' + (err instanceof ApiError ? err.message : String(err)))
+    }
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+async function triggerAiAnalysis(force = false) {
+  try {
+    await apiPost(`/api/danmaku-analysis/${sessionId.value}${force ? '?force=true' : ''}`)
+    toast.success('已入队分析，稍后刷新查看')
+    setTimeout(fetchAiRecord, 3000)
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : '触发分析失败')
+  }
+}
 
 // ---- Computed ----
 const sessionStatusBadge = computed(() => {
@@ -127,6 +184,7 @@ async function fetchDetail() {
 
 onMounted(() => {
   fetchDetail()
+  fetchAiRecord()
 })
 </script>
 
@@ -163,6 +221,92 @@ onMounted(() => {
           >
             返回列表
           </router-link>
+        </div>
+      </div>
+
+      <!-- AI 弹幕分析区块 -->
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-5">
+        <div
+          class="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between"
+        >
+          <span class="text-sm font-medium text-gray-700">AI 分析</span>
+          <div class="flex items-center gap-2">
+            <template v-if="aiRecord && ['completed', 'no_danmaku'].includes(aiRecord.status)">
+              <a
+                :href="`/api/danmaku-analysis/${sessionId}/report`"
+                target="_blank"
+                class="px-2 py-0.5 text-[11px] rounded border border-brand-300 text-brand-700 hover:bg-brand-50 transition-colors no-underline whitespace-nowrap"
+              >
+                查看报告
+              </a>
+              <button
+                class="px-2 py-0.5 text-[11px] rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors whitespace-nowrap"
+                @click="triggerAiAnalysis(true)"
+              >
+                重算
+              </button>
+            </template>
+            <button
+              v-else-if="!aiRecord || aiRecord.status === 'failed'"
+              class="px-2 py-0.5 text-[11px] rounded border border-brand-300 text-brand-700 hover:bg-brand-50 transition-colors whitespace-nowrap"
+              :disabled="aiLoading"
+              @click="triggerAiAnalysis()"
+            >
+              立即分析
+            </button>
+            <span
+              v-else
+              class="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700"
+              >分析中…</span
+            >
+          </div>
+        </div>
+        <div class="p-4">
+          <template
+            v-if="aiRecord && aiRecord.status !== 'running' && aiRecord.status !== 'pending'"
+          >
+            <p v-if="aiRecord.summary" class="text-sm text-gray-700 mb-2">
+              {{ aiRecord.summary }}
+              <span class="text-xs text-gray-400 ml-1">模型 {{ aiRecord.model || '-' }}</span>
+            </p>
+            <p v-else-if="aiRecord.llm_error" class="text-xs text-red-500 mb-2">
+              LLM 未成功（纯统计结果）：{{ aiRecord.llm_error }}
+            </p>
+            <p v-else-if="aiRecord.status === 'no_danmaku'" class="text-xs text-gray-400 mb-2">
+              该会话无可分析弹幕
+            </p>
+            <div v-if="(aiRecord.highlights || []).length" class="space-y-2">
+              <div
+                v-for="(h, i) in aiRecord.highlights || []"
+                :key="i"
+                class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5"
+              >
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-mono text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">
+                    {{ fmtHMS(h.start_ms) }} → {{ fmtHMS(h.end_ms) }}
+                  </span>
+                  <span v-if="h.label" class="text-sm font-medium text-gray-800">{{
+                    h.label
+                  }}</span>
+                  <span class="text-xs text-gray-400">峰值加权 {{ h.peak_weighted }}</span>
+                </div>
+                <p v-if="h.reason" class="text-xs text-gray-600 mt-1">{{ h.reason }}</p>
+                <div v-if="h.samples && h.samples.length" class="flex flex-wrap gap-1 mt-1.5">
+                  <span
+                    v-for="(s, si) in h.samples.slice(0, 8)"
+                    :key="si"
+                    class="px-1.5 py-0.5 text-xs bg-white border border-gray-100 text-gray-600 rounded max-w-[180px] truncate"
+                    :title="s"
+                    >{{ s }}</span
+                  >
+                </div>
+              </div>
+            </div>
+          </template>
+          <p v-else-if="!aiRecord && !aiLoading" class="text-xs text-gray-400">
+            尚未分析。开启 AI 弹幕分析后可手动触发或等待下播自动分析。
+          </p>
+          <p v-else class="text-xs text-gray-400">加载中...</p>
         </div>
       </div>
 

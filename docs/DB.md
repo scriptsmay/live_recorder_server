@@ -300,51 +300,56 @@ KV 结构的全局配置表。
 
 **默认设置项：**
 
-| 键                                | 默认值             | 说明                                                                           |
-| --------------------------------- | ------------------ | ------------------------------------------------------------------------------ |
-| `pool_size`                       | `3`                | 下载线程池大小，限制最大同时录制数                                             |
-| `watchdog_interval`               | `30`               | 看门狗检查间隔（秒）                                                           |
-| `watchdog_timeout`                | `60`               | 录制状态检查超时（秒），超过则标记为完成                                       |
-| `filtering_threshold`             | `10`               | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                   |
-| `delay`                           | `60`               | 下播延迟检测（秒）                                                             |
-| `max_upload_limit`                | `99`               | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                     |
-| `auto_transcode`                  | `true`             | 是否自动转码 FLV 到 MP4                                                        |
-| `transcode_delete_originals`      | `true`             | 转码后是否删除原 FLV 文件                                                      |
-| `transcode_concurrency`           | `3`                | 转码队列并发数，控制同时处理的转码任务数                                       |
-| `auto_generate_hls`               | `true`             | 是否自动生成 HLS 播放文件                                                      |
-| `hls_enabled`                     | `true`             | 是否启用 HLS 播放功能                                                          |
-| `hls_segment_duration`            | `10`               | HLS 分片时长（秒）                                                             |
-| `hls_cleanup_days`                | `30`               | HLS 文件自动清理天数                                                           |
-| `log_retention_days`              | `30`               | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件           |
-| `kuaishou_danmaku_enabled`        | `false`            | 是否启用快手弹幕采集                                                           |
-| `danmaku_density_per_second`      | `15`               | 弹幕渲染每秒最大密度（**遗留键**，仅供外部 danmaku-tool 消费，本服务不再使用） |
-| `danmaku_font_family`             | `Noto Sans CJK SC` | 弹幕渲染字体（**遗留键**，同上）                                               |
-| `danmaku_font_size`               | `38`               | 弹幕渲染字体大小（**遗留键**，同上）                                           |
-| `danmaku_opacity`                 | `0.88`             | 弹幕不透明度（**遗留键**，同上）                                               |
-| `danmaku_outline_colour`          | `000000`           | 弹幕描边颜色（**遗留键**，同上）                                               |
-| `danmaku_outline_width`           | `2`                | 弹幕描边宽度（**遗留键**，同上）                                               |
-| `replay_enabled`                  | `true`             | 是否启用回放工具箱                                                             |
-| `replay_work_dir`                 | `/data/replay`     | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR`         |
-| `replay_queue_concurrency`        | `1`                | 回放队列并发数（当前强制最大 1）                                               |
-| `replay_cron_enabled`             | `false`            | 是否启用回放定时任务                                                           |
-| `replay_cron_expr`                | `0 3 * * *`        | 回放定时任务表达式                                                             |
-| `replay_auto_upload`              | `false`            | 回放处理完成后是否自动投稿                                                     |
-| `replay_max_count_per_run`        | `1`                | 单次主播回放批处理默认数量                                                     |
-| `file_cleanup_enabled`            | `false`            | 是否启用文件自动清理                                                           |
-| `file_cleanup_empty_dirs_enabled` | `false`            | 是否启用录制和回放目录空目录自动清理                                           |
-| `file_cleanup_retention_days`     | `30`               | 文件清理保留天数                                                               |
-| `file_cleanup_categories`         | ``                 | 清理的文件类别，逗号分隔                                                       |
-| `file_cleanup_watermark_warn`     | `80`               | 磁盘空间告警阈值（%）                                                          |
-| `file_cleanup_watermark_critical` | `90`               | 磁盘空间严重告警阈值（%）                                                      |
-| `file_cleanup_suggestion_notify`  | `false`            | 是否发送文件清理建议通知                                                       |
-| `webhook_enabled`                 | `false`            | 是否启用 Webhook 通知                                                          |
-| `webhook_url`                     | ``                 | Webhook 推送 URL                                                               |
-| `feishu_webhook_enabled`          | `false`            | 是否启用飞书通知（v1.7.0 细化，原 `MESSAGE_FEISHU_WEBHOOK` 环境变量仍兼容）    |
-| `feishu_webhook_url`              | ``                 | 飞书 Webhook URL                                                               |
-| `gotify_enabled`                  | `false`            | 是否启用 Gotify 通知                                                           |
-| `gotify_server`                   | ``                 | Gotify 服务地址                                                                |
-| `gotify_token`                    | ``                 | Gotify app token                                                               |
-| `gotify_priority`                 | `5`                | Gotify 优先级                                                                  |
+| 键                                | 默认值                         | 说明                                                                           |
+| --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| `pool_size`                       | `3`                            | 下载线程池大小，限制最大同时录制数                                             |
+| `watchdog_interval`               | `30`                           | 看门狗检查间隔（秒）                                                           |
+| `watchdog_timeout`                | `60`                           | 录制状态检查超时（秒），超过则标记为完成                                       |
+| `filtering_threshold`             | `10`                           | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                   |
+| `delay`                           | `60`                           | 下播延迟检测（秒）                                                             |
+| `max_upload_limit`                | `99`                           | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                     |
+| `auto_transcode`                  | `true`                         | 是否自动转码 FLV 到 MP4                                                        |
+| `transcode_delete_originals`      | `true`                         | 转码后是否删除原 FLV 文件                                                      |
+| `transcode_concurrency`           | `3`                            | 转码队列并发数，控制同时处理的转码任务数                                       |
+| `auto_generate_hls`               | `true`                         | 是否自动生成 HLS 播放文件                                                      |
+| `hls_enabled`                     | `true`                         | 是否启用 HLS 播放功能                                                          |
+| `hls_segment_duration`            | `10`                           | HLS 分片时长（秒）                                                             |
+| `hls_cleanup_days`                | `30`                           | HLS 文件自动清理天数                                                           |
+| `log_retention_days`              | `30`                           | 日志文件保留天数，启动时和每日日志清理任务会删除超过该天数的日志文件           |
+| `kuaishou_danmaku_enabled`        | `false`                        | 是否启用快手弹幕采集                                                           |
+| `danmaku_density_per_second`      | `15`                           | 弹幕渲染每秒最大密度（**遗留键**，仅供外部 danmaku-tool 消费，本服务不再使用） |
+| `danmaku_font_family`             | `Noto Sans CJK SC`             | 弹幕渲染字体（**遗留键**，同上）                                               |
+| `danmaku_font_size`               | `38`                           | 弹幕渲染字体大小（**遗留键**，同上）                                           |
+| `danmaku_opacity`                 | `0.88`                         | 弹幕不透明度（**遗留键**，同上）                                               |
+| `danmaku_outline_colour`          | `000000`                       | 弹幕描边颜色（**遗留键**，同上）                                               |
+| `danmaku_outline_width`           | `2`                            | 弹幕描边宽度（**遗留键**，同上）                                               |
+| `replay_enabled`                  | `true`                         | 是否启用回放工具箱                                                             |
+| `replay_work_dir`                 | `/data/replay`                 | 回放处理工作目录默认值；实际文件路径优先使用环境变量 `REPLAY_WORK_DIR`         |
+| `replay_queue_concurrency`        | `1`                            | 回放队列并发数（当前强制最大 1）                                               |
+| `replay_cron_enabled`             | `false`                        | 是否启用回放定时任务                                                           |
+| `replay_cron_expr`                | `0 3 * * *`                    | 回放定时任务表达式                                                             |
+| `replay_auto_upload`              | `false`                        | 回放处理完成后是否自动投稿                                                     |
+| `replay_max_count_per_run`        | `1`                            | 单次主播回放批处理默认数量                                                     |
+| `file_cleanup_enabled`            | `false`                        | 是否启用文件自动清理                                                           |
+| `file_cleanup_empty_dirs_enabled` | `false`                        | 是否启用录制和回放目录空目录自动清理                                           |
+| `file_cleanup_retention_days`     | `30`                           | 文件清理保留天数                                                               |
+| `file_cleanup_categories`         | ``                             | 清理的文件类别，逗号分隔                                                       |
+| `file_cleanup_watermark_warn`     | `80`                           | 磁盘空间告警阈值（%）                                                          |
+| `file_cleanup_watermark_critical` | `90`                           | 磁盘空间严重告警阈值（%）                                                      |
+| `file_cleanup_suggestion_notify`  | `false`                        | 是否发送文件清理建议通知                                                       |
+| `webhook_enabled`                 | `false`                        | 是否启用 Webhook 通知                                                          |
+| `webhook_url`                     | ``                             | Webhook 推送 URL                                                               |
+| `feishu_webhook_enabled`          | `false`                        | 是否启用飞书通知（v1.7.0 细化，原 `MESSAGE_FEISHU_WEBHOOK` 环境变量仍兼容）    |
+| `feishu_webhook_url`              | ``                             | 飞书 Webhook URL                                                               |
+| `gotify_enabled`                  | `false`                        | 是否启用 Gotify 通知                                                           |
+| `gotify_server`                   | ``                             | Gotify 服务地址                                                                |
+| `gotify_token`                    | ``                             | Gotify app token                                                               |
+| `gotify_priority`                 | `5`                            | Gotify 优先级                                                                  |
+| `ai_analysis_enabled`             | `false`                        | AI 弹幕分析总开关（v1.13.0，ADR-017）                                          |
+| `ai_analysis_auto_enabled`        | `false`                        | 下播自动分析开关（总开关开启后生效）                                           |
+| `ai_analysis_notify_enabled`      | `true`                         | 分析完成通知开关                                                               |
+| `ai_analysis_base_url`            | `https://ai.virola-eko.com/v1` | LiteLLM OpenAI 兼容端点；API Key 只走环境变量 `AI_ANALYSIS_API_KEY`，不入库    |
+| `ai_analysis_model`               | `deepseek-v4.1-flash`          | 分析主模型，失败自动回退备用链（`AI_ANALYSIS_FALLBACK_MODELS` 可覆盖）         |
 
 **v1.8.0 已删除的设置键**（启动迁移 `DELETE FROM settings` 自动清理，无需人工干预）：
 
@@ -431,6 +436,36 @@ VIDEO_DOWNLOAD_DIR/danmaku/
 > `EXTRACT(EPOCH FROM (col AT TIME ZONE current_setting('TimeZone'))) * 1000` 取
 > epoch，避免 Node 进程时区与数据库时区不一致时整体偏移、把弹幕吸附到相邻会话。
 > 禁止在业务代码里 `new Date(row.started_at).getTime()`。
+
+---
+
+### danmaku_analysis_records — AI 弹幕分析记录（v1.13.0）
+
+**记录每个会话的 AI 弹幕分析结果**（ADR-017）。一场一活跃记录：部分唯一索引
+`idx_danmaku_analysis_session_active ON (session_id) WHERE deleted_at IS NULL`，软删后可重算插新行。
+watchdog 自动分析经 `NOT EXISTS` 未删行排重，历史批量产出经 `scripts/import-danmaku-analysis.js` 导入后天然不重算。
+
+| 字段           | 类型          | 约束              | 说明                                                                                                 |
+| -------------- | ------------- | ----------------- | ---------------------------------------------------------------------------------------------------- |
+| id             | SERIAL        | PRIMARY KEY       | 自增主键                                                                                             |
+| session_id     | INTEGER       | NOT NULL          | 所属录制会话（无外键，与 danmaku_capture_records 惯例一致）                                          |
+| status         | VARCHAR(20)   | DEFAULT 'pending' | `pending` / `running` / `completed` / `failed` / `no_danmaku`                                        |
+| highlights     | JSONB         | DEFAULT '[]'      | 高光区间数组（加权分值 + LLM label/reason + 样本弹幕），整存整取                                     |
+| summary        | TEXT          |                   | LLM 整场一句话总结                                                                                   |
+| model          | VARCHAR(100)  |                   | 实际命中的模型（回退链可能非主模型）                                                                 |
+| llm_ok         | BOOLEAN       | DEFAULT false     | LLM 层是否成功（false 时报告为纯统计结果）                                                           |
+| llm_error      | TEXT          |                   | LLM 层失败原因                                                                                       |
+| threshold_mode | VARCHAR(50)   |                   | 高光阈值判定路径（如 `relaxed_mean_x_K+top_up`，见算法层降级链）                                     |
+| stats          | JSONB         |                   | 统计层全量输出（含 `series_10s` 曲线、type_counts、dup_rate 等），整存整取                           |
+| report_path    | VARCHAR(1024) |                   | HTML 报告绝对路径；**读取端不信任此列**，一律由 sessionId 经 `getDanmakuAnalysisHtmlPath()` 重新推导 |
+| elapsed_s      | NUMERIC(8,1)  |                   | 分析耗时（秒）                                                                                       |
+| error          | TEXT          |                   | 分析链路异常信息                                                                                     |
+| created_at     | TIMESTAMP     | DEFAULT NOW()     |                                                                                                      |
+| updated_at     | TIMESTAMP     | DEFAULT NOW()     |                                                                                                      |
+| deleted_at     | TIMESTAMP     |                   | 软删除时间（v1.12.0 统一惯例）                                                                       |
+
+> JSONB 为本库首次引入。查询一律整存整取（`SELECT stats` / `highlights`），不做 JSONB 谓词检索；
+> 列表接口只取 `stats->'type_counts'->>'comment'` 等个别标量投影。
 
 ---
 

@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const pool = require('../../db/index');
-const { DANMAKU_DIR_NAME } = require('../utils/tool');
+const { DANMAKU_DIR_NAME, DANMAKU_ANALYSIS_DIR_NAME } = require('../utils/tool');
 
 /**
  * 扫描录像文件目录的冷却时间（5分钟）
@@ -72,7 +72,9 @@ async function scanRecordingFiles(force = false) {
       if (entry.isDirectory()) {
         if (entry.name === 'hls' || entry.name.startsWith('hls_')) continue;
         // v1.8.0：弹幕数据集中在 VIDEO_DOWNLOAD_DIR/danmaku 保留目录，跳过以免误判为孤儿会话
-        if (dir === VIDEO_DOWNLOAD_DIR && entry.name === DANMAKU_DIR_NAME) continue;
+        // v1.13.0：AI 分析产物目录（danmaku_analysis）同为保留目录，跳过
+        if (dir === VIDEO_DOWNLOAD_DIR && (entry.name === DANMAKU_DIR_NAME || entry.name === DANMAKU_ANALYSIS_DIR_NAME))
+          continue;
         walkDir(fp);
         continue;
       }

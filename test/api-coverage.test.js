@@ -96,6 +96,13 @@ const EXPECTED_APIS = [
   { method: 'POST', path: '/danmaku/orphan/reconcile/:recordId' },
   { method: 'DELETE', path: '/danmaku/orphan/:recordId' },
 
+  // ===== danmaku-analysis.js =====
+  // ADR-017 AI 弹幕分析
+  { method: 'GET', path: '/danmaku-analysis' },
+  { method: 'POST', path: '/danmaku-analysis/:sessionId' },
+  { method: 'GET', path: '/danmaku-analysis/:sessionId' },
+  { method: 'GET', path: '/danmaku-analysis/:sessionId/report' },
+
   // ===== transcode.js =====
   { method: 'GET', path: '/transcode_records' },
   { method: 'DELETE', path: '/transcode_records/:id' },
@@ -175,6 +182,7 @@ describe('API接口完整性检查', () => {
       { file: 'replay.js', prefix: '' },
       { file: 'auth.js', prefix: '/auth' },
       { file: 'danmaku.js', prefix: '' },
+      { file: 'danmaku-analysis.js', prefix: '' },
       { file: 'transcode.js', prefix: '' },
       { file: 'logs.js', prefix: '' },
       { file: 'file-manage.js', prefix: '' },
