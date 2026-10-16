@@ -419,7 +419,7 @@ onMounted(fetchRecords)
                     : ''
                 }}
               </td>
-              <td class="px-4 py-3 text-right">
+              <td class="px-4 py-3 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1">
                   <button
                     v-if="canRetry(r)"

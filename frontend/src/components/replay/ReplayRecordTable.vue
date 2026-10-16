@@ -180,7 +180,7 @@ function onTogglePage(event: Event) {
             <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
               {{ $formatTime(record.created_at) }}
             </td>
-            <td class="px-4 py-3 text-right">
+            <td class="px-4 py-3 text-right whitespace-nowrap">
               <ReplayActionButton
                 :record-id="record.id"
                 :status="record.status"

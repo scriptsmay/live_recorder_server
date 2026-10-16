@@ -409,7 +409,7 @@ onMounted(() => {
 
               <!-- 状态 -->
               <td class="px-4 py-3">
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1.5 whitespace-nowrap">
                   <span
                     class="inline-block w-2 h-2 rounded-full"
                     :class="statusDotClasses[r.status] || 'bg-gray-400'"
@@ -422,7 +422,7 @@ onMounted(() => {
 
               <!-- 开关 -->
               <td class="px-4 py-3">
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 whitespace-nowrap">
                   <span
                     class="flex items-center gap-1 text-xs px-1 py-0.5 rounded-md border"
                     :class="
@@ -460,7 +460,7 @@ onMounted(() => {
                   </div>
                   <div class="flex items-center gap-2">
                     <span
-                      class="items-center px-1.5 py-0.5 rounded text-xs font-medium"
+                      class="items-center px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap"
                       :class="
                         r.last_live_status ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
                       "
@@ -472,13 +472,15 @@ onMounted(() => {
                     </span>
                   </div>
                 </template>
-                <span v-else class="text-xs text-gray-400">未开启</span>
+                <span v-else class="text-xs text-gray-400 whitespace-nowrap">未开启</span>
               </td>
 
               <!-- 配置 -->
               <td class="px-4 py-3">
                 <div class="text-xs space-y-1">
-                  <code class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 text-xs break-all">
+                  <code
+                    class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 text-xs whitespace-nowrap"
+                  >
                     {{ r.filename_template || '{room_name}_{datetime}' }}
                   </code>
                   <div class="text-gray-400 mt-2">
@@ -494,7 +496,7 @@ onMounted(() => {
 
               <!-- 操作 -->
               <td class="px-4 py-3">
-                <div class="flex items-center justify-end gap-1.5">
+                <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
                   <template v-if="r.status === 'idle'">
                     <button
                       class="px-2.5 py-1 text-xs font-medium rounded-md border border-blue-300 text-blue-600 hover:bg-blue-50 transition-colors"
