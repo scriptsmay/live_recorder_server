@@ -38,6 +38,10 @@ services:
       DANMAKU_NATIVE_PLATFORMS: ${DANMAKU_NATIVE_PLATFORMS:-}
       DOUYIN_TTWID: ${DOUYIN_TTWID:-}
       BILIBILI_DANMAKU_COOKIE: ${BILIBILI_DANMAKU_COOKIE:-}
+      # v1.13.0 AI 弹幕分析：api_key 只走环境变量，绝不入库/进前端/落日志；
+      # 留空则分析自动降级为纯统计报告。base_url/model 走 settings 表（前端设置页可配）
+      AI_ANALYSIS_API_KEY: ${AI_ANALYSIS_API_KEY:-}
+      AI_ANALYSIS_FALLBACK_MODELS: ${AI_ANALYSIS_FALLBACK_MODELS:-}
     ports:
       - '${HOST_PORT:-11123}:1123'
     volumes:
