@@ -501,11 +501,12 @@ async function runMigration() {
       ['hls_cleanup_days', '30'],
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
-      // v1.13.0 AI 弹幕分析（api_key 不进 settings，只走环境变量 AI_ANALYSIS_API_KEY）
+      // v1.13.0 AI 弹幕分析（api_key 不进 settings，只走环境变量 AI_ANALYSIS_API_KEY；
+      // base_url 默认空 = LLM 层降级为纯统计，部署者在设置页填入自己的 OpenAI 兼容端点后生效）
       ['ai_analysis_enabled', 'false'],
       ['ai_analysis_auto_enabled', 'false'],
       ['ai_analysis_notify_enabled', 'true'],
-      ['ai_analysis_base_url', 'https://ai.virola-eko.com/v1'],
+      ['ai_analysis_base_url', ''],
       ['ai_analysis_model', 'deepseek-v4.1-flash'],
       // v1.9.0 孤儿弹幕兜底采集与回填
       ['orphan_tolerance_ms', '120000'],
