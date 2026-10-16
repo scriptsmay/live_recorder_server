@@ -5,6 +5,8 @@
  * - Teleport 到 body
  * - 录制/暂停中 limited 模式：仅可修改通知开关与投稿模板
  * - 轮询间隔条件显示
+ *
+ * 设计：与 Rooms.vue 保持 Linear Aesthetic —— 玻璃遮罩 + 超细描边 + 统一控件态。
  */
 import { ref, reactive, watch } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/utils/api'
@@ -28,6 +30,9 @@ const toast = useToast()
 const saving = ref(false)
 
 const DEFAULT_POLLING_INTERVAL = 90
+
+const fieldClass =
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/60 disabled:bg-gray-100 disabled:text-gray-500'
 
 const form = reactive<RoomFormData & { room_url: string }>({
   room_url: '',
@@ -131,24 +136,56 @@ function onOverlayClick(e: MouseEvent) {
     <Transition name="fade">
       <div
         v-if="visible"
-        class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
         @click="onOverlayClick"
       >
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div
+          class="hairline-card max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl shadow-2xl"
+        >
           <!-- 头部 -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">
-              {{ limited ? '编辑（录制中）' : editId ? '编辑直播间' : '新增直播间' }}
-            </h3>
+          <div
+            class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200/70 bg-surface/85 px-6 py-4 backdrop-blur-xl"
+          >
+            <div class="flex items-center gap-3">
+              <span
+                class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-brand-500/10 text-brand-600"
+              >
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
+                  />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold tracking-tight text-gray-900">
+                  {{ limited ? '编辑（录制中）' : editId ? '编辑直播间' : '新增直播间' }}
+                </h3>
+                <p class="mt-0.5 text-xs text-gray-400">
+                  {{
+                    limited
+                      ? '录制进行中，仅可调整通知与投稿模板'
+                      : '配置直播间地址、录制参数与轮询'
+                  }}
+                </p>
+              </div>
+            </div>
             <button
-              class="text-gray-400 hover:text-gray-600 transition-colors"
+              class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
               @click="emit('close')"
             >
               <svg
-                class="w-5 h-5"
+                class="h-5 w-5"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="2"
+                stroke-width="1.8"
                 viewBox="0 0 24 24"
               >
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -157,17 +194,17 @@ function onOverlayClick(e: MouseEvent) {
           </div>
 
           <!-- 表单 -->
-          <div class="px-6 py-5 space-y-5">
+          <div class="space-y-5 px-6 py-5">
             <!-- 有限编辑提示 -->
             <div
               v-if="limited"
-              class="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700"
+              class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-700"
             >
               <svg
-                class="w-5 h-5 flex-shrink-0 mt-0.5"
+                class="mt-0.5 h-5 w-5 shrink-0"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="2"
+                stroke-width="1.8"
                 viewBox="0 0 24 24"
               >
                 <path
@@ -181,31 +218,31 @@ function onOverlayClick(e: MouseEvent) {
 
             <!-- 直播间地址 -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1" for="room-url">
+              <label class="mb-1.5 block text-sm font-medium text-gray-700" for="room-url">
                 直播间地址 <span class="text-red-500">*</span>
               </label>
               <input
                 id="room-url"
                 v-model="form.room_url"
                 type="text"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
+                :class="fieldClass"
                 placeholder="https://live.example.com/room"
                 :disabled="!!editId"
               />
             </div>
 
             <!-- 两列布局 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
               <!-- 直播间名称 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1" for="room-name"
+                <label class="mb-1.5 block text-sm font-medium text-gray-700" for="room-name"
                   >直播间名称</label
                 >
                 <input
                   id="room-name"
                   v-model="form.room_name"
                   type="text"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  :class="fieldClass"
                   placeholder="主播名"
                   :disabled="limited"
                 />
@@ -213,38 +250,40 @@ function onOverlayClick(e: MouseEvent) {
 
               <!-- 文件名模板 -->
               <div v-if="!limited">
-                <label class="block text-sm font-medium text-gray-700 mb-1" for="filename-template">
+                <label
+                  class="mb-1.5 block text-sm font-medium text-gray-700"
+                  for="filename-template"
+                >
                   文件名模板
-                  <span class="text-gray-400 font-normal"
-                    >(默认
-                    <code class="text-xs bg-gray-100 px-1 rounded">{room_name}_{datetime}</code
-                    >)</span
+                  <span class="font-normal text-gray-400"
+                    >(默认 <code class="text-xs">{room_name}_{datetime}</code>)</span
                   >
                 </label>
                 <input
                   id="filename-template"
                   v-model="form.filename_template"
                   type="text"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  :class="[fieldClass, 'font-mono']"
                   placeholder="{room_name}_{datetime}"
                 />
-                <p class="text-xs text-gray-400 mt-1">
-                  支持 <code class="bg-gray-100 px-0.5 rounded">{room_name}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{datetime}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{YYYY}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{MM}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{DD}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{HH}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{mm}</code>
-                  <code class="bg-gray-100 px-0.5 rounded">{ss}</code>
+                <p class="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-gray-400">
+                  <span>支持</span>
+                  <code>{room_name}</code>
+                  <code>{datetime}</code>
+                  <code>{YYYY}</code>
+                  <code>{MM}</code>
+                  <code>{DD}</code>
+                  <code>{HH}</code>
+                  <code>{mm}</code>
+                  <code>{ss}</code>
                 </p>
               </div>
             </div>
 
-            <div v-if="!limited" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div v-if="!limited" class="grid grid-cols-1 gap-5 md:grid-cols-2">
               <!-- 分段时长 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1" for="segment-duration"
+                <label class="mb-1.5 block text-sm font-medium text-gray-700" for="segment-duration"
                   >分段录制时长（秒，0 = 不分段）</label
                 >
                 <input
@@ -253,46 +292,38 @@ function onOverlayClick(e: MouseEvent) {
                   type="number"
                   min="0"
                   step="60"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  :class="fieldClass"
                 />
-                <p class="text-xs text-gray-400 mt-1">3600 = 每 1 小时自动分割</p>
+                <p class="mt-1.5 text-xs text-gray-400">3600 = 每 1 小时自动分割</p>
               </div>
 
               <!-- 投稿模板 -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1" for="upload-template"
+                <label class="mb-1.5 block text-sm font-medium text-gray-700" for="upload-template"
                   >投稿模板</label
                 >
-                <select
-                  id="upload-template"
-                  v-model="form.upload_template_id"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
-                >
+                <select id="upload-template" v-model="form.upload_template_id" :class="fieldClass">
                   <option :value="null">不使用模板</option>
                   <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
                 </select>
-                <p class="text-xs text-gray-400 mt-1">录制完成且转码就绪时自动投稿</p>
+                <p class="mt-1.5 text-xs text-gray-400">录制完成且转码就绪时自动投稿</p>
               </div>
             </div>
 
             <!-- 投稿模板（limited 模式下也要展示） -->
             <div v-if="limited">
-              <label class="block text-sm font-medium text-gray-700 mb-1" for="upload-template"
+              <label class="mb-1.5 block text-sm font-medium text-gray-700" for="upload-template"
                 >投稿模板</label
               >
-              <select
-                id="upload-template"
-                v-model="form.upload_template_id"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
-              >
+              <select id="upload-template" v-model="form.upload_template_id" :class="fieldClass">
                 <option :value="null">不使用模板</option>
                 <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
-              <p class="text-xs text-gray-400 mt-1">录制完成且转码就绪时自动投稿</p>
+              <p class="mt-1.5 text-xs text-gray-400">录制完成且转码就绪时自动投稿</p>
             </div>
 
             <!-- 开关行 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
               <!-- 通知开关 -->
               <SwitchField
                 v-model="form.notification_enabled"
@@ -305,12 +336,12 @@ function onOverlayClick(e: MouseEvent) {
                 v-if="!limited"
                 v-model="form.monitoring_enabled"
                 label="启用监听"
-                description="收到api请求后启动 ffmpeg 录制"
+                description="收到 api 请求后启动 ffmpeg 录制"
               />
             </div>
 
             <!-- 轮询设置 -->
-            <div v-if="!limited" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div v-if="!limited" class="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <SwitchField
                   v-model="form.polling_enabled"
@@ -320,7 +351,7 @@ function onOverlayClick(e: MouseEvent) {
               </div>
 
               <div v-if="form.polling_enabled">
-                <label class="block text-sm font-medium text-gray-700 mb-1" for="polling-interval"
+                <label class="mb-1.5 block text-sm font-medium text-gray-700" for="polling-interval"
                   >轮询间隔（秒）</label
                 >
                 <input
@@ -329,26 +360,43 @@ function onOverlayClick(e: MouseEvent) {
                   type="number"
                   min="30"
                   max="3600"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  :class="fieldClass"
                 />
-                <p class="text-xs text-gray-400 mt-1">建议不少于 30 秒</p>
+                <p class="mt-1.5 text-xs text-gray-400">建议不少于 30 秒</p>
               </div>
             </div>
           </div>
 
           <!-- 底部 -->
-          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+          <div
+            class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-gray-200/70 bg-surface/85 px-6 py-4 backdrop-blur-xl"
+          >
             <button
-              class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               @click="emit('close')"
             >
               取消
             </button>
             <button
-              class="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="saving"
               @click="handleSave"
             >
+              <svg v-if="saving" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"
+                />
+              </svg>
               {{ saving ? '保存中...' : '保存' }}
             </button>
           </div>
