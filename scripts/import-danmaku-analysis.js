@@ -1,7 +1,7 @@
 /**
  * 批量弹幕分析产出导入脚本（v1.13.0，一次性手动执行）
  *
- * 把 danmaku-batch/analyze.py 回算产出（VIDEO_DOWNLOAD_DIR/danmaku_analysis/{sessionId}.json，
+ * 把离线批量回算脚本 analyze.py 的产出（VIDEO_DOWNLOAD_DIR/danmaku_analysis/{sessionId}.json，
  * _serialize 结构）导入 danmaku_analysis_records，使历史 50 场在前端可看；
  * 入表后 watchdog 经 NOT EXISTS 排重，天然不会对这些场次重算。
  *

@@ -1,4 +1,4 @@
-// ADR-012 Phase 3：DataService.getSessionsOverlappingWindow SQL 契约测试
+// DataService.getSessionsOverlappingWindow SQL 契约测试
 // 重点验证：
 // 1. 返回字段为 epoch ms（数值），业务代码不做二次转换
 // 2. ended_at IS NULL 时通过 SQL 兜底（LEFT JOIN recording_files + started_at+maxSessionMs）

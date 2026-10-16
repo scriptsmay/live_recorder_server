@@ -162,7 +162,7 @@ function getDanmakuDir() {
 }
 
 /**
- * 弹幕 AI 分析产物目录名（VIDEO_DOWNLOAD_DIR 下的保留目录名，ADR-017 D4）
+ * 弹幕 AI 分析产物目录名（VIDEO_DOWNLOAD_DIR 下的保留目录名）
  *
  * 存放 `{sessionId}.html` 报告与 `{sessionId}.json` 结果，与会话目录同级。
  * scan-files 必须显式跳过该目录，否则会被判定为孤儿会话目录。
@@ -199,7 +199,7 @@ function getAnalysisPaths(sessionId) {
 }
 
 /**
- * 生成弹幕 AI 分析 HTML 报告路径（唯一入口，ADR-017 D4）
+ * 生成弹幕 AI 分析 HTML 报告路径（唯一入口）
  *
  * 路径结构：VIDEO_DOWNLOAD_DIR/danmaku_analysis/[sessionId].html
  *

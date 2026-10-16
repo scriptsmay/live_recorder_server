@@ -13,9 +13,9 @@ const {
 const llm = require('../lib/core/llm/litellm-client');
 
 /**
- * AI 弹幕分析服务 — ADR-017 方案 B（统计高光点 + LLM 文字总结）
+ * AI 弹幕分析服务（统计高光点 + LLM 文字总结）
  *
- * 算法口径 = danmaku-batch/analyze.py（2026-10-16 批量 50 场实测验证），逐分支移植，不另立标准。
+ * 算法口径 = 离线批量回算脚本 analyze.py（2026-10-16 批量 50 场实测验证），逐分支移植，不另立标准。
  * 四条调研实证约束（勿删）：
  *   1. like 权重对快手是死参数（0 条事件），保留仅为跨平台预留；
  *   2. 必须先剔除系统事件（gift_name="直播已停止" 或无身份行），否则末尾桶加权达真实峰值 93 倍、阈值被抬 7.6 倍；
@@ -473,7 +473,7 @@ ${llmNote}
 <div class="card"><h2>高光区间</h2>${hlBlocks || '<p class="muted">未检出</p>'}</div>
 <div class="card"><h2>高频刷屏词</h2><ul class="two">${phrases}</ul>
 <h2>礼物事件（仅计数，礼物名为平台混淆串）</h2><ul class="two">${gifts || '<li>无</li>'}</ul></div>
-<p class="muted">由 K-Recorder AI 弹幕分析生成。算法口径见 ADR-017 与选型调研。</p>
+<p class="muted">由 K-Recorder AI 弹幕分析生成。</p>
 </div></body></html>`;
 }
 

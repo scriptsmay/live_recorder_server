@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * AI 弹幕分析 - 记录列表 + 行内详情（高光时间轴）
- * ADR-017：统计高光 + LLM 总结，报告 HTML 走鉴权 /report 端点新窗口打开
+ * 统计高光 + LLM 总结，报告 HTML 走鉴权 /report 端点新窗口打开
  */
 import { ref, computed, onMounted } from 'vue'
 import { apiGet, apiPost, ApiError } from '@/utils/api'
@@ -163,8 +163,8 @@ onMounted(loadData)
   <div>
     <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">AI 弹幕分析</h1>
-        <p class="text-sm text-gray-500 mt-1">快手弹幕统计高光 + LLM 总结（ADR-017）</p>
+        <h1 class="text-2xl font-bold text-gray-900">弹幕分析</h1>
+        <p class="text-sm text-gray-500 mt-1">弹幕统计高光 + LLM 总结</p>
       </div>
       <div class="flex items-center gap-2">
         <input
@@ -237,7 +237,7 @@ onMounted(loadData)
                 <th class="px-4 py-3 text-left font-medium text-gray-500">直播间</th>
                 <th class="px-4 py-3 text-left font-medium text-gray-500 w-20">状态</th>
                 <th class="px-4 py-3 text-right font-medium text-gray-500 w-20">弹幕</th>
-                <th class="px-4 py-3 text-right font-medium text-gray-500 w-20">时长(分)</th>
+                <th class="px-4 py-3 text-right font-medium text-gray-500 w-24">时长(分)</th>
                 <th class="px-4 py-3 text-right font-medium text-gray-500 w-16">高光</th>
                 <th class="px-4 py-3 text-left font-medium text-gray-500">一句话总结</th>
                 <th class="px-4 py-3 text-left font-medium text-gray-500 w-36">时间</th>
@@ -257,9 +257,9 @@ onMounted(loadData)
                   <td class="px-4 py-3">
                     <div class="text-gray-700 truncate max-w-[160px]">{{ r.room_name || '-' }}</div>
                   </td>
-                  <td class="px-4 py-3">
+                  <td class="px-4 py-3 whitespace-nowrap">
                     <span
-                      class="px-2 py-0.5 text-xs font-medium rounded"
+                      class="px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap"
                       :class="statusStyle(r.status)"
                       >{{ STATUS_LABELS[r.status] || r.status }}</span
                     >

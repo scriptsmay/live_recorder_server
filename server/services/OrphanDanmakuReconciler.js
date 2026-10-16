@@ -5,12 +5,12 @@ const DataService = require('./DataService');
 const { getDanmakuJsonlPath, getDiscardedOrphanDanmakuDir, readJsonlLines } = require('../lib/utils/tool');
 
 /**
- * OrphanDanmakuReconciler — 孤儿弹幕回填服务（ADR-012 方案 C 回填侧）
+ * OrphanDanmakuReconciler — 孤儿弹幕回填服务
  *
  * 职责：把 `writeBatch` 落到孤儿文件的弹幕，按每条事件的绝对时间戳 `ts_abs_ms`
  * 逐条分桶到时间窗有重叠的历史 recording_sessions，并合并进各会话的正式 JSONL。
  *
- * 设计约束（对应 ADR-012 决策条款）：
+ * 设计约束：
  * - 逐条分桶而非整批就近吸附：一批可能跨多个会话（断流重连、手动停/起）
  * - `ts_ms` 必须按**目标会话**的 started_at 重算，否则整批 ASS 字幕会整体偏移
  * - 置信度 = 命中事件数 / 总事件数，低于阈值默认拒绝（除非 force）
@@ -290,7 +290,7 @@ class OrphanDanmakuReconciler {
     const lines = [];
     let skipped = 0;
     for (const ev of events) {
-      // ⚠️ ts_ms 必须按目标会话重算，否则整批字幕整体偏移（ADR-012 决策第 4 条）
+      // ⚠️ ts_ms 必须按目标会话重算，否则整批字幕整体偏移
       const rewritten = { ...ev };
       if (typeof ev.ts_abs_ms === 'number' && sessionStartMs > 0) {
         rewritten.ts_ms = Math.max(0, ev.ts_abs_ms - sessionStartMs);

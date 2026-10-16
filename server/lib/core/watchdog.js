@@ -607,7 +607,7 @@ async function checkSessionHLS() {
 }
 
 /**
- * 检查已完成且未分析的快手会话，入队 AI 弹幕分析（v1.13.0 / ADR-017）
+ * 检查已完成且未分析的快手会话，入队 AI 弹幕分析（v1.13.0）
  *
  * 去重三重：SQL 的 NOT EXISTS 排掉已入表场次；服务内 _inFlight 与 running 状态排掉
  * 同期重入；completed 无 force 直接拒绝。进程崩溃遗留的僵尸 running 行会永久挡该场次

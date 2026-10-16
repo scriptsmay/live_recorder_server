@@ -1,7 +1,7 @@
 /**
  * B 站合集（Season / Section）只读+写入客户端
  *
- * 走创作中心私有接口 `member.bilibili.com/x2/creative/web/*`，理由见知识库 ADR-014。
+ * 走创作中心私有接口 `member.bilibili.com/x2/creative/web/*`。
  * 接口契约对齐 biliup 1.2.8 `biliup/plugins/bili_webup.py`，并于 2026-10-13 线上只读探测复核。
  *
  * 凭证红线：cookie / csrf 绝不进入错误信息、堆栈或日志；超时错误不复用会带 URL 的通用封装，

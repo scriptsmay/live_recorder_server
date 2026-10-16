@@ -9,7 +9,7 @@ const {
   DISCARDED_DIR_NAME,
 } = require('../server/lib/utils/tool');
 
-// ADR-012：孤儿弹幕路径工具函数 + OrphanDanmakuReconciler 核心逻辑
+// 孤儿弹幕路径工具函数 + OrphanDanmakuReconciler 核心逻辑
 describe('getOrphanDanmakuPath', () => {
   const ORIGINAL_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 
@@ -169,7 +169,7 @@ describe('OrphanDanmakuReconciler._readJsonl', () => {
   });
 });
 
-describe('ts_ms 重算正确性（ADR-012 决策第 4 条）', () => {
+describe('ts_ms 重算正确性', () => {
   const fs = require('fs');
   const os = require('os');
   const { getDanmakuJsonlPath } = require('../server/lib/utils/tool');

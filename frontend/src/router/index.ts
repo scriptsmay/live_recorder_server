@@ -54,7 +54,7 @@ const routes: RouteRecordRaw[] = [
     path: '/danmaku-analysis',
     name: 'DanmakuAnalysis',
     component: () => import('@/views/DanmakuAnalysis.vue'),
-    meta: { title: 'AI 弹幕分析' },
+    meta: { title: '弹幕分析' },
   },
   {
     path: '/replay-toolbox',

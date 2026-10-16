@@ -52,7 +52,6 @@ const detail = ref<SessionDetail | null>(null)
 const loading = ref(false)
 const notFound = ref(false)
 
-// ---- AI 弹幕分析（ADR-017 内嵌区块）----
 interface AiHighlight {
   start_ms: number
   end_ms: number

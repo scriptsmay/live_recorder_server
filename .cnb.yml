@@ -1,6 +1,6 @@
 # .cnb.yml — live_recorder_server 云原生构建流水线
 #
-# 试点迁移目标（对应知识库 ADR-001 步骤 ③）：
+# 试点迁移目标：
 #   用 CNB 云原生构建替代 GitHub Actions 的 docker-image.yml / replay-cron-image.yml / ffmpeg-builder.yml，
 #   镜像推送到 CNB 制品库（registry.cnb.cool），逐步退役 ghcr.io。
 #

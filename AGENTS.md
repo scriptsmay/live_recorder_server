@@ -158,13 +158,13 @@ npm run lint && npm run format && npm run test
 
 > 弹幕压制（ASS 生成 + 硬字幕烧录）已于 v1.7.0 迁出至独立的 danmaku-tool 项目，相关端点已下线。本服务只负责弹幕采集与查询。
 
-- `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据；无活跃采集会话时返回 **HTTP 409** 并落 orphan 兜底文件（ADR-012）
+- `POST /api/danmaku/batch` —— 接收 Chrome 扩展推送的弹幕数据；无活跃采集会话时返回 **HTTP 409** 并落 orphan 兜底文件
 - `GET /api/danmaku_capture_records` —— 查询弹幕采集记录
 - `GET /api/danmaku/status` —— 获取弹幕采集状态
 - `GET /api/danmaku/search` —— 搜索弹幕 JSONL 内容
 - `GET /api/sessions/:id/danmaku-page` —— 弹幕详情页 JSON 数据（会话信息、录制状态、分段文件）
 - `GET /api/danmaku/sessions/:id/raw` —— 下载会话原始弹幕 JSONL
-- `GET /api/danmaku/orphan` —— 孤儿弹幕记录列表（ADR-012）
+- `GET /api/danmaku/orphan` —— 孤儿弹幕记录列表
 - `POST /api/danmaku/orphan/reconcile/:recordId` —— 单条回填
 - `POST /api/danmaku/orphan/reconcile-all` —— 批量回填
 - `DELETE /api/danmaku/orphan/:recordId` —— 人工丢弃
@@ -261,7 +261,7 @@ VIDEO_DOWNLOAD_DIR/
 │   └── {room_name}_%Y%m%d_%H%M%S.ts  # 分段录制
 ```
 
-> v1.8.0 起弹幕 JSONL 不再放在会话子目录下的 `danmaku/danmaku.jsonl`。路径由 `getDanmakuJsonlPath(sessionId)` 唯一推导，业务代码禁止自行拼接。danmaku-tool 的批量压制功能需同步更新路径（见 ADR-011）。
+> v1.8.0 起弹幕 JSONL 不再放在会话子目录下的 `danmaku/danmaku.jsonl`。路径由 `getDanmakuJsonlPath(sessionId)` 唯一推导，业务代码禁止自行拼接。danmaku-tool 的批量压制功能需同步更新路径。
 
 ## 日志
 
@@ -292,7 +292,7 @@ VIDEO_DOWNLOAD_DIR/
 - `cron-entrypoint.sh` —— cron 容器入口，v1.8.2 起 entrypoint 用镜像内 `scripts` 同步到 `shared_scripts` named volume（`scripts.image` 机制）
 - `replay-cron.sh` —— 回放定时任务（`docker-compose.cron.yml` 使用，依赖 `/mnt/scripts/cron-entrypoint.sh`）
 - `sync-records.sh` / `sync-db-tables.sh` —— 生产/开发数据库记录与表结构同步
-- `migrate-danmaku-paths.js` —— 弹幕 JSONL 存量路径迁移（ADR-011 扁平路径，手动执行）
+- `migrate-danmaku-paths.js` —— 弹幕 JSONL 存量路径迁移（扁平路径迁移，手动执行）
 - `ensure-db.js` —— 数据库就绪检查
 - `backup-db.sh` —— 数据库全量备份（`pg_dump -Fc` + 归档校验 + 按天保留），由 `replay_cron` 定时调度；POSIX sh，依赖 `DATABASE_URL`，主应用镜像内没有 `pg_dump`，不要放到主容器里跑
 - `test-checker.js` —— 各平台 checker 独立冒烟测试脚本

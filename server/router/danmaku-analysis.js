@@ -6,7 +6,7 @@ const DataService = require('../services/DataService');
 const { getDanmakuAnalysisHtmlPath } = require('../lib/utils/tool');
 
 /**
- * AI 弹幕分析 API（ADR-017）
+ * AI 弹幕分析 API
  *
  * 路径一律由 sessionId 经 getDanmakuAnalysisHtmlPath 唯一推导，
  * 不信任 report_path 列内容，杜绝路径穿越。

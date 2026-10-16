@@ -265,6 +265,11 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* 表头默认不换行：窄列挤压时整词保持一行，列宽交给 overflow-x-auto 滚动 */
+  th {
+    white-space: nowrap;
+  }
+
   body {
     margin: 0;
     font-family: var(--font-sans);

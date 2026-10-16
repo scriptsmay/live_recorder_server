@@ -1,7 +1,7 @@
 /**
  * HuyaDanmakuClient — 虎牙弹幕客户端（v1.10.0）
  *
- * 协议（2026-08-30 真实抓包验证，见知识库 huya-danmaku-capture-plan §2.3）：
+ * 协议（2026-08-30 真实抓包验证）：
  * - TARS 二进制协议 over WebSocket（wss://cdnws.api.huya.com/），免登录
  * - 外层 WebSocketCommand: tag0 iCmdType(int32) / tag1 vData(bytes)
  *   1=注册 2=注册响应 5=心跳 6=心跳响应 7=消息推送

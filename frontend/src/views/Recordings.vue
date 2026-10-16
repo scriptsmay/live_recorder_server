@@ -294,7 +294,9 @@ watch(
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-16">ID</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500">直播间会话</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">
+                直播间会话
+              </th>
               <th class="px-4 py-3 text-left font-medium text-gray-500">文件路径</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-30">大小</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 w-24">状态</th>
@@ -324,7 +326,7 @@ watch(
                 {{ rec.file_path || '-' }}
               </td>
               <td class="px-4 py-3 text-xs text-gray-500">{{ formatBytes(rec.file_size) }}</td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 whitespace-nowrap">
                 <span
                   class="inline-block px-2 py-0.5 rounded-full text-xs font-medium min-w-[50px] text-center"
                   :class="statusStyle(rec.status)"

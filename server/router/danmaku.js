@@ -231,7 +231,7 @@ router.get('/danmaku/sessions/:id/raw', async (req, res) => {
 
 /**
  * GET /api/danmaku/orphan
- * 孤儿弹幕记录列表（ADR-012）
+ * 孤儿弹幕记录列表
  */
 router.get('/danmaku/orphan', async (req, res) => {
   try {

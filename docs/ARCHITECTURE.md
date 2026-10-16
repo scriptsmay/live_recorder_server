@@ -134,7 +134,7 @@ _handleDanmakuFinish()
     ├── GET /api/danmaku/search              搜索 JSONL 内容
     ├── GET /api/sessions/:id/danmaku-page   会话弹幕详情
     ├── GET /api/danmaku/sessions/:id/raw    下载原始 JSONL
-    ├── AI 弹幕分析（v1.13.0，ADR-017）       统计高光 + LLM 总结 → HTML/JSON 报告
+    ├── AI 弹幕分析（v1.13.0）                  统计高光 + LLM 总结 → HTML/JSON 报告
     └── danmaku-tool（外部项目）              批量压制，直接读取 JSONL 路径
 ```
 
@@ -153,12 +153,12 @@ VIDEO_DOWNLOAD_DIR/
 - 弹幕采集与录制流程完全解耦，录制模块只负责「采集 + 落 JSONL」
 - 新录制目录结构为 `VIDEO_DOWNLOAD_DIR/[sessionId]/`；历史的 `VIDEO_DOWNLOAD_DIR/[roomId]/[sessionId]/` 不迁移，继续通过 `recording_sessions.output_dir` 兼容读取
 - 弹幕 JSONL 集中扁平存放于 `VIDEO_DOWNLOAD_DIR/danmaku/[sessionId].jsonl`（v1.8.0）；路径由 `server/lib/utils/tool.js` 的 `getDanmakuJsonlPath(sessionId)` 唯一推导，读取与写入均走该函数，不再兼容会话子目录旧路径（历史数据由 `scripts/migrate-danmaku-paths.js` 一次性迁移）
-- **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool（见知识库 ADR-011）
+- **danmaku-tool 的批量压制直接依赖上述 JSONL 路径**，本服务变更弹幕路径时必须同步改造 danmaku-tool
 - 已于 v1.8.0 DROP：`danmaku_burn_records`、`danmaku_free_burn_records` 表与 `recording_files.danmaku_ass_path`、`danmaku_capture_records.ass_path` 列；废弃环境变量 `DANMAKU_OUTPUT_DIR` 一并移除。`DANMAKU_ARCHIVE_DIR` 未废弃 —— 仍在生产挂载（`/data/danmaku_archive`），file-manage 以 `file_type=danmaku_archive` 索引归档文件并标记不可自动清理
 
-### AI 弹幕分析（v1.13.0，ADR-017）
+### AI 弹幕分析（v1.13.0）
 
-对快手会话做「确定性统计高光 + LLM 语义总结」，算法为离线批量工具 danmaku-batch/analyze.py 的逐分支移植（回归口径以 golden 单测锁死）。
+对快手会话做「确定性统计高光 + LLM 语义总结」，算法为离线批量回算脚本 analyze.py 的逐分支移植（回归口径以 golden 单测锁死）。
 
 ```text
 下播（watchdog checkSessionAnalysis，双开关门控）      手动 POST /api/danmaku-analysis/:sessionId
@@ -181,7 +181,7 @@ VIDEO_DOWNLOAD_DIR/
 **关键设计决策**：
 
 - **api_key 只走环境变量 `AI_ANALYSIS_API_KEY`**，base_url/model 走 settings 表；key 绝不入库、不落日志、不进前端
-- 报告读取端点由数字 sessionId 经 `getDanmakuAnalysisHtmlPath()` 唯一推导，不信任库内 `report_path` 列（对齐 ADR-011 路径唯一推导惯例）
+- 报告读取端点由数字 sessionId 经 `getDanmakuAnalysisHtmlPath()` 唯一推导，不信任库内 `report_path` 列（对齐路径唯一推导惯例）
 - 轻量原则：不引入 Redis 队列/chokidar，进程内 Promise 池即可；watchdog 崩溃遗留的 `running` 僵尸行只会永久挡住该场自动重算，人工 force 可解
 - 历史批量产出经 `scripts/import-danmaku-analysis.js`（默认 dry-run，`--apply` 落库）导入后，watchdog 经表排重天然不重算
 

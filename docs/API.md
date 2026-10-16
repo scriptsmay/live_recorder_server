@@ -1218,7 +1218,7 @@ curl -X DELETE http://127.0.0.1:1123/api/transcode_records/1
 
 v1.9.0 起：无活跃采集会话时返回 **HTTP 409**，响应 `{ok:false, error:'no_active_session'}`。
 扩展据此保留自己的缓冲区（`buffer.unshift`），等录制启动后自动续发。
-后端同时把这批弹幕落到 `danmaku/_orphan/` 兜底文件（ADR-012）。
+后端同时把这批弹幕落到 `danmaku/_orphan/` 兜底文件。
 
 **请求体：**
 
@@ -1282,7 +1282,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ---
 
-### 孤儿弹幕回填（ADR-012，v1.9.0）
+### 孤儿弹幕回填（v1.9.0）
 
 无活跃采集会话时收到的弹幕批次会落到 `danmaku/_orphan/` 兜底文件并登记
 `orphan_pending` 记录，通过以下接口按时间戳区间匹配回填到历史会话。
@@ -1321,7 +1321,7 @@ curl -X POST http://127.0.0.1:1123/api/danmaku/batch \
 
 ---
 
-## AI 弹幕分析（ADR-017，v1.13.0）
+## AI 弹幕分析（v1.13.0）
 
 对快手会话的弹幕 JSONL 做确定性统计高光检测 + LLM 语义总结，产出自包含 HTML/JSON 报告
 （`VIDEO_DOWNLOAD_DIR/danmaku_analysis/{sessionId}.html|.json`）。

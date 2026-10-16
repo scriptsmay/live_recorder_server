@@ -1,9 +1,9 @@
 const axios = require('axios');
 
 /**
- * litellm（OpenAI 兼容 /chat/completions）客户端封装 — ADR-017 D1
+ * litellm（OpenAI 兼容 /chat/completions）客户端封装
  *
- * 行为基线 = danmaku-batch/analyze.py 批量实测验证过的 call_llm/回退链，逐分支移植：
+ * 行为基线 = 离线批量回算脚本 analyze.py 实测验证过的 call_llm/回退链，逐分支移植：
  *  - 每次调用最多 3 次 HTTP 尝试，线性退避 2s/4s/6s；
  *  - 模型拒收 temperature（响应体含 "temperature"）时弹出该字段立即重试（kimi-k3 类）；
  *  - JSON 解析失败不再重试 HTTP，交外层 strict 二试；

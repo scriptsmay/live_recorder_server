@@ -452,7 +452,7 @@ async function runMigration() {
     // v1.8.0：弹幕压制记录表已迁至 danmaku-tool，本服务不再维护
     await client.query(`DROP TABLE IF EXISTS danmaku_burn_records`);
 
-    // ========== v1.13.0：AI 弹幕分析（ADR-017，全库首个 JSONB 表）==========
+    // ========== v1.13.0：AI 弹幕分析（全库首个 JSONB 表）==========
     await client.query(`
       CREATE TABLE IF NOT EXISTS danmaku_analysis_records (
         id SERIAL PRIMARY KEY,
@@ -501,13 +501,13 @@ async function runMigration() {
       ['hls_cleanup_days', '30'],
       ['log_retention_days', '30'],
       ['kuaishou_danmaku_enabled', 'false'],
-      // v1.13.0 ADR-017 AI 弹幕分析（api_key 不进 settings，只走环境变量 AI_ANALYSIS_API_KEY）
+      // v1.13.0 AI 弹幕分析（api_key 不进 settings，只走环境变量 AI_ANALYSIS_API_KEY）
       ['ai_analysis_enabled', 'false'],
       ['ai_analysis_auto_enabled', 'false'],
       ['ai_analysis_notify_enabled', 'true'],
       ['ai_analysis_base_url', 'https://ai.virola-eko.com/v1'],
       ['ai_analysis_model', 'deepseek-v4.1-flash'],
-      // v1.9.0 ADR-012 孤儿弹幕兜底采集与回填
+      // v1.9.0 孤儿弹幕兜底采集与回填
       ['orphan_tolerance_ms', '120000'],
       ['orphan_confidence_threshold', '0.8'],
       ['orphan_max_session_ms', '28800000'],

@@ -345,7 +345,7 @@ KV 结构的全局配置表。
 | `gotify_server`                   | ``                             | Gotify 服务地址                                                                |
 | `gotify_token`                    | ``                             | Gotify app token                                                               |
 | `gotify_priority`                 | `5`                            | Gotify 优先级                                                                  |
-| `ai_analysis_enabled`             | `false`                        | AI 弹幕分析总开关（v1.13.0，ADR-017）                                          |
+| `ai_analysis_enabled`             | `false`                        | AI 弹幕分析总开关（v1.13.0）                                                   |
 | `ai_analysis_auto_enabled`        | `false`                        | 下播自动分析开关（总开关开启后生效）                                           |
 | `ai_analysis_notify_enabled`      | `true`                         | 分析完成通知开关                                                               |
 | `ai_analysis_base_url`            | `https://ai.virola-eko.com/v1` | LiteLLM OpenAI 兼容端点；API Key 只走环境变量 `AI_ANALYSIS_API_KEY`，不入库    |
@@ -380,7 +380,7 @@ KV 结构的全局配置表。
 
 **记录每个会话的弹幕采集生命周期。** 一个 `session_id` 可能对应多条采集记录（如中断后重连）。
 
-v1.9.0 起该表同时承载**孤儿弹幕**记录（ADR-012）：无活跃采集会话时收到的弹幕批次以
+v1.9.0 起该表同时承载**孤儿弹幕**记录：无活跃采集会话时收到的弹幕批次以
 `session_id = NULL` + `status = 'orphan_pending'` 落库，`raw_path` 指向孤儿 JSONL，
 由 `OrphanDanmakuReconciler` 按时间戳回填到重叠的历史会话。
 
@@ -441,7 +441,7 @@ VIDEO_DOWNLOAD_DIR/danmaku/
 
 ### danmaku_analysis_records — AI 弹幕分析记录（v1.13.0）
 
-**记录每个会话的 AI 弹幕分析结果**（ADR-017）。一场一活跃记录：部分唯一索引
+**记录每个会话的 AI 弹幕分析结果**（v1.13.0）。一场一活跃记录：部分唯一索引
 `idx_danmaku_analysis_session_active ON (session_id) WHERE deleted_at IS NULL`，软删后可重算插新行。
 watchdog 自动分析经 `NOT EXISTS` 未删行排重，历史批量产出经 `scripts/import-danmaku-analysis.js` 导入后天然不重算。
 
