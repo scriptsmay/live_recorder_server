@@ -152,17 +152,17 @@ function closePlayer() {
 </script>
 
 <template>
-  <div class="border-t border-gray-200 bg-mist-50 px-4 py-3">
+  <div class="border-t border-gray-200/70 bg-gray-50/40 px-4 py-3">
     <!-- Loading State -->
-    <div v-if="loading" class="flex items-center gap-2 py-4 justify-center">
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-4">
       <div
-        class="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"
+        class="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"
       />
       <span class="text-sm text-gray-500">加载文件列表...</span>
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="files.length === 0" class="text-center py-4">
+    <div v-else-if="files.length === 0" class="py-4 text-center">
       <span class="text-sm text-gray-400">无分片文件</span>
     </div>
 
@@ -170,43 +170,56 @@ function closePlayer() {
     <div v-else class="overflow-x-auto">
       <table class="w-full text-xs">
         <thead>
-          <tr class="text-left text-gray-400 border-b border-gray-200">
-            <th class="py-1.5 pr-3 font-medium">#</th>
-            <th class="py-1.5 pr-3 font-medium">文件路径</th>
-            <th class="py-1.5 pr-3 font-medium">大小</th>
-            <th class="py-1.5 pr-3 font-medium">HLS</th>
-            <th class="py-1.5 pr-3 font-medium">操作</th>
+          <tr
+            class="border-b border-gray-200/70 text-left text-[11px] font-medium uppercase tracking-wider text-gray-400"
+          >
+            <th class="py-2 pr-3">#</th>
+            <th class="py-2 pr-3">文件路径</th>
+            <th class="py-2 pr-3">大小</th>
+            <th class="py-2 pr-3">HLS</th>
+            <th class="py-2 pr-3">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr
             v-for="(file, index) in files"
             :key="file.id"
-            class="border-b border-gray-100 last:border-0"
+            class="border-b border-gray-100/80 transition-colors last:border-0 hover:bg-white/60"
           >
-            <td class="py-1.5 pr-3 text-gray-500">{{ index + 1 }}</td>
-            <td class="py-1.5 pr-3 text-gray-700 break-all max-w-[300px]">
+            <td class="py-2 pr-3 font-mono tabular-nums text-gray-400">{{ index + 1 }}</td>
+            <td class="max-w-[300px] break-all py-2 pr-3 font-mono text-gray-600">
               {{ file.file_path || '-' }}
             </td>
-            <td class="py-1.5 pr-3 text-gray-500 whitespace-nowrap">
+            <td class="whitespace-nowrap py-2 pr-3 tabular-nums text-gray-500">
               {{ formatBytes(file.file_size) }}
             </td>
-            <td class="py-1.5 pr-3">
+            <td class="py-2 pr-3">
               <span
-                class="px-1.5 py-0.5 rounded text-xs font-medium"
+                class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
                 :class="
-                  file.is_hls_ready ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  file.is_hls_ready
+                    ? 'border-green-200 bg-green-50 text-green-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-500'
                 "
               >
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :class="file.is_hls_ready ? 'bg-green-500' : 'bg-gray-400'"
+                />
                 {{ file.is_hls_ready ? '就绪' : '未生成' }}
               </span>
             </td>
-            <td class="py-1.5 pr-3">
+            <td class="py-2 pr-3">
               <button
                 v-if="file.is_hls_ready"
-                class="px-1.5 py-0.5 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
+                class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
                 @click="handlePlay(file)"
               >
+                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M4.5 3.2a.75.75 0 0 1 1.14-.64l6.5 4.05a.75.75 0 0 1 0 1.28l-6.5 4.05a.75.75 0 0 1-1.14-.64V3.2Z"
+                  />
+                </svg>
                 播放
               </button>
             </td>
