@@ -54,3 +54,4 @@ data/
 qrcode.png
 .arts/
 .codeartsdoer/
+frontend/.merkle-snapshot.json

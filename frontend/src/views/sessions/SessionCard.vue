@@ -2,8 +2,12 @@
 /**
  * SessionCard - 单个录制会话卡片
  *
- * 双栏布局：左栏直播录制信息，右栏弹幕信息
- * 支持展开文件列表（懒加载）、查看投稿记录、删除、投稿
+ * 左栏直播录制信息（封面、分片统计、输出路径、直播流、投稿记录），
+ * 右栏弹幕采集概览（事件数 + 弹幕详情 / 文件 / 日志）。
+ * 支持展开文件列表（懒加载）、投稿、删除。
+ *
+ * 设计：Linear Aesthetic —— 超细描边卡片 + 状态 pill + 图标化 ghost 操作；
+ * 全部使用语义色类（gray-* / brand-* / hairline-card），自动适配亮/深双主题。
  */
 import { ref, computed, watch } from 'vue'
 import { formatBytes, formatTime } from '@/utils/lib'
@@ -22,6 +26,9 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+
+const btnGhost =
+  'inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors'
 
 // ---- Local State ----
 const filesExpanded = ref(false)
@@ -50,35 +57,44 @@ const isDone = computed(
 const hasSuccessUpload = computed(() => uploadRecords.value.some((u) => u.status === 'success'))
 
 const sessionBadge = computed(() => {
-  const s = props.session
-  switch (s.status) {
+  switch (props.session.status) {
     case 'recording':
       return {
         text: '录制中',
-        cls: 'bg-green-100 text-green-700',
-        dotCls: 'bg-green-500 animate-pulse',
+        pill: 'border-green-200 bg-green-50 text-green-700',
+        dot: 'bg-green-500 animate-pulse',
       }
     case 'completed':
-      return { text: '已完成', cls: 'bg-blue-100 text-blue-700', dotCls: 'bg-blue-500' }
+      return {
+        text: '已完成',
+        pill: 'border-blue-200 bg-blue-50 text-blue-600',
+        dot: 'bg-blue-500',
+      }
     case 'interrupted':
-      return { text: '中断', cls: 'bg-red-100 text-red-700', dotCls: 'bg-red-500' }
+      return {
+        text: '中断',
+        pill: 'border-red-200 bg-red-50 text-red-600',
+        dot: 'bg-red-500',
+      }
     default:
-      return { text: '准备中', cls: 'bg-gray-100 text-gray-500', dotCls: 'bg-gray-400' }
+      return {
+        text: '准备中',
+        pill: 'border-gray-200 bg-gray-50 text-gray-500',
+        dot: 'bg-gray-400',
+      }
   }
 })
 
 const danmakuBadge = computed(() => {
-  const s = props.session
-  const count = s.danmaku_event_count || 0
-  switch (s.danmaku_status) {
+  switch (props.session.danmaku_status) {
     case 'recording':
-      return { text: `录制中 (${count}条)`, cls: 'bg-green-100 text-green-700' }
+      return { text: '采集中', pill: 'border-green-200 bg-green-50 text-green-700' }
     case 'completed':
-      return { text: `已完成 (${count}条)`, cls: 'bg-blue-100 text-blue-700' }
+      return { text: '已完成', pill: 'border-blue-200 bg-blue-50 text-blue-600' }
     case 'failed':
-      return { text: '失败', cls: 'bg-red-100 text-red-600' }
+      return { text: '采集失败', pill: 'border-red-200 bg-red-50 text-red-600' }
     default:
-      return { text: '\u2014', cls: 'bg-gray-100 text-gray-500' }
+      return { text: '未采集', pill: 'border-gray-200 bg-gray-50 text-gray-500' }
   }
 })
 
@@ -92,16 +108,16 @@ const logFileUrl = computed(() => {
   return `/logs?file=${encodeURIComponent(`ffmpeg_${props.session.id}.log`)}`
 })
 
-const uploadBadgeCls = (status: string) => {
+function uploadPill(status: string) {
   switch (status) {
     case 'success':
-      return 'bg-green-100 text-green-700'
+      return 'border-green-200 bg-green-50 text-green-700'
     case 'uploading':
-      return 'bg-blue-100 text-blue-700'
+      return 'border-blue-200 bg-blue-50 text-blue-600'
     case 'failed':
-      return 'bg-red-100 text-red-600'
+      return 'border-red-200 bg-red-50 text-red-600'
     default:
-      return 'bg-gray-100 text-gray-500'
+      return 'border-gray-200 bg-gray-50 text-gray-500'
   }
 }
 
@@ -125,295 +141,323 @@ const metaItems = computed(() => [
 ])
 
 // ---- Helpers ----
-
-// 统一的成功提示函数（可以对接你上一问的 Bootstrap Toast）
-function handleCopySuccess(text: string) {
-  console.log('复制成功:', text)
-  // 如果你有 toast 函数，可以在这里调用：
-  toast.success('已复制直播流地址')
-}
 async function copyStreamUrl() {
   const url = props.session.stream_url
   if (!url) return
-  // 1. 优先使用现代的 Clipboard API（如果是 HTTPS 或 Localhost）
+
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
-      .then(() => handleCopySuccess(url))
+      .then(() => toast.success('已复制直播流地址'))
       .catch((err) => console.error('现代复制API失败:', err))
-  } else {
-    // 2. 降级方案：针对 HTTP 环境或老旧浏览器
-    // 创建一个隐藏的 input 元素
-    const textArea = document.createElement('textarea')
-    textArea.value = url
-
-    // 避开滚动条影响，将其定位到屏幕外
-    textArea.style.position = 'fixed'
-    textArea.style.top = '-9999px'
-    document.body.appendChild(textArea)
-
-    // 选中文字并执行复制命令
-    textArea.focus()
-    textArea.select()
-
-    try {
-      const successful = document.execCommand('copy')
-      if (successful) {
-        handleCopySuccess(url)
-      } else {
-        toast.error('复制失败')
-      }
-    } catch (err) {
-      console.error('降级复制方案失败:', err)
-    }
-
-    // 移除临时创建的元素
-    document.body.removeChild(textArea)
+    return
   }
 
-  // try {
-  //   await navigator.clipboard.writeText(url)
-  //   toast.success('已复制直播流地址')
-  // } catch (err) {
-  //   console.error('复制直播流地址失败', err)
-  //   toast.error('复制失败')
-  // }
+  const textArea = document.createElement('textarea')
+  textArea.value = url
+  textArea.style.position = 'fixed'
+  textArea.style.top = '-9999px'
+  document.body.appendChild(textArea)
+
+  textArea.focus()
+  textArea.select()
+
+  try {
+    if (document.execCommand('copy')) {
+      toast.success('已复制直播流地址')
+    } else {
+      toast.error('复制失败')
+    }
+  } catch (err) {
+    console.error('降级复制方案失败:', err)
+    toast.error('复制失败')
+  }
+
+  document.body.removeChild(textArea)
 }
 </script>
 
 <template>
-  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-3">
-    <!-- Card Header -->
-    <div class="flex items-start gap-2 px-4 py-3 border-b border-gray-100 flex-wrap">
+  <article class="hairline-card mb-3 overflow-hidden rounded-xl">
+    <!-- 卡片头部 -->
+    <header
+      class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200/70 px-4 py-3"
+    >
       <span
-        class="inline-flex items-center bg-brand-600 text-white text-xs font-bold px-2 py-0.5 rounded-md shrink-0"
+        class="inline-flex h-6 shrink-0 items-center rounded-md border border-gray-200 bg-gray-50 px-1.5 font-mono text-[11px] font-medium text-gray-500"
       >
         #{{ session.id }}
       </span>
+
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 flex-wrap">
-          <strong class="text-sm font-semibold text-gray-900 min-w-0 truncate">
+        <div class="flex items-center gap-2">
+          <h3 class="truncate text-sm font-semibold tracking-tight text-gray-900">
             {{ session.room_name || session.room_url || '未命名' }}
-          </strong>
+          </h3>
           <span
-            class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
-            :class="sessionBadge.cls"
+            class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium"
+            :class="sessionBadge.pill"
           >
-            <span class="w-2 h-2 rounded-full" :class="sessionBadge.dotCls" />
+            <span class="h-1.5 w-1.5 rounded-full" :class="sessionBadge.dot" />
             {{ sessionBadge.text }}
           </span>
         </div>
-        <div class="mt-1 flex items-center gap-2 flex-wrap text-xs text-gray-500">
-          <span class="truncate max-w-full" :title="session.room_url || ''">{{
-            session.room_url || ''
-          }}</span>
-          <span v-if="session.caption" class="text-gray-400">{{ session.caption }}</span>
+        <div class="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-gray-400">
+          <span class="truncate" :title="session.room_url || ''">{{ session.room_url || '' }}</span>
+          <span v-if="session.caption" class="shrink-0">· {{ session.caption }}</span>
         </div>
       </div>
-      <button
-        class="px-2 py-0.5 text-xs font-medium rounded border border-red-300 text-red-500 hover:bg-red-50 transition-colors shrink-0"
-        title="删除会话"
-        @click="emit('delete-session', session.id)"
-      >
-        删除
-      </button>
-    </div>
 
-    <div class="p-4">
-      <div class="grid gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
-        <div
-          class="grid grid-cols-1 gap-3 sm:grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-[144px_minmax(0,1fr)] min-w-0"
+      <div class="flex shrink-0 items-center gap-1">
+        <button
+          v-if="isDone && !hasSuccessUpload"
+          :class="[btnGhost, 'text-green-600 hover:border-green-200 hover:bg-green-50']"
+          title="投稿此会话"
+          @click="emit('upload', session.id)"
         >
-          <a
-            v-if="coverUrl"
-            :href="coverUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="group relative block aspect-video overflow-hidden rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-            :aria-label="`在会话 #${session.id} 的新标签页查看封面原图`"
-            title="在新标签页查看封面原图"
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            viewBox="0 0 24 24"
           >
-            <img
-              :src="coverUrl"
-              :alt="`${session.room_name || session.room_url || '直播间'}封面`"
-              class="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-              loading="lazy"
-              decoding="async"
-              @error="handleCoverError"
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 16.5V4.5m0 0L7.5 9M12 4.5 16.5 9M3.75 19.5h16.5"
             />
-          </a>
-          <div
-            v-else
-            class="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-400"
-            aria-label="暂无封面"
+          </svg>
+          投稿
+        </button>
+        <button
+          :class="[
+            btnGhost,
+            'text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600',
+          ]"
+          title="删除会话"
+          @click="emit('delete-session', session.id)"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            viewBox="0 0 24 24"
           >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+            />
+          </svg>
+          删除
+        </button>
+      </div>
+    </header>
+
+    <!-- 卡片主体 -->
+    <div class="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(264px,1fr)]">
+      <!-- 左栏：录制信息 -->
+      <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-[132px_minmax(0,1fr)]">
+        <!-- 封面 -->
+        <a
+          v-if="coverUrl"
+          :href="coverUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group/cover relative block aspect-video self-start overflow-hidden rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          :aria-label="`在会话 #${session.id} 的新标签页查看封面原图`"
+          title="在新标签页查看封面原图"
+        >
+          <img
+            :src="coverUrl"
+            :alt="`${session.room_name || session.room_url || '直播间'}封面`"
+            class="h-full w-full object-cover transition-transform duration-300 group-hover/cover:scale-[1.03]"
+            loading="lazy"
+            decoding="async"
+            @error="handleCoverError"
+          />
+        </a>
+        <div
+          v-else
+          class="flex aspect-video flex-col items-center justify-center gap-1 self-start rounded-lg border border-dashed border-gray-300 bg-gray-50/60 text-gray-300"
+          aria-label="暂无封面"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            class="h-5 w-5"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 012.561 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 12.75h.008v.008H18v-.008zM3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"
+            />
+          </svg>
+          <span class="text-[10px] leading-none">暂无封面</span>
+        </div>
+
+        <div class="min-w-0">
+          <!-- 关键指标 -->
+          <dl class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div
+              v-for="item in metaItems"
+              :key="item.label"
+              class="min-w-0 rounded-lg border border-gray-200/70 bg-gray-50/60 px-2.5 py-2"
+            >
+              <dt class="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                {{ item.label }}
+              </dt>
+              <dd class="mt-0.5 truncate text-sm font-medium tabular-nums text-gray-800">
+                {{ item.value }}
+              </dd>
+            </div>
+          </dl>
+
+          <!-- 路径 / 直播流 / 投稿 -->
+          <div class="mt-3 space-y-2 text-xs">
+            <div class="flex items-baseline gap-2">
+              <span class="w-14 shrink-0 text-gray-400">输出路径</span>
+              <span class="min-w-0 break-all text-gray-600">{{ session.output_path || '-' }}</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="w-14 shrink-0 text-gray-400">直播流</span>
+              <code
+                class="min-w-0 cursor-pointer break-all transition-colors hover:brightness-110"
+                :title="session.stream_url || ''"
+                @click="copyStreamUrl"
+                >{{ truncatedStreamUrl || '-' }}</code
+              >
+            </div>
+            <div v-if="uploadRecords.length > 0" class="flex items-baseline gap-2">
+              <span class="w-14 shrink-0 text-gray-400">投稿</span>
+              <div class="flex flex-wrap items-center gap-1">
+                <span
+                  v-for="u in uploadRecords"
+                  :key="u.id"
+                  class="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                  :class="uploadPill(u.status)"
+                  :title="u.status"
+                >
+                  {{ u.bv_id ? 'BV ' + u.bv_id : u.status }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右栏：弹幕采集 -->
+      <div class="flex flex-col rounded-xl border border-gray-200/70 bg-gray-50/50 p-3.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 text-gray-400">
             <svg
-              viewBox="0 0 24 24"
+              class="h-3.5 w-3.5"
               fill="none"
               stroke="currentColor"
-              stroke-width="1.5"
-              class="size-5"
-              aria-hidden="true"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
             >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 012.561 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 12.75h.008v.008H18v-.008zM3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"
+                d="M8.25 6.75h7.5M8.25 11.25h4.5m-9 8.25h9a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3h-9a3 3 0 0 0-3 3v13.5Z"
               />
             </svg>
-            <span class="mt-1 text-[10px] leading-none">暂无封面</span>
+            <span class="text-[11px] font-medium uppercase tracking-wider">弹幕采集</span>
           </div>
-
-          <div class="min-w-0">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-              <div
-                v-for="item in metaItems"
-                :key="item.label"
-                class="rounded-lg bg-gray-50 px-2.5 py-2 min-w-0"
-              >
-                <div class="text-[11px] text-gray-400">{{ item.label }}</div>
-                <div class="mt-0.5 text-gray-700 font-medium truncate">{{ item.value }}</div>
-              </div>
-            </div>
-
-            <div class="mt-3 grid gap-2 text-xs">
-              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)]">
-                <span class="text-gray-400">输出路径</span>
-                <div class="text-gray-700 break-all">{{ session.output_path || '-' }}</div>
-              </div>
-              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-start">
-                <span class="text-gray-400">直播流</span>
-                <code
-                  class="block text-gray-600 bg-gray-50 rounded px-2 py-1 text-xs cursor-pointer hover:bg-gray-100 break-all"
-                  :title="session.stream_url || ''"
-                  @click="copyStreamUrl"
-                  >{{ truncatedStreamUrl || '-' }}</code
-                >
-              </div>
-            </div>
-
-            <div v-if="uploadRecords.length > 0" class="mt-1">
-              <div class="grid gap-1.5 md:grid-cols-[72px_minmax(0,1fr)] items-center">
-                <span class="text-xs text-gray-400">投稿记录</span>
-                <div>
-                  <span
-                    v-for="u in uploadRecords"
-                    :key="u.id"
-                    class="text-xs font-medium px-2 py-0.5 rounded-full"
-                    :class="uploadBadgeCls(u.status)"
-                    :title="u.status"
-                  >
-                    {{ u.bv_id ? 'BV ' + u.bv_id : u.status }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <span
+            class="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+            :class="danmakuBadge.pill"
+            :title="session.danmaku_error || ''"
+          >
+            {{ danmakuBadge.text }}
+          </span>
         </div>
 
-        <div class="rounded-lg bg-gray-50/70 p-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="text-sm font-medium text-gray-800">弹幕录制</span>
-            <span
-              class="text-xs font-medium px-2 py-0.5 rounded-full"
-              :class="danmakuBadge.cls"
-              :title="session.danmaku_error || ''"
-            >
-              {{ danmakuBadge.text }}
-            </span>
-          </div>
+        <div class="mt-3 flex items-baseline gap-1.5">
+          <span class="text-2xl font-semibold tabular-nums text-gray-900">{{
+            session.danmaku_event_count || 0
+          }}</span>
+          <span class="text-xs text-gray-400">条事件</span>
+          <span
+            v-if="session.danmaku_error"
+            class="ml-auto text-[11px] font-medium text-red-500"
+            :title="session.danmaku_error"
+            >采集异常</span
+          >
+        </div>
 
-          <div class="flex items-center flex-wrap gap-2 pt-1">
-            <router-link
-              :to="`/sessions/${session.id}/danmaku`"
-              class="flex items-center px-2.5 py-1 text-xs font-medium rounded-md border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors no-underline bg-white"
+        <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-3.5">
+          <router-link
+            :to="`/sessions/${session.id}/danmaku`"
+            :class="[btnGhost, 'no-underline hover:bg-gray-50 hover:text-gray-900']"
+          >
+            <svg
+              class="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
             >
-              <span>弹幕详情</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                class="size-3"
-              >
-                <path
-                  d="M11.25 2A2.75 2.75 0 0 1 14 4.75v6.5A2.75 2.75 0 0 1 11.25 14h-3a2.75 2.75 0 0 1-2.75-2.75v-.5a.75.75 0 0 1 1.5 0v.5c0 .69.56 1.25 1.25 1.25h3c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25h-3C7.56 3.5 7 4.06 7 4.75v.5a.75.75 0 0 1-1.5 0v-.5A2.75 2.75 0 0 1 8.25 2h3Z"
-                />
-                <path
-                  d="M7.97 6.28a.75.75 0 0 1 1.06-1.06l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 1 1-1.06-1.06l.97-.97H1.75a.75.75 0 0 1 0-1.5h7.19l-.97-.97Z"
-                />
-              </svg>
-            </router-link>
-            <button
-              class="flex items-center px-2.5 py-1 text-xs font-medium rounded-md border transition-colors bg-white"
-              :class="
-                filesExpanded
-                  ? 'border-brand-300 text-brand-700 bg-brand-50'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-              "
-              @click="filesExpanded = !filesExpanded"
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+              />
+            </svg>
+            弹幕详情
+          </router-link>
+          <button
+            :class="[
+              btnGhost,
+              filesExpanded
+                ? 'border-brand-200 bg-brand-50 text-brand-600'
+                : 'hover:bg-gray-50 hover:text-gray-900',
+            ]"
+            @click="filesExpanded = !filesExpanded"
+          >
+            <svg
+              class="h-3.5 w-3.5 transition-transform"
+              :class="filesExpanded ? 'rotate-180' : ''"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
             >
-              <span>查看文件</span>
-              <svg
-                v-if="!filesExpanded"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                class="size-3"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                class="size-3"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
-            <a
-              :href="logFileUrl"
-              target="_blank"
-              class="flex items-center px-2.5 py-1 text-xs font-medium rounded-md border border-gray-300 text-gray-600 hover:bg-white transition-colors no-underline bg-white"
+              <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+            文件
+          </button>
+          <a
+            :href="logFileUrl"
+            target="_blank"
+            :class="[btnGhost, 'no-underline hover:bg-gray-50 hover:text-gray-900']"
+          >
+            <svg
+              class="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              viewBox="0 0 24 24"
             >
-              <span>日志</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                class="size-3"
-              >
-                <path
-                  d="M6.22 8.72a.75.75 0 0 0 1.06 1.06l5.22-5.22v1.69a.75.75 0 0 0 1.5 0v-3.5a.75.75 0 0 0-.75-.75h-3.5a.75.75 0 0 0 0 1.5h1.69L6.22 8.72Z"
-                />
-                <path
-                  d="M3.5 6.75c0-.69.56-1.25 1.25-1.25H7A.75.75 0 0 0 7 4H4.75A2.75 2.75 0 0 0 2 6.75v4.5A2.75 2.75 0 0 0 4.75 14h4.5A2.75 2.75 0 0 0 12 11.25V9a.75.75 0 0 0-1.5 0v2.25c0 .69-.56 1.25-1.25 1.25h-4.5c-.69 0-1.25-.56-1.25-1.25v-4.5Z"
-                />
-              </svg>
-            </a>
-            <button
-              v-if="isDone && !hasSuccessUpload"
-              class="px-2.5 py-1 text-xs font-medium rounded-md border border-green-300 text-green-700 hover:bg-green-50 transition-colors bg-white"
-              title="投稿此会话"
-              @click="emit('upload', session.id)"
-            >
-              投稿
-            </button>
-          </div>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h4.5M19.5 12a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+              />
+            </svg>
+            日志
+          </a>
         </div>
       </div>
     </div>
 
-    <!-- Collapsible File Panel (lazy loaded) -->
+    <!-- 分片文件面板（懒加载） -->
     <FilePanel v-if="filesExpanded" :session-id="session.id" />
-  </div>
+  </article>
 </template>
