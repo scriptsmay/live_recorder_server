@@ -93,7 +93,9 @@ log "空间检查通过：库大小 ${DB_SIZE_KB} KB，需要 ${NEED_KB} KB，�
 
 # ── 导出 ──────────────────────────────────────────────────
 # -Fc 自定义格式自带压缩，且可用 pg_restore --list 校验、可选择性恢复单表
-PARTIAL="$BACKUP_OUTPUT_DIR/backup_$TS.dump.partial"
+# partial 带 PID：即使将来再出现并发实例，各自的 partial 也互不覆盖；
+# finish() 的 rm -f 只会删掉本进程创建的 partial，不会误删并发实例正在写的文件
+PARTIAL="$BACKUP_OUTPUT_DIR/backup_${TS}_$$.dump.partial"
 FINAL_PATH="$BACKUP_OUTPUT_DIR/backup_$TS.dump"
 
 log "正在导出（-Fc，不含 owner/ACL）..."

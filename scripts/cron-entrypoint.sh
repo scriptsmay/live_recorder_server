@@ -2,6 +2,8 @@
 set -eu
 
 CRONTAB_FILE=/tmp/crontab
+# 幂等：每次启动先清空再重建，避免 docker restart 时 >> 追加导致重复 cron 行（并发实例根因）
+: > "$CRONTAB_FILE"
 
 # ── 脚本路径（生产环境通过 named volume 挂载到 /mnt/scripts/）──
 SCRIPTS_DIR="${SCRIPTS_DIR:-/mnt/scripts}"
@@ -81,12 +83,12 @@ cleanup() {
 trap cleanup TERM INT
 
 # ── 启动 ──
-if [ ! -f "$CRONTAB_FILE" ] && [ -z "$REDIS_LISTENER_PID" ]; then
+if [ ! -s "$CRONTAB_FILE" ] && [ -z "$REDIS_LISTENER_PID" ]; then
   echo "[cron] 无启用的定时任务且 Redis 监听未启用，退出"
   exit 0
 fi
 
-if [ -f "$CRONTAB_FILE" ]; then
+if [ -s "$CRONTAB_FILE" ]; then
   crontab "$CRONTAB_FILE"
   echo "[cron] 当前 crontab:"
   crontab -l

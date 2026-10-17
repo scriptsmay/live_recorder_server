@@ -204,7 +204,9 @@ biliup --help
 | `BACKUP_RETENTION_DAYS` | `7`          | 产物保留天数，超期自动清理                      |
 | `DB_BACKUP_HOST_DIR`    | `./backups`  | 宿主机产物目录，挂载到容器 `/data/db_backups`   |
 
-导出前会检查磁盘水位（可用空间需 ≥ 库大小的 1.5 倍），产物先写 `.partial` 再通过 `pg_restore --list` 校验、校验通过才 `mv` 成正式档，避免半档被当成可用备份。失败与每周日一次成功心跳都经 `/api/notify/feishu_webhook` 推送，sidecar 本身不持有通知密钥。
+导出前会检查磁盘水位（可用空间需 ≥ 库大小的 1.5 倍），产物先写 `.partial` 再通过 `pg_restore --list` 校验、校验通过才 `mv` 成正式档，避免半档被当成可用备份。`.partial` 文件名带进程 PID（`backup_${TS}_$$.dump.partial`），即使将来再出现并发实例，各自的半档也互不覆盖、失败清理只会删掉本进程自己的文件。失败与每周日一次成功心跳都经 `/api/notify/feishu_webhook` 推送，sidecar 本身不持有通知密钥。
+
+> `cron-entrypoint.sh` 每次启动都会先清空再重建 `/tmp/crontab`（`: > "$CRONTAB_FILE"`），保证 cron 行幂等、不会因 `docker restart` 重复追加而出现两条相同的调度行。
 
 > 默认落盘目录与数据库在同一存储池，能应对误删，扛不住整盘损坏。需要异地留存时改 `DB_BACKUP_HOST_DIR` 即可，脚本无需改动。
 
