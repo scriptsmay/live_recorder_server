@@ -187,13 +187,15 @@ async function runMigration() {
 
     // v1.11.0：投稿后加入合集的状态机（幂等占位 + 失败原因 + 尝试计数）
     // 仅描述合集追加结果，与投稿本身的 status 完全解耦，失败不回写 status
+    // v1.13.3：season_pending_since 记录占位时刻，供重启续跑与就绪等待窗口计算；终态保留不清空
     await client.query(`
       ALTER TABLE upload_records
         ADD COLUMN IF NOT EXISTS season_id BIGINT,
         ADD COLUMN IF NOT EXISTS season_status VARCHAR(16) NOT NULL DEFAULT 'none',
         ADD COLUMN IF NOT EXISTS season_error TEXT,
         ADD COLUMN IF NOT EXISTS season_attempts SMALLINT NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP
+        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS season_pending_since TIMESTAMP
     `);
 
     await client.query(`
@@ -319,7 +321,8 @@ async function runMigration() {
         ADD COLUMN IF NOT EXISTS season_status VARCHAR(16) NOT NULL DEFAULT 'none',
         ADD COLUMN IF NOT EXISTS season_error TEXT,
         ADD COLUMN IF NOT EXISTS season_attempts SMALLINT NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP
+        ADD COLUMN IF NOT EXISTS season_added_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS season_pending_since TIMESTAMP
     `);
 
     await client.query(`

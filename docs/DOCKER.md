@@ -119,17 +119,22 @@ biliup --help
 
 投稿成功后由服务端直连 B 站创作中心接口把稿件加入指定合集小节，全部配置可选：
 
-| 环境变量                   | 说明                                                | 默认值  |
-| -------------------------- | --------------------------------------------------- | ------- |
-| `SEASON_AUTO_ADD_ENABLED`  | 总开关，仅 `false` 关闭                             | `true`  |
-| `SEASON_ADD_DELAY_MS`      | 投稿成功后延迟入合集（毫秒），给稿件转码留时间      | `45000` |
-| `SEASON_ADD_MAX_ATTEMPTS`  | 单条记录最多尝试次数（含首次）                      | `3`     |
-| `SEASON_ADD_BACKOFF_MS`    | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s） | `30000` |
-| `SEASON_HTTP_TIMEOUT_MS`   | B 站接口超时（毫秒）                                | `10000` |
-| `SEASON_LIST_CACHE_TTL`    | 合集列表 Redis 缓存 TTL（秒）                       | `600`   |
-| `SEASON_SEASONS_PAGE_SIZE` | 合集列表分页条数                                    | `30`    |
+| 环境变量                     | 说明                                                 | 默认值    |
+| ---------------------------- | ---------------------------------------------------- | --------- |
+| `SEASON_AUTO_ADD_ENABLED`    | 总开关，仅 `false` 关闭                              | `true`    |
+| `SEASON_ADD_DELAY_MS`        | 投稿成功后延迟入合集（毫秒），给稿件转码留时间       | `45000`   |
+| `SEASON_READY_POLL_MS`       | 稿件就绪轮询间隔（毫秒），轮询在写队列之外并发执行   | `30000`   |
+| `SEASON_READY_TIMEOUT_MS`    | 稿件就绪等待上限（毫秒），超时判 `failed` 可手动重试 | `1800000` |
+| `SEASON_ADD_MAX_ATTEMPTS`    | 写阶段最多尝试次数（含首次；就绪轮询不计入）         | `3`       |
+| `SEASON_ADD_BACKOFF_MS`      | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s）  | `30000`   |
+| `SEASON_PENDING_MAX_AGE_MIN` | 重启续跑硬上限（分钟），占位超时未完成则判 `failed`  | `90`      |
+| `SEASON_HTTP_TIMEOUT_MS`     | B 站接口超时（毫秒）                                 | `10000`   |
+| `SEASON_LIST_CACHE_TTL`      | 合集列表 Redis 缓存 TTL（秒）                        | `600`     |
+| `SEASON_SEASONS_PAGE_SIZE`   | 合集列表分页条数                                     | `30`      |
 
 合集与小节的选择存在投稿模板上（`season_id` / `season_title` / `section_id` / `season_auto_add`），未勾选自动加入的模板完全不受该功能影响。
+
+加入流程分两段：先按 `SEASON_READY_POLL_MS` 轮询 B 站 view 接口等稿件可查（`-404` 等瞬态错误继续等，不受写重试次数限制），就绪后才进入同账号写队列，按 `SEASON_ADD_MAX_ATTEMPTS` 与退避策略重试。服务重启时 `resumePending()` 会以非阻塞方式续跑 `pending` 记录，超过 `SEASON_PENDING_MAX_AGE_MIN` 的占位直接判失败。
 
 ## 消息通知
 

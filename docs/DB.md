@@ -240,14 +240,15 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 | season_id                              | BIGINT       |                               | 本次实际操作的合集小节所属合集 ID                                                                 |
 | season_status                          | VARCHAR(16)  | NOT NULL DEFAULT 'none' CHECK | 加入合集状态：`none` 未配置 `pending` 占位/执行中 `added` 已加入 `failed` 失败 `skipped` 主动跳过 |
 | season_error                           | TEXT         |                               | 失败原因（错误码 + 类别，不含 cookie 等凭证）                                                     |
-| season_attempts                        | SMALLINT     | NOT NULL DEFAULT 0            | 加入合集的累计尝试次数（含自动退避重试）                                                          |
+| season_attempts                        | SMALLINT     | NOT NULL DEFAULT 0            | 写阶段累计尝试次数（不含就绪轮询）                                                                |
 | season_added_at                        | TIMESTAMP    |                               | 加入成功时间                                                                                      |
+| season_pending_since                   | TIMESTAMP    |                               | 占位时刻（v1.13.3），终态保留，用于续跑窗口与分析                                                 |
 | started_at / completed_at / created_at | TIMESTAMP    |                               |                                                                                                   |
 | deleted_at                             | TIMESTAMP    |                               | 软删除时间（v1.12.0）                                                                             |
 
 > **v1.11.0 变更**：`season_*` 列描述的是「投稿成功后追加到合集小节」这一步的结果，与投稿本身的 `status` **完全解耦** —— 加入合集失败不会把 `status` 从 `success` 改回 `failed`，也不影响 `after_upload` 的后处理。
 > `season_status` 同时充当幂等锁：占位用 `UPDATE ... WHERE id=$1 AND season_status IN ('none','failed') RETURNING id`，0 行即放弃，自动与手动重试共用该入口。
-> 进程重启会让执行中的 `pending` 失去宿主，启动链里的 `SeasonService.cleanupStalePending()` 把这些孤儿行回收为 `failed` 并写入孤儿说明，之后可手动重试。v1.11.1 起该清理同时覆盖 `replay_upload_records`。
+> 进程重启会让执行中的 `pending` 失去宿主，v1.13.3 起启动链里的 `SeasonService.resumePending()` 以非阻塞方式续跑（写重试未耗尽且未超过 `SEASON_PENDING_MAX_AGE_MIN`），其余判 `failed`；终态不清空 `season_pending_since`。v1.11.1 起同时覆盖 `replay_upload_records`。
 
 ### biliup_accounts — biliup 账号登记
 
@@ -543,30 +544,31 @@ pending -> extracted -> downloaded -> cut -> fixed -> uploaded -> completed
 
 约束：`idx_replay_upload_one_uploading` 限制同一 `replay_record_id` 同时只能有一条 `status='uploading'` 投稿记录。历史上同一回放可能已有多条 `success`，因此成功记录的重复拦截由 `ReplayUploadService` 在创建新投稿前检查。
 
-| 字段             | 类型         | 约束                                         | 说明                                           |
-| ---------------- | ------------ | -------------------------------------------- | ---------------------------------------------- |
-| id               | SERIAL       | PRIMARY KEY                                  | 自增主键                                       |
-| replay_record_id | INTEGER      | FK → replay_records(id) ON DELETE SET NULL   | 对应回放记录                                   |
-| template_id      | INTEGER      | FK → upload_templates(id) ON DELETE SET NULL | 使用的投稿模板                                 |
-| template_name    | VARCHAR(255) |                                              | 模板名称                                       |
-| title            | VARCHAR(512) |                                              | 实际投稿标题                                   |
-| status           | VARCHAR(20)  | DEFAULT 'pending'                            | `pending` / `uploading` / `success` / `failed` |
-| command          | TEXT         |                                              | biliup 命令                                    |
-| output           | TEXT         |                                              | 命令输出                                       |
-| error_message    | TEXT         |                                              | 失败原因                                       |
-| file_count       | INTEGER      | DEFAULT 0                                    | 投稿文件数量                                   |
-| total_size       | BIGINT       | DEFAULT 0                                    | 投稿文件总大小                                 |
-| bv_id            | VARCHAR(50)  |                                              | BV 号                                          |
-| upload_files     | TEXT         | JSON 字符串                                  | 投稿文件路径数组                               |
-| season_id        | BIGINT       |                                              | 本次实际操作的合集小节所属合集 ID              |
-| season_status    | VARCHAR(16)  | NOT NULL DEFAULT 'none' CHECK                | 加入合集状态，取值同 `upload_records`          |
-| season_error     | TEXT         |                                              | 失败原因（错误码 + 类别，不含 cookie 等凭证）  |
-| season_attempts  | SMALLINT     | NOT NULL DEFAULT 0                           | 加入合集的累计尝试次数（含自动退避重试）       |
-| season_added_at  | TIMESTAMP    |                                              | 加入成功时间                                   |
-| started_at       | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                       |
-| completed_at     | TIMESTAMP    |                                              | 完成时间                                       |
-| created_at       | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                       |
-| deleted_at       | TIMESTAMP    |                                              | 软删除时间（v1.12.0）                          |
+| 字段                 | 类型         | 约束                                         | 说明                                              |
+| -------------------- | ------------ | -------------------------------------------- | ------------------------------------------------- |
+| id                   | SERIAL       | PRIMARY KEY                                  | 自增主键                                          |
+| replay_record_id     | INTEGER      | FK → replay_records(id) ON DELETE SET NULL   | 对应回放记录                                      |
+| template_id          | INTEGER      | FK → upload_templates(id) ON DELETE SET NULL | 使用的投稿模板                                    |
+| template_name        | VARCHAR(255) |                                              | 模板名称                                          |
+| title                | VARCHAR(512) |                                              | 实际投稿标题                                      |
+| status               | VARCHAR(20)  | DEFAULT 'pending'                            | `pending` / `uploading` / `success` / `failed`    |
+| command              | TEXT         |                                              | biliup 命令                                       |
+| output               | TEXT         |                                              | 命令输出                                          |
+| error_message        | TEXT         |                                              | 失败原因                                          |
+| file_count           | INTEGER      | DEFAULT 0                                    | 投稿文件数量                                      |
+| total_size           | BIGINT       | DEFAULT 0                                    | 投稿文件总大小                                    |
+| bv_id                | VARCHAR(50)  |                                              | BV 号                                             |
+| upload_files         | TEXT         | JSON 字符串                                  | 投稿文件路径数组                                  |
+| season_id            | BIGINT       |                                              | 本次实际操作的合集小节所属合集 ID                 |
+| season_status        | VARCHAR(16)  | NOT NULL DEFAULT 'none' CHECK                | 加入合集状态，取值同 `upload_records`             |
+| season_error         | TEXT         |                                              | 失败原因（错误码 + 类别，不含 cookie 等凭证）     |
+| season_attempts      | SMALLINT     | NOT NULL DEFAULT 0                           | 写阶段累计尝试次数（不含就绪轮询）                |
+| season_added_at      | TIMESTAMP    |                                              | 加入成功时间                                      |
+| season_pending_since | TIMESTAMP    |                                              | 占位时刻（v1.13.3），终态保留，用于续跑窗口与分析 |
+| started_at           | TIMESTAMP    | DEFAULT NOW()                                | 开始时间                                          |
+| completed_at         | TIMESTAMP    |                                              | 完成时间                                          |
+| created_at           | TIMESTAMP    | DEFAULT NOW()                                | 创建时间                                          |
+| deleted_at           | TIMESTAMP    |                                              | 软删除时间（v1.12.0）                             |
 
 > **v1.11.1 变更**：回放投稿接入合集链路，`season_*` 五列与 `upload_records` 同名同语义同约束，由 `SeasonService` 按来源表复用同一套编排。两表的 `id` 各自独立自增，**跨表同号是不同稿件**，因此来源（`recording` / `replay`）必须一路透传到终态写入；SQL 里的表名取自 `SeasonService` 内部的常量白名单，永不来自请求入参。
 > **v1.12.0 变更**：`idx_replay_upload_one_uploading` 部分唯一索引追加 `deleted_at IS NULL`——软删的 `uploading` 记录不再永久阻断同一回放再次投稿。

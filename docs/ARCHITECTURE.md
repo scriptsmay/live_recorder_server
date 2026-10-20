@@ -461,13 +461,13 @@ await transcodeQueue.getCurrentProcessingCount();
 
 ### 不属于看门狗（但在 `server/app.js` 启动时通过 `lifecycle.js` 运行）
 
-| 函数                       | 所在文件                             | 触发       | 职责                                                             |
-| -------------------------- | ------------------------------------ | ---------- | ---------------------------------------------------------------- |
-| `cleanupStaleRecordings()` | `server/lib/core/lifecycle.js`       | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                       |
-| `cleanupStaleUploads()`    | `server/services/RecorderService.js` | 启动       | 把进程重启遗留的孤儿 `uploading` 投稿标为 `failed`               |
-| `cleanupStalePending()`    | `server/services/SeasonService.js`   | 启动       | 把进程重启遗留的孤儿 `pending` 合集任务标为 `failed`，可手动重试 |
-| `cleanupStaleRedis()`      | `server/lib/core/lifecycle.js`       | 启动       | 清理 Redis 过期 `active_task:*`                                  |
-| `scanRecordingFiles()`     | `server/lib/scan-files.js`           | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用       |
+| 函数                       | 所在文件                             | 触发       | 职责                                                            |
+| -------------------------- | ------------------------------------ | ---------- | --------------------------------------------------------------- |
+| `cleanupStaleRecordings()` | `server/lib/core/lifecycle.js`       | 启动       | 重命名 `.part`、追踪遗留文件、尝试恢复会话                      |
+| `cleanupStaleUploads()`    | `server/services/RecorderService.js` | 启动       | 把进程重启遗留的孤儿 `uploading` 投稿标为 `failed`              |
+| `resumePending()`          | `server/services/SeasonService.js`   | 启动       | 非阻塞续跑重启遗留的 `pending` 合集任务，超龄/耗尽者判 `failed` |
+| `cleanupStaleRedis()`      | `server/lib/core/lifecycle.js`       | 启动       | 清理 Redis 过期 `active_task:*`                                 |
+| `scanRecordingFiles()`     | `server/lib/scan-files.js`           | 启动 / API | 同步 fs 遍历下载目录，`watchdog.runFileScan()` 和 API 共用      |
 
 ### 周期性执行链
 
@@ -492,7 +492,7 @@ server/app.js
        ├─ cleanupStaleRedis()             ← 清理 Redis 过期 active_task
        ├─ cleanupStaleRecordings()        ← 重命名 .part、恢复会话
        ├─ RecorderService.cleanupStaleUploads() ← 孤儿 uploading 投稿 → failed
-       ├─ SeasonService.cleanupStalePending()   ← 孤儿 pending 合集任务 → failed
+       ├─ SeasonService.resumePending()         ← 重启续跑 pending 合集任务（超龄 → failed）
        ├─ transcodeQueue.init()           ← 初始化转码队列(加载并发配置)
        ├─ watchdog.start()                ← 启动看门狗
        └─ pollingManager.start()          ← 启动轮询管理器(加载 polling_enabled 房间)

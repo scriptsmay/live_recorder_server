@@ -1083,7 +1083,9 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 重试按**投稿模板当前**的 `cookies_path` / `season_id` / `section_id` 执行（每次调用现联表读取，占位时一并覆写记录的 `season_id`），不是投稿当时快照的目标。模板改过合集后重试，会加入新合集。
 
-**进程重启**：执行中的 `pending` 会随进程一起丢失，启动时由 `SeasonService.cleanupStalePending()` 统一回收为 `failed`（`season_error` 标注孤儿回收），并只发一条 `season_orphan_recovered` 通知（两张表的孤儿合并计数）；两张投稿表都会被扫到，通知按表标注 ID，避免两表同号指错稿件。回收后可直接手动重试。投稿主状态 `status` 不受影响。
+**执行编排**（v1.13.3）：触发后先等待 `SEASON_ADD_DELAY_MS`，再在写队列之外并发轮询 B 站 view 接口等稿件可查（间隔 `SEASON_READY_POLL_MS`，瞬态网络错误继续轮询，上限 `SEASON_READY_TIMEOUT_MS`，默认 30 分钟）。就绪后才进入同账号串行写队列，按 `SEASON_ADD_MAX_ATTEMPTS` 与退避策略重试；就绪轮询不计入写重试次数。等待超时以专门的 `VIDEO_READY_TIMEOUT` 标记失败，长轮询期间不阻塞同账号其他记录，也不阻塞投稿 HTTP 流程。
+
+**进程重启**：执行中的 `pending` 会随进程一起丢失，启动时由 `SeasonService.resumePending()` 扫描两张投稿表并以非阻塞方式续跑：`season_attempts` 未耗尽的记录直接恢复执行（沿用原占位时刻计算就绪窗口）；占位超过 `SEASON_PENDING_MAX_AGE_MIN`（默认 90 分钟）、写重试已耗尽、模板失效或记录已软删除的，判为 `failed`。批量判失败只发一条聚合的 `season_pending_expired` 通知（按表标注 ID，软删除记录静默处理）；单条执行失败仍发 `season_add_failed`。记录终态保留 `season_pending_since`，可用于分析「占位 → 成功」耗时。手动重试语义不变，可直接重试。投稿主状态 `status` 不受影响。
 
 **模板合集字段**（`POST/PUT /api/upload_templates`）：
 

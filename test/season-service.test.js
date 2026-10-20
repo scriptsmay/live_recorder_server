@@ -1,8 +1,8 @@
 /**
  * SeasonService 单测
  *
- * 覆盖：触发门禁、三层幂等、退避重试、异常矩阵终态、同账号串行、状态回写、凭证红线、列表缓存。
- * 合集客户端与 cookie 解析全部 mock，只验证编排语义。
+ * 覆盖：触发门禁、三层幂等、就绪轮询、写阶段退避重试、异常矩阵终态、同账号串行、状态回写、凭证红线、列表缓存。
+ * 合集客户端与 cookie 解析全部 mock，只验证编排语义；时钟用虚拟时钟推进，不真实等待。
  */
 
 jest.mock('../server/db/index', () => ({ query: jest.fn() }));
@@ -43,6 +43,7 @@ jest.mock('../server/lib/core/bilibili-season', () => {
 
 const pool = require('../server/db/index');
 const redis = require('../server/db/redis');
+const notify = require('../server/lib/core/notify');
 const { loadBiliupCookie, CookieError } = require('../server/lib/utils/biliup-cookie');
 const season = require('../server/lib/core/bilibili-season');
 const SeasonService = require('../server/services/SeasonService');
@@ -86,12 +87,20 @@ function emptySection(overrides = {}) {
 function mockPool({ records = [recordRow()], claimOk = true, currentStatus = 'pending' } = {}) {
   const list = Array.isArray(records) ? records : [records];
   pool.query.mockImplementation(async (sql, params = []) => {
+    if (sql.includes("WHERE ur.season_status = 'pending'")) {
+      return { rows: [] };
+    }
     if (sql.includes('SELECT ur.id')) {
       const row = list.find((r) => String(r.id) === String(params[0]));
       return { rows: row ? [row] : [] };
     }
+    if (sql.includes('AND season_pending_since IS NULL')) {
+      return { rows: params.length ? [{ id: params[0], season_pending_since: new Date(clock.now) }] : [] };
+    }
     if (sql.includes("SET season_status = 'pending'")) {
-      return { rows: claimOk ? [{ id: params[0] }] : [] };
+      return {
+        rows: claimOk ? [{ id: params[0], season_pending_since: new Date(clock.now) }] : [],
+      };
     }
     if (sql.includes('SELECT season_status FROM')) {
       return { rows: [{ season_status: currentStatus }] };
@@ -128,18 +137,26 @@ function bizError(code, { retryable = false, bizCode, message } = {}) {
 }
 
 let sleeps;
+let clock;
 
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.SEASON_ADD_DELAY_MS = '0';
   process.env.SEASON_ADD_BACKOFF_MS = '30000';
   process.env.SEASON_ADD_MAX_ATTEMPTS = '3';
+  process.env.SEASON_READY_POLL_MS = '30000';
+  process.env.SEASON_READY_TIMEOUT_MS = '1800000';
+  process.env.SEASON_PENDING_MAX_AGE_MIN = '90';
   delete process.env.SEASON_AUTO_ADD_ENABLED;
   delete process.env.SEASON_LIST_CACHE_TTL;
 
+  // 虚拟时钟：_sleep 直接推进时间，长轮询与退避不会真实等待
+  clock = { now: Date.parse('2026-10-20T00:00:00Z') };
+  jest.spyOn(SeasonService, '_now').mockImplementation(() => clock.now);
   sleeps = [];
   jest.spyOn(SeasonService, '_sleep').mockImplementation(async (ms) => {
     sleeps.push(ms);
+    clock.now += ms;
   });
 
   loadBiliupCookie.mockResolvedValue(CREDENTIAL);
@@ -281,20 +298,117 @@ describe('正常执行链路', () => {
   });
 });
 
-describe('重试与退避', () => {
-  test('可重试错误按指数退避到上限后转 failed', async () => {
+describe('就绪轮询', () => {
+  test('稿件晚就绪时持续轮询，就绪后才写且只消耗一次写尝试', async () => {
+    season.getVideoInfo
+      .mockRejectedValueOnce(bizError(season.ERROR_CODES.VIDEO_NOT_READY, { retryable: true, bizCode: -404 }))
+      .mockRejectedValueOnce(bizError(season.ERROR_CODES.VIDEO_NOT_READY, { retryable: true, bizCode: -404 }))
+      .mockResolvedValueOnce({ aid: 5001, cid: 6001, title: '稿件标题' });
+    mockPool();
+    const result = await SeasonService.scheduleAdd(101);
+
+    expect(result.ok).toBe(true);
+    expect(sleeps).toEqual([30000, 30000]);
+    expect(season.getVideoInfo).toHaveBeenCalledTimes(3);
+    expect(callsFor('season_attempts = season_attempts + 1')).toHaveLength(1);
+    expect(season.addToSeason).toHaveBeenCalledTimes(1);
+    expect(lastWrite("SET season_status = 'added'")).not.toBeNull();
+  });
+
+  test('瞬态网络错误（retryable）在就绪阶段被容忍', async () => {
+    season.getVideoInfo
+      .mockRejectedValueOnce(bizError('NETWORK_ERROR', { retryable: true, message: 'fetch failed' }))
+      .mockResolvedValueOnce({ aid: 5001, cid: 6001, title: '稿件标题' });
+    mockPool();
+    const result = await SeasonService.scheduleAdd(101);
+
+    expect(result.ok).toBe(true);
+    expect(sleeps).toEqual([30000]);
+    expect(callsFor('season_attempts = season_attempts + 1')).toHaveLength(1);
+  });
+
+  test('凭证失效等不可重试错误直接失败，不进入写队列', async () => {
+    season.getVideoInfo.mockRejectedValue(bizError(season.ERROR_CODES.AUTH_EXPIRED, { bizCode: -101 }));
+    mockPool();
+    const result = await SeasonService.scheduleAdd(101);
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(season.ERROR_CODES.AUTH_EXPIRED);
+    expect(sleeps).toEqual([]);
+    expect(season.getSeasonSection).not.toHaveBeenCalled();
+    expect(season.addToSeason).not.toHaveBeenCalled();
+  });
+
+  test('就绪超时以 VIDEO_READY_TIMEOUT 收敛，不占用写重试次数', async () => {
+    process.env.SEASON_READY_TIMEOUT_MS = '60000';
     season.getVideoInfo.mockRejectedValue(
       bizError(season.ERROR_CODES.VIDEO_NOT_READY, { retryable: true, bizCode: -404 })
     );
     mockPool();
     const result = await SeasonService.scheduleAdd(101);
 
-    expect(result).toEqual({ ok: false, attempts: 3, code: season.ERROR_CODES.VIDEO_NOT_READY });
-    expect(sleeps).toEqual([30000, 60000]);
+    expect(result).toEqual({ ok: false, attempts: 0, code: season.ERROR_CODES.VIDEO_READY_TIMEOUT });
+    expect(sleeps).toEqual([30000, 30000]);
     expect(season.getVideoInfo).toHaveBeenCalledTimes(3);
+    expect(callsFor('season_attempts = season_attempts + 1')).toHaveLength(0);
+    expect(season.addToSeason).not.toHaveBeenCalled();
+    const [, params] = lastWrite("SET season_status = 'failed'");
+    expect(params[1]).toContain(season.ERROR_CODES.VIDEO_READY_TIMEOUT);
+  });
+
+  test('最终失败只发一条 season_add_failed 通知', async () => {
+    season.getSeasonSection.mockResolvedValueOnce(emptySection());
+    season.addToSeason.mockRejectedValue(bizError(season.ERROR_CODES.AUTH_EXPIRED, { bizCode: -101 }));
+    mockPool();
+    await SeasonService.scheduleAdd(101);
+
+    expect(notify.send).toHaveBeenCalledTimes(1);
+    const [eventType, title, content] = notify.send.mock.calls[0];
+    expect(eventType).toBe('season_add_failed');
+    expect(title).toContain('BV1testBvid');
+    expect(content).toContain('记录 ID：101');
+    expect(content).toContain('AUTH_EXPIRED');
+  });
+
+  test('重复收敛（状态已非 pending）不再发通知', async () => {
+    // 模拟 UPDATE ... WHERE season_status='pending' 命中 0 行
+    pool.query.mockResolvedValue({ rows: [] });
+    const err = bizError(season.ERROR_CODES.AUTH_EXPIRED, { bizCode: -101 });
+
+    const changed = await SeasonService._markFailed(101, err, { ...recordRow(), table: 'upload_records' });
+
+    expect(changed).toBe(false);
+    expect(notify.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('重试与退避', () => {
+  test('写阶段瞬态错误按指数退避重试后成功', async () => {
+    season.getSeasonSection.mockResolvedValue(emptySection());
+    season.addToSeason
+      .mockRejectedValueOnce(bizError('NETWORK_ERROR', { retryable: true, message: 'fetch failed' }))
+      .mockResolvedValueOnce({ added: true, alreadyAdded: false, bizCode: 0 });
+    mockPool();
+    const result = await SeasonService.scheduleAdd(101);
+
+    expect(result.ok).toBe(true);
+    expect(result.attempts).toBe(2);
+    expect(sleeps).toEqual([30000]);
+    expect(callsFor('season_attempts = season_attempts + 1')).toHaveLength(2);
+  });
+
+  test('写阶段可重试错误按指数退避到上限后转 failed', async () => {
+    season.getSeasonSection.mockResolvedValue(emptySection());
+    season.addToSeason.mockRejectedValue(bizError(season.ERROR_CODES.BIZ_ERROR, { retryable: true, bizCode: 99999 }));
+    mockPool();
+    const result = await SeasonService.scheduleAdd(101);
+
+    expect(result).toEqual({ ok: false, attempts: 3, code: season.ERROR_CODES.BIZ_ERROR });
+    expect(sleeps).toEqual([30000, 60000]);
+    expect(season.addToSeason).toHaveBeenCalledTimes(3);
     expect(callsFor('season_attempts = season_attempts + 1')).toHaveLength(3);
     const [, params] = lastWrite("SET season_status = 'failed'");
-    expect(params[1]).toContain(season.ERROR_CODES.VIDEO_NOT_READY);
+    expect(params[1]).toContain(season.ERROR_CODES.BIZ_ERROR);
   });
 
   test('不可重试错误立即 failed，不消耗重试额度', async () => {
@@ -335,6 +449,45 @@ describe('重试与退避', () => {
 });
 
 describe('同账号串行', () => {
+  test('慢就绪记录不阻塞同账号后续记录进入写队列（队头阻塞回归）', async () => {
+    mockPool({
+      records: [recordRow({ id: 101, bv_id: 'BV1fast' }), recordRow({ id: 102, bv_id: 'BV1slow' })],
+    });
+    let releaseSlow;
+    const slowReady = new Promise((resolve) => {
+      releaseSlow = () => resolve({ aid: 5002, cid: 6002, title: '慢稿件' });
+    });
+    season.getVideoInfo.mockImplementation(async (_credential, { bvid }) => {
+      if (bvid === 'BV1slow') return slowReady;
+      return { aid: 5001, cid: 6001, title: '快稿件' };
+    });
+    season.getSeasonSection.mockResolvedValue(emptySection());
+    let inFlight = 0;
+    let peak = 0;
+    season.addToSeason.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setImmediate(r));
+      inFlight -= 1;
+      return { added: true, alreadyAdded: false, bizCode: 0 };
+    });
+
+    const slow = SeasonService.scheduleAdd(102);
+    const fast = SeasonService.scheduleAdd(101);
+
+    // 慢记录仍在轮询时，快记录应已完成写入，而不是排在它后面等待
+    const fastResult = await fast;
+    expect(fastResult.ok).toBe(true);
+    expect(season.addToSeason).toHaveBeenCalledTimes(1);
+    expect(season.addToSeason.mock.calls[0][1].episodes[0].title).toBe('快稿件');
+
+    releaseSlow();
+    const slowResult = await slow;
+    expect(slowResult.ok).toBe(true);
+    expect(season.addToSeason).toHaveBeenCalledTimes(2);
+    expect(peak).toBe(1);
+  });
+
   test('同一 cookie 路径的两次加入不并发发起写请求', async () => {
     mockPool({ records: [recordRow(), recordRow({ id: 102 })] });
     let inFlight = 0;
