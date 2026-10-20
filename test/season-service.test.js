@@ -144,6 +144,7 @@ beforeEach(() => {
   process.env.SEASON_ADD_DELAY_MS = '0';
   process.env.SEASON_ADD_BACKOFF_MS = '30000';
   process.env.SEASON_ADD_MAX_ATTEMPTS = '3';
+  process.env.SEASON_WRITE_GAP_MS = '0';
   process.env.SEASON_READY_POLL_MS = '30000';
   process.env.SEASON_READY_TIMEOUT_MS = '1800000';
   process.env.SEASON_PENDING_MAX_AGE_MIN = '90';
@@ -504,6 +505,23 @@ describe('同账号串行', () => {
     await Promise.all([SeasonService.scheduleAdd(101), SeasonService.scheduleAdd(102)]);
     expect(peak).toBe(1);
     expect(season.addToSeason).toHaveBeenCalledTimes(2);
+  });
+
+  test('同一账号连续写入之间保留 SEASON_WRITE_GAP_MS 间隔', async () => {
+    process.env.SEASON_WRITE_GAP_MS = '3000';
+    mockPool({ records: [recordRow(), recordRow({ id: 102 })] });
+    season.getSeasonSection.mockResolvedValue(emptySection());
+    const writeTimes = [];
+    season.addToSeason.mockImplementation(async () => {
+      writeTimes.push(clock.now);
+      return { added: true, alreadyAdded: false, bizCode: 0 };
+    });
+
+    await Promise.all([SeasonService.scheduleAdd(101), SeasonService.scheduleAdd(102)]);
+
+    expect(writeTimes).toHaveLength(2);
+    expect(writeTimes[1] - writeTimes[0]).toBeGreaterThanOrEqual(3000);
+    expect(sleeps).toContain(3000);
   });
 
   test('不同 cookie 路径的加入互不阻塞', async () => {

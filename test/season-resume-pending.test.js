@@ -96,6 +96,7 @@ beforeEach(() => {
   process.env.SEASON_PENDING_MAX_AGE_MIN = '90';
   process.env.SEASON_READY_POLL_MS = '30000';
   process.env.SEASON_READY_TIMEOUT_MS = '1800000';
+  process.env.SEASON_WRITE_GAP_MS = '0';
   delete process.env.SEASON_AUTO_ADD_ENABLED;
 
   clock = { now: Date.parse('2026-10-20T00:00:00Z') };

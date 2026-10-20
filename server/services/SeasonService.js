@@ -104,6 +104,10 @@ class SeasonService {
     return envInt('SEASON_ADD_BACKOFF_MS', 30000);
   }
 
+  static writeGapMs() {
+    return envInt('SEASON_WRITE_GAP_MS', 3000);
+  }
+
   static readyPollMs() {
     return envInt('SEASON_READY_POLL_MS', 30000, 1);
   }
@@ -453,17 +457,22 @@ class SeasonService {
 
       const key = ctx.cookies_path;
       const previous = accountTails.get(key) || Promise.resolve();
-      const next = previous.then(
+      const task = previous.then(
         () => this._attempts(recordId, ctx, sectionId, video, usedAttempts),
         () => this._attempts(recordId, ctx, sectionId, video, usedAttempts)
       );
+      // 间隔只挂在队列 tail 上，当前调用者等到写入结果即返回；否则手动重试接口会被多拖 3 秒
+      const tail = task.then(async () => {
+        const gap = this.writeGapMs();
+        if (gap > 0) await this._sleep(gap);
+      });
       accountTails.set(
         key,
-        next.catch((err) => {
+        tail.catch((err) => {
           console.error(`${LOG} 记录 ${recordId} 队列异常: ${safeMessage(err)}`);
         })
       );
-      return await next;
+      return await task;
     } catch (err) {
       console.error(`${LOG} 记录 ${recordId} 执行异常: ${safeMessage(err)}`);
       try {

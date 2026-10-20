@@ -127,6 +127,7 @@ biliup --help
 | `SEASON_READY_TIMEOUT_MS`    | 稿件就绪等待上限（毫秒），超时判 `failed` 可手动重试 | `1800000` |
 | `SEASON_ADD_MAX_ATTEMPTS`    | 写阶段最多尝试次数（含首次；就绪轮询不计入）         | `3`       |
 | `SEASON_ADD_BACKOFF_MS`      | 首次重试退避基数（毫秒，指数递增 30s / 60s / 120s）  | `30000`   |
+| `SEASON_WRITE_GAP_MS`        | 同账号连续写入最小间隔（毫秒），避免触发 20111 频控  | `3000`    |
 | `SEASON_PENDING_MAX_AGE_MIN` | 重启续跑硬上限（分钟），占位超时未完成则判 `failed`  | `90`      |
 | `SEASON_HTTP_TIMEOUT_MS`     | B 站接口超时（毫秒）                                 | `10000`   |
 | `SEASON_LIST_CACHE_TTL`      | 合集列表 Redis 缓存 TTL（秒）                        | `600`     |
@@ -134,7 +135,7 @@ biliup --help
 
 合集与小节的选择存在投稿模板上（`season_id` / `season_title` / `section_id` / `season_auto_add`），未勾选自动加入的模板完全不受该功能影响。
 
-加入流程分两段：先按 `SEASON_READY_POLL_MS` 轮询 B 站 view 接口等稿件可查（`-404` 等瞬态错误继续等，不受写重试次数限制），就绪后才进入同账号写队列，按 `SEASON_ADD_MAX_ATTEMPTS` 与退避策略重试。服务重启时 `resumePending()` 会以非阻塞方式续跑 `pending` 记录，超过 `SEASON_PENDING_MAX_AGE_MIN` 的占位直接判失败。
+加入流程分两段：先按 `SEASON_READY_POLL_MS` 轮询 B 站 view 接口等稿件可查（`-404` 等瞬态错误继续等，不受写重试次数限制），就绪后才进入同账号写队列，按 `SEASON_ADD_MAX_ATTEMPTS` 与退避策略重试；同一账号相邻写入之间至少间隔 `SEASON_WRITE_GAP_MS`，避免毫秒级连写触发 20111 频控。服务重启时 `resumePending()` 会以非阻塞方式续跑 `pending` 记录，超过 `SEASON_PENDING_MAX_AGE_MIN` 的占位直接判失败。
 
 ## 消息通知
 
