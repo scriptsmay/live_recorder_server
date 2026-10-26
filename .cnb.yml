@@ -1,45 +1,20 @@
 # .cnb.yml — live_recorder_server 云原生构建流水线
 #
 # 试点迁移目标：
-#   用 CNB 云原生构建替代 GitHub Actions 的 docker-image.yml / replay-cron-image.yml / ffmpeg-builder.yml，
+#   用 CNB 云原生构建替代 GitHub Actions 的 docker-image.yml / replay-cron-image.yml，
 #   镜像推送到 CNB 制品库（registry.cnb.cool），逐步退役 ghcr.io。
 #
 # 触发规则（与原 GitHub 工作流对齐）：
 #   - 推送 v* Tag  -> 构建并推送「主服务镜像」+「replay-cron 镜像」（对应 docker-image.yml / replay-cron-image.yml）
-#   - 每周一定时   -> 从上游 ghcr.io 拉取 FFmpeg 构建镜像并转推到 CNB 制品库（对应 ffmpeg-builder.yml）
 #
 # 镜像地址约定：
 #   主服务    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG              -> registry.cnb.cool/scriptsmay/live_recorder_server
 #   replay-cron: $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG/replay-cron -> registry.cnb.cool/scriptsmay/live_recorder_server/replay-cron
-#   ffmpeg    : $CNB_DOCKER_REGISTRY/$CNB_REPO_SLUG/ffmpeg       -> registry.cnb.cool/scriptsmay/live_recorder_server/ffmpeg
 #   注：CNB Docker 制品库用「仓库路径/镜像名」命名空间（非同名制品），镜像都落在同一个制品库下，
 #       构建令牌对已存在的 live_recorder_server 制品库可写，无需单独建库。
 #
 # 制品库登录：使用构建期临时令牌（CNB_TOKEN_USER_NAME 固定为 cnb），无需自建密钥仓库。
 # 注意：首次推送前需在 CNB 网页确认该仓库已开启「制品库」；CNB 通常会随首次推送自动创建制品仓库。
-
-# ---- 定时任务必须挂在具体分支名下（此处用默认分支 main）----
-main:
-  # 每周一 03:00（UTC）从上游 ghcr.io 同步 FFmpeg 构建镜像到 CNB 制品库
-  'crontab: 0 3 * * 1':
-    - name: sync-ffmpeg-image
-      services:
-        - docker
-      stages:
-        - name: login-cnb-registry
-          script: docker login -u "$CNB_TOKEN_USER_NAME" -p "$CNB_TOKEN" "$CNB_DOCKER_REGISTRY"
-        - name: pull-retag-push
-          script: |
-            SRC="ghcr.io/ffpresets/ffmpeg-builds/master-7.1:latest"
-            DST="$CNB_DOCKER_REGISTRY/${CNB_REPO_SLUG}/ffmpeg:master-7.1"
-            echo "从上游拉取 FFmpeg 镜像: $SRC"
-            docker pull "$SRC"
-            docker tag "$SRC" "$DST"
-            docker push "$DST"
-            echo "已转推到 CNB 制品库: $DST"
-      failStages:
-        - name: notify-failure
-          script: echo "FFmpeg 镜像同步失败：$CNB_BUILD_FAILED_MSG"
 
 # ---- 仓库级事件（tag_push）必须挂在 $ 兜底分支下 ----
 $:
