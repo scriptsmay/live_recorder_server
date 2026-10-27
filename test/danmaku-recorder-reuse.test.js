@@ -60,7 +60,7 @@ describe('DanmakuRecorder.startCapture/stopCapture — 采集记录复用与时�
   test('同 session_id + raw_path 已存在：复用记录，不重复 INSERT', async () => {
     pool.query.mockImplementation(async (sql) => {
       if (/FROM danmaku_capture_records/.test(sql)) return { rows: [{ id: 100, event_count: 5 }] };
-      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_at: ORIGINAL_STARTED_AT }] };
+      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_ms: String(ORIGINAL_STARTED_AT.getTime()) }] };
       return { rows: [] };
     });
 
@@ -89,7 +89,7 @@ describe('DanmakuRecorder.startCapture/stopCapture — 采集记录复用与时�
   test('复用记录时时间轴基准锚定 recording_sessions 初始 started_at，而非续播启动时间', async () => {
     pool.query.mockImplementation(async (sql) => {
       if (/FROM danmaku_capture_records/.test(sql)) return { rows: [{ id: 100, event_count: 2 }] };
-      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_at: ORIGINAL_STARTED_AT }] };
+      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_ms: String(ORIGINAL_STARTED_AT.getTime()) }] };
       return { rows: [] };
     });
 
@@ -101,6 +101,12 @@ describe('DanmakuRecorder.startCapture/stopCapture — 采集记录复用与时�
       recordingStartedAt: RESUME_FFMPEG_STARTED_AT,
     });
 
+    // started_at 的 epoch 必须在 SQL 内换算（时区安全），不在 Node 侧 new Date(row.started_at)
+    const anchorQuery = pool.query.mock.calls.find(([sql]) => /FROM recording_sessions/.test(sql));
+    expect(anchorQuery[0]).toContain('EXTRACT(EPOCH FROM (started_at AT TIME ZONE');
+    expect(anchorQuery[0]).toContain("current_setting('TimeZone')");
+    expect(anchorQuery[0]).toContain('AS started_ms');
+
     const session = DanmakuRecorder.getSession(ROOM);
     expect(session.startedAt).toBe(ORIGINAL_STARTED_AT.getTime());
     expect(session.startedAt).not.toBe(RESUME_FFMPEG_STARTED_AT);
@@ -109,7 +115,7 @@ describe('DanmakuRecorder.startCapture/stopCapture — 采集记录复用与时�
   test('续播后事件累加：stopCapture 写回全局总数', async () => {
     pool.query.mockImplementation(async (sql) => {
       if (/FROM danmaku_capture_records/.test(sql)) return { rows: [{ id: 100, event_count: 5 }] };
-      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_at: ORIGINAL_STARTED_AT }] };
+      if (/FROM recording_sessions/.test(sql)) return { rows: [{ started_ms: String(ORIGINAL_STARTED_AT.getTime()) }] };
       return { rows: [] };
     });
 

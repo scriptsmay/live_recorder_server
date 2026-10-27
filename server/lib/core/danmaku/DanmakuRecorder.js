@@ -88,9 +88,18 @@ class DanmakuRecorder {
 
         // 时间轴锚定：必须使用 recording_sessions 初始创建时的 started_at，
         // 而非续播 FFmpeg 的启动时间，确保 JSONL 中 ts_ms 跨续播严格单调、对齐视频时间轴。
-        const sessionRes = await pool.query(`SELECT started_at FROM recording_sessions WHERE id = $1`, [sessionId]);
-        const originalStartedAt = sessionRes.rows[0]?.started_at;
-        startedAt = originalStartedAt ? new Date(originalStartedAt).getTime() : recordingStartedAt || Date.now();
+        // started_at 是无时区 TIMESTAMP，epoch 必须在 SQL 内按数据库时区换算；
+        // 禁止 new Date(row.started_at).getTime()（见 docs/DB.md 时区约定）。
+        const sessionRes = await pool.query(
+          `SELECT EXTRACT(EPOCH FROM (started_at AT TIME ZONE current_setting('TimeZone'))) * 1000 AS started_ms
+           FROM recording_sessions WHERE id = $1`,
+          [sessionId]
+        );
+        const originalStartedMs = Number(sessionRes.rows[0]?.started_ms);
+        startedAt =
+          Number.isFinite(originalStartedMs) && originalStartedMs > 0
+            ? Math.round(originalStartedMs)
+            : recordingStartedAt || Date.now();
 
         console.log(
           `[DanmakuRecorder] 复用采集记录: capture_id=${captureId}, session=${sessionId}, ` +
