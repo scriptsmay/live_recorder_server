@@ -103,41 +103,41 @@ describe('UploadService template variables', () => {
   test('scanPendingAutoUpload passes ended_at so duration_mins can be calculated', async () => {
     const startedAt = new Date(2026, 0, 2, 3, 0, 0);
     const endedAt = new Date(2026, 0, 2, 4, 30, 0);
-    pool.query
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 1,
-            room_url: 'https://live.example/1',
-            room_name: 'KSG无言',
-            started_at: startedAt,
-            ended_at: endedAt,
-            upload_template_id: 10,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rows: [],
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 10,
-            name: '模板',
-            title_template: '{duration_mins}',
-            cookies_path: '/tmp/cookies.json',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ deleted_at: null }] })
-      .mockResolvedValueOnce({
-        rows: [{ file_path: '/tmp/a.mp4', status: 'completed' }],
-      })
-      .mockResolvedValueOnce({ rows: [{ id: 99 }] });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT rs.id FROM recording_sessions')) return { rows: [{ id: 1 }] };
+      if (sql.includes('SELECT rs.*, r.room_name')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              room_url: 'https://live.example/1',
+              room_name: 'KSG无言',
+              started_at: startedAt,
+              ended_at: endedAt,
+              upload_template_id: 10,
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM upload_templates')) {
+        return {
+          rows: [{ id: 10, name: '模板', title_template: '{duration_mins}', cookies_path: '/tmp/cookies.json' }],
+        };
+      }
+      if (sql.includes('SELECT deleted_at FROM recording_sessions')) return { rows: [{ deleted_at: null }] };
+      if (sql.includes('FROM recording_files')) return { rows: [{ file_path: '/tmp/a.mp4', status: 'completed' }] };
+      if (sql.includes('INSERT INTO upload_records')) return { rows: [{ id: 99 }] };
+      return { rows: [] };
+    });
     redis.get.mockResolvedValue(null);
     redis.incr.mockResolvedValue(1);
-    DataService.getSetting.mockResolvedValueOnce('true').mockResolvedValueOnce('10');
+    DataService.getSetting.mockImplementation(async (key, fallback) => {
+      if (key === 'auto_transcode') return 'true';
+      if (key === 'filtering_threshold') return '10';
+      if (key === 'delay') return '60';
+      if (key === 'auto_upload_grace_seconds') return '180';
+      return fallback;
+    });
     transcodeQueue.hasSessionPending.mockResolvedValue(false);
     jest.spyOn(UploadService, '_runUpload').mockResolvedValue(undefined);
     jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
@@ -155,41 +155,50 @@ describe('UploadService template variables', () => {
   test('scanPendingAutoUpload renders {caption} from recording_sessions into upload metadata', async () => {
     const startedAt = new Date(2026, 0, 2, 3, 0, 0);
     const endedAt = new Date(2026, 0, 2, 4, 30, 0);
-    pool.query
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 51,
-            room_url: 'https://live.example/1',
-            room_name: 'KSG子旗',
-            started_at: startedAt,
-            ended_at: endedAt,
-            caption: '解说狼队veTES',
-            upload_template_id: 1,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 1,
-            name: '崩铁子-private',
-            title_template: '{room_name} 直播回放 {YYYY}-{MM}-{DD} {HH}:{mm}',
-            desc_template: '{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}\n{caption}\n-\n存档',
-            cookies_path: '/tmp/cookies.json',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ deleted_at: null }] })
-      .mockResolvedValueOnce({
-        rows: [{ file_path: '/tmp/a.mp4', status: 'completed' }],
-      })
-      .mockResolvedValueOnce({ rows: [{ id: 99 }] });
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT rs.id FROM recording_sessions')) return { rows: [{ id: 51 }] };
+      if (sql.includes('SELECT rs.*, r.room_name')) {
+        return {
+          rows: [
+            {
+              id: 51,
+              room_url: 'https://live.example/1',
+              room_name: 'KSG子旗',
+              started_at: startedAt,
+              ended_at: endedAt,
+              caption: '解说狼队veTES',
+              upload_template_id: 1,
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM upload_templates')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              name: '崩铁子-private',
+              title_template: '{room_name} 直播回放 {YYYY}-{MM}-{DD} {HH}:{mm}',
+              desc_template: '{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}\n{caption}\n-\n存档',
+              cookies_path: '/tmp/cookies.json',
+            },
+          ],
+        };
+      }
+      if (sql.includes('SELECT deleted_at FROM recording_sessions')) return { rows: [{ deleted_at: null }] };
+      if (sql.includes('FROM recording_files')) return { rows: [{ file_path: '/tmp/a.mp4', status: 'completed' }] };
+      if (sql.includes('INSERT INTO upload_records')) return { rows: [{ id: 99 }] };
+      return { rows: [] };
+    });
     redis.get.mockResolvedValue(null);
     redis.incr.mockResolvedValue(1);
-    DataService.getSetting.mockResolvedValueOnce('true').mockResolvedValueOnce('10');
+    DataService.getSetting.mockImplementation(async (key, fallback) => {
+      if (key === 'auto_transcode') return 'true';
+      if (key === 'filtering_threshold') return '10';
+      if (key === 'delay') return '60';
+      if (key === 'auto_upload_grace_seconds') return '180';
+      return fallback;
+    });
     transcodeQueue.hasSessionPending.mockResolvedValue(false);
     jest.spyOn(UploadService, '_runUpload').mockResolvedValue(undefined);
     jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);

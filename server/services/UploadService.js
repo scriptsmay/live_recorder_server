@@ -140,6 +140,91 @@ class UploadService {
   }
 
   /**
+   * 解析秒数设置值，非法/非数字/负数时回退默认值
+   * @param {*} raw - settings 表中的原始字符串
+   * @param {number} fallback - 解析失败时的回退值
+   * @returns {number} 非负整数秒
+   */
+  static parseDurationSeconds(raw, fallback) {
+    if (raw === null || raw === undefined) return fallback;
+    const text = String(raw).trim();
+    if (text === '') return fallback;
+    const value = Number(text);
+    if (!Number.isFinite(value) || value < 0) return fallback;
+    return Math.floor(value);
+  }
+
+  /**
+   * 计算自动投稿有效冷静期：max(delay, auto_upload_grace_seconds)
+   * 即使 delay 被调小或设为 0，自动投稿也至少等待 auto_upload_grace_seconds（默认 180s）。
+   * @returns {Promise<number>} 有效冷静期秒数
+   */
+  static async getEffectiveGraceSeconds() {
+    const [delayRaw, graceRaw] = await Promise.all([
+      DataService.getSetting('delay', '60'),
+      DataService.getSetting('auto_upload_grace_seconds', '180'),
+    ]);
+    // delay 非法时回退其自身默认 60；grace 非法时回退 180
+    const delay = this.parseDurationSeconds(delayRaw, 60);
+    const grace = this.parseDurationSeconds(graceRaw, 180);
+    return Math.max(delay, grace);
+  }
+
+  /**
+   * 自动投稿资格 SQL 片段（scan 与 execute 双查共用）
+   * 依赖别名 rs（recording_sessions）、r（rooms），参数 $1 为有效冷静期秒数。
+   *
+   * 数据库时钟比较：ended_at 为 TIMESTAMP，禁止与 JS Date 直接比较，
+   * 统一用 NOW() - INTERVAL '1 second' * $1 在 SQL 侧计算。
+   * @returns {string} WHERE 条件片段
+   */
+  static _autoUploadEligibilitySql() {
+    return `rs.status = 'completed'
+      AND rs.deleted_at IS NULL
+      AND rs.ended_at IS NOT NULL
+      AND rs.ended_at < NOW() - INTERVAL '1 second' * $1
+      AND rs.ended_at > NOW() - INTERVAL '7 days'
+      AND r.deleted_at IS NULL
+      AND r.upload_template_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM recording_sessions rs2
+        WHERE rs2.room_url = rs.room_url
+          AND rs2.status IN ('recording', 'pending')
+          AND rs2.deleted_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM rooms r2
+        WHERE r2.room_url = rs.room_url
+          AND r2.status = 'recording'
+          AND r2.deleted_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM upload_records ur
+        WHERE ur.session_id = rs.id
+          AND ur.status IN ('uploading', 'success')
+          AND ur.deleted_at IS NULL
+      )`;
+  }
+
+  /**
+   * 重新校验单个会话当前是否仍具备自动投稿资格
+   * 用于 executeUpload({ auto: true }) 在创建 upload_records 前的防竞态二次确认。
+   * @param {number|string} sessionId - 录制会话ID
+   * @param {number} graceSeconds - 有效冷静期秒数
+   * @returns {Promise<boolean>} 仍有资格返回true
+   */
+  static async isAutoUploadEligible(sessionId, graceSeconds) {
+    const { rows } = await pool.query(
+      `SELECT rs.id FROM recording_sessions rs
+       INNER JOIN rooms r ON r.room_url = rs.room_url
+       WHERE rs.id = $2 AND ${this._autoUploadEligibilitySql()}
+       LIMIT 1`,
+      [graceSeconds, sessionId]
+    );
+    return rows.length > 0;
+  }
+
+  /**
    * 检查会话是否已被删除
    * @param {string} sessionId - 录制会话ID
    * @returns {Promise<boolean>} 如果会话不存在或已删除返回true，否则返回false
@@ -173,9 +258,12 @@ class UploadService {
    * @param {string} [tmpl.cover] - 固定封面路径（use_room_cover 命中时作兜底）
    * @param {number} [tmpl.dtime] - 定时发布时间
    * @param {string} [tmpl.after_upload] - 上传后处理配置
-   * @returns {Promise<void>}
+   * @param {Object} [options] - 可选执行参数
+   * @param {boolean} [options.auto] - 是否为自动投稿；true 时在创建投稿记录前重查资格（防续播竞态）
+   * @returns {Promise<Object>} 执行结果；自动投稿被并发录制打断时返回 { skipped: true, reason: 'active_session_running' }
    */
-  static async executeUpload(session, tmpl) {
+  static async executeUpload(session, tmpl, options = {}) {
+    const isAuto = options.auto === true;
     let message;
     if (await this.isSessionDeleted(session.id)) {
       message = `[投稿] 会话 ${session.id} 已被删除，跳过执行`;
@@ -238,6 +326,18 @@ class UploadService {
         return sum;
       }
     }, 0);
+
+    // 自动投稿：紧邻 INSERT 前以会话最新状态二次确认资格，把扫描后重新开播/续播的竞态窗口压到最小。
+    // 手动投稿不传 auto，保持即时执行能力。
+    if (isAuto) {
+      const graceSeconds = await this.getEffectiveGraceSeconds();
+      if (!(await this.isAutoUploadEligible(session.id, graceSeconds))) {
+        console.log(
+          `[投稿] 会话 ${session.id} 自动投稿资格失效（同房间录制中/待录制或冷静期未满），跳过且不创建投稿记录`
+        );
+        return { skipped: true, reason: 'active_session_running' };
+      }
+    }
 
     // 创建上传记录
     const record = await pool.query(
@@ -393,27 +493,23 @@ class UploadService {
 
   /**
    * 由看门狗调用：扫描已完成且转码就绪的会话，按直播间模板自动投稿
-   * 查询最近7天内完成、未删除、配置了上传模板且没有成功/进行中上传记录的会话
+   * 资格条件见 `_autoUploadEligibilitySql()`：最近 7 天内完成、冷静期已过、
+   * 同房间无 recording/pending 会话、直播间非 recording、无阻塞投稿记录。
+   * 扫描结果仅作为候选，executeUpload({ auto: true }) 会再次校验。
    * 会话行用 rs.* 整行透传给 executeUpload，避免手工挑字段导致模板变量缺失（如 caption）
    * @returns {Promise<void>}
    */
   static async scanPendingAutoUpload() {
     try {
+      const graceSeconds = await this.getEffectiveGraceSeconds();
       const { rows } = await pool.query(
         `SELECT rs.*, r.room_name, r.upload_template_id
          FROM recording_sessions rs
-         INNER JOIN rooms r ON r.room_url = rs.room_url AND r.deleted_at IS NULL
-         WHERE rs.status = 'completed'
-           AND rs.deleted_at IS NULL
-           AND r.upload_template_id IS NOT NULL
-           AND rs.ended_at > NOW() - INTERVAL '7 days'
-           AND NOT EXISTS (
-             SELECT 1 FROM upload_records ur
-             WHERE ur.session_id = rs.id AND ur.status IN ('uploading', 'success')
-               AND ur.deleted_at IS NULL
-           )
+         INNER JOIN rooms r ON r.room_url = rs.room_url
+         WHERE ${this._autoUploadEligibilitySql()}
          ORDER BY rs.ended_at DESC
-         LIMIT 20`
+         LIMIT 20`,
+        [graceSeconds]
       );
 
       // 遍历每个符合条件的会话，执行自动上传
@@ -435,7 +531,7 @@ class UploadService {
         if (await this.hasBlockingUploadRecord(row.id)) continue;
 
         console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
-        await this.executeUpload(row, tmpl);
+        await this.executeUpload(row, tmpl, { auto: true });
       }
     } catch (err) {
       console.error('[UploadService][投稿] 扫描失败:', err.message);

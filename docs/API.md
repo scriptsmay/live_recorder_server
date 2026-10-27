@@ -843,22 +843,23 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 
 ### 全局设置项说明
 
-| 键                           | 类型   | 默认值   | 说明                                                      |
-| ---------------------------- | ------ | -------- | --------------------------------------------------------- |
-| `downloader`                 | string | `ffmpeg` | 下载插件（已弃用多引擎，仅 `ffmpeg`，保留键名兼容旧配置） |
-| `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                        |
-| `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                      |
-| `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成      |
-| `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除          |
-| `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间          |
-| `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                 |
-| `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件       |
-| `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                              |
-| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件             |
-| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                     |
-| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                        |
-| `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理        |
-| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                          |
+| 键                           | 类型   | 默认值   | 说明                                                       |
+| ---------------------------- | ------ | -------- | ---------------------------------------------------------- |
+| `downloader`                 | string | `ffmpeg` | 下载插件（已弃用多引擎，仅 `ffmpeg`，保留键名兼容旧配置）  |
+| `pool_size`                  | number | `3`      | 下载线程池大小，限制最大同时录制数                         |
+| `watchdog_interval`          | number | `30`     | 看门狗检查间隔（秒）                                       |
+| `watchdog_timeout`           | number | `60`     | 录制状态检查超时（秒），超过此时长无活动则标记为完成       |
+| `filtering_threshold`        | number | `10`     | 碎片过滤（MB），小于此大小的视频文件将被过滤删除           |
+| `delay`                      | number | `60`     | 下播延迟检测（秒），检测到主播下播后延迟确认时间           |
+| `auto_transcode`             | string | `true`   | 自动转码，录制完成后自动将 FLV 转换为 MP4                  |
+| `transcode_delete_originals` | string | `false`  | 转码后删除原始文件，转码成功后自动删除 FLV 原始文件        |
+| `max_upload_limit`           | number | `3`      | 单会话最大投稿次数（24小时）                               |
+| `auto_upload_grace_seconds`  | number | `180`    | 自动投稿冷静期（秒），与 `delay` 取较大值生效；范围 0–3600 |
+| `auto_generate_hls`          | string | `true`   | 自动生成 HLS，录制完成后自动生成 HLS 播放文件              |
+| `hls_enabled`                | string | `true`   | 是否启用 HLS 播放功能                                      |
+| `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                         |
+| `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理         |
+| `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                           |
 
 ---
 

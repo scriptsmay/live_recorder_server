@@ -313,6 +313,7 @@ KV 结构的全局配置表。
 | `filtering_threshold`             | `10`                  | 碎片过滤阈值（MB），小于此大小的文件将被过滤                                                                                                   |
 | `delay`                           | `60`                  | 下播延迟检测（秒）                                                                                                                             |
 | `max_upload_limit`                | `99`                  | 上传重试次数上限（内存计数，重启后重置），建议设为 `2`-`3`                                                                                     |
+| `auto_upload_grace_seconds`       | `180`                 | 自动投稿冷静期（秒）；与 `delay` 取较大值生效，非法值回退 180                                                                                  |
 | `auto_transcode`                  | `true`                | 是否自动转码 FLV 到 MP4                                                                                                                        |
 | `transcode_delete_originals`      | `true`                | 转码后是否删除原 FLV 文件                                                                                                                      |
 | `transcode_concurrency`           | `3`                   | 转码队列并发数，控制同时处理的转码任务数                                                                                                       |

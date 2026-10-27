@@ -495,6 +495,8 @@ async function runMigration() {
       ['filtering_threshold', '10'],
       ['delay', '60'],
       ['max_upload_limit', '99'],
+      // v1.13.4：自动投稿冷静期（秒），与 delay 取较大值生效，防止短暂断流续播后提前投稿
+      ['auto_upload_grace_seconds', '180'],
       ['auto_transcode', 'true'],
       ['transcode_delete_originals', 'true'],
       ['transcode_concurrency', '3'],
@@ -555,6 +557,16 @@ async function runMigration() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_replay_upload_records_started_at
         ON replay_upload_records(started_at DESC);
+    `);
+
+    // v1.13.4：自动投稿资格扫描索引（看门狗每 30s 轮询，避免全表扫描）
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_recording_sessions_auto_upload
+        ON recording_sessions(status, ended_at);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_recording_sessions_room_status
+        ON recording_sessions(room_url, status);
     `);
 
     // v1.8.0：弹幕自由压制记录表已迁至 danmaku-tool，本服务不再维护

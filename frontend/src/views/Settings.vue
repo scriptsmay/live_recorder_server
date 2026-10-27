@@ -180,6 +180,13 @@ const settingGroups: SettingGroup[] = [
         type: 'number',
         attrs: { min: 1, max: 999 },
       },
+      {
+        key: 'auto_upload_grace_seconds',
+        label: '自动投稿冷静期（秒）',
+        desc: '会话结束后至少等待该时长才允许自动投稿，用于避免短暂断流续播时提前投稿；实际生效时长为该值与「下播延迟检测」（delay）中的较大者。默认 180',
+        type: 'number',
+        attrs: { min: 0, max: 3600, step: 1 },
+      },
     ],
   },
   {

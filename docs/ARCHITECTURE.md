@@ -713,6 +713,28 @@ server/router/rooms.js (新增/修改房间)
 - 手动触发（POST /api/sessions/:id/upload）
 - 受 `max_upload_limit` Redis INCR 持久化计数限制（`upload_count:{sessionId}`，24h 过期）
 
+### 自动投稿资格（v1.13.4）
+
+看门狗每周期调用 `UploadService.scanPendingAutoUpload()`，扫描结果仅作为候选，
+`executeUpload(row, tmpl, { auto: true })` 在创建 `upload_records` 前会以会话最新状态
+重新执行同一套资格校验，防止扫描后重新开播或续播造成提前投稿（此时返回
+`{ skipped: true, reason: 'active_session_running' }`，不创建投稿记录）。
+
+资格条件：
+
+- 会话状态 `completed`、未软删、`ended_at` 在最近 7 天内；
+- `ended_at < NOW() - INTERVAL '1 second' * 有效冷静期`，其中
+  `有效冷静期 = max(delay, auto_upload_grace_seconds)`（默认 180 秒；配置非法时回退 180）；
+- 同一 `room_url` 无 `recording` / `pending` 状态的未删除会话；
+- 对应 `rooms.status` 不为 `recording`；
+- 无 `uploading` / `success` 的未删除投稿记录。
+
+时间比较统一在 SQL 侧用 `NOW()` 完成，不将 `TIMESTAMP` 列与 JS `Date` 直接比较。
+手动投稿不传 `auto`，不受冷静期限制，保持即时执行。
+
+相关索引：`idx_recording_sessions_auto_upload (status, ended_at)`、
+`idx_recording_sessions_room_status (room_url, status)`。
+
 ### 模板
 
 - `upload_templates` 表存储投稿参数
