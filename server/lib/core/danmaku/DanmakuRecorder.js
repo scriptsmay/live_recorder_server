@@ -59,27 +59,66 @@ class DanmakuRecorder {
     }
 
     try {
-      // 创建数据库记录
-      const result = await pool.query(
-        `INSERT INTO danmaku_capture_records (session_id, room_id, platform, status, raw_path, started_at)
-         VALUES ($1, $2, $3, 'recording', $4, NOW())
-         RETURNING id`,
-        [sessionId, roomId, platform, rawPath]
+      // 同一 session_id + raw_path 只保留一个采集记录：
+      // 续播时复用既有记录（改回 recording、清空 ended_at），避免同一 JSONL 对应多条记录，
+      // 导致统计重复与时间轴基准漂移。
+      const existing = await pool.query(
+        `SELECT id, event_count
+         FROM danmaku_capture_records
+         WHERE session_id = $1 AND raw_path = $2 AND deleted_at IS NULL
+         ORDER BY id DESC LIMIT 1`,
+        [sessionId, rawPath]
       );
-      const captureId = result.rows[0].id;
+
+      let captureId;
+      let initialEventCount = 0;
+      let startedAt;
+
+      if (existing.rows.length > 0) {
+        const reused = existing.rows[0];
+        captureId = reused.id;
+        initialEventCount = reused.event_count || 0;
+
+        await pool.query(
+          `UPDATE danmaku_capture_records
+           SET status = 'recording', ended_at = NULL, error = ''
+           WHERE id = $1`,
+          [captureId]
+        );
+
+        // 时间轴锚定：必须使用 recording_sessions 初始创建时的 started_at，
+        // 而非续播 FFmpeg 的启动时间，确保 JSONL 中 ts_ms 跨续播严格单调、对齐视频时间轴。
+        const sessionRes = await pool.query(`SELECT started_at FROM recording_sessions WHERE id = $1`, [sessionId]);
+        const originalStartedAt = sessionRes.rows[0]?.started_at;
+        startedAt = originalStartedAt ? new Date(originalStartedAt).getTime() : recordingStartedAt || Date.now();
+
+        console.log(
+          `[DanmakuRecorder] 复用采集记录: capture_id=${captureId}, session=${sessionId}, ` +
+            `已采 ${initialEventCount} 条, 时间轴基准=${new Date(startedAt).toISOString()}`
+        );
+      } else {
+        const result = await pool.query(
+          `INSERT INTO danmaku_capture_records (session_id, room_id, platform, status, raw_path, started_at)
+           VALUES ($1, $2, $3, 'recording', $4, NOW())
+           RETURNING id`,
+          [sessionId, roomId, platform, rawPath]
+        );
+        captureId = result.rows[0].id;
+        // 首次采集优先使用录制（FFmpeg）启动时间，使 ts_ms 对齐视频时间轴
+        startedAt = recordingStartedAt || Date.now();
+      }
 
       // 打开文件描述符（追加模式）
       const fd = fs.openSync(rawPath, 'a');
 
-      const startedAt = recordingStartedAt || Date.now();
-      // startedAt 优先使用录制（FFmpeg）启动时间，使 ts_ms 对齐视频时间轴
       this.activeSessions.set(roomUrl, {
         sessionId,
         captureId,
         fd,
         recordingStartedAt: startedAt,
         startedAt, // sessionStartMs 别名，供 _normalizeEvent 批量处理用
-        eventCount: 0,
+        // 复用记录时继承既有总数；stopCapture() 统一写回累加后的全局总数
+        eventCount: initialEventCount,
         rawPath,
       });
 
