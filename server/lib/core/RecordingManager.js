@@ -278,11 +278,17 @@ class RecordingManager {
   /**
    * 优雅停止录制进程
    * 先发 SIGTERM，超时后发 SIGKILL
+   *
+   * 发起停止时立即在进程对象上打 `_manualStopped = true`：即使 FFmpeg 在超时后
+   * 被兜底 SIGKILL，close 回调仍能据此判定为人工正常停止（completed），
+   * 不会误入 interrupted / 延迟完成链路。
    */
   stopRecordingProcess(dlProcess, timeoutMs = 10000) {
     if (!dlProcess || dlProcess.killed || dlProcess.exitCode !== null) {
       return Promise.resolve();
     }
+
+    dlProcess._manualStopped = true;
 
     return new Promise((resolve) => {
       const forceKillTimer = setTimeout(() => {
