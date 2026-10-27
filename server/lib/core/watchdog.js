@@ -473,8 +473,13 @@ async function syncMissingFiles() {
  * 1. 从配置中获取下播延迟检测时间（默认60秒）。
  * 2. 查询数据库中所有状态为'interrupted'的录制会话。
  * 3. 检查每个会话的 ended_at 时间与当前时间的差值是否超过配置的延迟时间。
- * 4. 对于超时的会话，将其状态从'interrupted'更新为'completed'。
+ * 4. 对于超时的会话，在**同一事务**内将会话与其余 `interrupted` 文件原子更新为
+ *    `completed`（避免出现「会话已完成、文件仍中断」的中间态被转码/HLS 扫描读到）。
  * 5. 统计并输出被更新的会话数量。
+ *
+ * 非预期退出时 `finishSession()` 写入的 `interrupted` 文件在此延迟完成；
+ * 若 delay 窗口内续播，`checkReuseSession()` 已将会话改回 `recording`，
+ * 本函数只处理仍为 `interrupted` 的行。
  *
  * @returns {Promise<void>} 无返回值，错误会在内部捕获并打印日志
  */
@@ -489,23 +494,48 @@ async function finalizeInterruptedSessions() {
        WHERE status = 'interrupted' AND ended_at IS NOT NULL`
     );
 
-    let updatedCount = 0;
     const now = Date.now();
-
+    const timedOut = [];
     for (const session of sessions) {
       const endedAt = new Date(session.ended_at).getTime();
       const timeDiff = now - endedAt;
-
       if (timeDiff > delayMs) {
-        await pool.query(`UPDATE recording_sessions SET status = 'completed' WHERE id = $1`, [session.id]);
-        updatedCount++;
-        log.debug(`[会话完成] (ID=${session.id}): interrupted -> completed (结束于${Math.floor(timeDiff / 1000)}秒前)`);
+        timedOut.push({ id: session.id, timeDiff });
       }
     }
 
-    if (updatedCount > 0) {
-      log.info(`[会话完成] 共更新 ${updatedCount} 个会话状态为 completed`);
+    if (timedOut.length === 0) return;
+
+    const ids = timedOut.map((s) => s.id);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE recording_sessions SET status = 'completed'
+         WHERE id = ANY($1::int[]) AND status = 'interrupted'`,
+        [ids]
+      );
+      await client.query(
+        `UPDATE recording_files SET status = 'completed', completed_at = NOW()
+         WHERE session_id = ANY($1::int[]) AND status = 'interrupted' AND deleted_at IS NULL`,
+        [ids]
+      );
+      await client.query('COMMIT');
+    } catch (txErr) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw txErr;
+    } finally {
+      client.release();
     }
+
+    for (const session of timedOut) {
+      log.debug(
+        `[会话完成] (ID=${session.id}): interrupted -> completed (结束于${Math.floor(session.timeDiff / 1000)}秒前，文件同步完成)`
+      );
+    }
+    log.info(`[会话完成] 共更新 ${timedOut.length} 个会话状态为 completed（会话与文件同事务）`);
   } catch (err) {
     log.error('[会话完成] 失败:', err.message);
   }

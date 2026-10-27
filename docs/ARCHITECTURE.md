@@ -126,8 +126,13 @@ Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕�
     ▼
 _handleDanmakuFinish()
     │
-    ├── DanmakuRecorder.stopCapture()   停止采集，返回 captureId / eventCount
+    ├── DanmakuRecorder.stopCapture()   停止采集，返回 captureId / eventCount（累计总数）
     └── 更新 danmaku_capture_records     status → completed，写入 ended_at / event_count
+
+续播（同一 session 再次 startCapture）
+    │
+    └── 复用同 session_id + raw_path 的既有记录：status → recording、ended_at 清空，
+        eventCount 继承既有值，ts_ms 基准锚定 recording_sessions.started_at 初始值
 
 弹幕数据的后续消费
     │
@@ -212,11 +217,20 @@ VIDEO_DOWNLOAD_DIR/
 
 ### 状态定义
 
-| 状态          | 含义     | 触发条件                                             |
-| ------------- | -------- | ---------------------------------------------------- |
-| `recording`   | 录制中   | POST /notify/live_download 成功                      |
-| `completed`   | 正常完成 | close handler 收到 exit code 0                       |
-| `interrupted` | 异常中断 | close handler 收到非 0 退出码 / SIGTERM / 看门狗清理 |
+| 状态          | 含义     | 触发条件                                                                                     |
+| ------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `recording`   | 录制中   | POST /notify/live_download 成功                                                              |
+| `completed`   | 正常完成 | close handler 判定为正常退出（exit code 0 / SIGTERM / 人工停止，含停止超时后的兜底 SIGKILL） |
+| `interrupted` | 异常中断 | close handler 判定为非预期退出（非零退出码、外部 SIGKILL、崩溃等）/ 看门狗清理               |
+
+> 退出判定由 `server/lib/utils/exit-status.js` 的 `isUnexpectedExit({ code, signal, isManualStop })` 统一完成。
+> `RecordingManager.stopRecordingProcess()` 发起停止时会在进程对象上写入 `_manualStopped = true`，
+> 因此停止流程在 10 秒后触发的兜底 `SIGKILL` 仍判定为人工正常停止（`completed`），不会进入延迟完成链路。
+>
+> 非预期退出时，`finishSession()` 把有效文件写为 `interrupted` 并**跳过即时转码**；
+> `finalizeInterruptedSessions()` 在 `delay` 窗口超时后于同一事务将会话与其 `interrupted` 文件
+> 一并切为 `completed`，随后由看门狗轮次进入转码、HLS 与自动投稿流程。若窗口内续播，
+> `checkReuseSession()` 将会话改回 `recording`，最终正常结束时按完成路径入队。
 
 ### 延迟续播
 
@@ -225,6 +239,12 @@ VIDEO_DOWNLOAD_DIR/
 - 匹配 `status IN ('completed', 'interrupted')`
 - 复用会话 ID，不清 zero totals，close handler 累加
 - **注意**：续播不 append 到旧文件。FLV/MP4 容器无文件级 append 机制，每次启动录制均使用文件名模板生成新文件。
+- **增量补录**：`finishSession()` 结束时始终扫描 `output_dir`，只 INSERT 尚未在 `recording_files`
+  中登记的视频文件（不再以 `recording_files.length === 0` 为前置条件），因此续播产生的新文件
+  不会在会话结束时漏记。
+- **弹幕时间轴**：同一 `session_id` + `raw_path` 只保留一条 `danmaku_capture_records`
+  （续播复用并继承 `event_count`），`ts_ms` 基准固定为 `recording_sessions.started_at`
+  的初始值，跨续播保持单调递增。
 
 ---
 

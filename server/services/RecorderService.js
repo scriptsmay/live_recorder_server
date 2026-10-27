@@ -13,6 +13,7 @@ const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const { SUPPORTED_EXT_REGEX } = require('../config/config');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { isUnexpectedExit } = require('../lib/utils/exit-status');
 const { fetchRoomCoverByUrl } = require('../lib/core/polling/checkers');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
@@ -231,14 +232,12 @@ class RecorderService {
    * 完成录制会话的后续处理
    *
    * @param {Object} params - 处理参数
-   * @param {number} params.code - 进程退出码
+   * @param {number|null} params.code - 进程退出码
+   * @param {string|null} [params.signal] - 终止信号（正常退出为 null）
    * @param {string|number} params.sessionId - 会话ID
-   * @param {boolean} params.reuseSession - 是否复用会话
-   * @param {boolean} params.useSegment - 是否使用分段录制
-   * @param {string} params.outputFilePattern - 输出文件路径模式
-   * @param {string} params.roomKey - 房间唯一标识 room_url
+   * @param {boolean} [params.isManualStop] - 是否由人工停止流程发起
    */
-  static async finishSession({ code, sessionId }) {
+  static async finishSession({ code, signal = null, sessionId, isManualStop = false }) {
     // 简化参数，几乎所有数据都可从数据库中查询到，需要保留 sessionId
     const session = await DataService.getSession(sessionId);
     const roomKey = session.room_url;
@@ -262,9 +261,16 @@ class RecorderService {
     // 从会话中获取输出路径，避免生成新路径导致变量缺失问题
     const outputFilePattern = session.output_path || '[路径未知]';
 
+    // 判定退出性质：非预期退出 → 有效文件 interrupted + 延迟完成；正常/人工停止 → completed
+    const unexpectedExit = isUnexpectedExit({ code, signal, isManualStop });
+
     await this.delActiveTask(roomKey);
     console.log(
-      `[finishSession][${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)`
+      `[finishSession][${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)` +
+        ` | 退出码: ${code === null || code === undefined ? 'null' : code}` +
+        ` | 信号: ${signal || '无'}` +
+        ` | 人工停止: ${isManualStop ? '是' : '否'}` +
+        ` | 判定: ${unexpectedExit ? 'interrupted(非预期退出)' : 'completed(正常结束)'}`
     );
 
     try {
@@ -290,6 +296,9 @@ class RecorderService {
       const { fileSize, fileCount } = await this._handleSessionFinish({
         sessionId,
         code,
+        signal,
+        isManualStop,
+        unexpectedExit,
       });
 
       // 停止弹幕采集
@@ -315,13 +324,30 @@ class RecorderService {
   /**
    * 处理会话录制结束的业务逻辑
    *
+   * 文件状态按退出性质区分：
+   * - 正常退出 / 人工停止：有效文件 `completed`，立即入转码队列；
+   * - 非预期退出：有效文件 `interrupted`，跳过即时转码，等待 delay 窗口后由看门狗
+   *   `finalizeInterruptedSessions()` 统一完成并进入转码流程。
+   *
+   * 不分段录制没有 segment 事件，结束回调时 `recording_files` 可能为空；因此这里
+   * 始终对 `output_dir` 做增量扫描：只补录尚未在 `recording_files` 中登记的文件，
+   * 续播（同一会话多次启动）产生的新文件也会被拾取，不再依赖
+   * `recordingFiles.length === 0` 的前置条件。
+   *
    * @param {Object} params - 处理参数
    * @param {string|number} params.sessionId - 会话ID
-   * @param {number} params.code - 进程退出码
+   * @param {number|null} params.code - 进程退出码
+   * @param {string|null} [params.signal] - 终止信号
+   * @param {boolean} [params.isManualStop] - 是否人工停止
+   * @param {boolean} [params.unexpectedExit] - 是否非预期退出（由 isUnexpectedExit 判定）
    *
    * @returns {Promise<{fileSize: number, fileCount: number}>} - 文件大小和文件数量
    */
-  static async _handleSessionFinish({ sessionId, code }) {
+  static async _handleSessionFinish({ sessionId, code, signal = null, isManualStop = false, unexpectedExit }) {
+    if (typeof unexpectedExit !== 'boolean') {
+      unexpectedExit = isUnexpectedExit({ code, signal, isManualStop });
+    }
+    const fileStatus = unexpectedExit ? 'interrupted' : 'completed';
     const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
@@ -332,7 +358,10 @@ class RecorderService {
       const { rows: recordingFiles } = await DataService.getRecordingFiles({ session_id: sessionId });
       console.log(`[finishSession] 会话 ${sessionId} 查询到 ${recordingFiles.length} 个录制文件记录`);
 
+      const trackedPaths = new Set();
+
       for (const file of recordingFiles) {
+        trackedPaths.add(file.file_path);
         let stat;
         try {
           stat = fs.statSync(file.file_path);
@@ -358,53 +387,76 @@ class RecorderService {
         // 有文件，更新数据库记录
         // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
         await pool.query(
-          `UPDATE recording_files SET file_size = $1, status = 'completed', ended_at = NOW(), completed_at = NOW()
-           WHERE session_id = $2 AND file_path = $3 AND deleted_at IS NULL`,
-          [stat.size, sessionId, file.file_path]
+          `UPDATE recording_files
+           SET file_size = $1, status = $2, ended_at = NOW(),
+               completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END
+           WHERE session_id = $3 AND file_path = $4 AND deleted_at IS NULL`,
+          [stat.size, fileStatus, sessionId, file.file_path]
         );
 
-        // 加入自动转码队列
-        RecordingManager.addTranscodeQueue(sessionId, file.file_path);
+        // 非预期退出跳过即时转码：文件先挂 interrupted，延迟完成后再由看门狗入队
+        if (!unexpectedExit) {
+          RecordingManager.addTranscodeQueue(sessionId, file.file_path);
+        }
       }
 
-      // 不分段录制：recording_files 可能为空（无 segment 事件），主动扫描 output_dir 补录
-      if (recordingFiles.length === 0) {
-        const sessRes = await pool.query(
-          `SELECT output_dir, room_url, started_at FROM recording_sessions WHERE id = $1`,
-          [sessionId]
-        );
-        const sessRow = sessRes.rows[0];
+      // 增量补录：扫描 output_dir，仅 INSERT 尚未在 recording_files 中登记的视频文件。
+      // 覆盖不分段录制（无 segment 事件）以及续播后新增但未登记的文件。
+      const sessRes = await pool.query(
+        `SELECT output_dir, room_url, started_at FROM recording_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      const sessRow = sessRes.rows[0];
 
-        if (sessRow && sessRow.output_dir && fs.existsSync(sessRow.output_dir)) {
-          const entries = fs.readdirSync(sessRow.output_dir);
-          let segIdx = 0;
-          for (const name of entries) {
-            const fp = path.join(sessRow.output_dir, name);
-            if (!SUPPORTED_EXT_REGEX.test(name)) continue;
+      if (sessRow && sessRow.output_dir && fs.existsSync(sessRow.output_dir)) {
+        let nextSegIdx = recordingFiles.reduce((max, f) => Math.max(max, f.segment_index || 0), -1) + 1;
+        const entries = fs.readdirSync(sessRow.output_dir);
+        let backfilled = 0;
+        for (const name of entries) {
+          // 跳过隐藏文件（临时文件/系统文件）；HLS 目录由 isFile() 判定排除
+          if (name.startsWith('.')) continue;
+          if (!SUPPORTED_EXT_REGEX.test(name)) continue;
 
-            let stat;
-            try {
-              stat = fs.statSync(fp);
-            } catch {
-              continue;
-            }
-            if (stat.size < thresholdBytes) continue;
+          const fp = path.join(sessRow.output_dir, name);
+          if (trackedPaths.has(fp)) continue;
 
-            await pool.query(
-              `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, checked_at)
-               VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), $7, NOW())
-               ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
-              [sessionId, sessRow.room_url, fp, name, stat.size, sessRow.started_at, segIdx]
-            );
-
-            fileCount++;
-            fileSize += stat.size;
-            fileExists = true;
-            segIdx++;
-
-            RecordingManager.addTranscodeQueue(sessionId, fp);
-            console.log(`[finishSession] 补录文件: ${name} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
+          let stat;
+          try {
+            stat = fs.statSync(fp);
+          } catch {
+            continue;
           }
+          if (!stat.isFile() || stat.size < thresholdBytes) continue;
+
+          const inserted = await pool.query(
+            `INSERT INTO recording_files
+               (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, completed_at, segment_index, checked_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(),
+                     CASE WHEN $6 = 'completed' THEN NOW() ELSE NULL END, $8, NOW())
+             ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING
+             RETURNING id`,
+            [sessionId, sessRow.room_url, fp, name, stat.size, fileStatus, sessRow.started_at, nextSegIdx]
+          );
+
+          // ON CONFLICT 命中说明已被并发路径登记，不重复计数/入队
+          if (inserted.rows.length === 0) continue;
+
+          fileCount++;
+          fileSize += stat.size;
+          fileExists = true;
+          trackedPaths.add(fp);
+          backfilled++;
+          nextSegIdx++;
+
+          if (!unexpectedExit) {
+            RecordingManager.addTranscodeQueue(sessionId, fp);
+          }
+          console.log(
+            `[finishSession] 补录文件: ${name} (${(stat.size / 1024 / 1024).toFixed(1)}MB, status=${fileStatus})`
+          );
+        }
+        if (backfilled > 0) {
+          console.log(`[finishSession] 会话 ${sessionId} 增量补录 ${backfilled} 个文件`);
         }
       }
     } catch (statErr) {
@@ -412,10 +464,7 @@ class RecorderService {
     }
 
     if (sessionId) {
-      let sessionStatus = 'completed';
-      if (fileSize === 0 && code !== 0) {
-        sessionStatus = 'interrupted';
-      }
+      const sessionStatus = unexpectedExit ? 'interrupted' : 'completed';
 
       await pool.query(
         `UPDATE recording_sessions
@@ -425,6 +474,14 @@ class RecorderService {
              WHERE id = $4 AND status = 'recording'`,
         [sessionStatus, fileCount, fileSize, sessionId]
       );
+
+      if (unexpectedExit) {
+        console.log(
+          `[finishSession] 会话 ${sessionId} 判定为非预期退出（退出码: ${code === null || code === undefined ? 'null' : code}, 信号: ${signal || '无'}），` +
+            `有效文件 ${fileCount} 个标记为 interrupted，跳过即时转码；` +
+            `延迟完成原因: 等待 delay 窗口内续播，超时后由看门狗 finalizeInterruptedSessions() 置为 completed`
+        );
+      }
     }
 
     if (fileCount === 0) {
@@ -753,8 +810,11 @@ class RecorderService {
         });
 
       const finishSessionWrapper = async (code, signal) => {
+        // 人工停止标记在 stopRecordingProcess 发起停止时写入进程对象；
+        // 超时兜底 SIGKILL 也保留该标记，close 时据此判定为正常结束。
+        const isManualStop = dlProcess._manualStopped === true;
         if (code !== 0) {
-          console.error(`FFmpeg 下载失败，退出码: ${code}, 信号: ${signal}`);
+          console.error(`FFmpeg 下载失败，退出码: ${code}, 信号: ${signal}, 人工停止: ${isManualStop}`);
         } else {
           console.log('FFmpeg 下载完成');
         }
@@ -762,7 +822,9 @@ class RecorderService {
         clearInterval(heartbeatInterval);
         await this.finishSession({
           code,
+          signal,
           sessionId,
+          isManualStop,
         });
       };
 

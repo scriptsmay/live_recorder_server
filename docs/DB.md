@@ -149,9 +149,11 @@
 **状态流转：**
 
 ```
-非分段：  recording ──→ completed         （ffmpeg 启动→关闭）
+非分段：  recording ──→ completed         （正常退出 / SIGTERM / 人工停止，含停止超时兜底 SIGKILL）
                           │
-                          ├──→ interrupted  （ffmpeg 崩溃/手动停止）
+                          ├──→ interrupted  （非零退出码 / 外部 SIGKILL / 崩溃）
+                          │        │
+                          │        └──→ completed  （delay 窗口超时后与 interrupted 文件同事务切换）
 
 分段：    completed                       （分片完成时直接 INSERT）
 
@@ -175,16 +177,18 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 **写入时机：**
 
-| 场景                         | 写入方式                     |
-| ---------------------------- | ---------------------------- |
-| 非分段录制完成               | INSERT/UPDATE 为 `completed` |
-| 分段录制分片完成（看门狗）   | INSERT 为 `completed`        |
-| 分段录制分片完成（进程退出） | INSERT 为 `completed`        |
-| 启动清理追踪遗留文件         | INSERT 为 `completed`        |
-| 磁盘扫描发现未跟踪文件       | INSERT 为 `orphaned`         |
-| 手动关联孤文件到会话         | UPDATE 为 `completed`        |
-| 看门狗超时判定录制中断       | UPDATE 为 `interrupted`      |
-| 启动扫描发现文件已丢失       | UPDATE 为 `missing`          |
+| 场景                                     | 写入方式                                               |
+| ---------------------------------------- | ------------------------------------------------------ |
+| 非分段录制正常结束（含人工停止）         | INSERT/UPDATE 为 `completed`                           |
+| 非分段录制非预期退出                     | INSERT/UPDATE 为 `interrupted`，跳过即时转码           |
+| 分段录制分片完成（看门狗）               | INSERT 为 `completed`                                  |
+| 分段录制分片完成（进程退出）             | INSERT 为 `completed`                                  |
+| 启动清理追踪遗留文件                     | INSERT 为 `completed`                                  |
+| 磁盘扫描发现未跟踪文件                   | INSERT 为 `orphaned`                                   |
+| 手动关联孤文件到会话                     | UPDATE 为 `completed`                                  |
+| 看门狗超时判定录制中断                   | UPDATE 为 `interrupted`                                |
+| `finalizeInterruptedSessions()` 延迟完成 | UPDATE 会话与其 `interrupted` 文件同事务为 `completed` |
+| 启动扫描发现文件已丢失                   | UPDATE 为 `missing`                                    |
 
 ### upload_templates — 投稿模板
 
@@ -379,7 +383,10 @@ KV 结构的全局配置表。
 
 ### danmaku_capture_records — 弹幕采集记录
 
-**记录每个会话的弹幕采集生命周期。** 一个 `session_id` 可能对应多条采集记录（如中断后重连）。
+**记录每个会话的弹幕采集生命周期。** 同一 `session_id` + `raw_path` 只保留一条采集记录：
+续播时 `DanmakuRecorder.startCapture()` 复用既有记录（改回 `recording`、清空 `ended_at`），
+继承 `event_count` 并继续累加；`ts_ms` 基准固定为 `recording_sessions.started_at` 的初始值。
+不同会话或不同路径仍可对应多条记录。
 
 v1.9.0 起该表同时承载**孤儿弹幕**记录：无活跃采集会话时收到的弹幕批次以
 `session_id = NULL` + `status = 'orphan_pending'` 落库，`raw_path` 指向孤儿 JSONL，
