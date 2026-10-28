@@ -171,11 +171,10 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
   test('eligibility SQL contains a grace-window cutoff (young sessions filtered DB-side)', async () => {
     mockSettings({ delay: '600', auto_upload_grace_seconds: '180' });
     // 数据库按 ended_at < NOW() - grace 过滤，未过窗口的会话不会出现在结果中
-    pool.query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValue({ rows: [] });
 
     await UploadService.scanPendingAutoUpload();
 
-    expect(pool.query).toHaveBeenCalledTimes(1);
     const [sql] = pool.query.mock.calls[0];
     expect(sql).toContain('INTERVAL');
   });

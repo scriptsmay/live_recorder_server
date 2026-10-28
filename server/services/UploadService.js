@@ -189,17 +189,23 @@ class UploadService {
    * 更早的 pending 行通常来自 createSession() 后推进失败或进程崩溃遗留的孤儿记录，
    * 并非真正排队中的录制；若不做时间约束，单条孤儿行会永久且静默地
    * 关闭该直播间所有后续自动投稿。
+   *
+   * @param {Object} [options]
+   * @param {boolean} [options.includeBlockedByRecording] - true 时反转「同房间 recording 会话」
+   *   守卫（仅保留**被该守卫阻断**的行），用于输出可见的阻断告警；不可用于实际投稿资格判断
    * @returns {string} WHERE 条件片段
    */
-  static _autoUploadEligibilitySql() {
-    return `rs.status = 'completed'
-      AND rs.deleted_at IS NULL
-      AND rs.ended_at IS NOT NULL
-      AND rs.ended_at < NOW() - INTERVAL '1 second' * $1
-      AND rs.ended_at > NOW() - INTERVAL '7 days'
-      AND r.deleted_at IS NULL
-      AND r.upload_template_id IS NOT NULL
-      AND NOT EXISTS (
+  static _autoUploadEligibilitySql({ includeBlockedByRecording = false } = {}) {
+    // 正常路径：同房间存在 recording/pending 会话时排除该候选。
+    // 诊断路径：反转 recording 守卫，只保留「本可投稿、仅被同房间 recording 会话阻断」的行。
+    const recordingGuard = includeBlockedByRecording
+      ? `EXISTS (
+        SELECT 1 FROM recording_sessions rs2
+        WHERE rs2.room_url = rs.room_url
+          AND rs2.status = 'recording'
+          AND rs2.deleted_at IS NULL
+      )`
+      : `NOT EXISTS (
         SELECT 1 FROM recording_sessions rs2
         WHERE rs2.room_url = rs.room_url
           AND (
@@ -208,7 +214,16 @@ class UploadService {
                 AND rs2.started_at > NOW() - INTERVAL '${PENDING_SESSION_BLOCK_MINUTES} minutes')
           )
           AND rs2.deleted_at IS NULL
-      )
+      )`;
+
+    return `rs.status = 'completed'
+      AND rs.deleted_at IS NULL
+      AND rs.ended_at IS NOT NULL
+      AND rs.ended_at < NOW() - INTERVAL '1 second' * $1
+      AND rs.ended_at > NOW() - INTERVAL '7 days'
+      AND r.deleted_at IS NULL
+      AND r.upload_template_id IS NOT NULL
+      AND ${recordingGuard}
       AND NOT EXISTS (
         SELECT 1 FROM rooms r2
         WHERE r2.room_url = rs.room_url
@@ -550,8 +565,44 @@ class UploadService {
         console.log(`[UploadService][投稿] 会话 ${row.id} 转码已完成，启动自动投稿`);
         await this.executeUpload(row, tmpl, { auto: true });
       }
+
+      await this._warnBlockedByRecordingSessions(graceSeconds);
     } catch (err) {
       console.error('[UploadService][投稿] 扫描失败:', err.message);
+    }
+  }
+
+  /**
+   * 可视化「被同房间 recording 会话静默封锁」的自动投稿候选。
+   *
+   * 资格 SQL 里的 `NOT EXISTS (rs2.status='recording')` 是防竞态守卫；一旦有会话
+   * 永久卡在 recording（例如 close 回调失败），该直播间所有自动投稿都会静默失效。
+   * 这里对满足其余条件、仅被该守卫排除的会话打印 warn，让停摆可见可查。
+   *
+   * @param {number} graceSeconds - 有效冷静期秒数
+   * @returns {Promise<void>}
+   */
+  static async _warnBlockedByRecordingSessions(graceSeconds) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT rs.id, rs.room_url, r.room_name,
+                (SELECT id FROM recording_sessions
+                 WHERE room_url = rs.room_url AND status = 'recording' AND deleted_at IS NULL
+                 ORDER BY id DESC LIMIT 1) AS blocker_id
+         FROM recording_sessions rs
+         INNER JOIN rooms r ON r.room_url = rs.room_url
+         WHERE ${this._autoUploadEligibilitySql({ includeBlockedByRecording: true })}
+         LIMIT 10`,
+        [graceSeconds]
+      );
+      for (const row of rows) {
+        console.warn(
+          `[UploadService][投稿] 会话 ${row.id}（${row.room_name || row.room_url}）已满足冷静期，` +
+            `但被同房间 recording 会话 ${row.blocker_id} 阻断，自动投稿暂不执行`
+        );
+      }
+    } catch (err) {
+      console.warn('[UploadService][投稿] 阻断检测失败:', err.message);
     }
   }
 }

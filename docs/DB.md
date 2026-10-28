@@ -149,11 +149,13 @@
 **状态流转：**
 
 ```
-非分段：  recording ──→ completed         （正常退出 / SIGTERM / 人工停止，含停止超时兜底 SIGKILL）
+非分段：  recording ──→ completed         （正常退出 / 人工停止，含停止超时兜底 SIGKILL）
                           │
                           ├──→ interrupted  （非零退出码 / 外部 SIGKILL / 崩溃）
                           │        │
                           │        └──→ completed  （delay 窗口超时后与 interrupted 文件同事务切换）
+                          │
+                          └──→ interrupted  （悬挂回收：房间已非 recording 但会话仍 recording）
 
 分段：    completed                       （分片完成时直接 INSERT）
 
@@ -177,18 +179,19 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 **写入时机：**
 
-| 场景                                     | 写入方式                                               |
-| ---------------------------------------- | ------------------------------------------------------ |
-| 非分段录制正常结束（含人工停止）         | INSERT/UPDATE 为 `completed`                           |
-| 非分段录制非预期退出                     | INSERT/UPDATE 为 `interrupted`，跳过即时转码           |
-| 分段录制分片完成（看门狗）               | INSERT 为 `completed`                                  |
-| 分段录制分片完成（进程退出）             | INSERT 为 `completed`                                  |
-| 启动清理追踪遗留文件                     | INSERT 为 `completed`                                  |
-| 磁盘扫描发现未跟踪文件                   | INSERT 为 `orphaned`                                   |
-| 手动关联孤文件到会话                     | UPDATE 为 `completed`                                  |
-| 看门狗超时判定录制中断                   | UPDATE 为 `interrupted`                                |
-| `finalizeInterruptedSessions()` 延迟完成 | UPDATE 会话与其 `interrupted` 文件同事务为 `completed` |
-| 启动扫描发现文件已丢失                   | UPDATE 为 `missing`                                    |
+| 场景                                       | 写入方式                                                       |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| 非分段录制正常结束（含人工停止）           | INSERT/UPDATE 为 `completed`                                   |
+| 非分段录制非预期退出                       | INSERT/UPDATE 为 `interrupted`，跳过即时转码                   |
+| 分段录制分片完成（看门狗）                 | INSERT 为 `completed`                                          |
+| 分段录制分片完成（进程退出）               | INSERT 为 `completed`                                          |
+| 启动清理追踪遗留文件                       | INSERT 为 `completed`                                          |
+| 磁盘扫描发现未跟踪文件                     | INSERT 为 `orphaned`                                           |
+| 手动关联孤文件到会话                       | UPDATE 为 `completed`                                          |
+| 看门狗超时判定录制中断                     | UPDATE 为 `interrupted`（进程仍在时交给 close 回调收敛）       |
+| `finalizeInterruptedSessions()` 延迟完成   | UPDATE 会话与其 `interrupted` 文件同事务为 `completed`         |
+| `reapOrphanedRecordingSessions()` 悬挂回收 | 房间已非 recording 的 `recording` 会话 UPDATE 为 `interrupted` |
+| 启动扫描发现文件已丢失                     | UPDATE 为 `missing`                                            |
 
 ### upload_templates — 投稿模板
 

@@ -84,11 +84,10 @@ describe('UploadService template variables', () => {
   });
 
   test('scanPendingAutoUpload does not query duration_seconds from recording_sessions', async () => {
-    pool.query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValue({ rows: [] });
 
     await UploadService.scanPendingAutoUpload();
 
-    expect(pool.query).toHaveBeenCalledTimes(1);
     expect(pool.query.mock.calls[0][0]).not.toContain('rs.duration_seconds');
   });
 
@@ -214,5 +213,36 @@ describe('UploadService template variables', () => {
 
     const runUploadCall = UploadService._runUpload.mock.calls[0];
     expect(runUploadCall[5]).toBe('2026-01-02 03:00:00\n解说狼队veTES\n-\n存档');
+  });
+});
+
+describe('UploadService — 自动投稿阻断可见化', () => {
+  test('资格 SQL 默认排除同房间 recording 会话；诊断模式反转该守卫', () => {
+    const normal = UploadService._autoUploadEligibilitySql();
+    const diagnostic = UploadService._autoUploadEligibilitySql({ includeBlockedByRecording: true });
+
+    expect(normal).toContain('NOT EXISTS');
+    expect(normal).toContain("rs2.status = 'recording'");
+    expect(normal).toContain('pending');
+
+    expect(diagnostic).toContain('EXISTS');
+    expect(diagnostic).not.toContain('NOT EXISTS (\n        SELECT 1 FROM recording_sessions rs2');
+    expect(diagnostic).toContain("rs2.status = 'recording'");
+  });
+
+  test('扫描时对被同房间 recording 会话阻断的候选输出 warn', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes("rs2.status = 'recording'")) {
+        // 阻断诊断查询（含 blocker_id 投影）
+        if (sql.includes('blocker_id')) return { rows: [{ id: 70, room_url: 'r1', room_name: 'r', blocker_id: 71 }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+
+    await UploadService.scanPendingAutoUpload();
+
+    expect(warnSpy.mock.calls.some(([msg]) => String(msg).includes('被同房间 recording 会话 71 阻断'))).toBe(true);
   });
 });

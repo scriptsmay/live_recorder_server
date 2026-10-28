@@ -224,13 +224,29 @@ VIDEO_DOWNLOAD_DIR/
 | `interrupted` | 异常中断 | close handler 判定为非预期退出（非零退出码、外部 SIGKILL、崩溃等）/ 看门狗清理               |
 
 > 退出判定由 `server/lib/utils/exit-status.js` 的 `isUnexpectedExit({ code, signal, isManualStop })` 统一完成。
-> `RecordingManager.stopRecordingProcess()` 发起停止时会在进程对象上写入 `_manualStopped = true`，
-> 因此停止流程在 10 秒后触发的兜底 `SIGKILL` 仍判定为人工正常停止（`completed`），不会进入延迟完成链路。
+>
+> **主动停止链路**（均写入 `_manualStopped = true`，close 回调按 `completed` 处理）：
+>
+> - `RoomService.stopRecording()` / `deleteRoom()`：经 `live-processes` 登记表命中进程后调用
+>   `RecordingManager.stopRecordingProcess()`（SIGTERM → 10s → SIGKILL）；未登记（如服务重启后的
+>   残留 PID）时回退为直接 SIGTERM。
+> - `watchdog.checkStaleRecordings()`：判定僵死后同样先打标记再优雅停止。看门狗是**有意终止**，
+>   不是平台侧异常断开，因此不开启续播等待窗口。
 >
 > 非预期退出时，`finishSession()` 把有效文件写为 `interrupted` 并**跳过即时转码**；
 > `finalizeInterruptedSessions()` 在 `delay` 窗口超时后于同一事务将会话与其 `interrupted` 文件
 > 一并切为 `completed`，随后由看门狗轮次进入转码、HLS 与自动投稿流程。若窗口内续播，
 > `checkReuseSession()` 将会话改回 `recording`，最终正常结束时按完成路径入队。
+>
+> **单一写者**：会话/文件状态与转码入队只在 close 回调（`finishSession`）收敛。
+> `checkStaleRecordings` 仅负责停进程与房间复位；只有在进程已不存在、close 回调不会再执行时，
+> 才兜底把会话与文件置为 `interrupted`。这保证 `recording`（或 `interrupted`）会话下的文件
+> 不会在 delay 窗口内被标记 `completed` 或进入转码。
+>
+> **终态必达**：`finishSession` 在 `finally` 中兜底（`_ensureSessionTerminal`），会话不会因中途异常
+> 永久停留在 `recording`；`watchdog.reapOrphanedRecordingSessions()` 每个扫描周期回收
+> 「房间已非 recording、会话仍 recording」的悬挂行（置 `interrupted`，随后走延迟完成），
+> 避免同房间自动投稿的 `NOT EXISTS (rs2.status='recording')` 守卫被永久占位。
 
 ### 延迟续播
 
@@ -245,6 +261,9 @@ VIDEO_DOWNLOAD_DIR/
 - **弹幕时间轴**：同一 `session_id` + `raw_path` 只保留一条 `danmaku_capture_records`
   （续播复用并继承 `event_count`），`ts_ms` 基准固定为 `recording_sessions.started_at`
   的初始值，跨续播保持单调递增。
+- **弹幕 start/stop 串行**：`DanmakuRecorder` 对每个 `roomUrl` 维护串行队列，
+  `stopCapture(roomUrl, { captureId })` 先校验活跃采集记录身份，不匹配（房间已被新会话接管）
+  时不做任何写入，避免旧 stop 关闭新 fd / 用旧计数覆盖复用记录 / 驱逐新会话。
 
 ---
 
