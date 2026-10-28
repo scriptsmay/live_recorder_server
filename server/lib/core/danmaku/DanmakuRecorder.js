@@ -344,12 +344,16 @@ class DanmakuRecorder {
    * 停止弹幕采集
    * 关闭文件描述符并更新数据库记录
    *
-   * 与 startCapture 共用房间串行队列，且以 captureId 做身份校验：
-   * 只有当前活跃会话仍是入参对应的那条记录时才收口，避免旧 stop 覆盖被复用的记录。
+   * 与 startCapture 共用房间串行队列，且以 **录制会话 ID** 做身份校验：
+   * 只有当前活跃采集仍属于入参对应的录制会话时才收口，避免旧 stop 覆盖已被
+   * 新会话复用/接管的记录。
+   *
+   * 注意：这里比较的是 `recording_sessions.id`（调用方持有的 sessionId），
+   * 不是 `danmaku_capture_records.id`（内部 captureId，独立序列）。两者不可混用。
    *
    * @param {string} roomUrl - 房间 URL
    * @param {Object} [options]
-   * @param {number|null} [options.captureId] - 期望停止的采集记录 ID（不匹配则不做任何写入）
+   * @param {string|number|null} [options.sessionId] - 期望停止的录制会话 ID（不匹配则不做任何写入）
    * @returns {Promise<{ captureId: number|null, eventCount: number }>}
    */
   stopCapture(roomUrl, options = {}) {
@@ -360,15 +364,15 @@ class DanmakuRecorder {
    * stopCapture 的实际实现（由 _runSerialized 保证串行）
    * @private
    */
-  async _stopCapture(roomUrl, { captureId: expectedCaptureId = null } = {}) {
+  async _stopCapture(roomUrl, { sessionId: expectedSessionId = null } = {}) {
     const session = this.activeSessions.get(roomUrl);
     if (!session) {
       return { captureId: null, eventCount: 0 };
     }
-    // 身份校验：活跃会话已换成另一条采集记录（续播复用/新会话），旧 stop 不得收口
-    if (expectedCaptureId !== null && String(session.captureId) !== String(expectedCaptureId)) {
+    // 身份校验：房间已被另一录制会话接管时，旧 stop 不得收口
+    if (expectedSessionId !== null && String(session.sessionId) !== String(expectedSessionId)) {
       console.warn(
-        `[DanmakuRecorder] 跳过过期停止请求: room=${roomUrl}, expected=${expectedCaptureId}, active=${session.captureId}`
+        `[DanmakuRecorder] 跳过过期停止请求: room=${roomUrl}, expected_session=${expectedSessionId}, active_session=${session.sessionId}`
       );
       return { captureId: null, eventCount: 0 };
     }

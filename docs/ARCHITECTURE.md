@@ -244,9 +244,17 @@ VIDEO_DOWNLOAD_DIR/
 > 不会在 delay 窗口内被标记 `completed` 或进入转码。
 >
 > **终态必达**：`finishSession` 在 `finally` 中兜底（`_ensureSessionTerminal`），会话不会因中途异常
-> 永久停留在 `recording`；`watchdog.reapOrphanedRecordingSessions()` 每个扫描周期回收
-> 「房间已非 recording、会话仍 recording」的悬挂行（置 `interrupted`，随后走延迟完成），
-> 避免同房间自动投稿的 `NOT EXISTS (rs2.status='recording')` 守卫被永久占位。
+> 永久停留在 `recording`；兜底同时把该会话遗留的 `recording` 文件收敛到同一终态（`completed`
+> 立即入队转码，`interrupted` 等待 delay 窗口），否则这些文件既不满足 `checkSessionTranscode`
+> 的 `rf.status='completed'`，也不会被只扫 `interrupted` 文件的 `finalizeInterruptedSessions()` 接管。
+> `watchdog.reapOrphanedRecordingSessions()` 每个扫描周期回收「房间已非 recording、会话仍 recording」
+> 的悬挂行（置 `interrupted`，随后走延迟完成），避免同房间自动投稿的
+> `NOT EXISTS (rs2.status='recording')` 守卫被永久占位。
+>
+> **reaper 的 paused 例外**：判定谓词是 `r.status NOT IN ('recording', 'paused')`。`paused` 只表示
+> `SIGSTOP`、会话仍是 `recording` 且 FFmpeg 仍持有文件；把它当作「已停止」会在一个看门狗周期后
+> 误收口活跃会话并转码仍在写入的文件。会话侧的自动投稿守卫仍按 `rs2.status='recording'` 生效，
+> 暂停期间同样正确阻断投稿。
 
 ### 延迟续播
 
@@ -262,8 +270,12 @@ VIDEO_DOWNLOAD_DIR/
   （续播复用并继承 `event_count`），`ts_ms` 基准固定为 `recording_sessions.started_at`
   的初始值，跨续播保持单调递增。
 - **弹幕 start/stop 串行**：`DanmakuRecorder` 对每个 `roomUrl` 维护串行队列，
-  `stopCapture(roomUrl, { captureId })` 先校验活跃采集记录身份，不匹配（房间已被新会话接管）
-  时不做任何写入，避免旧 stop 关闭新 fd / 用旧计数覆盖复用记录 / 驱逐新会话。
+  `stopCapture(roomUrl, { sessionId })` 先按**录制会话 ID**校验活跃采集记录身份（不是采集记录
+  主键 `captureId`——两者取值不同），不匹配（房间已被新会话接管）时不做任何写入，避免旧 stop
+  关闭新 fd / 用旧计数覆盖复用记录 / 驱逐新会话。
+- **并发收敛**：`finishSession` 的终态写入使用 `UPDATE ... WHERE status='recording' RETURNING status`，
+  转码入队推迟到状态落库之后；若写入落空（reaper 抢先置 `interrupted`），本次把已写过的文件
+  对齐回 `interrupted` 并放弃入队。最终效果是「会话状态 = 文件状态 = 是否转码」三者一致。
 
 ---
 

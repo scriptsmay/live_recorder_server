@@ -238,58 +238,79 @@ class RecorderService {
    * @param {boolean} [params.isManualStop] - 是否由人工停止流程发起
    */
   static async finishSession({ code, signal = null, sessionId, isManualStop = false }) {
-    // 简化参数，几乎所有数据都可从数据库中查询到，需要保留 sessionId
-    const session = await DataService.getSession(sessionId);
-    const roomKey = session.room_url;
-    const room = await DataService.getRoomByUrl(session.room_url);
-    const sessionStart = session.started_at;
-    const engine = getActiveDownloader(room.polling_platform);
-
-    // 将分段时间写入数据库
-    let trackerSegments = [];
-    try {
-      trackerSegments = await recordingManager.finalizeSession(sessionId, pool);
-    } catch (err) {
-      console.error(`[RecorderService] Failed to finalize segment times for session ${sessionId}:`, err);
-      // 异常退出时尝试通过 ffprobe 补充分段时间
-      const watchdog = require('../lib/core/watchdog');
-      watchdog.backfillSegmentTimes(sessionId, pool).catch((e) => {
-        console.error(`[RecorderService] backfillSegmentTimes failed:`, e.message);
-      });
-    }
-
-    // 从会话中获取输出路径，避免生成新路径导致变量缺失问题
-    const outputFilePattern = session.output_path || '[路径未知]';
-
-    // 判定退出性质：非预期退出 → 有效文件 interrupted + 延迟完成；正常/人工停止 → completed
+    // 退出分类不依赖数据库，先算出来，保证 finally 兜底始终有判定可用
     const unexpectedExit = isUnexpectedExit({ code, signal, isManualStop });
 
-    await this.delActiveTask(roomKey);
-    console.log(
-      `[finishSession][${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engine.name}_${sessionId}.log)` +
-        ` | 退出码: ${code === null || code === undefined ? 'null' : code}` +
-        ` | 信号: ${signal || '无'}` +
-        ` | 人工停止: ${isManualStop ? '是' : '否'}` +
-        ` | 判定: ${unexpectedExit ? 'interrupted(非预期退出)' : 'completed(正常结束)'}`
-    );
-
     try {
-      await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
-        room.id,
-      ]);
-      await this.delRoomCache(room.room_url);
+      // I-R4：房间可能在录制期间被删除（软删后 getRoomByUrl 返回 null）。
+      // 所有查询都放进 try 并容忍 null——否则这里抛出会变成未处理 rejection
+      // （lifecycle 会 gracefulShutdown），且 finally 的终态兜底永远到不了。
+      const session = await DataService.getSession(sessionId);
+      if (!session) {
+        console.error(`[finishSession] 会话 ${sessionId} 不存在，跳过收尾`);
+        return;
+      }
+      const roomUrl = session.room_url;
+      const sessionStart = session.started_at;
+      const room = await DataService.getRoomByUrl(roomUrl);
+      if (!room) {
+        console.warn(`[finishSession] 会话 ${sessionId} 对应房间已删除，仍执行会话/文件收尾`);
+      }
+      const roomId = room?.id ?? null;
+      const roomName = room?.room_name || roomUrl;
+
+      let engineName = 'unknown';
+      try {
+        engineName = getActiveDownloader(room?.polling_platform || session.polling_platform)?.name || 'unknown';
+      } catch (_) {}
+
+      // 将分段时间写入数据库
+      let trackerSegments = [];
+      try {
+        trackerSegments = await recordingManager.finalizeSession(sessionId, pool);
+      } catch (err) {
+        console.error(`[RecorderService] Failed to finalize segment times for session ${sessionId}:`, err);
+        // 异常退出时尝试通过 ffprobe 补充分段时间
+        const watchdog = require('../lib/core/watchdog');
+        watchdog.backfillSegmentTimes(sessionId, pool).catch((e) => {
+          console.error(`[RecorderService] backfillSegmentTimes failed:`, e.message);
+        });
+      }
+
+      // 从会话中获取输出路径，避免生成新路径导致变量缺失问题
+      const outputFilePattern = session.output_path || '[路径未知]';
+
+      await this.delActiveTask(roomUrl);
+      console.log(
+        `[finishSession][${code}] 录制结束，路径: ${outputFilePattern} (日志: logs/${engineName}_${sessionId}.log)` +
+          ` | 退出码: ${code === null || code === undefined ? 'null' : code}` +
+          ` | 信号: ${signal || '无'}` +
+          ` | 人工停止: ${isManualStop ? '是' : '否'}` +
+          ` | 判定: ${unexpectedExit ? 'interrupted(非预期退出)' : 'completed(正常结束)'}`
+      );
+
+      if (roomId) {
+        await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
+          roomId,
+        ]);
+      }
+      await this.delRoomCache(roomUrl);
 
       // 如果录制时长很短（小于5秒），不设置冷却期，以便快速重试获取新的流地址
-      const sessionDuration = Date.now() - sessionStart.getTime();
+      const sessionDuration = Date.now() - (sessionStart ? new Date(sessionStart).getTime() : Date.now());
       if (sessionDuration >= 5000) {
         // 设置录制冷却期（30秒），防止流地址失效导致频繁重启录制
-        const cooldownKey = `polling:recording_cooldown:${room.id}`;
-        await redis.set(cooldownKey, Date.now().toString(), { EX: 30 }).catch(() => {});
+        if (roomId) {
+          const cooldownKey = `polling:recording_cooldown:${roomId}`;
+          await redis.set(cooldownKey, Date.now().toString(), { EX: 30 }).catch(() => {});
+        }
       } else {
         console.log(`[finishSession] 录制时长过短 (${sessionDuration}ms)，跳过冷却期，允许快速重试`);
         // 记录录制结束时间，供 PollingManager 检测是否需要立即重试
-        const lastEndKey = `polling:last_recording_end:${room.id}`;
-        await redis.set(lastEndKey, Date.now().toString(), { EX: 10 }).catch(() => {});
+        if (roomId) {
+          const lastEndKey = `polling:last_recording_end:${roomId}`;
+          await redis.set(lastEndKey, Date.now().toString(), { EX: 10 }).catch(() => {});
+        }
       }
 
       // 会话结束后启动转码任务、整理数据库各项状态
@@ -302,20 +323,18 @@ class RecorderService {
       });
 
       // 停止弹幕采集
-      await this._handleDanmakuFinish(sessionId, room.room_url, trackerSegments);
+      await this._handleDanmakuFinish(sessionId, roomUrl, trackerSegments);
 
-      if (sessionId) {
-        try {
-          const sess = await pool.query(
-            'SELECT status, total_segments, total_size FROM recording_sessions WHERE id = $1',
-            [sessionId]
-          );
-          const segs = fileCount || 0;
-          const mb = ((fileSize || 0) / 1024 / 1024).toFixed(1);
-          const status = sess.rows[0]?.status || 'completed';
-          notify.recordingComplete(room.room_name, segs, mb, sessionId, room.room_url, status);
-        } catch (_) {}
-      }
+      try {
+        const sess = await pool.query(
+          'SELECT status, total_segments, total_size FROM recording_sessions WHERE id = $1',
+          [sessionId]
+        );
+        const segs = fileCount || 0;
+        const mb = ((fileSize || 0) / 1024 / 1024).toFixed(1);
+        const status = sess.rows[0]?.status || 'completed';
+        notify.recordingComplete(roomName, segs, mb, sessionId, roomUrl, status);
+      } catch (_) {}
     } catch (dbErr) {
       console.error('[RecorderService] 录制结束数据库更新失败:', dbErr);
     } finally {
@@ -347,15 +366,69 @@ class RecorderService {
     const result = await pool.query(
       `UPDATE recording_sessions
        SET status = $1, ended_at = COALESCE(ended_at, NOW())
-       WHERE id = $2 AND status = 'recording'`,
+       WHERE id = $2 AND status = 'recording'
+       RETURNING id`,
       [status, sessionId]
     );
-    if (result.rowCount > 0) {
-      console.warn(
-        `[RecorderService] 会话 ${sessionId} 在正常收尾流程中未完成状态更新，兜底置为 ${status}` +
-          (unexpectedExit ? '（等待 delay 窗口后完成）' : '')
+    // rowCount / RETURNING rows 任一非空即说明本次真的写入了终态
+    if (!(result.rowCount > 0 || result.rows.length > 0)) return;
+
+    // 兜底不仅要收敛会话，还要收敛遗留文件：_handleSessionFinish 若在文件循环前抛错，
+    // 文件会一直停在 recording，既不满足 checkSessionTranscode 的 rf.status='completed'，
+    // 也不会被 finalizeInterruptedSessions（只扫 interrupted 文件）接管。
+    // completed 兜底直接让文件进入转码/后续流程；interrupted 兜底仍等待 delay 窗口。
+    const files = await pool.query(
+      `UPDATE recording_files
+       SET status = $1, ended_at = COALESCE(ended_at, NOW()),
+           completed_at = CASE WHEN $1 = 'completed' THEN COALESCE(completed_at, NOW()) ELSE completed_at END
+       WHERE session_id = $2 AND status = 'recording' AND deleted_at IS NULL`,
+      [status, sessionId]
+    );
+    console.warn(
+      `[RecorderService] 会话 ${sessionId} 在正常收尾流程中未完成状态更新，兜底置为 ${status}` +
+        (unexpectedExit ? '（等待 delay 窗口后完成）' : '') +
+        (files.rowCount > 0 ? `，同步收敛 ${files.rowCount} 个遗留文件` : '')
+    );
+    if (status === 'completed') {
+      // 兜底完成时按正常路径立即入队转码，否则要等下一轮看门狗扫描。
+      // 排除已有转码记录的文件，避免兜底重跑时重复入队。
+      const rows = await pool.query(
+        `SELECT rf.file_path FROM recording_files rf
+         WHERE rf.session_id = $1 AND rf.status = 'completed' AND rf.deleted_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM transcode_records tr
+             WHERE tr.original_path = rf.file_path AND tr.deleted_at IS NULL
+           )`,
+        [sessionId]
       );
+      for (const row of rows.rows) {
+        RecordingManager.addTranscodeQueue(sessionId, row.file_path);
+      }
     }
+  }
+
+  /**
+   * 把指定文件对齐到给定终态（并发收敛用）。
+   *
+   * 仅在 `_handleSessionFinish` 的终态写入被看门狗抢先时调用：本流程可能已把文件
+   * 写成 completed，而会话实际落库为 interrupted，需要把文件改回 interrupted，
+   * 保持「会话状态 = 文件状态」，避免转码在 interrupted 会话上运行。
+   *
+   * @param {string|number} sessionId
+   * @param {'completed'|'interrupted'} status
+   * @param {string[]} filePaths
+   * @private
+   */
+  static async _alignFilesToSession(sessionId, status, filePaths) {
+    if (!filePaths || filePaths.length === 0) return;
+    await pool.query(
+      `UPDATE recording_files
+       SET status = $1,
+           completed_at = CASE WHEN $1 = 'completed' THEN completed_at ELSE NULL END,
+           checked_at = NOW()
+       WHERE session_id = $2 AND file_path = ANY($3::text[]) AND deleted_at IS NULL`,
+      [status, sessionId, filePaths]
+    );
   }
 
   /**
@@ -406,7 +479,11 @@ class RecorderService {
       : unexpectedExit
         ? 'interrupted'
         : 'completed';
-    const enqueueTranscode = !sessionFinalized && fileStatus === 'completed';
+    // 即时转码入队延迟到「会话终态写入成功」之后执行：先落库状态，再入队，
+    // 避免 reaper 在同一窗口抢先置 interrupted 时留下「转码已入队」的分裂状态。
+    const canEnqueueTranscode = !sessionFinalized && fileStatus === 'completed';
+    // 本次实际改写过状态的文件路径（用于并发收敛时对齐）
+    const touchedFilePaths = [];
     const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
@@ -461,10 +538,7 @@ class RecorderService {
           );
         }
 
-        // 非预期退出（或会话已终态）跳过即时转码，避免在 delay 窗口内入队
-        if (enqueueTranscode) {
-          RecordingManager.addTranscodeQueue(sessionId, file.file_path);
-        }
+        touchedFilePaths.push(file.file_path);
       }
 
       // 增量补录：扫描 output_dir，仅 INSERT 尚未在 recording_files 中登记的视频文件。
@@ -515,9 +589,7 @@ class RecorderService {
           backfilled++;
           nextSegIdx++;
 
-          if (enqueueTranscode) {
-            RecordingManager.addTranscodeQueue(sessionId, fp);
-          }
+          touchedFilePaths.push(fp);
           console.log(
             `[finishSession] 补录文件: ${name} (${(stat.size / 1024 / 1024).toFixed(1)}MB, status=${fileStatus})`
           );
@@ -532,6 +604,9 @@ class RecorderService {
 
     if (sessionId) {
       const sessionStatus = unexpectedExit ? 'interrupted' : 'completed';
+      // 最终状态与实际应入队的文件路径；并发收敛时以落库状态为准
+      let finalStatus = sessionStatus;
+      let enqueuePaths = canEnqueueTranscode ? [...touchedFilePaths] : [];
 
       if (sessionFinalized) {
         // 状态已由其他路径写入，这里只补统计，不覆盖终态
@@ -540,15 +615,44 @@ class RecorderService {
           fileSize,
           sessionId,
         ]);
+        finalStatus = sessionStatusNow;
+        enqueuePaths = [];
       } else {
-        await pool.query(
+        // 终态写入是「谁赢谁定」的临界点：进入本流程后会话可能被看门狗回收（reaper）
+        // 抢先置为 interrupted。UPDATE ... RETURNING status 返回实际落库状态；
+        // 若已被抢先，立即把本次写入的文件状态对齐到会话，并放弃转码入队，避免
+        // 「会话 interrupted + 文件 completed + 转码进行中」的分裂。
+        const finalResult = await pool.query(
           `UPDATE recording_sessions
                SET ended_at = NOW(), status = $1,
                    total_segments = $2,
                    total_size = $3
-               WHERE id = $4 AND status = 'recording'`,
+               WHERE id = $4 AND status = 'recording'
+               RETURNING status`,
           [sessionStatus, fileCount, fileSize, sessionId]
         );
+
+        // rowCount / RETURNING rows 任一非空即说明本次真的写入了终态
+        const sessionWritten = finalResult.rowCount > 0 || finalResult.rows.length > 0;
+        if (!sessionWritten) {
+          const raced = await pool.query('SELECT status FROM recording_sessions WHERE id = $1', [sessionId]);
+          const actual = raced.rows[0]?.status || 'unknown';
+          console.warn(
+            `[finishSession] 会话 ${sessionId} 在收尾期间被并发置为 ${actual}，` + `本次按该状态对齐文件并放弃即时转码`
+          );
+          finalStatus = actual;
+          enqueuePaths = [];
+          if (actual === 'interrupted') {
+            await this._alignFilesToSession(sessionId, 'interrupted', touchedFilePaths);
+          }
+        }
+      }
+
+      // 状态落库后才入队：确保任何时刻都不会出现「会话 interrupted 而转码在跑」
+      if (finalStatus === 'completed' && enqueuePaths.length > 0) {
+        for (const fp of enqueuePaths) {
+          RecordingManager.addTranscodeQueue(sessionId, fp);
+        }
       }
 
       if (unexpectedExit) {
@@ -578,12 +682,18 @@ class RecorderService {
    */
   static async _handleDanmakuFinish(sessionId, roomUrl, _trackerSegments = []) {
     try {
-      // 停止弹幕采集。传入会话 ID 作为身份校验：若该房间已被新会话接管，
-      // stopCapture 不会误停/误写新采集记录。
-      const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl, { captureId: sessionId });
+      // 停止弹幕采集。传入录制会话 ID 作为身份校验：若该房间已被新会话接管，
+      // stopCapture 不会误停/误写新采集记录（注意是 sessionId，不是 captureId）。
+      const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl, { sessionId });
 
       if (!captureId) {
         console.log(`[弹幕] 会话 ${sessionId} 采集未启动或已停止`);
+        // 房间已被其他录制会话接管时，绝不触碰其活跃采集记录
+        const active = danmakuRecorder.getSession(roomUrl);
+        if (active && String(active.sessionId) !== String(sessionId)) {
+          console.log(`[弹幕] 房间 ${roomUrl} 已由会话 ${active.sessionId} 接管，跳过收口`);
+          return;
+        }
         // 仅收口本会话仍为 recording 的行；若同房间已有新采集记录（续播），不动它
         await pool.query(
           `UPDATE danmaku_capture_records SET status = 'completed', ended_at = COALESCE(ended_at, NOW())

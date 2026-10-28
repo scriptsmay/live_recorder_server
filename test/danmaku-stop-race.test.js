@@ -32,7 +32,7 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     jest.restoreAllMocks();
   });
 
-  test('旧 stop（captureId 不匹配新会话）不关闭 fd、不写库、不驱逐新会话', async () => {
+  test('旧 stop（sessionId 不匹配新会话）不关闭 fd、不写库、不驱逐新会话', async () => {
     // 新会话已占用该 roomUrl
     const newSession = {
       sessionId: 100,
@@ -45,8 +45,8 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     DanmakuRecorder.activeSessions.set(ROOM, newSession);
     const closeSpy = jest.spyOn(fs, 'closeSync');
 
-    // 旧会话（captureId=400）的 stop 迟到
-    const result = await DanmakuRecorder.stopCapture(ROOM, { captureId: 400 });
+    // 旧会话（sessionId=400）的 stop 迟到
+    const result = await DanmakuRecorder.stopCapture(ROOM, { sessionId: 400 });
 
     expect(result).toEqual({ captureId: null, eventCount: 0 });
     expect(closeSpy).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     expect(DanmakuRecorder.activeSessions.get(ROOM)).toBe(newSession);
   });
 
-  test('captureId 匹配时正常收口并写回累计计数', async () => {
+  test('sessionId 匹配时正常收口并写回累计计数（会话 ID 与采集记录 ID 不同）', async () => {
     const session = {
       sessionId: 100,
       captureId: 500,
@@ -67,7 +67,8 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     DanmakuRecorder.activeSessions.set(ROOM, session);
     pool.query.mockResolvedValue({ rows: [], rowCount: 1 });
 
-    const result = await DanmakuRecorder.stopCapture(ROOM, { captureId: 500 });
+    // 调用方只持有录制会话 ID（100），采集记录 ID 是 500——身份校验必须按会话 ID
+    const result = await DanmakuRecorder.stopCapture(ROOM, { sessionId: 100 });
 
     expect(result).toEqual({ captureId: 500, eventCount: 7 });
     expect(DanmakuRecorder.activeSessions.has(ROOM)).toBe(false);
@@ -95,7 +96,7 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     });
 
     // 模拟：先发起 stop（旧会话），紧接着发起 start（续播新 leg）
-    const stopPromise = DanmakuRecorder.stopCapture(ROOM, { captureId: 400 });
+    const stopPromise = DanmakuRecorder.stopCapture(ROOM, { sessionId: 100 });
     const startPromise = DanmakuRecorder.startCapture({
       sessionId: 100,
       roomId: 7,
@@ -137,7 +138,7 @@ describe('S3 — 弹幕 start/stop 串行与身份校验', () => {
     });
 
     // 空队列时 stop 先入队（无活跃会话 → 立即返回），start 后入队
-    const p1 = DanmakuRecorder.stopCapture(ROOM, { captureId: 1 });
+    const p1 = DanmakuRecorder.stopCapture(ROOM, { sessionId: 1 });
     const p2 = DanmakuRecorder.startCapture({
       sessionId: 101,
       roomId: 7,

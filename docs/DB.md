@@ -155,7 +155,7 @@
                           │        │
                           │        └──→ completed  （delay 窗口超时后与 interrupted 文件同事务切换）
                           │
-                          └──→ interrupted  （悬挂回收：房间已非 recording 但会话仍 recording）
+                          └──→ interrupted  （悬挂回收：房间已非 recording/paused 但会话仍 recording）
 
 分段：    completed                       （分片完成时直接 INSERT）
 
@@ -179,19 +179,20 @@ expired / deleted / missing / failed -> generating  （仅手动重新生成）
 
 **写入时机：**
 
-| 场景                                       | 写入方式                                                       |
-| ------------------------------------------ | -------------------------------------------------------------- |
-| 非分段录制正常结束（含人工停止）           | INSERT/UPDATE 为 `completed`                                   |
-| 非分段录制非预期退出                       | INSERT/UPDATE 为 `interrupted`，跳过即时转码                   |
-| 分段录制分片完成（看门狗）                 | INSERT 为 `completed`                                          |
-| 分段录制分片完成（进程退出）               | INSERT 为 `completed`                                          |
-| 启动清理追踪遗留文件                       | INSERT 为 `completed`                                          |
-| 磁盘扫描发现未跟踪文件                     | INSERT 为 `orphaned`                                           |
-| 手动关联孤文件到会话                       | UPDATE 为 `completed`                                          |
-| 看门狗超时判定录制中断                     | UPDATE 为 `interrupted`（进程仍在时交给 close 回调收敛）       |
-| `finalizeInterruptedSessions()` 延迟完成   | UPDATE 会话与其 `interrupted` 文件同事务为 `completed`         |
-| `reapOrphanedRecordingSessions()` 悬挂回收 | 房间已非 recording 的 `recording` 会话 UPDATE 为 `interrupted` |
-| 启动扫描发现文件已丢失                     | UPDATE 为 `missing`                                            |
+| 场景                                       | 写入方式                                                                                                             |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 非分段录制正常结束（含人工停止）           | INSERT/UPDATE 为 `completed`                                                                                         |
+| 非分段录制非预期退出                       | INSERT/UPDATE 为 `interrupted`，跳过即时转码                                                                         |
+| 分段录制分片完成（看门狗）                 | INSERT 为 `completed`                                                                                                |
+| 分段录制分片完成（进程退出）               | INSERT 为 `completed`                                                                                                |
+| 启动清理追踪遗留文件                       | INSERT 为 `completed`                                                                                                |
+| 磁盘扫描发现未跟踪文件                     | INSERT 为 `orphaned`                                                                                                 |
+| 手动关联孤文件到会话                       | UPDATE 为 `completed`                                                                                                |
+| 看门狗超时判定录制中断                     | UPDATE 为 `interrupted`（进程仍在时交给 close 回调收敛）                                                             |
+| `finalizeInterruptedSessions()` 延迟完成   | UPDATE 会话与其 `interrupted` 文件同事务为 `completed`                                                               |
+| `reapOrphanedRecordingSessions()` 悬挂回收 | 房间已非 recording/paused 的 `recording` 会话 UPDATE 为 `interrupted`（`paused` 仅 SIGSTOP，仍属活跃录制，不得回收） |
+| `_ensureSessionTerminal()` 终态兜底        | 会话仍为 `recording` 时按退出判定 UPDATE 为 `completed`/`interrupted`，并同步收敛该会话遗留的 `recording` 文件       |
+| 启动扫描发现文件已丢失                     | UPDATE 为 `missing`                                                                                                  |
 
 ### upload_templates — 投稿模板
 
@@ -391,6 +392,11 @@ KV 结构的全局配置表。
 续播时 `DanmakuRecorder.startCapture()` 复用既有记录（改回 `recording`、清空 `ended_at`），
 继承 `event_count` 并继续累加；`ts_ms` 基准固定为 `recording_sessions.started_at` 的初始值。
 不同会话或不同路径仍可对应多条记录。
+
+**停止时的身份校验**：`stopCapture(roomUrl, { sessionId })` 的键是**录制会话 ID**
+（`recording_sessions.id`），不是本表主键 `id`（`captureId`）——续播复用行时两者取值不同。
+只有活跃采集会话的 `sessionId` 与之一致才会关闭 fd、写回累计 `event_count` 并驱逐内存会话；
+不一致说明房间已被新录制会话接管，调用必须是空操作。
 
 v1.9.0 起该表同时承载**孤儿弹幕**记录：无活跃采集会话时收到的弹幕批次以
 `session_id = NULL` + `status = 'orphan_pending'` 落库，`raw_path` 指向孤儿 JSONL，

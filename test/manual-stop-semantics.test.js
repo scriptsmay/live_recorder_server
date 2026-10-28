@@ -6,13 +6,32 @@ jest.mock('../server/db/redis', () => ({
   setEx: jest.fn(),
   set: jest.fn(),
 }));
-jest.mock('../server/services/DataService', () => ({ getRoomByUrl: jest.fn(), getSetting: jest.fn() }));
+jest.mock('../server/services/DataService', () => ({
+  getRoomByUrl: jest.fn(),
+  getSetting: jest.fn(),
+  getSession: jest.fn(),
+  getRecordingFiles: jest.fn(),
+}));
 jest.mock('../server/lib/core/scan-files', () => ({ scanRecordingFiles: jest.fn() }));
 jest.mock('../server/lib/core/RecordingManager', () => ({
   stopRecordingProcess: jest.fn().mockResolvedValue(),
+  finalizeSession: jest.fn(async () => []),
+  addTranscodeQueue: jest.fn(async () => {}),
 }));
 // watchdog 依赖
 jest.mock('../server/services/UploadService', () => ({ scanPendingAutoUpload: jest.fn() }));
+// RecorderService 依赖
+jest.mock('../server/lib/core/notify', () => ({
+  recordingComplete: jest.fn(),
+  recordingStart: jest.fn(),
+  send: jest.fn(),
+}));
+jest.mock('../server/lib/core/danmaku/DanmakuRecorder', () => ({
+  startCapture: jest.fn(),
+  stopCapture: jest.fn(async () => ({ captureId: null, eventCount: 0 })),
+  getSession: jest.fn(),
+}));
+jest.mock('../server/lib/core/polling/checkers', () => ({ fetchRoomCoverByUrl: jest.fn() }));
 jest.mock('../server/lib/core/downloaders/DownloaderFactory', () => ({ getActiveDownloader: jest.fn() }));
 jest.mock('../server/lib/core/TranscodeQueue', () => ({ enqueue: jest.fn() }));
 jest.mock('../server/lib/core/hls-generator', () => ({ generateForRecording: jest.fn() }));
@@ -29,6 +48,7 @@ jest.mock('../server/lib/core/logger', () => ({
 
 const fs = require('fs');
 const RoomService = require('../server/services/RoomService');
+const RecorderService = require('../server/services/RecorderService');
 const liveProcesses = require('../server/lib/utils/live-processes');
 const RecordingManager = require('../server/lib/core/RecordingManager');
 const pool = require('../server/db/index');
@@ -95,6 +115,42 @@ describe('S1 — 主动停止判定为 completed', () => {
     await new Promise((r) => setImmediate(r));
 
     expect(RecordingManager.stopRecordingProcess).toHaveBeenCalledWith(proc);
+  });
+
+  test('I-R4：删除房间后 close 回调仍能收敛为 completed，且不产生未处理 rejection', async () => {
+    const proc = fakeProcess({ pid: 6666 });
+    liveProcesses.register({ sessionId: 21, process: proc });
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, room_url: ROOM_URL, ffmpeg_pid: 6666 }] })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+
+    await RoomService.deleteRoom(7);
+    await new Promise((r) => setImmediate(r));
+    // 删除后房间查询（过滤 deleted_at IS NULL）返回 null
+    DataService.getRoomByUrl.mockResolvedValue(null);
+    DataService.getSession.mockResolvedValue({
+      room_url: ROOM_URL,
+      started_at: new Date(),
+      output_path: '/data/x/seg.flv',
+    });
+    DataService.getRecordingFiles.mockResolvedValue({ rows: [] });
+
+    const rejections = [];
+    const onRejection = (err) => rejections.push(err);
+    process.on('unhandledRejection', onRejection);
+    try {
+      await RecorderService.finishSession({ code: null, signal: 'SIGTERM', sessionId: 21, isManualStop: true });
+      await new Promise((r) => setImmediate(r));
+
+      expect(rejections).toEqual([]);
+      const sessionUpdate = pool.query.mock.calls.find(
+        ([sql]) => /UPDATE recording_sessions/.test(sql) && /status = \$1/.test(sql)
+      );
+      expect(sessionUpdate).toBeDefined();
+      expect(sessionUpdate[1][0]).toBe('completed');
+    } finally {
+      process.removeListener('unhandledRejection', onRejection);
+    }
   });
 
   test('未登记的残留 PID 回退为 SIGTERM，不影响删除流程', async () => {

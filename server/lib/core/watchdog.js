@@ -180,6 +180,11 @@ async function checkStaleRecordings() {
  * 永久封锁该直播间（且无日志）。本函数把这类行收敛为 interrupted，随后进入正常的
  * delay 延迟完成链路。
  *
+ * ⚠️ `paused` 不是「已停止」：`RoomService.pauseRecording()` 保留会话 recording 且
+ * FFmpeg 只是 SIGSTOP，进程仍在写文件。若把 paused 也当作孤儿，暂停超过一个看门狗
+ * 周期就会把活跃会话与文件误判为 interrupted/completed，并转码仍在写入的文件。
+ * 因此判定必须是 `r.status NOT IN ('recording', 'paused')`。
+ *
  * @returns {Promise<void>}
  */
 async function reapOrphanedRecordingSessions() {
@@ -192,7 +197,7 @@ async function reapOrphanedRecordingSessions() {
          AND rs.status = 'recording'
          AND rs.deleted_at IS NULL
          AND r.deleted_at IS NULL
-         AND r.status <> 'recording'
+         AND r.status NOT IN ('recording', 'paused')
        RETURNING rs.id`
     );
     if (rows.length > 0) {
