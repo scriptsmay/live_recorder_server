@@ -3,6 +3,7 @@ const { SUPPORTED_TRANSCODE_EXT } = require('../../config/config');
 const pool = require('../../db/index');
 const redis = require('../../db/redis');
 const { createProcLog } = require('../utils/proc-log');
+const liveProcesses = require('../utils/live-processes');
 const transcodeQueue = require('./TranscodeQueue');
 const segmenter = require('./segmenter');
 const DataService = require('../../services/DataService');
@@ -250,6 +251,9 @@ class RecordingManager {
 
     const dlProcess = downloader.spawn(dlArgs);
 
+    // 登记进程，供 RoomService / watchdog 在主动停止前打 `_manualStopped` 标记
+    liveProcesses.register({ sessionId, process: dlProcess });
+
     if (dlProcess.stderr) {
       dlProcess.stderr.on('data', (chunk) => {
         logStream.write(chunk);
@@ -289,6 +293,7 @@ class RecordingManager {
     }
 
     dlProcess._manualStopped = true;
+    liveProcesses.markManualStop({ process: dlProcess });
 
     return new Promise((resolve) => {
       const forceKillTimer = setTimeout(() => {

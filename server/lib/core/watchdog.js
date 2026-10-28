@@ -12,8 +12,10 @@ const hlsGenerator = require('./hls-generator');
 const analysisService = require('../../services/DanmakuAnalysisService');
 
 const { createModuleLogger } = require('./logger');
+const liveProcesses = require('../utils/live-processes');
 const log = createModuleLogger('watchdog');
-// const recordingManager = require('./RecordingManager');
+// 延迟加载带定时器的单例，仅在需要按进程对象优雅停止时使用
+const getRecordingManager = () => require('./RecordingManager');
 
 let watchdogTimer = null;
 
@@ -117,15 +119,24 @@ async function checkStaleRecordings() {
           `[看门狗] 僵死录制: ${room.room_name || room.room_url} (pid=${room.ffmpeg_pid}, 进程=${processAlive}, 文件过时=${fileStale})`
         );
 
-        if (processAlive && room.ffmpeg_pid) {
+        // 看门狗是**有意终止**僵死进程，不是平台侧异常断开：打上人工停止标记后
+        // 再发信号（本进程内登记的进程走优雅停止，含 SIGKILL 兜底），close 回调
+        // 据此按 completed 收敛，不开启续播等待窗口，也不会反复重试录制。
+        const proc = liveProcesses.markManualStop({ sessionId: room.session_id, pid: room.ffmpeg_pid });
+        if (proc) {
+          getRecordingManager()
+            .stopRecordingProcess(proc)
+            .catch(() => {});
+        } else if (processAlive && room.ffmpeg_pid) {
           try {
             process.kill(room.ffmpeg_pid, 'SIGTERM');
           } catch (_) {}
-          setTimeout(() => {
+          const killTimer = setTimeout(() => {
             try {
               process.kill(room.ffmpeg_pid, 'SIGKILL');
             } catch (_) {}
           }, 5000);
+          if (typeof killTimer.unref === 'function') killTimer.unref();
         }
 
         await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
@@ -137,17 +148,14 @@ async function checkStaleRecordings() {
           await redis.del(`active_task:${room.room_url}`);
         } catch (_) {}
 
-        if (room.session_id) {
-          let fileSize = 0;
-          if (room.output_path) {
-            try {
-              const stat = fs.statSync(room.output_path);
-              fileSize = stat.size;
-            } catch (_) {}
-          }
+        // 会话/文件状态由 close 回调（finishSession）单点收敛，这里不再写 interrupted：
+        // 双写会造成「会话 interrupted + 文件 completed + 转码已入队」的不一致状态。
+        // 仅当进程已不存在、close 回调不会再来时才兜底置 interrupted。
+        if (room.session_id && !processAlive) {
           await pool.query(
-            `UPDATE recording_sessions SET ended_at = NOW(), status = 'interrupted', total_size = $1 WHERE id = $2`,
-            [fileSize, room.session_id]
+            `UPDATE recording_sessions SET ended_at = COALESCE(ended_at, NOW()), status = 'interrupted'
+             WHERE id = $1 AND status = 'recording'`,
+            [room.session_id]
           );
           await pool.query(
             `UPDATE recording_files SET status = 'interrupted', checked_at = NOW()
@@ -160,6 +168,44 @@ async function checkStaleRecordings() {
     }
   } catch (err) {
     log.error('[看门狗] 检查失败:', err.message);
+  }
+}
+
+/**
+ * 回收「房间已不在录制、会话却仍是 recording」的悬挂会话。
+ *
+ * checkStaleRecordings 只扫描 rooms.status='recording'，finalizeInterruptedSessions 只扫描
+ * interrupted；若 close 回调在会话 UPDATE 之前失败（或进程已死但回调未执行），会话会永久
+ * 停留在 recording，进而让同房间自动投稿的 `NOT EXISTS (rs2.status='recording')` 守卫
+ * 永久封锁该直播间（且无日志）。本函数把这类行收敛为 interrupted，随后进入正常的
+ * delay 延迟完成链路。
+ *
+ * @returns {Promise<void>}
+ */
+async function reapOrphanedRecordingSessions() {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE recording_sessions rs
+       SET status = 'interrupted', ended_at = COALESCE(rs.ended_at, NOW())
+       FROM rooms r
+       WHERE r.room_url = rs.room_url
+         AND rs.status = 'recording'
+         AND rs.deleted_at IS NULL
+         AND r.deleted_at IS NULL
+         AND r.status <> 'recording'
+       RETURNING rs.id`
+    );
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      await pool.query(
+        `UPDATE recording_files SET status = 'interrupted', checked_at = NOW()
+         WHERE session_id = ANY($1::int[]) AND status = 'recording' AND deleted_at IS NULL`,
+        [ids]
+      );
+      log.warn(`[会话回收] ${rows.length} 个会话仍为 recording 但房间已停止，已置为 interrupted: ${ids.join(', ')}`);
+    }
+  } catch (err) {
+    log.error('[会话回收] 失败:', err.message);
   }
 }
 
@@ -743,6 +789,8 @@ async function runWatchdog() {
   try {
     intervalSec = parseInt(await DataService.getSetting('watchdog_interval', '30'), 10);
     await checkStaleRecordings();
+    // 回收房间里已停止、会话仍为 recording 的悬挂行（阻断自动投稿的静默黑洞）
+    await reapOrphanedRecordingSessions();
     await scanActiveSegments();
     await cleanupFragmentFiles();
     await syncMissingFiles();
@@ -878,6 +926,7 @@ module.exports = {
   cleanupFragmentFiles,
   syncMissingFiles,
   finalizeInterruptedSessions,
+  reapOrphanedRecordingSessions,
   checkSessionHLS,
   checkSessionAnalysis,
   backfillSegmentTimes,

@@ -5,6 +5,30 @@ const redis = require('../db/redis');
 const DataService = require('./DataService');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const liveProcesses = require('../lib/utils/live-processes');
+
+/**
+ * 主动停止录制进程：先在本进程内命中登记对象并打 `_manualStopped`，
+ * 使 close 回调判定为人工正常停止（completed）；未登记（如服务重启后的残留 PID）
+ * 时回退为直接 SIGTERM。
+ * @param {number|null} pid
+ * @returns {Promise<void>}
+ */
+async function stopProcessIntentionally(pid, { silent = false } = {}) {
+  if (!pid) return;
+  const proc = liveProcesses.find({ pid });
+  if (proc) {
+    // 延迟加载：RecordingManager 是带定时器的单例，测试可整体 mock
+    const recordingManager = require('../lib/core/RecordingManager');
+    await recordingManager.stopRecordingProcess(proc);
+    return;
+  }
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch (err) {
+    if (!silent) console.log(`[停止] SIGTERM 失败 (PID=${pid}):`, err.message);
+  }
+}
 
 class RoomService {
   static async getRoomByUrl(roomUrl) {
@@ -103,13 +127,10 @@ class RoomService {
       return { success: false, message: '直播间未在录制' };
     }
 
-    if (room.ffmpeg_pid) {
-      try {
-        process.kill(room.ffmpeg_pid, 'SIGTERM');
-      } catch (err) {
-        console.log(`[停止] SIGTERM 失败 (PID=${room.ffmpeg_pid}):`, err.message);
-      }
-    }
+    // 人工停止：通过登记表打 _manualStopped 后走优雅停止（含超时兜底），
+    // 保证 close 回调判定为 completed 而不是开启续播窗口。
+    // 不阻塞 HTTP 响应：标记在发信号前同步写入。
+    stopProcessIntentionally(room.ffmpeg_pid).catch(() => {});
 
     await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
       room.id,
@@ -180,11 +201,8 @@ class RoomService {
     }
 
     const r = room.rows[0];
-    if (r.ffmpeg_pid) {
-      try {
-        process.kill(r.ffmpeg_pid, 'SIGTERM');
-      } catch (_) {}
-    }
+    // 删除房间同样属于主动停止：打标记后优雅停止，close 按 completed 处理
+    stopProcessIntentionally(r.ffmpeg_pid, { silent: true }).catch(() => {});
 
     await pool.query('UPDATE rooms SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [roomId]);
     // 连带会话一并软删（原物理删除 + FK CASCADE 的行为等价替换）
