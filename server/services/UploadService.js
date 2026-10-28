@@ -9,6 +9,14 @@ const { afterUpload } = require('../lib/core/backup');
 const DataService = require('./DataService');
 const SeasonService = require('./SeasonService');
 
+// 自动投稿冷静期默认值（秒）：settings 缺失或值非法时回退
+const AUTO_UPLOAD_GRACE_DEFAULT_SECONDS = 180;
+
+// 同房间 pending 会话仅在该分钟数内视为「排队中」。
+// 超时的 pending 行多为 createSession() 后推进失败或进程崩溃遗留的孤儿记录，
+// 不应永久静默封锁整个直播间的自动投稿。
+const PENDING_SESSION_BLOCK_MINUTES = 10;
+
 /**
  * 上传服务类
  * 负责处理录制文件的自动上传功能，支持模板化配置、文件过滤、转码检查等
@@ -162,11 +170,11 @@ class UploadService {
   static async getEffectiveGraceSeconds() {
     const [delayRaw, graceRaw] = await Promise.all([
       DataService.getSetting('delay', '60'),
-      DataService.getSetting('auto_upload_grace_seconds', '180'),
+      DataService.getSetting('auto_upload_grace_seconds', String(AUTO_UPLOAD_GRACE_DEFAULT_SECONDS)),
     ]);
     // delay 非法时回退其自身默认 60；grace 非法时回退 180
     const delay = this.parseDurationSeconds(delayRaw, 60);
-    const grace = this.parseDurationSeconds(graceRaw, 180);
+    const grace = this.parseDurationSeconds(graceRaw, AUTO_UPLOAD_GRACE_DEFAULT_SECONDS);
     return Math.max(delay, grace);
   }
 
@@ -176,6 +184,11 @@ class UploadService {
    *
    * 数据库时钟比较：ended_at 为 TIMESTAMP，禁止与 JS Date 直接比较，
    * 统一用 NOW() - INTERVAL '1 second' * $1 在 SQL 侧计算。
+   *
+   * 同房间 pending 会话只封锁 PENDING_SESSION_BLOCK_MINUTES 分钟：
+   * 更早的 pending 行通常来自 createSession() 后推进失败或进程崩溃遗留的孤儿记录，
+   * 并非真正排队中的录制；若不做时间约束，单条孤儿行会永久且静默地
+   * 关闭该直播间所有后续自动投稿。
    * @returns {string} WHERE 条件片段
    */
   static _autoUploadEligibilitySql() {
@@ -189,7 +202,11 @@ class UploadService {
       AND NOT EXISTS (
         SELECT 1 FROM recording_sessions rs2
         WHERE rs2.room_url = rs.room_url
-          AND rs2.status IN ('recording', 'pending')
+          AND (
+            rs2.status = 'recording'
+            OR (rs2.status = 'pending'
+                AND rs2.started_at > NOW() - INTERVAL '${PENDING_SESSION_BLOCK_MINUTES} minutes')
+          )
           AND rs2.deleted_at IS NULL
       )
       AND NOT EXISTS (

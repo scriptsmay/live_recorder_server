@@ -725,7 +725,9 @@ server/router/rooms.js (新增/修改房间)
 - 会话状态 `completed`、未软删、`ended_at` 在最近 7 天内；
 - `ended_at < NOW() - INTERVAL '1 second' * 有效冷静期`，其中
   `有效冷静期 = max(delay, auto_upload_grace_seconds)`（默认 180 秒；配置非法时回退 180）；
-- 同一 `room_url` 无 `recording` / `pending` 状态的未删除会话；
+- 同一 `room_url` 无 `recording` 状态的未删除会话，也没有启动于最近 10 分钟内的
+  `pending` 会话（更早的 `pending` 多为 `createSession()` 后推进失败或进程崩溃遗留的
+  孤儿行，不再永久封锁该直播间的自动投稿）；
 - 对应 `rooms.status` 不为 `recording`；
 - 无 `uploading` / `success` 的未删除投稿记录。
 

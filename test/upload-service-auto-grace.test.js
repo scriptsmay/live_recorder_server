@@ -108,7 +108,7 @@ describe('UploadService.getEffectiveGraceSeconds', () => {
 });
 
 describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
-  test('SQL uses SQL-side grace cutoff and NOT EXISTS guards', async () => {
+  test('eligibility SQL contains SQL-side grace cutoff and all NOT EXISTS guards', async () => {
     mockSettings({ delay: '600', auto_upload_grace_seconds: '180' });
     pool.query.mockResolvedValueOnce({ rows: [] });
 
@@ -118,7 +118,6 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
     expect(params).toEqual([600]);
     expect(sql).toContain("rs.status = 'completed'");
     expect(sql).toMatch(/rs\.ended_at\s*<\s*NOW\(\)\s*-\s*INTERVAL\s*'1 second'\s*\*\s*\$1/);
-    expect(sql).toContain("rs2.status IN ('recording', 'pending')");
     expect(sql).toContain('rs2.deleted_at IS NULL');
     expect(sql).toContain("r2.status = 'recording'");
     expect(sql).toContain('r2.deleted_at IS NULL');
@@ -127,7 +126,40 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
     expect(sql).not.toMatch(/new Date|Date\.now/);
   });
 
-  test('uses effective grace (max) as $1', async () => {
+  test('eligibility SQL time-bounds pending guard and no longer uses a bare status IN list', async () => {
+    mockSettings();
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    await UploadService.scanPendingAutoUpload();
+
+    const [sql] = pool.query.mock.calls[0];
+    expect(sql).toContain("rs2.status = 'recording'");
+    expect(sql).toContain("rs2.status = 'pending'");
+    // 10 分钟边界写在 SQL 字面量中（无新增绑定参数）
+    expect(sql).toMatch(
+      /rs2\.status\s*=\s*'pending'\s*\n?\s*AND\s+rs2\.started_at\s*>\s*NOW\(\)\s*-\s*INTERVAL\s*'10 minutes'/
+    );
+    expect(sql).toContain("INTERVAL '10 minutes'");
+    // 旧的无限期 pending 封锁必须消失
+    expect(sql).not.toContain("rs2.status IN ('recording', 'pending')");
+  });
+
+  test('pending bound introduces no new bind parameters (still only $1 grace)', async () => {
+    mockSettings({ delay: '60', auto_upload_grace_seconds: '900' });
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    await UploadService.scanPendingAutoUpload();
+
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(params).toEqual([900]); // 仅有效冷静期一个参数
+    expect(sql).not.toMatch(/\$2/); // 10 分钟为字面量，不新增占位符
+    expect(sql).toContain("INTERVAL '10 minutes'");
+    // 查询形状仍为 rs INNER JOIN rooms + 3 个 NOT EXISTS
+    expect(sql).toContain('INNER JOIN rooms r ON r.room_url = rs.room_url');
+    expect((sql.match(/NOT EXISTS/g) || []).length).toBe(3);
+  });
+
+  test('eligibility SQL still applies the effective grace (max) as $1', async () => {
     mockSettings({ delay: '60', auto_upload_grace_seconds: '900' });
     pool.query.mockResolvedValueOnce({ rows: [] });
 
@@ -136,7 +168,7 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
     expect(pool.query.mock.calls[0][1]).toEqual([900]);
   });
 
-  test('session younger than grace window is excluded by the query (no candidates)', async () => {
+  test('eligibility SQL contains a grace-window cutoff (young sessions filtered DB-side)', async () => {
     mockSettings({ delay: '600', auto_upload_grace_seconds: '180' });
     // 数据库按 ended_at < NOW() - grace 过滤，未过窗口的会话不会出现在结果中
     pool.query.mockResolvedValueOnce({ rows: [] });
@@ -148,7 +180,7 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
     expect(sql).toContain('INTERVAL');
   });
 
-  test('same-room recording/pending session guard is present (excludes candidates)', async () => {
+  test('eligibility SQL contains the same-room session guard (recording or recent pending)', async () => {
     mockSettings();
     pool.query.mockResolvedValueOnce({ rows: [] });
 
@@ -156,10 +188,12 @@ describe('UploadService.scanPendingAutoUpload — eligibility query', () => {
 
     const [sql] = pool.query.mock.calls[0];
     expect(sql).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM recording_sessions rs2/);
-    expect(sql).toContain("rs2.status IN ('recording', 'pending')");
+    expect(sql).toContain('rs2.room_url = rs.room_url');
+    expect(sql).toContain("rs2.status = 'recording'");
+    expect(sql).toMatch(/rs2\.status = 'pending'[\s\S]*rs2\.started_at > NOW\(\)/);
   });
 
-  test("room status 'recording' guard is present (excludes candidates)", async () => {
+  test("eligibility SQL contains the room-status 'recording' guard", async () => {
     mockSettings();
     pool.query.mockResolvedValueOnce({ rows: [] });
 
