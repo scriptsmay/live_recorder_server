@@ -318,6 +318,43 @@ class RecorderService {
       }
     } catch (dbErr) {
       console.error('[RecorderService] 录制结束数据库更新失败:', dbErr);
+    } finally {
+      // S4：会话状态更新是必达语义。_handleSessionFinish 若在 UPDATE 之前抛错，
+      // 会话会永久停留在 recording（看门狗只扫描 rooms.status='recording'，
+      // finalizeInterruptedSessions 只扫描 interrupted），进而让同房间自动投稿
+      // 的 NOT EXISTS 守卫静默封锁该直播间。这里兜底收敛，绝不留 recording。
+      try {
+        await this._ensureSessionTerminal(sessionId, unexpectedExit);
+      } catch (err) {
+        console.error(`[RecorderService] 会话 ${sessionId} 终态兜底失败:`, err);
+      }
+    }
+  }
+
+  /**
+   * 会话终态兜底：若会话仍是 recording，按退出判定写入终态。
+   *
+   * 正常结束/人工停止 → completed；非预期退出 → interrupted（等待 delay 窗口）。
+   * ended_at NULL 的历史行也在此补齐，避免下游按 ended_at 过滤时漏掉。
+   *
+   * @param {string|number} sessionId
+   * @param {boolean} unexpectedExit
+   * @private
+   */
+  static async _ensureSessionTerminal(sessionId, unexpectedExit) {
+    if (!sessionId) return;
+    const status = unexpectedExit ? 'interrupted' : 'completed';
+    const result = await pool.query(
+      `UPDATE recording_sessions
+       SET status = $1, ended_at = COALESCE(ended_at, NOW())
+       WHERE id = $2 AND status = 'recording'`,
+      [status, sessionId]
+    );
+    if (result.rowCount > 0) {
+      console.warn(
+        `[RecorderService] 会话 ${sessionId} 在正常收尾流程中未完成状态更新，兜底置为 ${status}` +
+          (unexpectedExit ? '（等待 delay 窗口后完成）' : '')
+      );
     }
   }
 
@@ -347,7 +384,29 @@ class RecorderService {
     if (typeof unexpectedExit !== 'boolean') {
       unexpectedExit = isUnexpectedExit({ code, signal, isManualStop });
     }
-    const fileStatus = unexpectedExit ? 'interrupted' : 'completed';
+
+    // 单一写者：若会话已被其他路径（看门狗兜底、启动清理）写成终态，
+    // 本次 close 只补充文件大小/统计，不得再改文件状态或入队转码，
+    // 否则会出现「会话 interrupted + 文件 completed + 转码已入队」的分裂状态。
+    const stateRes = await pool.query(`SELECT status FROM recording_sessions WHERE id = $1`, [sessionId]);
+    const sessionStatusNow = stateRes.rows[0]?.status;
+    const sessionFinalized = Boolean(sessionStatusNow) && sessionStatusNow !== 'recording';
+    if (sessionFinalized) {
+      console.warn(
+        `[finishSession] 会话 ${sessionId} 已被其他路径置为 ${sessionStatusNow}，` +
+          `close 回调只补统计、不改文件状态也不入队转码`
+      );
+    }
+
+    // 已终态时沿用会话现有状态，避免把 interrupted 会话的文件写成 completed
+    const fileStatus = sessionFinalized
+      ? sessionStatusNow === 'interrupted'
+        ? 'interrupted'
+        : 'completed'
+      : unexpectedExit
+        ? 'interrupted'
+        : 'completed';
+    const enqueueTranscode = !sessionFinalized && fileStatus === 'completed';
     const thresholdValue = await DataService.getSetting('filtering_threshold', '10');
     const thresholdBytes = (parseInt(thresholdValue, 10) || 10) * 1024 * 1024;
 
@@ -385,17 +444,25 @@ class RecorderService {
         fileExists = true;
 
         // 有文件，更新数据库记录
-        // v1.12.0：仅更新未删除行——软删行与重建行可能同路径
-        await pool.query(
-          `UPDATE recording_files
-           SET file_size = $1, status = $2, ended_at = NOW(),
-               completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END
-           WHERE session_id = $3 AND file_path = $4 AND deleted_at IS NULL`,
-          [stat.size, fileStatus, sessionId, file.file_path]
-        );
+        // v1.12.0：仅更新未删除行——软删行与重建行可能同路径。
+        // 会话已被其他路径终态化时只补大小，不改状态。
+        if (sessionFinalized) {
+          await pool.query(
+            `UPDATE recording_files SET file_size = $1 WHERE session_id = $2 AND file_path = $3 AND deleted_at IS NULL`,
+            [stat.size, sessionId, file.file_path]
+          );
+        } else {
+          await pool.query(
+            `UPDATE recording_files
+             SET file_size = $1, status = $2, ended_at = NOW(),
+                 completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END
+             WHERE session_id = $3 AND file_path = $4 AND deleted_at IS NULL`,
+            [stat.size, fileStatus, sessionId, file.file_path]
+          );
+        }
 
-        // 非预期退出跳过即时转码：文件先挂 interrupted，延迟完成后再由看门狗入队
-        if (!unexpectedExit) {
+        // 非预期退出（或会话已终态）跳过即时转码，避免在 delay 窗口内入队
+        if (enqueueTranscode) {
           RecordingManager.addTranscodeQueue(sessionId, file.file_path);
         }
       }
@@ -448,7 +515,7 @@ class RecorderService {
           backfilled++;
           nextSegIdx++;
 
-          if (!unexpectedExit) {
+          if (enqueueTranscode) {
             RecordingManager.addTranscodeQueue(sessionId, fp);
           }
           console.log(
@@ -466,14 +533,23 @@ class RecorderService {
     if (sessionId) {
       const sessionStatus = unexpectedExit ? 'interrupted' : 'completed';
 
-      await pool.query(
-        `UPDATE recording_sessions
-             SET ended_at = NOW(), status = $1,
-                 total_segments = $2,
-                 total_size = $3
-             WHERE id = $4 AND status = 'recording'`,
-        [sessionStatus, fileCount, fileSize, sessionId]
-      );
+      if (sessionFinalized) {
+        // 状态已由其他路径写入，这里只补统计，不覆盖终态
+        await pool.query(`UPDATE recording_sessions SET total_segments = $1, total_size = $2 WHERE id = $3`, [
+          fileCount,
+          fileSize,
+          sessionId,
+        ]);
+      } else {
+        await pool.query(
+          `UPDATE recording_sessions
+               SET ended_at = NOW(), status = $1,
+                   total_segments = $2,
+                   total_size = $3
+               WHERE id = $4 AND status = 'recording'`,
+          [sessionStatus, fileCount, fileSize, sessionId]
+        );
+      }
 
       if (unexpectedExit) {
         console.log(
@@ -502,12 +578,13 @@ class RecorderService {
    */
   static async _handleDanmakuFinish(sessionId, roomUrl, _trackerSegments = []) {
     try {
-      // 停止弹幕采集
-      const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl);
+      // 停止弹幕采集。传入会话 ID 作为身份校验：若该房间已被新会话接管，
+      // stopCapture 不会误停/误写新采集记录。
+      const { captureId, eventCount } = await danmakuRecorder.stopCapture(roomUrl, { captureId: sessionId });
 
       if (!captureId) {
         console.log(`[弹幕] 会话 ${sessionId} 采集未启动或已停止`);
-        // 即使采集未启动，也要确保将 recording 状态更新为 completed（处理服务器重启场景）
+        // 仅收口本会话仍为 recording 的行；若同房间已有新采集记录（续播），不动它
         await pool.query(
           `UPDATE danmaku_capture_records SET status = 'completed', ended_at = COALESCE(ended_at, NOW())
            WHERE session_id = $1 AND status = 'recording'`,

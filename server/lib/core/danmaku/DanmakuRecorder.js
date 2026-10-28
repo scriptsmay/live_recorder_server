@@ -22,6 +22,33 @@ class DanmakuRecorder {
   constructor() {
     // 活跃的采集会话：roomUrl -> { sessionId, captureId, fd, startedAt, eventCount, rawPath }
     this.activeSessions = new Map();
+    // 每个房间的串行队列：保证 startCapture 与 stopCapture 不交错执行
+    this._roomQueues = new Map();
+  }
+
+  /**
+   * 按 roomUrl 串行执行异步任务。
+   *
+   * 录制结束的 stopCapture 与下一次 notify 触发的 startCapture 之间存在竞态：
+   * 若两者交错，旧 stop 可能关掉新 fd、用旧计数覆盖被复用的采集记录并删除新会话。
+   * 串行化后同一房间的 start/stop 严格按调用顺序执行。
+   *
+   * @param {string} roomUrl
+   * @param {Function} fn
+   * @returns {Promise<*>}
+   * @private
+   */
+  _runSerialized(roomUrl, fn) {
+    const prev = this._roomQueues.get(roomUrl) || Promise.resolve();
+    const next = prev.then(fn, fn);
+    this._roomQueues.set(roomUrl, next);
+    // 队列尾部完成后清理，避免 Map 无限增长（仅当自己仍是尾部时）
+    next
+      .catch(() => {})
+      .then(() => {
+        if (this._roomQueues.get(roomUrl) === next) this._roomQueues.delete(roomUrl);
+      });
+    return next;
   }
 
   /**
@@ -38,7 +65,15 @@ class DanmakuRecorder {
    * @param {number} [params.recordingStartedAt] - 录制（FFmpeg）启动时间戳（epoch ms），用于对齐视频时间轴
    * @returns {Promise<number|null>} capture_id 或 null（未启用时）
    */
-  async startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', recordingStartedAt }) {
+  startCapture(params) {
+    return this._runSerialized(params.roomUrl, () => this._startCapture(params));
+  }
+
+  /**
+   * startCapture 的实际实现（由 _runSerialized 保证串行）
+   * @private
+   */
+  async _startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', recordingStartedAt }) {
     const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
       return null;
@@ -309,12 +344,32 @@ class DanmakuRecorder {
    * 停止弹幕采集
    * 关闭文件描述符并更新数据库记录
    *
+   * 与 startCapture 共用房间串行队列，且以 captureId 做身份校验：
+   * 只有当前活跃会话仍是入参对应的那条记录时才收口，避免旧 stop 覆盖被复用的记录。
+   *
    * @param {string} roomUrl - 房间 URL
+   * @param {Object} [options]
+   * @param {number|null} [options.captureId] - 期望停止的采集记录 ID（不匹配则不做任何写入）
    * @returns {Promise<{ captureId: number|null, eventCount: number }>}
    */
-  async stopCapture(roomUrl) {
+  stopCapture(roomUrl, options = {}) {
+    return this._runSerialized(roomUrl, () => this._stopCapture(roomUrl, options));
+  }
+
+  /**
+   * stopCapture 的实际实现（由 _runSerialized 保证串行）
+   * @private
+   */
+  async _stopCapture(roomUrl, { captureId: expectedCaptureId = null } = {}) {
     const session = this.activeSessions.get(roomUrl);
     if (!session) {
+      return { captureId: null, eventCount: 0 };
+    }
+    // 身份校验：活跃会话已换成另一条采集记录（续播复用/新会话），旧 stop 不得收口
+    if (expectedCaptureId !== null && String(session.captureId) !== String(expectedCaptureId)) {
+      console.warn(
+        `[DanmakuRecorder] 跳过过期停止请求: room=${roomUrl}, expected=${expectedCaptureId}, active=${session.captureId}`
+      );
       return { captureId: null, eventCount: 0 };
     }
 
@@ -344,7 +399,10 @@ class DanmakuRecorder {
 
     const captureId = session.captureId;
     const eventCount = session.eventCount;
-    this.activeSessions.delete(roomUrl);
+    // 仅删除仍是本对象的条目：串行队列下不会被替换，双保险防外部直接改写
+    if (this.activeSessions.get(roomUrl) === session) {
+      this.activeSessions.delete(roomUrl);
+    }
 
     return { captureId, eventCount };
   }
