@@ -306,11 +306,47 @@ onMounted(loadData)
                       加载中...
                     </div>
                     <div v-else-if="detailMap[r.session_id]" class="space-y-3">
+                      <div
+                        v-if="
+                          ((detailMap[r.session_id].stats?.llm_tags as any)?.atmosphere || [])
+                            .length
+                        "
+                        class="flex flex-wrap gap-1.5"
+                      >
+                        <span
+                          v-for="(tag, ti) in (detailMap[r.session_id].stats?.llm_tags as any)
+                            .atmosphere"
+                          :key="ti"
+                          class="px-2 py-0.5 text-xs font-medium rounded-full bg-pink-50 text-pink-700 border border-pink-200"
+                        >
+                          {{ tag }}
+                        </span>
+                      </div>
                       <div v-if="detailMap[r.session_id].summary" class="text-sm text-gray-700">
                         <span class="font-medium">总结：</span>{{ detailMap[r.session_id].summary }}
                         <span class="text-xs text-gray-400 ml-2"
                           >模型 {{ detailMap[r.session_id].model || '-' }}</span
                         >
+                      </div>
+                      <div
+                        v-if="
+                          ((detailMap[r.session_id].stats?.wordcloud as any)?.phrases || []).length
+                        "
+                        class="flex flex-wrap items-center gap-1.5 text-xs text-gray-600"
+                      >
+                        <span class="text-gray-400 font-medium">刷屏热词：</span>
+                        <span
+                          v-for="([p, c], pi) in (
+                            (detailMap[r.session_id].stats?.wordcloud as any).phrases as [
+                              string,
+                              number,
+                            ][]
+                          ).slice(0, 8)"
+                          :key="pi"
+                          class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100"
+                        >
+                          {{ p }} <span class="text-blue-400">×{{ c }}</span>
+                        </span>
                       </div>
                       <div
                         v-else-if="detailMap[r.session_id].llm_error"

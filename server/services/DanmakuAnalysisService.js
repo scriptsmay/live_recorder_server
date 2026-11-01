@@ -277,6 +277,16 @@ function computeStats(sessionId, events, badLines) {
     giftCounter.set(name, (giftCounter.get(name) || 0) + 1);
   }
 
+  const emojiCounter = new Map();
+  const phraseTextCounter = new Map();
+  for (const [t, c] of phraseCounter) {
+    if (PLACEHOLDER_RE.test(t)) {
+      emojiCounter.set(t, c);
+    } else {
+      phraseTextCounter.set(t, c);
+    }
+  }
+
   const userIds = new Set();
   for (const e of comments) {
     if (e.user_id) userIds.add(e.user_id);
@@ -328,6 +338,15 @@ function computeStats(sessionId, events, badLines) {
     top_phrases: mostCommon(phraseCounter, PHRASE_TOP_N),
     top_gifts: mostCommon(giftCounter, GIFT_TOP_N),
     series_10s: series,
+    llm_tags: {
+      atmosphere: [],
+      nicknames: [],
+      concerns: [],
+    },
+    wordcloud: {
+      emojis: mostCommon(emojiCounter, 10),
+      phrases: mostCommon(phraseTextCounter, 15),
+    },
   };
   return { stats, intervals };
 }
@@ -342,6 +361,19 @@ function fmtHms(ms) {
   return `${p(hh)}:${p(mm)}:${p(ss)}`;
 }
 
+/**
+ * 防御性清洗 LLM 语义标签（非数组转空、过滤非字符串与空串、trim、截断 15 字、最多 5 项）
+ */
+function sanitizeTags(arr, maxItems = 5, maxLen = 15) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((x) => typeof x === 'string')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0)
+    .map((x) => x.slice(0, maxLen))
+    .slice(0, maxItems);
+}
+
 function buildPayload(stats, intervals) {
   const top = intervals.slice(0, TOP_N_HIGHLIGHTS);
   const lines = [
@@ -350,11 +382,7 @@ function buildPayload(stats, intervals) {
       `均速 ${stats.rate_per_min} 条/分；独立用户 ${stats.unique_users}；` +
       `文本重复率 ${pyRound(stats.dup_rate * 100, 1)}%；礼物事件 ${stats.type_counts.gift} 次。`,
     `10s 桶峰值 ${stats.bucket_10s_comment.max}、p90 ${stats.bucket_10s_comment.p90}、均值 ${stats.bucket_10s_comment.mean}。`,
-    '高频刷屏词：' +
-      stats.top_phrases
-        .slice(0, 8)
-        .map(([t, c]) => `${t}×${c}`)
-        .join('、'),
+    '高频刷屏词：' + stats.top_phrases.map(([t, c]) => `${t}×${c}`).join('、'),
     '',
     `【高光候选区间（共 ${top.length} 个，按热度排序）】`,
   ];
@@ -376,9 +404,9 @@ function escapeHtml(s) {
 }
 
 function renderHtml(res) {
-  const st = res.stats;
-  const ivs = res.intervals;
-  const series = st.series_10s;
+  const st = res.stats || {};
+  const ivs = res.intervals || [];
+  const series = st.series_10s || [];
   const peak = series.length ? Math.max(...series) : 1;
   const width = 900;
   const height = 180;
@@ -403,77 +431,226 @@ function renderHtml(res) {
     );
   }
 
+  // LLM 氛围标签
+  const atmoTags = st.llm_tags && Array.isArray(st.llm_tags.atmosphere) ? st.llm_tags.atmosphere : [];
+  const atmoHtml = atmoTags.length
+    ? `<div class="chips-container">${atmoTags.map((t) => `<span class="chip-atmo">${escapeHtml(t)}</span>`).join('')}</div>`
+    : '';
+
+  // 高光时间轴卡片
   const hlBlocks = ivs
     .slice(0, TOP_N_HIGHLIGHTS)
     .map((iv, idx) => {
-      const samples = iv.samples.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
+      const samples = (iv.samples || []).map((s) => `<span class="sample-tag">${escapeHtml(s)}</span>`).join('');
       return `
-        <div class="hl">
-          <div class="hl-head"><span class="badge">#${idx + 1}</span>
-            <b>${fmtHms(iv.start_ms)} – ${fmtHms(iv.end_ms)}</b>
-            <span class="muted">峰值加权 ${iv.peak_weighted} · 均加权 ${iv.score}</span></div>
-          <div class="label">${escapeHtml(iv.label || '（LLM 未标注）')}</div>
-          <div class="reason">${escapeHtml(iv.reason || '')}</div>
-          <ul class="samples">${samples}</ul>
+        <div class="hl-card">
+          <div class="hl-head">
+            <span class="hl-badge">#${idx + 1}</span>
+            <span class="hl-time">${fmtHms(iv.start_ms)} – ${fmtHms(iv.end_ms)}</span>
+            <span class="hl-title">${escapeHtml(iv.label || '热度飙升')}</span>
+            <span class="muted" style="margin-left:auto;font-size:12px;">峰值加权 ${iv.peak_weighted} · 均加权 ${iv.score}</span>
+          </div>
+          ${iv.reason ? `<div class="hl-reason">${escapeHtml(iv.reason)}</div>` : ''}
+          ${samples ? `<div class="hl-samples">${samples}</div>` : ''}
         </div>`;
     })
     .join('');
 
-  const phrases = st.top_phrases.map(([t, c]) => `<li>${escapeHtml(t)} ×${c}</li>`).join('');
-  const gifts = st.top_gifts.map(([g, c]) => `<li>${escapeHtml(g)} ×${c}</li>`).join('');
+  // 词云分桶（带向下兼容降级）
+  let emojis = [];
+  let phrases = [];
+  if (st.wordcloud) {
+    emojis = st.wordcloud.emojis || [];
+    phrases = st.wordcloud.phrases || [];
+  } else if (st.top_phrases) {
+    emojis = st.top_phrases.filter(([t]) => PLACEHOLDER_RE.test(t));
+    phrases = st.top_phrases.filter(([t]) => !PLACEHOLDER_RE.test(t));
+  }
+  const nicknames = st.llm_tags && Array.isArray(st.llm_tags.nicknames) ? st.llm_tags.nicknames : [];
+  const concerns = st.llm_tags && Array.isArray(st.llm_tags.concerns) ? st.llm_tags.concerns : [];
+
+  const emojiHtml = emojis.length
+    ? `<div class="sub-block">
+        <div class="sub-title">常用表情包</div>
+        <div class="cloud-tags">
+          ${emojis.map(([e, c]) => `<span class="tag-emoji">${escapeHtml(e)} <small>×${c}</small></span>`).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const phraseHtml = phrases.length
+    ? `<div class="sub-block">
+        <div class="sub-title">刷屏热词</div>
+        <div class="cloud-tags">
+          ${phrases.map(([p, c]) => `<span class="tag-phrase">${escapeHtml(p)} <small>×${c}</small></span>`).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const nickHtml = nicknames.length
+    ? `<div class="sub-block">
+        <div class="sub-title">粉丝昵称</div>
+        <div class="cloud-tags">
+          ${nicknames.map((n) => `<span class="tag-nick">${escapeHtml(n)}</span>`).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const concernHtml = concerns.length
+    ? `<div class="sub-block">
+        <div class="sub-title">观众关心的事</div>
+        <ul class="concern-list">
+          ${concerns.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}
+        </ul>
+      </div>`
+    : '';
+
+  const gifts = (st.top_gifts || [])
+    .map(([g, c]) => `<span class="tag-gift">${escapeHtml(g)} <small>×${c}</small></span>`)
+    .join('');
+  const giftHtml = gifts
+    ? `<div class="sub-block">
+        <div class="sub-title">礼物互动 <small class="muted" style="font-weight:normal;">（共 ${st.type_counts ? st.type_counts.gift : 0} 次，仅计数）</small></div>
+        <div class="cloud-tags">${gifts}</div>
+      </div>`
+    : '';
+
   const llmNote = res.llm_ok
     ? ''
     : `<p class="warn">LLM 层未成功（${escapeHtml(res.llm_error || '未调用')}），本报告为纯统计结果。</p>`;
+
+  const typeCounts = st.type_counts || {};
+  const b10 = st.bucket_10s_comment || {};
+  const b60 = st.bucket_60s_comment || {};
 
   return `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>弹幕分析 · 会话 ${escapeHtml(res.session_id)}</title>
 <style>
- :root{--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--acc:#e11d48}
+ :root{--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--primary:#e11d48;--primary-light:#fff1f2}
  *{box-sizing:border-box}
  body{margin:0;padding:24px;background:#f8fafc;color:var(--fg);
    font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
  .wrap{max-width:960px;margin:0 auto}
- h1{font-size:20px;margin:0 0 4px} h2{font-size:16px;margin:28px 0 10px}
+ h1{font-size:22px;margin:0 0 4px;font-weight:700}
+ h2{font-size:16px;margin:0 0 14px;font-weight:600;color:#1e293b}
  .muted{color:var(--muted);font-size:13px}
- .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin:14px 0}
- table{border-collapse:collapse;width:100%;font-size:14px}
- td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
- .hl{border-left:3px solid var(--acc);padding:8px 0 8px 12px;margin:14px 0}
- .hl-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
- .badge{background:var(--acc);color:#fff;border-radius:6px;padding:1px 7px;font-size:12px}
- .label{font-weight:600;margin:6px 0 2px}
- .reason{color:#334155;font-size:14px}
- .samples{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:13px;columns:2;column-gap:24px}
- .warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:8px 12px;border-radius:8px;font-size:13px}
- ul.two{columns:2;column-gap:24px;padding-left:20px;font-size:14px}
+ .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0}
+ .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0}
+ .stat-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+ .stat-label{font-size:13px;color:var(--muted);font-weight:500}
+ .stat-val{font-size:24px;font-weight:700;color:var(--fg);margin-top:4px}
+ .stat-val small{font-size:14px;font-weight:normal;color:var(--muted);margin-left:2px}
+ .stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+ .chips-container{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+ .chip-atmo{background:#fdf2f8;color:#9d174d;border:1px solid #fbcfe8;font-size:12px;font-weight:600;padding:2px 10px;border-radius:9999px}
+ .summary-text{font-size:15px;line-height:1.7;color:#1e293b;margin:0}
+ .hl-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0;border-left:3px solid var(--primary)}
+ .hl-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+ .hl-badge{background:var(--primary);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600}
+ .hl-time{font-family:monospace;font-size:13px;font-weight:700;background:#f1f5f9;padding:2px 6px;border-radius:4px;color:#0f172a}
+ .hl-title{font-size:14px;font-weight:600;color:#0f172a}
+ .hl-reason{color:#334155;font-size:13px;margin:6px 0 8px}
+ .hl-samples{display:flex;flex-wrap:wrap;gap:6px}
+ .sample-tag{font-size:12px;background:#f8fafc;color:#475569;border:1px solid #e2e8f0;padding:2px 8px;border-radius:6px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .sub-block{margin-top:16px}
+ .sub-block:first-of-type{margin-top:0}
+ .sub-title{font-size:14px;font-weight:600;color:#334155;margin-bottom:8px}
+ .cloud-tags{display:flex;flex-wrap:wrap;gap:8px}
+ .tag-emoji{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;padding:3px 10px;border-radius:9999px;font-size:13px}
+ .tag-phrase{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:3px 10px;border-radius:9999px;font-size:13px}
+ .tag-nick{background:#faf5ff;color:#6b21a8;border:1px solid #e9d5ff;padding:3px 10px;border-radius:9999px;font-size:13px;font-weight:500}
+ .tag-gift{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;padding:3px 10px;border-radius:9999px;font-size:13px}
+ .concern-list{margin:6px 0 0;padding-left:20px;color:#334155;font-size:14px}
+ .concern-list li{margin-bottom:4px}
+ .expert-details{margin:24px 0 16px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+ .expert-details summary{padding:14px 18px;font-size:14px;font-weight:600;color:#475569;cursor:pointer;background:#f8fafc;user-select:none}
+ .expert-details summary:hover{color:#0f172a;background:#f1f5f9}
+ .expert-content{padding:18px;background:#fafafa}
+ table{border-collapse:collapse;width:100%;font-size:14px;background:#fff;border-radius:8px;overflow:hidden}
+ td,th{border-bottom:1px solid var(--line);padding:8px 12px;text-align:left}
+ th{background:#f8fafc;font-weight:600;color:#475569}
+ .warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px 14px;border-radius:8px;font-size:13px;margin:12px 0}
+ .footer{margin-top:24px;font-size:12px;color:var(--muted);text-align:center}
 </style></head><body><div class="wrap">
 <h1>弹幕分析报告 · 会话 ${escapeHtml(res.session_id)}</h1>
 <div class="muted">生成时间 ${dayjs().format('YYYY-MM-DD HH:mm:ss')} · 模型 ${escapeHtml(res.model || '-')} · 耗时 ${(res.elapsed_s ?? 0).toFixed(1)}s</div>
 ${llmNote}
-<div class="card"><h2>整场总结</h2><p>${escapeHtml(res.summary || '（无）')}</p></div>
-<div class="card"><h2>弹幕密度（10s 加权，红线为高光区间）</h2>
-<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">
- <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
- <polyline fill="none" stroke="#2563eb" stroke-width="1.6" points="${pts.join(' ')}"/>
- ${marks.join('')}
-</svg>
-<div class="muted">峰值加权 ${peak} · 阈值 ${st.threshold}（均值 ${st.weighted_mean_10s}，模式 ${escapeHtml(st.threshold_mode || '-')}） · 全片 ${st.span_minutes} 分钟</div></div>
-<div class="card"><h2>统计概览</h2>
-<table><tr><th>指标</th><th>值</th></tr>
-<tr><td>弹幕总量</td><td>${st.type_counts.comment} 条（gift ${st.type_counts.gift} 次，已剔除系统事件 ${st.type_counts.gift_system_filtered} 条）</td></tr>
-<tr><td>弹幕时长 / 均速</td><td>${st.span_minutes} 分钟 / ${st.rate_per_min} 条·分⁻¹</td></tr>
-<tr><td>独立用户</td><td>${st.unique_users}</td></tr>
-<tr><td>文本重复率</td><td>${pyRound(st.dup_rate * 100, 1)}%（重复 ${st.dup_text} 条，均值长度 ${st.text_len_mean} 字）</td></tr>
-<tr><td>10s 桶（comment）</td><td>max ${st.bucket_10s_comment.max} · p99 ${st.bucket_10s_comment.p99} · p90 ${st.bucket_10s_comment.p90} · p50 ${st.bucket_10s_comment.p50} · mean ${st.bucket_10s_comment.mean}</td></tr>
-<tr><td>60s 桶（comment）</td><td>max ${st.bucket_60s_comment.max} · p90 ${st.bucket_60s_comment.p90} · p50 ${st.bucket_60s_comment.p50} · mean ${st.bucket_60s_comment.mean}</td></tr>
-<tr><td>高光区间</td><td>检出 ${st.intervals_total} 个，展示前 ${Math.min(ivs.length, TOP_N_HIGHLIGHTS)} 个</td></tr>
-</table></div>
-<div class="card"><h2>高光区间</h2>${hlBlocks || '<p class="muted">未检出</p>'}</div>
-<div class="card"><h2>高频刷屏词</h2><ul class="two">${phrases}</ul>
-<h2>礼物事件（仅计数，礼物名为平台混淆串）</h2><ul class="two">${gifts || '<li>无</li>'}</ul></div>
-<p class="muted">由 K-Recorder AI 弹幕分析生成。</p>
+
+<div class="card">
+  <h2>整场总结</h2>
+  ${atmoHtml}
+  <p class="summary-text">${escapeHtml(res.summary || '（暂无文字总结）')}</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">直播时长</div>
+    <div class="stat-val">${st.span_minutes ?? 0} <small>分钟</small></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">互动小伙伴</div>
+    <div class="stat-val">${st.unique_users ?? 0} <small>人</small></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">弹幕规模</div>
+    <div class="stat-val">${typeCounts.comment ?? 0} <small>条</small></div>
+    <div class="stat-sub">均速 ${st.rate_per_min ?? 0} 条/分</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">高光时刻</div>
+    <div class="stat-val">${st.intervals_total ?? 0} <small>处</small></div>
+    <div class="stat-sub">精选前 ${Math.min(ivs.length, TOP_N_HIGHLIGHTS)} 处</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>🌟 精彩看点时间轴（补档直通车）</h2>
+  ${hlBlocks || '<p class="muted">未检出高光时间段</p>'}
+</div>
+
+<div class="card">
+  <h2>💬 观众在聊什么</h2>
+  ${emojiHtml}
+  ${phraseHtml}
+  ${nickHtml}
+  ${concernHtml}
+  ${giftHtml}
+  ${!emojiHtml && !phraseHtml && !nickHtml && !concernHtml && !giftHtml ? '<p class="muted">暂无词频数据</p>' : ''}
+</div>
+
+<details class="expert-details">
+  <summary>查看专家指标与底层统计数据</summary>
+  <div class="expert-content">
+    <div class="card" style="margin-top:0">
+      <h3 style="margin-top:0;font-size:15px;color:#1e293b;">弹幕密度曲线（10s 桶加权，红线为高光区间）</h3>
+      <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">
+        <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
+        <polyline fill="none" stroke="#2563eb" stroke-width="1.6" points="${pts.join(' ')}"/>
+        ${marks.join('')}
+      </svg>
+      <div class="muted" style="margin-top:6px;">峰值加权 ${peak} · 阈值 ${st.threshold ?? '-'}（均值 ${st.weighted_mean_10s ?? '-'}，模式 ${escapeHtml(st.threshold_mode || '-')}） · 全片 ${st.span_minutes ?? 0} 分钟</div>
+    </div>
+
+    <div class="card" style="margin-bottom:0">
+      <h3 style="margin-top:0;font-size:15px;color:#1e293b;">底层统计指标</h3>
+      <table>
+        <tr><th>指标</th><th>值</th></tr>
+        <tr><td>弹幕总量</td><td>${typeCounts.comment ?? 0} 条（礼物事件 ${typeCounts.gift ?? 0} 次，已剔除系统事件 ${typeCounts.gift_system_filtered ?? 0} 条）</td></tr>
+        <tr><td>弹幕时长 / 均速</td><td>${st.span_minutes ?? 0} 分钟 / ${st.rate_per_min ?? 0} 条·分⁻¹</td></tr>
+        <tr><td>独立用户</td><td>${st.unique_users ?? 0}</td></tr>
+        <tr><td>文本重复率</td><td>${pyRound((st.dup_rate || 0) * 100, 1)}%（重复 ${st.dup_text ?? 0} 条，均值长度 ${st.text_len_mean ?? 0} 字）</td></tr>
+        <tr><td>10s 桶（comment）</td><td>max ${b10.max ?? 0} · p99 ${b10.p99 ?? 0} · p90 ${b10.p90 ?? 0} · p50 ${b10.p50 ?? 0} · mean ${b10.mean ?? 0}</td></tr>
+        <tr><td>60s 桶（comment）</td><td>max ${b60.max ?? 0} · p90 ${b60.p90 ?? 0} · p50 ${b60.p50 ?? 0} · mean ${b60.mean ?? 0}</td></tr>
+        <tr><td>阈值模式 / 加权均值</td><td>${escapeHtml(st.threshold_mode || '-')} / ${st.weighted_mean_10s ?? '-'}（阈值 ${st.threshold ?? '-'}）</td></tr>
+        <tr><td>高光区间</td><td>检出 ${st.intervals_total ?? 0} 个，展示前 ${Math.min(ivs.length, TOP_N_HIGHLIGHTS)} 个</td></tr>
+      </table>
+    </div>
+  </div>
+</details>
+
+<div class="footer">由 K-Recorder AI 弹幕分析生成。</div>
 </div></body></html>`;
 }
 
@@ -746,6 +923,12 @@ class DanmakuAnalysisService {
           res.model = callRes.model;
           res.summary = String(callRes.data.session_summary || '').trim();
           res.llm_ok = true;
+          if (!res.stats.llm_tags) {
+            res.stats.llm_tags = { atmosphere: [], nicknames: [], concerns: [] };
+          }
+          res.stats.llm_tags.atmosphere = sanitizeTags(callRes.data.atmosphere_tags, 5, 15);
+          res.stats.llm_tags.nicknames = sanitizeTags(callRes.data.fan_nicknames, 5, 15);
+          res.stats.llm_tags.concerns = sanitizeTags(callRes.data.fan_concerns, 5, 15);
           const byIdx = new Map();
           for (const h of callRes.data.highlights || []) {
             if (h && typeof h === 'object' && /^\d+$/.test(String(h.index ?? ''))) {
@@ -826,6 +1009,7 @@ module.exports.computeStats = (...args) => computeStats(...args);
 module.exports.serializeResult = serializeResult;
 module.exports.renderHtml = renderHtml;
 module.exports.buildPayload = buildPayload;
+module.exports.sanitizeTags = sanitizeTags;
 module.exports.pyRound = pyRound;
 module.exports.isSystemEvent = isSystemEvent;
 module.exports.percentile = percentile;

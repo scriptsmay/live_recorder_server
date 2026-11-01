@@ -7,7 +7,8 @@
  */
 
 const svc = require('../server/services/DanmakuAnalysisService');
-const { computeStats, serializeResult, renderHtml, buildPayload, pyRound, isSystemEvent, percentile } = svc;
+const { computeStats, serializeResult, renderHtml, buildPayload, pyRound, isSystemEvent, percentile, sanitizeTags } =
+  svc;
 
 const c = (ts, text, uid = 'u1', username = '观众') => ({ type: 'comment', ts_ms: ts, text, user_id: uid, username });
 const g = (ts, name = '礼物#abc==', uid = 'u1') => ({
@@ -115,6 +116,47 @@ describe('computeStats：两条口径不混（统计 comment_all / 检测过滤�
       ['哈', 1],
     ]);
     expect(stats.top_gifts).toEqual([['礼物#a==', 1]]);
+    expect(stats.llm_tags).toEqual({ atmosphere: [], nicknames: [], concerns: [] });
+    expect(stats.wordcloud.emojis).toEqual([]);
+    expect(stats.wordcloud.phrases).toEqual([
+      ['来了', 2],
+      ['好的', 1],
+      ['无身份', 1],
+      ['空桶', 1],
+      ['哈哈', 1],
+      ['哈', 1],
+    ]);
+  });
+
+  test('wordcloud 独立分桶：表情包（命中 PLACEHOLDER_RE）与文字刷屏词各自排行榜', () => {
+    const testEvents = [
+      c(1000, '[666]'),
+      c(2000, '[666]'),
+      c(3000, '[赞]'),
+      c(4000, '加油'),
+      c(5000, '加油'),
+      c(6000, '冲冲冲'),
+    ];
+    const { stats: st } = computeStats('wc', testEvents, 0);
+    expect(st.llm_tags).toEqual({
+      atmosphere: [],
+      nicknames: [],
+      concerns: [],
+    });
+    expect(st.wordcloud.emojis).toEqual([
+      ['[666]', 2],
+      ['[赞]', 1],
+    ]);
+    expect(st.wordcloud.phrases).toEqual([
+      ['加油', 2],
+      ['冲冲冲', 1],
+    ]);
+    expect(st.top_phrases).toEqual([
+      ['[666]', 2],
+      ['加油', 2],
+      ['[赞]', 1],
+      ['冲冲冲', 1],
+    ]);
   });
 
   test('60s 桶统计口径同样含无身份行：7 条、均值 7', () => {
@@ -289,16 +331,29 @@ describe('buildPayload / serializeResult / renderHtml', () => {
     no_danmaku: false,
   };
 
-  test('buildPayload：概览 + 前 8 高频词 + 序号对齐的高光列表', () => {
+  test('buildPayload：概览 + 全量 15 条高频词 + 序号对齐的高光列表', () => {
     const phrases = Array.from({ length: 15 }, (_, i) => [`w${i}`, 10 - i]);
     const payload = buildPayload({ ...baseStats, top_phrases: phrases }, [mkIv(0)]);
     expect(payload).toContain('【整场概览】');
     expect(payload).toContain('文本重复率 47.7%');
-    expect(payload).toContain('w0×10、w1×9、w2×8、w3×7、w4×6、w5×5、w6×4、w7×3');
-    expect(payload).not.toContain('w8×');
+    expect(payload).toContain(
+      'w0×10、w1×9、w2×8、w3×7、w4×6、w5×5、w6×4、w7×3、w8×2、w9×1、w10×0、w11×-1、w12×-2、w13×-3、w14×-4'
+    );
     expect(payload).toContain('【高光候选区间（共 1 个，按热度排序）】');
     expect(payload).toContain('1. 00:00:00（峰值加权 10）样本弹幕：');
     expect(payload).toContain('   好 | 冲');
+  });
+
+  test('sanitizeTags：防御性清洗（非数组返回空、trim、去空、截断 15 字、最多 5 项）', () => {
+    expect(sanitizeTags(null)).toEqual([]);
+    expect(sanitizeTags(undefined)).toEqual([]);
+    expect(sanitizeTags('not an array')).toEqual([]);
+    expect(sanitizeTags(123)).toEqual([]);
+    expect(sanitizeTags([null, undefined, 123, '', '   ', '正常标签'])).toEqual(['正常标签']);
+    expect(sanitizeTags(['  带空格标签  '])).toEqual(['带空格标签']);
+    expect(sanitizeTags(['这是一个超过十五个字符的很长很长的标签内容'])).toEqual(['这是一个超过十五个字符的很长很']);
+    const many = ['t1', 't2', 't3', 't4', 't5', 't6', 't7'];
+    expect(sanitizeTags(many)).toEqual(['t1', 't2', 't3', 't4', 't5']);
   });
 
   test('serializeResult：8 个顶层键 + highlights 截前 10', () => {
@@ -353,5 +408,82 @@ describe('buildPayload / serializeResult / renderHtml', () => {
     expect(html).toContain('LLM 层未成功');
     expect(html).toContain('本报告为纯统计结果');
     expect(html.match(/<script/g)).toBeNull();
+  });
+
+  test('renderHtml：人话版排版（四项概览卡、氛围 chips、词云分桶、折叠专家详情）与 XSS 防护', () => {
+    const fullStats = {
+      ...baseStats,
+      llm_tags: {
+        atmosphere: ['<script>氛围</script>', '轻松闲聊'],
+        nicknames: ['<tag>宝宝</tag>'],
+        concerns: ['<img src=x>早点休息'],
+      },
+      wordcloud: {
+        emojis: [['[666]', 10]],
+        phrases: [['加油', 20]],
+      },
+    };
+    const html = renderHtml({
+      session_id: '100',
+      stats: fullStats,
+      summary: '一场温馨的直播',
+      llm_ok: true,
+      llm_error: '',
+      model: 'deepseek-v4.1-flash',
+      elapsed_s: 3.5,
+      intervals: [mkIv(0, { label: '首杀高光', reason: '团战精彩' })],
+    });
+
+    // 人话版四大模块验证
+    expect(html).toContain('直播时长');
+    expect(html).toContain('互动小伙伴');
+    expect(html).toContain('弹幕规模');
+    expect(html).toContain('高光时刻');
+
+    // 总结与氛围 chips
+    expect(html).toContain('一场温馨的直播');
+    expect(html).toContain('&lt;script&gt;氛围&lt;/script&gt;');
+    expect(html).toContain('轻松闲聊');
+
+    // 词云分桶与语义标签
+    expect(html).toContain('[666]');
+    expect(html).toContain('加油');
+    expect(html).toContain('&lt;tag&gt;宝宝&lt;/tag&gt;');
+    expect(html).toContain('&lt;img src=x&gt;早点休息');
+
+    // 原生 details 折叠专家指标
+    expect(html).toContain('<details');
+    expect(html).toContain('<summary');
+    expect(html).toContain('查看专家指标与底层统计数据');
+    expect(html).toContain('</details>');
+
+    // 零外部脚本
+    expect(html.match(/<script/g)).toBeNull();
+  });
+
+  test('renderHtml：向下兼容旧数据（缺失 llm_tags 或 wordcloud 时优雅降级不抛错）', () => {
+    const legacyStats = {
+      ...baseStats,
+      // 故意不传 llm_tags 与 wordcloud，模拟存量历史数据
+      llm_tags: undefined,
+      wordcloud: undefined,
+    };
+    const html = renderHtml({
+      session_id: 'legacy-99',
+      stats: legacyStats,
+      summary: '旧记录总结',
+      llm_ok: true,
+      llm_error: '',
+      model: 'legacy-model',
+      elapsed_s: 2.1,
+      intervals: [mkIv(0)],
+    });
+
+    expect(html).toContain('legacy-99');
+    expect(html).toContain('旧记录总结');
+    expect(html).toContain('查看专家指标与底层统计数据');
+    // 降级使用 top_phrases 正常展示
+    expect(html).toContain('好');
+    expect(html).toContain('冲');
   });
 });

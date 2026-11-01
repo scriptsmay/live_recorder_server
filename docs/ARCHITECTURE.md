@@ -187,6 +187,7 @@ VIDEO_DOWNLOAD_DIR/
 
 - **api_key 只走环境变量 `AI_ANALYSIS_API_KEY`**，base_url/model 走 settings 表；key 绝不入库、不落日志、不进前端
 - 报告读取端点由数字 sessionId 经 `getDanmakuAnalysisHtmlPath()` 唯一推导，不信任库内 `report_path` 列（对齐路径唯一推导惯例）
+- **报告排版**：`danmaku_analysis/{sid}.html` 为自包含静态 HTML（零 JS 零外链），采用人话化排版（整场总结与氛围标签、四项概览卡、高光时间轴、表情与刷屏词独立分桶、原生 details 折叠专家指标与密度曲线），结合 LLM 语义标签（氛围/昵称/关心的事）展现
 - 轻量原则：不引入 Redis 队列/chokidar，进程内 Promise 池即可；watchdog 崩溃遗留的 `running` 僵尸行只会永久挡住该场自动重算，人工 force 可解
 - 历史批量产出经 `scripts/import-danmaku-analysis.js`（默认 dry-run，`--apply` 落库）导入后，watchdog 经表排重天然不重算
 

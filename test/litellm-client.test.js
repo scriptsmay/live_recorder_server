@@ -155,3 +155,12 @@ describe('completeWithFallback', () => {
     expect(axios.post).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SYSTEM_PROMPT 契约规范', () => {
+  test('包含语义分类字段与空值防编造约束', () => {
+    expect(client.SYSTEM_PROMPT).toContain('atmosphere_tags');
+    expect(client.SYSTEM_PROMPT).toContain('fan_nicknames');
+    expect(client.SYSTEM_PROMPT).toContain('fan_concerns');
+    expect(client.SYSTEM_PROMPT).toContain('严禁编造');
+  });
+});

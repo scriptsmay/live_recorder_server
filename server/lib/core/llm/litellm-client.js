@@ -24,8 +24,12 @@ const SYSTEM_PROMPT =
   '你是直播弹幕分析助手。输入是一场直播的统计概览与若干高光时间区间的弹幕样本。' +
   '请输出严格的 JSON（不要 markdown 代码块、不要多余文字），结构：' +
   '{"session_summary": "整场 2~4 句中文总结", ' +
+  '"atmosphere_tags": ["2~4个4~6字氛围短标签"], ' +
+  '"fan_nicknames": ["粉丝对主播称呼，无或非粉籍直播必须输出空数组[]，严禁编造"], ' +
+  '"fan_concerns": ["观众核心关心事项或叮嘱，无则必须输出空数组[]，严禁编造"], ' +
   '"highlights": [{"index": 1, "label": "8 字内短标题", "reason": "一句话说明这段为什么是高光"}]}。' +
-  '要求：highlights 的 index 必须与输入的高光区间序号一一对应；只依据给定样本，不要编造未出现的内容；' +
+  '要求：highlights 的 index 必须与输入的高光区间序号一一对应；' +
+  'fan_nicknames 与 fan_concerns 仅从给定样本与高频刷屏词提炼，无则必须输出空数组 []，严禁编造；' +
   '不得声称分析过礼物名称（礼物名是平台混淆串）。';
 
 const STRICT_SUFFIX =

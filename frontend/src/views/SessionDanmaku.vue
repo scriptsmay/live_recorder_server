@@ -567,9 +567,36 @@ onMounted(() => {
 
         <div class="px-4 py-4">
           <template v-if="aiDone">
+            <div
+              v-if="((aiRecord?.stats?.llm_tags as any)?.atmosphere || []).length"
+              class="flex flex-wrap gap-1.5 mb-2.5"
+            >
+              <span
+                v-for="(tag, ti) in (aiRecord?.stats?.llm_tags as any).atmosphere"
+                :key="ti"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-pink-50 text-pink-700 border border-pink-200"
+              >
+                {{ tag }}
+              </span>
+            </div>
             <p v-if="aiRecord?.summary" class="text-sm leading-relaxed text-gray-700">
               {{ aiRecord.summary }}
             </p>
+            <div
+              v-if="((aiRecord?.stats?.wordcloud as any)?.phrases || []).length"
+              class="flex flex-wrap items-center gap-1.5 text-xs text-gray-600 mt-2.5"
+            >
+              <span class="text-gray-400 font-medium">刷屏热词：</span>
+              <span
+                v-for="([p, c], pi) in (
+                  (aiRecord?.stats?.wordcloud as any).phrases as [string, number][]
+                ).slice(0, 8)"
+                :key="pi"
+                class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100"
+              >
+                {{ p }} <span class="text-blue-400">×{{ c }}</span>
+              </span>
+            </div>
             <p
               v-else-if="aiRecord?.llm_error"
               class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 text-xs text-amber-700"
