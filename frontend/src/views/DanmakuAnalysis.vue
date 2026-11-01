@@ -349,7 +349,7 @@ onMounted(loadData)
                         </span>
                       </div>
                       <div
-                        v-else-if="detailMap[r.session_id].llm_error"
+                        v-if="!detailMap[r.session_id].summary && detailMap[r.session_id].llm_error"
                         class="text-xs text-red-500"
                       >
                         LLM 未成功：{{ detailMap[r.session_id].llm_error }}

@@ -598,7 +598,7 @@ onMounted(() => {
               </span>
             </div>
             <p
-              v-else-if="aiRecord?.llm_error"
+              v-if="!aiRecord?.summary && aiRecord?.llm_error"
               class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 text-xs text-amber-700"
             >
               <svg
@@ -617,7 +617,7 @@ onMounted(() => {
               <span>LLM 未成功（以下为纯统计结果）：{{ aiRecord.llm_error }}</span>
             </p>
             <p
-              v-else-if="aiRecord?.status === 'no_danmaku'"
+              v-if="!aiRecord?.summary && aiRecord?.status === 'no_danmaku'"
               class="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5 text-xs text-gray-500"
             >
               该会话无可分析弹幕
