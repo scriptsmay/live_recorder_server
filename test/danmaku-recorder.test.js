@@ -398,4 +398,56 @@ describe('DanmakuRecorder.writeBatch — 批次时间戳分配', () => {
       else process.env.VIDEO_DOWNLOAD_DIR = prevDir;
     }
   });
+
+  test('extensionDanmakuEnabled 对非扩展采集平台（huya）不启动采集', async () => {
+    const DataService = require('../server/services/DataService');
+    jest.spyOn(DataService, 'getSetting').mockResolvedValueOnce('false');
+    const openSpy = jest.spyOn(fs, 'openSync');
+
+    const captureId = await DanmakuRecorder.startCapture({
+      sessionId: 72,
+      roomId: 22,
+      roomUrl: 'https://www.huya.com/721931',
+      platform: 'huya',
+      recordingStartedAt: 1700000000000,
+      extensionDanmakuEnabled: true,
+    });
+
+    expect(captureId).toBeNull();
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(DanmakuRecorder.isCapturing('https://www.huya.com/721931')).toBe(false);
+  });
+
+  test('同一房间同一录制会话重复 startCapture 幂等，不会重复打开文件描述符', async () => {
+    const pool = require('../server/db/index');
+    const DataService = require('../server/services/DataService');
+    const prevDir = process.env.VIDEO_DOWNLOAD_DIR;
+    process.env.VIDEO_DOWNLOAD_DIR = '/tmp/xhs-idempotent-test';
+
+    jest.spyOn(DataService, 'getSetting').mockResolvedValue('false');
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const openSpy = jest.spyOn(fs, 'openSync').mockReturnValue(99);
+    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: 999 }] });
+
+    try {
+      const params = {
+        sessionId: 73,
+        roomId: 26,
+        roomUrl: 'https://www.xiaohongshu.com/livestream/570523582342626239',
+        platform: 'xiaohongshu',
+        recordingStartedAt: 1700000000000,
+        extensionDanmakuEnabled: true,
+      };
+
+      const first = await DanmakuRecorder.startCapture(params);
+      const second = await DanmakuRecorder.startCapture(params);
+
+      expect(first).toBe(999);
+      expect(second).toBe(999);
+      expect(openSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      if (prevDir === undefined) delete process.env.VIDEO_DOWNLOAD_DIR;
+      else process.env.VIDEO_DOWNLOAD_DIR = prevDir;
+    }
+  });
 });

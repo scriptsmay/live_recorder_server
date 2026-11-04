@@ -19,8 +19,7 @@ const hlsGenerator = require('../lib/core/hls-generator');
 const hlsCleanupService = require('../services/HLSCleanupService');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const { detectPlatform } = require('../lib/utils/platform-detector');
-
-const EXTENSION_DANMAKU_PLATFORMS = new Set(['kuaishou', 'xiaohongshu']);
+const { EXTENSION_DANMAKU_PLATFORMS } = require('../lib/utils/danmaku-platforms');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../../package.json');

@@ -5,6 +5,7 @@ const DataService = require('../../../services/DataService');
 const { getDanmakuJsonlPath, getOrphanDanmakuPath } = require('../../utils/tool');
 const { detectPlatform } = require('../../utils/platform-detector');
 const { normalizeRoomUrl } = require('../../utils/room-url');
+const { supportsExtensionDanmaku } = require('../../utils/danmaku-platforms');
 const { createDanmakuClient } = require('./client/DanmakuClientFactory');
 
 // 原生弹幕客户端攒批参数：500ms 或 20 条，先到先触发
@@ -83,9 +84,20 @@ class DanmakuRecorder {
     recordingStartedAt,
     extensionDanmakuEnabled = false,
   }) {
+    // 房间级开关只对扩展采集平台生效：其他平台开启后既不会有扩展推送，
+    // 也不应在这里凭空创建空的采集记录与 JSONL 文件。
+    const extensionPlatformAllowed = extensionDanmakuEnabled && supportsExtensionDanmaku(platform);
     const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
-    if (enabled !== 'true' && !extensionDanmakuEnabled) {
+    if (enabled !== 'true' && !extensionPlatformAllowed) {
       return null;
+    }
+
+    // 幂等：同一房间同一录制会话已有活跃采集时直接复用。
+    // 录制中动态开启（PUT /rooms/:id）与 RecorderService 启动可能并发触发
+    // startCapture，重复执行会打开第二个 fd 并覆盖 activeSessions 条目，泄漏旧 fd。
+    const activeSession = this.activeSessions.get(roomUrl);
+    if (activeSession && String(activeSession.sessionId) === String(sessionId)) {
+      return activeSession.captureId;
     }
 
     let rawPath;
@@ -590,7 +602,14 @@ class DanmakuRecorder {
   async _writeOrphanBatch(roomUrl, events) {
     const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
-      const room = typeof DataService.getRoomByUrl === 'function' ? await DataService.getRoomByUrl(roomUrl) : null;
+      let room = null;
+      try {
+        room = await DataService.getRoomByUrl(roomUrl);
+      } catch (err) {
+        // 查询失败时按房间已开启处理：孤儿文件是最坏兜底，宁可多落一份也不丢数据
+        console.warn('[DanmakuRecorder] 查询房间弹幕开关失败，按已开启处理以保留孤儿数据:', err.message);
+        room = { extension_danmaku_enabled: true };
+      }
       if (room?.extension_danmaku_enabled !== true) {
         // 采集未启用时不需要落孤儿：扩展本不该向后端推
         return null;

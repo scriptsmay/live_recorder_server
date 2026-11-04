@@ -13,6 +13,7 @@ const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const { SUPPORTED_EXT_REGEX } = require('../config/config');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { detectPlatform } = require('../lib/utils/platform-detector');
 const { isUnexpectedExit } = require('../lib/utils/exit-status');
 const { fetchRoomCoverByUrl } = require('../lib/core/polling/checkers');
 
@@ -989,7 +990,9 @@ class RecorderService {
           sessionId,
           roomId: room.id,
           roomUrl: room.room_url,
-          platform: room.polling_platform || 'kuaishou',
+          // 不能只信 polling_platform：经 notify/live_download 直接建房的房间该列可能为 NULL，
+          // 统一回退到按 URL 探测，避免把虎牙/B站等房间误标成 kuaishou 并启动无效采集。
+          platform: room.polling_platform || detectPlatform(room.room_url) || 'kuaishou',
           recordingStartedAt: sessionStartMs,
           extensionDanmakuEnabled: room.extension_danmaku_enabled === true,
         })

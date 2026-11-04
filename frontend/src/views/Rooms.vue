@@ -535,11 +535,7 @@ onMounted(() => {
                     录制
                   </span>
                   <span
-                    v-if="
-                      r.extension_danmaku_enabled ||
-                      r.polling_platform === 'kuaishou' ||
-                      r.polling_platform === 'xiaohongshu'
-                    "
+                    v-if="r.polling_platform === 'kuaishou' || r.polling_platform === 'xiaohongshu'"
                     class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
                     :class="
                       r.extension_danmaku_enabled

@@ -328,7 +328,7 @@ router.put('/rooms/:id', async (req, res) => {
     }
 
     if (sets.length === 0) {
-      const msg = isActive ? '录制中仅可更新通知开关与投稿模板' : '无更新字段';
+      const msg = isActive ? '录制中仅可更新通知开关、浏览器插件弹幕采集与投稿模板' : '无更新字段';
       return res.status(400).json({ status: 'Error', message: msg });
     }
     const blocked = Object.keys(req.body).filter(
@@ -337,7 +337,7 @@ router.put('/rooms/:id', async (req, res) => {
     if (blocked.length > 0) {
       return res.status(400).json({
         status: 'Error',
-        message: '录制中仅可更新通知开关与投稿模板',
+        message: isActive ? '录制中仅可更新通知开关、浏览器插件弹幕采集与投稿模板' : '包含不可更新的字段',
       });
     }
     values.push(id);
