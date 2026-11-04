@@ -41,7 +41,7 @@ describe('XiaohongshuChecker', () => {
       roomId: '570523767964993440',
       hostId: '5f849379000000000101e56e',
       isProfileUrl: false,
-      canonicalUrl: 'https://www.xiaohongshu.com/livestream/570523767964993440?host_id=5f849379000000000101e56e',
+      canonicalUrl: 'https://www.xiaohongshu.com/livestream/570523767964993440',
     });
 
     const profileParsed = XiaohongshuChecker.parseUrlIdentifiers(

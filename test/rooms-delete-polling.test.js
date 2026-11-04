@@ -110,7 +110,7 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
       );
     const checkRoomSpy = jest.spyOn(pollingManager, 'checkRoom').mockResolvedValueOnce(undefined);
 
-    const canonicalUrl = 'https://www.xiaohongshu.com/livestream/570523767964993440?host_id=5f849379000000000101e56e';
+    const canonicalUrl = 'https://www.xiaohongshu.com/livestream/570523767964993440';
     const createdRow = {
       id: 99,
       room_url: canonicalUrl,

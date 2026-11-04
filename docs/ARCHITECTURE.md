@@ -93,7 +93,7 @@ Chrome 扩展 ───▶│ app: node server/app.js + ffmpeg │──▶ /dat
 
 ### 弹幕数据流（Chrome 扩展 → 后端）
 
-Chrome 扩展在快手直播间页面注入 `inject.js` 拦截 WebSocket 弹幕，经 `content.js` 转发给 `background.js`，批量推送到后端 `POST /api/danmaku/batch`。**扩展侧弹幕发送与后端录制状态联动**：仅在录制中时才推送弹幕数据，未录制时事件保留在内存缓冲区（上限 5000 条）。
+Chrome 扩展在快手与小红书直播间页面注入 `inject.js` 拦截弹幕（快手采用 WebSocket protobuf/JSON 双模式；小红书采用 RWP WebSocket `t=4` SYNC 帧 Base64 解码 + DOM `MutationObserver` 评论区虚拟列表双保险去重模式），经 `content.js` 转发给 `background.js`，批量推送到后端 `POST /api/danmaku/batch`。**扩展侧弹幕发送与后端录制状态联动**：仅在录制中时才推送弹幕数据，未录制时事件保留在内存缓冲区（上限 5000 条）。
 
 ```text
 [Chrome Extension]                                                    [Server]

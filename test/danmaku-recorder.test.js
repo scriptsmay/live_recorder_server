@@ -297,4 +297,54 @@ describe('DanmakuRecorder.writeBatch — 批次时间戳分配', () => {
 
     normalizeSpy.mockRestore();
   });
+
+  test('writeBatch 对带追踪参数的小红书直播间 URL 自动规范化后命中活跃采集会话', async () => {
+    DanmakuRecorder.activeSessions.set('https://www.xiaohongshu.com/livestream/570523582342626238', {
+      sessionId: 42,
+      captureId: 99,
+      fd: 10,
+      startedAt: 1700000000000,
+      eventCount: 0,
+      rawPath: '/tmp/test/42.jsonl',
+    });
+
+    const res = await DanmakuRecorder.writeBatch(
+      'https://www.xiaohongshu.com/livestream/570523582342626238?track_id=live_a2a_chat&source=web_feed&xsec_token=abc',
+      [{ ts_abs_ms: 1700000005000, type: 'comment', user: 'XhsUser', userId: 'u_xhs', text: '加油' }]
+    );
+
+    expect(res).toEqual({ written: 1, error: null });
+    expect(
+      DanmakuRecorder.activeSessions.get('https://www.xiaohongshu.com/livestream/570523582342626238').eventCount
+    ).toBe(1);
+  });
+
+  test('_writeOrphanBatch 对小红书直播间登记 platform=xiaohongshu 而非硬编码 kuaishou', async () => {
+    const pool = require('../server/db/index');
+    const DataService = require('../server/services/DataService');
+    const prevDir = process.env.VIDEO_DOWNLOAD_DIR;
+    process.env.VIDEO_DOWNLOAD_DIR = '/tmp/xhs-orphan-test';
+
+    jest.spyOn(DataService, 'getSetting').mockResolvedValueOnce('true');
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'appendFileSync').mockImplementation(() => {});
+    pool.query.mockResolvedValueOnce({ rowCount: 0, rows: [] }).mockResolvedValueOnce({ rows: [{ id: 777 }] });
+
+    try {
+      const res = await DanmakuRecorder.writeBatch(
+        'https://www.xiaohongshu.com/livestream/570523582342626238?xsec_token=abc',
+        [{ ts_abs_ms: 1700000005000, type: 'comment', user: 'XhsUser', text: '孤儿弹幕' }]
+      );
+
+      expect(res.error).toBe('no_active_session');
+      expect(res.orphan).toMatchObject({ id: 777, event_count: 1 });
+      expect(pool.query).toHaveBeenLastCalledWith(
+        expect.stringContaining('INSERT INTO danmaku_capture_records'),
+        expect.arrayContaining(['https://www.xiaohongshu.com/livestream/570523582342626238', 'xiaohongshu'])
+      );
+    } finally {
+      if (prevDir === undefined) delete process.env.VIDEO_DOWNLOAD_DIR;
+      else process.env.VIDEO_DOWNLOAD_DIR = prevDir;
+    }
+  });
 });

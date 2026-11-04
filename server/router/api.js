@@ -17,6 +17,7 @@ const pollingManager = require('../lib/core/polling/PollingManager');
 const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
 const hlsCleanupService = require('../services/HLSCleanupService');
+const { normalizeRoomUrl } = require('../lib/utils/room-url');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../../package.json');
@@ -162,7 +163,10 @@ router.get('/notify/status', async (req, res) => {
   }
 
   try {
-    const room = await DataService.getRoomByUrl(url);
+    const normalizedUrl = normalizeRoomUrl(url);
+    const room =
+      (await DataService.getRoomByUrl(url)) ||
+      (normalizedUrl && normalizedUrl !== url ? await DataService.getRoomByUrl(normalizedUrl) : null);
     if (!room) {
       return res.json({ exists: false });
     }

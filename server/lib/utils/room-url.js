@@ -4,8 +4,8 @@ const { extractFirstUrlFromText } = require('./platform-detector');
 
 /**
  * Normalize Xiaohongshu / RedNote URLs into canonical form:
- * - /livestream/dynpath.../570523767964993440?... -> https://www.xiaohongshu.com/livestream/570523767964993440(?host_id=...)
- * - /hina/livestream/570523767964993440/... -> https://www.xiaohongshu.com/livestream/570523767964993440(?host_id=...)
+ * - /livestream/dynpath.../570523767964993440?... -> https://www.xiaohongshu.com/livestream/570523767964993440
+ * - /hina/livestream/570523767964993440/... -> https://www.xiaohongshu.com/livestream/570523767964993440
  * - /user/profile/5f849379000000000101e56e?... -> https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e
  *
  * @param {URL} parsed
@@ -36,10 +36,6 @@ function normalizeXiaohongshuParsedUrl(parsed) {
     const afterLive = segments.slice(liveIdx + 1).filter((seg) => !/^dynpath/i.test(seg));
     const roomIdCandidate = afterLive.find((seg) => /^\d{10,}$/.test(seg)) || afterLive[0];
     if (roomIdCandidate) {
-      const hostId = parsed.searchParams.get('host_id') || parsed.searchParams.get('hostId');
-      if (hostId && /^[a-f0-9]{24}$/i.test(hostId)) {
-        return `https://www.xiaohongshu.com/livestream/${roomIdCandidate}?host_id=${hostId}`;
-      }
       return `https://www.xiaohongshu.com/livestream/${roomIdCandidate}`;
     }
   }

@@ -5,7 +5,7 @@
 - 基础地址：`http://<host>:<port>/api`
 - 默认端口：`1123`
 - 请求格式：`application/json`
-- 直播间地址 `room_url` 作为稳定标识使用，服务端会在查询或创建前自动从分享口令文本中提取首个 HTTP(S) 链接，并移除分享跟踪 query string 和 fragment，避免同一地址被识别为新直播间。平台用于识别直播间的参数（如抖音 `web_rid`、小红书 `host_id`）会保留；小红书 `xhslink.com` 短链在创建直播间时会自动通过 302 还原为规范化的 `xiaohongshu.com` 地址。
+- 直播间地址 `room_url` 作为稳定标识使用，服务端会在查询或创建前自动从分享口令文本中提取首个 HTTP(S) 链接，并移除分享跟踪 query string 和 fragment，避免同一地址被识别为新直播间。平台用于识别直播间的参数（如抖音 `web_rid`）会保留；小红书 `xhslink.com` 短链在创建直播间时会自动通过 302 还原为规范化的 `https://www.xiaohongshu.com/livestream/{roomId}` 地址（去除 `?host_id=` / `?xsec_token=` 等临时参数，与浏览器扩展端保持严格一致）。
 
 ---
 

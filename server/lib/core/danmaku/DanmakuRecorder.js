@@ -3,6 +3,8 @@ const path = require('path');
 const pool = require('../../../db/index');
 const DataService = require('../../../services/DataService');
 const { getDanmakuJsonlPath, getOrphanDanmakuPath } = require('../../utils/tool');
+const { detectPlatform } = require('../../utils/platform-detector');
+const { normalizeRoomUrl } = require('../../utils/room-url');
 const { createDanmakuClient } = require('./client/DanmakuClientFactory');
 
 // 原生弹幕客户端攒批参数：500ms 或 20 条，先到先触发
@@ -293,9 +295,12 @@ class DanmakuRecorder {
    * @returns {Promise<{ written: number, error: string|null, orphan?: Object|null }>}
    */
   async writeBatch(roomUrl, events) {
-    const session = this.activeSessions.get(roomUrl);
+    const normalizedUrl = typeof roomUrl === 'string' ? normalizeRoomUrl(roomUrl) : roomUrl;
+    const session =
+      this.activeSessions.get(roomUrl) ||
+      (normalizedUrl && normalizedUrl !== roomUrl ? this.activeSessions.get(normalizedUrl) : null);
     if (!session) {
-      const orphan = await this._writeOrphanBatch(roomUrl, events);
+      const orphan = await this._writeOrphanBatch(normalizedUrl || roomUrl, events);
       return { written: 0, error: 'no_active_session', orphan };
     }
 
@@ -651,13 +656,14 @@ class DanmakuRecorder {
       if (merged.rowCount > 0) {
         orphanId = merged.rows[0].id;
       } else {
+        const platform = detectPlatform(roomUrl) || 'kuaishou';
         const result = await pool.query(
           `INSERT INTO danmaku_capture_records
              (session_id, room_id, room_url, platform, status, raw_path,
               event_count, started_at, ended_at)
            VALUES (NULL, NULL, $1, $2, 'orphan_pending', $3, $4, $5, $6)
            RETURNING id`,
-          [roomUrl, 'kuaishou', rawPath, records.length, startedAt, endedAt]
+          [roomUrl, platform, rawPath, records.length, startedAt, endedAt]
         );
         orphanId = result.rows[0].id;
       }

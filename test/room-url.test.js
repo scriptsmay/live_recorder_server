@@ -40,12 +40,13 @@ describe('normalizeRoomUrl', () => {
     expect(normalizeRoomUrl(shareText)).toBe('https://xhslink.com/o/6SoiafhhH6N');
   });
 
-  test('规范化小红书带 dynpath 防封段与 host_id 的直播间长链', () => {
+  test('规范化小红书带 dynpath 防封段与 host_id/xsec_token 的直播间长链为统一无参格式', () => {
     const longUrl =
       'https://www.xiaohongshu.com/livestream/dynpathxYjf2eb8/570523767964993440?timestamp=1793721783836&host_id=5f849379000000000101e56e&xsec_token=abc';
-    expect(normalizeRoomUrl(longUrl)).toBe(
-      'https://www.xiaohongshu.com/livestream/570523767964993440?host_id=5f849379000000000101e56e'
-    );
+    const webUrl =
+      'https://www.xiaohongshu.com/livestream/570523767964993440?track_id=live_a2a_chat&source=web_feed&xsec_token=xyz';
+    expect(normalizeRoomUrl(longUrl)).toBe('https://www.xiaohongshu.com/livestream/570523767964993440');
+    expect(normalizeRoomUrl(webUrl)).toBe('https://www.xiaohongshu.com/livestream/570523767964993440');
   });
 
   test('规范化小红书个人主页链接并去除多余参数', () => {
