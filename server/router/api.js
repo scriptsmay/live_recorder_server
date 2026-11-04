@@ -161,11 +161,14 @@ router.post('/notify/feishu_webhook', async (req, res) => {
 router.get('/notify/status', async (req, res) => {
   const url = req.query.url;
   const activeOnly = req.query.active === 'true' || req.query.active === '1';
+  // include_all=true：返回全部活跃录制（不限于开启扩展弹幕采集的房间），
+  // 供扩展 Popup 展示跨平台录制状态；默认行为保持不变。
+  const includeAll = req.query.include_all === 'true' || req.query.include_all === '1';
 
   if (!url && activeOnly) {
     try {
       const activeRes = await pool.query(
-        `SELECT r.id, r.room_url, r.room_name, r.polling_platform, r.status,
+        `SELECT r.id, r.room_url, r.room_name, r.avatar_url, r.polling_platform, r.status,
                 r.extension_danmaku_enabled, r.live_room_id, r.live_url,
                 s.id AS session_id, s.started_at
          FROM rooms r
@@ -178,7 +181,7 @@ router.get('/notify/status', async (req, res) => {
          ) s ON true
          WHERE r.deleted_at IS NULL
            AND r.monitoring_enabled IS NOT FALSE
-           AND r.extension_danmaku_enabled = TRUE
+           ${includeAll ? '' : 'AND r.extension_danmaku_enabled = TRUE'}
            AND r.status IN ('recording', 'paused')
          ORDER BY r.id ASC`
       );
@@ -194,6 +197,7 @@ router.get('/notify/status', async (req, res) => {
             live_room_id: row.live_room_id || '',
             live_url: liveUrl,
             room_name: row.room_name,
+            avatar_url: row.avatar_url || '',
             platform,
             status: row.status,
             extension_danmaku_enabled: row.extension_danmaku_enabled === true,
@@ -201,7 +205,7 @@ router.get('/notify/status', async (req, res) => {
             started_at: row.started_at || null,
           };
         })
-        .filter((room) => EXTENSION_DANMAKU_PLATFORMS.has(room.platform));
+        .filter((room) => includeAll || EXTENSION_DANMAKU_PLATFORMS.has(room.platform));
       return res.json({ status: 'ok', data: { rooms } });
     } catch (err) {
       console.error('[api] 活跃录制列表查询失败:', err);

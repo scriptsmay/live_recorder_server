@@ -134,4 +134,53 @@ describe('GET /api/notify/status URL 规范化回退', () => {
       session_id: 71,
     });
   });
+
+  test('active=true&include_all=true 返回全部平台活跃录制，且不再过滤弹幕开关', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 25,
+          room_url: CANONICAL_URL,
+          room_name: '王者荣耀女子公开赛',
+          avatar_url: 'https://avatar/xhs.jpg',
+          polling_platform: 'xiaohongshu',
+          status: 'recording',
+          extension_danmaku_enabled: false,
+          live_room_id: '570523582342626238',
+          live_url: CANONICAL_URL,
+          session_id: 71,
+          started_at: '2026-11-04T05:56:44.677Z',
+        },
+        {
+          id: 22,
+          room_url: 'https://www.huya.com/721931',
+          room_name: '虎牙房间',
+          polling_platform: 'huya',
+          status: 'paused',
+          extension_danmaku_enabled: false,
+          session_id: 72,
+          started_at: '2026-11-04T05:57:00.000Z',
+        },
+      ],
+    });
+
+    const res = await request(app).get('/api/notify/status').query({ active: 'true', include_all: 'true' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.rooms).toHaveLength(2);
+    expect(res.body.data.rooms[0]).toMatchObject({
+      id: 25,
+      platform: 'xiaohongshu',
+      avatar_url: 'https://avatar/xhs.jpg',
+      live_room_id: '570523582342626238',
+      extension_danmaku_enabled: false,
+    });
+    expect(res.body.data.rooms[1]).toMatchObject({
+      id: 22,
+      platform: 'huya',
+      status: 'paused',
+    });
+    const sql = pool.query.mock.calls[0][0];
+    expect(sql).not.toContain('extension_danmaku_enabled = TRUE');
+  });
 });

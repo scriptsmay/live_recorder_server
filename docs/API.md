@@ -445,10 +445,11 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 
 **参数（Query）：**
 
-| 参数   | 类型    | 必填 | 说明                                                                                                                                                       |
-| ------ | ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url    | string  | 否   | 直播间地址（`room_url`）；优先按目标地址匹配，未命中时回退匹配 `rooms.live_url`；与 `active=true` 二选一                                                   |
-| active | boolean | 否   | 传 `true` 或 `1` 时返回当前处于 `recording` / `paused`、开启了 `extension_danmaku_enabled = true` 且平台属于 `kuaishou` / `xiaohongshu` 的活跃录制房间列表 |
+| 参数        | 类型    | 必填 | 说明                                                                                                                                                       |
+| ----------- | ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url         | string  | 否   | 直播间地址（`room_url`）；优先按目标地址匹配，未命中时回退匹配 `rooms.live_url`；与 `active=true` 二选一                                                   |
+| active      | boolean | 否   | 传 `true` 或 `1` 时返回当前处于 `recording` / `paused`、开启了 `extension_danmaku_enabled = true` 且平台属于 `kuaishou` / `xiaohongshu` 的活跃录制房间列表 |
+| include_all | boolean | 否   | 与 `active=true` 搭配；传 `true` 或 `1` 时返回**全部**活跃录制（不要求 `extension_danmaku_enabled`，也不限制平台），用于扩展 Popup 展示跨平台录制状态      |
 
 **示例：**
 
@@ -458,6 +459,9 @@ curl 'http://127.0.0.1:1123/api/notify/status?url=https://live.example.com/room1
 
 # 扩展弹幕活跃任务发现
 curl 'http://127.0.0.1:1123/api/notify/status?active=true'
+
+# 扩展 Popup 跨平台录制状态
+curl 'http://127.0.0.1:1123/api/notify/status?active=true&include_all=true'
 ```
 
 **返回（`active=true` 活跃弹幕任务列表）：**
