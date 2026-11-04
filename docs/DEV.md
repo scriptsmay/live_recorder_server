@@ -49,10 +49,17 @@ lsof -i :3001
 **主动重启后建议清理脏数据：**
 
 ```bash
-node scripts/cleanup-dev.js
+npm run cleanup:dev   # 等价于 node scripts/cleanup-dev.js
 ```
 
-该脚本会：杀死孤儿进程 → 重命名 `.part` → 清除孤文件 DB 记录 → 中断遗留会话 → 追踪遗留文件到 recording_files。具体实现见 `scripts/cleanup-dev.js`。
+该脚本是「开发环境重置」而不是单纯的磁盘清理：
+
+- 杀掉 3001 端口进程、本仓库的 `node --watch` 与 ffmpeg 录制进程（按进程 cwd 校验，不会误伤其他项目）；
+- 清空 `VIDEO_DOWNLOAD_DIR`、`logs/`、`REPLAY_WORK_DIR`；
+- 清空录制 / 转码 / 弹幕 / 回放 / 上传 / 文件管理 / 审计等业务表，**保留** `rooms`、`admin_users`、`settings`、`upload_templates`、`biliup_accounts`、`replay_settings`；
+- 最后扫描下载目录并把遗留文件登记到 `recording_files`。
+
+具体实现见 `scripts/cleanup-dev.js`。
 
 - 录制进程日志（ffmpeg 输出）在 `logs/` 目录
 - 数据库独立：`ks_live_recorder_dev`（需手动 `CREATE DATABASE`，表结构自动迁移）

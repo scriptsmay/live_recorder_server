@@ -4,21 +4,19 @@
  * 在重启开发服务器前运行，清理孤儿进程和脏数据。
  * ⚠️ 注意：本脚本只清理开发环境相关进程，不会影响 PM2 生产环境
  *
- * 用法: node scripts/cleanup-dev.js
+ * 用法: npm run cleanup:dev（等价 node scripts/cleanup-dev.js）
  *
  * 清理内容：
  *   - 杀死占用端口 3001 的进程
- *   - 杀死 nodemon 和 node --watch 孤儿进程
- *   - 杀死残留的 stream-gears 和 ffmpeg 孤儿进程
- *   - dev_downloads/*.part → 重命名为 .flv
- *   - 删除孤文件（orphaned）和缺失文件（missing）的 DB 记录
- *   - 中断所有遗留的 recording 会话
- *   - 清空弹幕采集记录（danmaku_capture_records）
- *   - 清空弹幕压制记录（danmaku_burn_records）
+ *   - 杀死 nodemon 和 node --watch 孤儿进程（仅限本仓库工作目录）
+ *   - 杀死残留的 ffmpeg 录制进程（仅限本仓库工作目录，不影响其他项目）
+ *   - dev_downloads 下的录制 / 弹幕 / HLS 文件全部删除
+ *   - 清空录制、转码、弹幕、回放、上传、文件管理等业务数据表
  *
  * 保护机制：
  *   - 不会停止/删除任何 PM2 进程（生产环境由 PM2 管理）
- *   - 只操作开发相关端口和进程
+ *   - 只操作开发相关端口和进程；ffmpeg / node --watch 会校验进程 cwd
+ *   - 保留 rooms、admin_users、settings、upload_templates 等配置类表
  */
 
 const path = require('path');
@@ -34,10 +32,46 @@ require('../server/config/env').initEnv({ mode: env });
 
 const pool = require('../server/db/index');
 
-const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(__dirname, '..', 'dev_downloads');
-const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
-const REPLAY_WORK_DIR = process.env.REPLAY_WORK_DIR || path.join(__dirname, '..', 'dev_replay');
+const REPO_ROOT = path.resolve(__dirname, '..');
+const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR || path.join(REPO_ROOT, 'dev_downloads');
+const LOG_DIR = process.env.LOG_DIR || path.join(REPO_ROOT, 'logs');
+const REPLAY_WORK_DIR = process.env.REPLAY_WORK_DIR || path.join(REPO_ROOT, 'dev_replay');
 const DEV_PORT = process.env.PORT || '3001';
+
+/** 读取进程 cwd（取不到时返回空串），用于把进程清理限定在本仓库内 */
+function getProcessCwd(pid) {
+  // Linux（容器内）优先读 /proc，macOS 走 lsof
+  try {
+    return path.resolve(fs.readlinkSync(`/proc/${pid}/cwd`));
+  } catch (_) {}
+  try {
+    const out = execSync(`lsof -p ${pid} -a -d cwd -Fn 2>/dev/null`, { encoding: 'utf-8' });
+    const line = out.split('\n').find((l) => l.startsWith('n'));
+    return line ? path.resolve(line.slice(1)) : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function isProjectProcess(pid) {
+  const cwd = getProcessCwd(pid);
+  return cwd === REPO_ROOT || cwd.startsWith(`${REPO_ROOT}${path.sep}`);
+}
+
+function killPids(pids) {
+  let killed = 0;
+  for (const pid of pids) {
+    if (!isProjectProcess(pid)) {
+      console.log(`    ↷ 跳过非本项目进程 ${pid}`);
+      continue;
+    }
+    try {
+      execSync(`kill ${pid} 2>/dev/null`, { stdio: 'ignore' });
+      killed++;
+    } catch (_) {}
+  }
+  return killed;
+}
 
 console.log('========================================');
 console.log('  开发环境清理脚本');
@@ -109,12 +143,8 @@ async function cleanup() {
     }).trim();
     if (watchProcs) {
       const pids = watchProcs.split('\n').filter(Boolean);
-      for (const pid of pids) {
-        try {
-          execSync(`kill ${pid} 2>/dev/null`, { stdio: 'ignore' });
-        } catch (_) {}
-      }
-      console.log(`    ✅ 已清理 ${pids.length} 个 node --watch 进程`);
+      const killed = killPids(pids);
+      console.log(`    ✅ 已清理 ${killed} 个 node --watch 进程`);
     } else {
       console.log('    ✅ 无 node --watch 进程');
     }
@@ -122,11 +152,16 @@ async function cleanup() {
     console.log('    ✅ 无 node --watch 进程');
   }
 
-  // 4. 杀死残留的 ffmpeg 和 stream-gears 进程
-  console.log('  └─ 杀死残留录制进程...');
+  // 4. 杀死残留的 ffmpeg 录制进程（仅限本仓库）
+  console.log('  └─ 清理本项目残留录制进程...');
   try {
-    execSync('pkill -f "ffmpeg -i" 2>/dev/null', { stdio: 'ignore' });
-    console.log('    ✅ 录制进程已清理');
+    const ffmpegPids = execSync('pgrep -f "[f]fmpeg"', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+    if (ffmpegPids.length === 0) {
+      console.log('    ✅ 无残留录制进程');
+    } else {
+      const killed = killPids(ffmpegPids);
+      console.log(`    ✅ 已清理 ${killed} 个录制进程`);
+    }
   } catch (_) {
     console.log('    ✅ 无残留录制进程');
   }
@@ -181,49 +216,32 @@ async function cleanup() {
     const d = await pool.connect();
     await d.query('BEGIN');
 
-    // 清空 recording_files 表
-    const recordingFiles = await d.query('DELETE FROM recording_files RETURNING id');
-    if (recordingFiles.rowCount > 0) {
-      console.log(`  └─ 清空 recording_files: ${recordingFiles.rowCount} 条`);
-    } else {
-      console.log('  └─ recording_files 已为空');
-    }
+    // 只清业务数据表：保留 rooms / admin_users / settings / upload_templates /
+    // biliup_accounts / replay_settings 等配置与身份数据。
+    // 顺序为「子表 → 主表」，避免外键约束；不存在的表直接跳过（兼容旧库）。
+    const DATA_TABLES = [
+      'replay_upload_records',
+      'replay_records',
+      'upload_records',
+      'transcode_records',
+      'danmaku_analysis_records',
+      'danmaku_capture_records',
+      'recording_files',
+      'recording_sessions',
+      'managed_files',
+      'file_delete_audit_logs',
+      'recordings', // 历史废弃表，仅旧库存在
+    ];
 
-    // recordings 是历史废弃表，新库可能已删除。
-    const recordingsExists = await d.query(`SELECT to_regclass('public.recordings') AS table_name`);
-    if (recordingsExists.rows[0]?.table_name) {
-      const recordings = await d.query('DELETE FROM recordings RETURNING id');
-      if (recordings.rowCount > 0) {
-        console.log(`  └─ 清空 recordings: ${recordings.rowCount} 条`);
-      } else {
-        console.log('  └─ recordings 已为空');
+    for (const table of DATA_TABLES) {
+      const exists = await d.query('SELECT to_regclass($1) AS table_name', [`public.${table}`]);
+      if (!exists.rows[0]?.table_name) {
+        console.log(`  └─ ${table} 表不存在，跳过`);
+        continue;
       }
-    } else {
-      console.log('  └─ recordings 表不存在，跳过');
-    }
-
-    // 清空 recording_sessions 表
-    const sessions = await d.query('DELETE FROM recording_sessions RETURNING id');
-    if (sessions.rowCount > 0) {
-      console.log(`  └─ 清空 recording_sessions: ${sessions.rowCount} 条`);
-    } else {
-      console.log('  └─ recording_sessions 已为空');
-    }
-
-    // 清空 transcode_records 表
-    const transcodeRecords = await d.query('DELETE FROM transcode_records RETURNING id');
-    if (transcodeRecords.rowCount > 0) {
-      console.log(`  └─ 清空 transcode_records: ${transcodeRecords.rowCount} 条`);
-    } else {
-      console.log('  └─ transcode_records 已为空');
-    }
-
-    // 清空 danmaku_capture_records 表（弹幕采集记录）
-    const danmakuCaptureRecords = await d.query('DELETE FROM danmaku_capture_records RETURNING id');
-    if (danmakuCaptureRecords.rowCount > 0) {
-      console.log(`  └─ 清空 danmaku_capture_records: ${danmakuCaptureRecords.rowCount} 条`);
-    } else {
-      console.log('  └─ danmaku_capture_records 已为空');
+      // 表名为脚本内常量，不来自外部输入
+      const res = await d.query(`DELETE FROM ${table} RETURNING id`);
+      console.log(res.rowCount > 0 ? `  └─ 清空 ${table}: ${res.rowCount} 条` : `  └─ ${table} 已为空`);
     }
 
     // 房间复位

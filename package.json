@@ -27,6 +27,7 @@
     "test:coverage": "jest --coverage",
     "test:api": "jest test/api-coverage.test.js --verbose",
     "check-env": "bash scripts/check-env.sh",
+    "cleanup:dev": "node scripts/cleanup-dev.js",
     "release:patch": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major"
