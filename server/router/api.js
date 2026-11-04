@@ -20,6 +20,7 @@ const hlsCleanupService = require('../services/HLSCleanupService');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { EXTENSION_DANMAKU_PLATFORMS } = require('../lib/utils/danmaku-platforms');
+const { probeStream, isProbeableStreamUrl } = require('../lib/utils/stream-probe');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../../package.json');
@@ -289,6 +290,24 @@ router.get('/notify/status', async (req, res) => {
   } catch (err) {
     console.error('[api] 状态查询失败:', err);
     res.status(500).json({ exists: false, message: '查询失败' });
+  }
+});
+
+router.post('/notify/probe_stream', async (req, res) => {
+  const { url } = req.body || {};
+  if (!isProbeableStreamUrl(url)) {
+    return res.status(400).json({ status: 'Error', message: '仅支持小红书直播 CDN 地址' });
+  }
+
+  try {
+    const result = await probeStream(url);
+    if (!result.ok) {
+      return res.json({ status: 'Error', message: result.error || '探测失败' });
+    }
+    return res.json({ status: 'ok', data: result });
+  } catch (err) {
+    console.error('[api] 流画质探测失败:', err);
+    return res.status(500).json({ status: 'Error', message: '探测失败' });
   }
 });
 

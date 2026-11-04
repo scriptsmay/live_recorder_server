@@ -535,6 +535,42 @@ curl 'http://127.0.0.1:1123/api/notify/status?active=true&include_all=true'
 
 ---
 
+### POST /api/notify/probe_stream
+
+探测小红书直播流的真实画质（ffprobe 读取首个视频流）。直播地址本身不携带清晰度信息（如 `_hcv530` 只是 CDN 流变体标识），扩展 Popup 用它区分同一房间/同一页面上多条候选流。
+
+**安全与限制：**
+
+- 只接受小红书直播 CDN：主机以 `live` 开头且后缀为 `.xhscdn.com` / `.xhscdn.net`，其他地址返回 400；
+- 探测并发上限 3，超限返回 `busy`；成功结果缓存 5 分钟、失败缓存 1 分钟（按 `origin + pathname` 收敛，忽略签名参数）。
+
+**请求：**
+
+```json
+{ "url": "https://live-source-play.xhscdn.com/live/570526135062847546_hcv530.flv?userId=xxx" }
+```
+
+**返回（成功）：**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "ok": true,
+    "width": 1920,
+    "height": 1080,
+    "codec": "hevc",
+    "bit_rate": 5940000,
+    "fps": "30/1",
+    "measured_at": "2026-11-04T12:13:20.766Z"
+  }
+}
+```
+
+**返回（失败）：** `{ "status": "Error", "message": "probe_failed" }`（`unsupported_url` / `busy` / `timeout` 等）。
+
+---
+
 ### GET /api/sessions
 
 查询录制会话列表。支持分页、按房间和状态筛选。
