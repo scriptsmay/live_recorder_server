@@ -46,7 +46,8 @@ __pycache__/
 download.log
 data/
 
-# IDEs
+# IDEs / 浏览器自动化产物
+.playwright-mcp/
 .workbuddy/
 .claude/
 .worktrees/
