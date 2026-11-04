@@ -10,6 +10,7 @@ const { pollingManager } = require('../lib/core/polling');
 const XiaohongshuChecker = require('../lib/core/polling/XiaohongshuChecker');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { normalizeRoomUrl, isXiaohongshuProfileUrl } = require('../lib/utils/room-url');
+const { parseXiaohongshuIdentity } = require('../lib/utils/room-identity');
 const { isWithinRoot, resolveAndValidate } = require('../lib/utils/path-safety');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 
@@ -164,6 +165,11 @@ router.post('/rooms', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '缺少 room_url' });
     }
 
+    // 身份解析必须在 normalizeRoomUrl 之前：规范化会剥掉 ?host_id=，
+    // 而 host_id 是直播间链接归并到稳定主播目标的唯一线索（ADR-021）。
+    const rawInput = room_url;
+    let xhsIdentity = parseXiaohongshuIdentity(rawInput);
+
     room_url = normalizeRoomUrl(room_url);
 
     // 直接根据room_url自动检测平台
@@ -172,13 +178,23 @@ router.post('/rooms', async (req, res) => {
     // 若为小红书短链 (xhslink.com)，在入库前解析 302 还原为规范化的直播间或个人主页长链
     if (polling_platform === 'xiaohongshu' && /(?:^|\.|\/)xhslink\.com/i.test(room_url)) {
       const resolvedUrl = await XiaohongshuChecker.resolveShortUrl(room_url);
+      xhsIdentity = parseXiaohongshuIdentity(resolvedUrl) || xhsIdentity;
       room_url = normalizeRoomUrl(resolvedUrl);
       polling_platform = detectPlatform(room_url) || 'xiaohongshu';
     }
 
+    const hostUserId = xhsIdentity?.hostUserId || '';
+    const liveRoomId = xhsIdentity?.liveRoomId || '';
+    const liveUrl = xhsIdentity?.liveUrl || '';
+
+    // 同一直播间链接（带 host_id）归并到稳定的个人主页目标，避免每场开播新建房间。
+    if (polling_platform === 'xiaohongshu' && hostUserId && xhsIdentity?.profileUrl) {
+      room_url = xhsIdentity.profileUrl;
+    }
+
     // 小红书个人主页链接无法推导出当前直播间 room_id（每次开播重新生成），
     // 仅用于主播信息预登记：强制关闭轮询开关，避免每分钟抓一次主页。
-    const profileOnly = polling_platform === 'xiaohongshu' && isXiaohongshuProfileUrl(room_url);
+    const profileOnly = polling_platform === 'xiaohongshu' && Boolean(xhsIdentity?.isProfile);
 
     // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
     // 重新添加同名房间走复活语义：清 deleted_at 后按提交字段更新（保持房间 id 连续）。
@@ -202,6 +218,9 @@ router.post('/rooms', async (req, res) => {
         'polling_platform',
         'polling_interval',
         'extension_danmaku_enabled',
+        'host_user_id',
+        'live_room_id',
+        'live_url',
       ];
       const reqBody = {
         room_name,
@@ -214,6 +233,10 @@ router.post('/rooms', async (req, res) => {
         polling_platform,
         polling_interval,
         extension_danmaku_enabled,
+        // 仅写非空值：重新提交主页链接时不得清掉正在录制的场次信息。
+        host_user_id: hostUserId || undefined,
+        live_room_id: liveRoomId || undefined,
+        live_url: liveUrl || undefined,
       };
       for (const f of fieldsList) {
         if (reqBody[f] !== undefined) {
@@ -233,7 +256,22 @@ router.post('/rooms', async (req, res) => {
         }
       }
 
-      if (profileOnly || req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
+      // 直播间链接被归并到主页目标后，立即检测必须仍使用本场直播地址，
+      // 否则 checker 会把主页当成不可开播目标（ADR-021）。
+      const runtimeRoom = liveUrl
+        ? {
+            ...updatedRoom,
+            room_url: liveUrl,
+            live_url: liveUrl,
+            live_room_id: liveRoomId,
+            host_user_id: hostUserId || updatedRoom.host_user_id,
+          }
+        : updatedRoom;
+
+      if (liveUrl && updatedRoom.monitoring_enabled !== false && typeof pollingManager.checkRoom === 'function') {
+        // 归并到主页目标后，本场直播仍需立即检测一次以触发录制。
+        Promise.resolve(pollingManager.checkRoom(runtimeRoom)).catch(() => {});
+      } else if (profileOnly || req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
         await pollingManager.reloadRoom(updatedRoom.id);
       } else if (
         updatedRoom.monitoring_enabled !== false &&
@@ -247,8 +285,8 @@ router.post('/rooms', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id, polling_enabled, polling_platform, polling_interval, extension_danmaku_enabled)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id, polling_enabled, polling_platform, polling_interval, extension_danmaku_enabled, host_user_id, live_room_id, live_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         room_url,
         room_name || '',
@@ -261,6 +299,9 @@ router.post('/rooms', async (req, res) => {
         polling_platform || null,
         polling_interval || 60,
         extension_danmaku_enabled === true,
+        hostUserId,
+        liveRoomId,
+        liveUrl,
       ]
     );
     const createdRoom = result.rows[0];
@@ -268,7 +309,14 @@ router.post('/rooms', async (req, res) => {
 
     // 后续启动轮询；若未开启定时轮询但启用了监听，也立即异步执行一次开播检测（确保直播中添加房间能立即启动录制并回填主播名）
     // 小红书个人主页房间只跑这一次元信息拉取（昵称/头像），不建立定时轮询。
-    if (polling_enabled === true && !profileOnly) {
+    const runtimeRoom = liveUrl
+      ? { ...createdRoom, room_url: liveUrl, live_url: liveUrl, live_room_id: liveRoomId, host_user_id: hostUserId }
+      : createdRoom;
+
+    if (liveUrl && monitoring_enabled !== false && typeof pollingManager.checkRoom === 'function') {
+      // 本场直播间链接：合并到主页目标后立即检测一次，触发录制。
+      Promise.resolve(pollingManager.checkRoom(runtimeRoom)).catch(() => {});
+    } else if (polling_enabled === true && !profileOnly) {
       await pollingManager.reloadRoom(createdRoom.id);
     } else if (monitoring_enabled !== false && polling_platform && typeof pollingManager.checkRoom === 'function') {
       Promise.resolve(pollingManager.checkRoom(createdRoom)).catch(() => {});
@@ -388,7 +436,8 @@ router.put('/rooms/:id', async (req, res) => {
             .startCapture({
               sessionId: sess.id,
               roomId: updatedRoom.id,
-              roomUrl: updatedRoom.room_url,
+              // 弹幕以本场直播地址为运行期 key（ADR-021）；目标地址不参与扩展匹配。
+              roomUrl: updatedRoom.live_url || updatedRoom.room_url,
               platform: updatedRoom.polling_platform || detectedPlatform || 'kuaishou',
               recordingStartedAt: startedAtMs,
               extensionDanmakuEnabled: true,

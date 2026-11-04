@@ -9,6 +9,7 @@ const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFacto
 const recordingManager = require('../lib/core/RecordingManager');
 const notify = require('../lib/core/notify');
 const DataService = require('./DataService');
+const RoomTargetService = require('./RoomTargetService');
 const RecordingManager = require('../lib/core/RecordingManager');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const { SUPPORTED_EXT_REGEX } = require('../config/config');
@@ -259,6 +260,8 @@ class RecorderService {
       }
       const roomId = room?.id ?? null;
       const roomName = room?.room_name || roomUrl;
+      // 弹幕采集以运行期直播地址为 key（ADR-021）；旧会话没有 live_url 时回退目标地址。
+      const broadcastUrl = session.live_url || roomUrl;
 
       let engineName = 'unknown';
       try {
@@ -291,9 +294,13 @@ class RecorderService {
       );
 
       if (roomId) {
-        await pool.query(`UPDATE rooms SET status = 'idle', ffmpeg_pid = NULL, updated_at = NOW() WHERE id = $1`, [
-          roomId,
-        ]);
+        // 下播/录制结束后清空当前场次，保留目标配置与历史会话（ADR-021）。
+        await pool.query(
+          `UPDATE rooms
+           SET status = 'idle', ffmpeg_pid = NULL, live_room_id = '', live_url = '', updated_at = NOW()
+           WHERE id = $1`,
+          [roomId]
+        );
       }
       await this.delRoomCache(roomUrl);
 
@@ -324,7 +331,7 @@ class RecorderService {
       });
 
       // 停止弹幕采集
-      await this._handleDanmakuFinish(sessionId, roomUrl, trackerSegments);
+      await this._handleDanmakuFinish(sessionId, broadcastUrl, trackerSegments);
 
       try {
         const sess = await pool.query(
@@ -738,11 +745,13 @@ class RecorderService {
    * @param {string} params.room_url - 房间URL
    * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
    */
-  static async startRecording({ url, title, caption, room_url, roomCover }) {
+  static async startRecording({ url, title, caption, room_url, roomCover, host_user_id, live_room_id }) {
     const normalizedRoomUrl = normalizeRoomUrl(room_url);
     console.log('[RecorderService] 收到录制请求:', {
       title,
       room_url: normalizedRoomUrl,
+      host_user_id: host_user_id || undefined,
+      live_room_id: live_room_id || undefined,
       url: url?.slice(0, 60),
       caption,
       roomCover: roomCover ? 'yes' : 'no',
@@ -764,7 +773,30 @@ class RecorderService {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
 
-    const roomKey = normalizedRoomUrl;
+    // 快速路径：入参地址本身已在录制时直接拒绝，避免无谓的数据库解析。
+    if (await this.isActiveTask(normalizedRoomUrl)) {
+      console.log('[RecorderService] 录制请求被拒: active_task 已存在 (roomKey=' + normalizedRoomUrl + ')');
+      return { error: true, status: 200, code: 400, status_str: 'Already recording', message: '请勿重复开启' };
+    }
+
+    // ADR-021：先解析稳定目标，再以目标 URL 作为运行期 key。
+    // 小红书同一主播换场次时 live URL 会变，但 active_task / 房间状态必须
+    // 落在同一个 rooms 行上，否则并发开播会重复拉起 FFmpeg。
+    let room;
+    try {
+      room = await RoomTargetService.resolve({
+        roomUrl: room_url,
+        platform: detectPlatform(normalizedRoomUrl),
+        hostUserId: host_user_id,
+        liveRoomId: live_room_id,
+        roomName: title,
+      });
+    } catch (dbErr) {
+      console.error('[RecorderService] 数据库操作失败:', dbErr);
+      return { error: true, status: 200, code: 500, message: '数据库操作失败' };
+    }
+
+    const roomKey = room.room_url;
 
     if (await this.isActiveTask(roomKey)) {
       console.log('[RecorderService] 录制请求被拒: active_task 已存在 (roomKey=' + roomKey + ')');
@@ -783,14 +815,7 @@ class RecorderService {
         message: `下载线程池已满 (${activeTasksCount}/${poolSize})，请等待其他录制完成`,
       };
     }
-
-    let room;
-    try {
-      room = await this.getOrCreateRoom(roomKey, title);
-    } catch (dbErr) {
-      console.error('[RecorderService] 数据库操作失败:', dbErr);
-      return { error: true, status: 200, code: 500, message: '数据库操作失败' };
-    }
+    await this.setRoomCache(room).catch(() => {});
 
     if (room.monitoring_enabled === false) {
       console.log('[RecorderService] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');
@@ -851,6 +876,8 @@ class RecorderService {
   static async startRoomRecording({ roomId, caption, url, resumeSessionId = null, roomCover = '' }) {
     const room = await DataService.getRoomById(roomId);
     const roomKey = room.room_url;
+    // 运行期（弹幕采集、状态查询）使用本场直播地址；目标身份仍是 room.room_url。
+    const broadcastUrl = room.live_url || room.room_url;
     console.log(`[任务启动] 直播间 ${roomKey} 开始录制${caption ? ' - ' + caption : ''}`);
 
     // 封面来源：入参缺失时按房间 URL 自取兜底（扩展/Webhook/前端手动触发均不带 cover_url）
@@ -989,7 +1016,7 @@ class RecorderService {
         .startCapture({
           sessionId,
           roomId: room.id,
-          roomUrl: room.room_url,
+          roomUrl: broadcastUrl,
           // 不能只信 polling_platform：经 notify/live_download 直接建房的房间该列可能为 NULL，
           // 统一回退到按 URL 探测，避免把虎牙/B站等房间误标成 kuaishou 并启动无效采集。
           platform: room.polling_platform || detectPlatform(room.room_url) || 'kuaishou',

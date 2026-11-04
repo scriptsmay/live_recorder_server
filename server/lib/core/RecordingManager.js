@@ -382,8 +382,9 @@ class RecordingManager {
 
       // 新建会话是准备状态
       const session = await pool.query(
-        `INSERT INTO recording_sessions (room_url, started_at, output_dir, status, caption, stream_url, cover_url)
-         VALUES ($1, $2, $3, 'pending', $4, $5, $6)
+        `INSERT INTO recording_sessions
+           (room_url, started_at, output_dir, status, caption, stream_url, cover_url, live_room_id, live_url)
+         VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           room.room_url,
@@ -392,6 +393,8 @@ class RecordingManager {
           caption || '',
           streamUrl,
           coverUrl || '',
+          room.live_room_id || '',
+          room.live_url || '',
         ]
       );
       finalSessionId = session.rows[0].id;
@@ -426,6 +429,18 @@ class RecordingManager {
 
     if (!session.stream_url) {
       throw new Error(`会话 ${sessionId} 缺少直播流地址，无法恢复`);
+    }
+
+    // ADR-021：恢复录制时把会话记录的场次信息写回目标房间，
+    // 否则弹幕采集会用个人主页地址作为运行期 key，无法匹配扩展推送。
+    if (session.live_url) {
+      await pool.query(`UPDATE rooms SET live_room_id = $1, live_url = $2, updated_at = NOW() WHERE id = $3`, [
+        session.live_room_id || '',
+        session.live_url,
+        room.id,
+      ]);
+      room.live_room_id = session.live_room_id || '';
+      room.live_url = session.live_url;
     }
 
     console.log(`[恢复会话] 尝试恢复会话 ${sessionId} (直播间: ${room.room_name || room.room_url})`);

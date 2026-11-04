@@ -107,6 +107,17 @@ async function runMigration() {
       ALTER TABLE rooms ADD COLUMN IF NOT EXISTS extension_danmaku_enabled BOOLEAN DEFAULT FALSE
     `);
 
+    // v1.14.0 / ADR-021：录制目标与直播场次分离。
+    // 小红书 /livestream/{room_id} 每场开播变化，稳定身份是主播 user_id；
+    // rooms 保存目标（host_user_id）与当前场次（live_room_id/live_url），
+    // 下播后清空场次字段，配置与历史会话继续挂在同一目标下。
+    await client.query(`
+      ALTER TABLE rooms
+        ADD COLUMN IF NOT EXISTS host_user_id VARCHAR(64) DEFAULT '',
+        ADD COLUMN IF NOT EXISTS live_room_id VARCHAR(64) DEFAULT '',
+        ADD COLUMN IF NOT EXISTS live_url VARCHAR(512) DEFAULT ''
+    `);
+
     // ========== recording_sessions ==========
 
     await client.query(`
@@ -128,6 +139,13 @@ async function runMigration() {
         cover_url VARCHAR(1024) DEFAULT '',
         cover_path VARCHAR(1024) DEFAULT ''
       )
+    `);
+
+    // v1.14.0 / ADR-021：场次维度标识，便于按当前直播间地址反查目标。
+    await client.query(`
+      ALTER TABLE recording_sessions
+        ADD COLUMN IF NOT EXISTS live_room_id VARCHAR(64) DEFAULT '',
+        ADD COLUMN IF NOT EXISTS live_url VARCHAR(512) DEFAULT ''
     `);
 
     // ========== upload_templates ==========
@@ -720,6 +738,42 @@ async function runMigration() {
     for (const table of softDeleteTables) {
       await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`);
     }
+
+    // ADR-021：同平台同主播只允许一个稳定目标（软删行不占用）。
+    // 存量库此列刚新增、全为空，直接建索引安全。
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_platform_host_active
+        ON rooms (polling_platform, host_user_id)
+        WHERE deleted_at IS NULL AND host_user_id <> ''
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_rooms_live_url
+        ON rooms (live_url)
+        WHERE live_url <> ''
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_recording_sessions_live_room_id
+        ON recording_sessions (live_room_id)
+        WHERE live_room_id <> ''
+    `);
+
+    // 存量小红书房间回填：个人主页 → host_user_id；直播间 → 当前场次字段。
+    // 旧直播间链接若已被 normalizeRoomUrl 剥掉 ?host_id=，无法反推主播，
+    // 保留为一次性历史目标，不做猜测性合并（见 ADR-021「合并与迁移规则」）。
+    await client.query(`
+      UPDATE rooms
+         SET host_user_id = substring(room_url from '/user/profile/([^/?#]+)')
+       WHERE host_user_id = ''
+         AND room_url ~* '(xiaohongshu\\.com|redelight\\.cn)/user/profile/'
+    `);
+    await client.query(`
+      UPDATE rooms
+         SET live_room_id = substring(room_url from '/livestream/(?:dynpath[^/]*/)?([^/?#]+)'),
+             live_url = room_url
+       WHERE live_room_id = ''
+         AND status IN ('recording', 'paused')
+         AND room_url ~* '(xiaohongshu\\.com|redelight\\.cn)/livestream/'
+    `);
 
     // v1.13.0：一场次一活跃分析记录（软删后可重算插入新行，同 biliup_accounts 惯例）
     await client.query(`

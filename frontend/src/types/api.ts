@@ -27,6 +27,9 @@ export interface Room {
   polling_enabled: boolean
   polling_interval: number
   polling_platform: string | null
+  host_user_id?: string
+  live_room_id?: string
+  live_url?: string
   extension_danmaku_enabled?: boolean
   last_live_status: boolean
   last_polled_at: string | null

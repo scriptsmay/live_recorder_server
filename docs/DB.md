@@ -88,6 +88,9 @@
 | polling_platform          | VARCHAR(50)   |                                   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`、`xiaohongshu`（已实现），`douyu`（不可用-平台流2分钟超时）                                                                                                                                  |
 | polling_interval          | INTEGER       | DEFAULT 60                        | 轮询间隔（秒）                                                                                                                                                                                                                                  |
 | extension_danmaku_enabled | BOOLEAN       | DEFAULT FALSE                     | 浏览器插件弹幕采集开关；开启且平台属于 `kuaishou` / `xiaohongshu` 时，在播录制期间通过 `GET /api/notify/status?active=true` 通知 Chrome 扩展自动打开后台标签页采集弹幕（即使全局 `kuaishou_danmaku_enabled` 为 false 也会为该房间启动弹幕会话） |
+| host_user_id              | VARCHAR(64)   | DEFAULT ''                        | 小红书主播 user_id（ADR-021 稳定身份）；同一 `(polling_platform, host_user_id)` 仅允许一个未软删目标（部分唯一索引 `idx_rooms_platform_host_active`）                                                                                           |
+| live_room_id              | VARCHAR(64)   | DEFAULT ''                        | 小红书当前场次 room_id；开播写入，下播/录制结束清空                                                                                                                                                                                             |
+| live_url                  | VARCHAR(512)  | DEFAULT ''                        | 当前场次直播页地址；运行期（弹幕匹配、状态查询）使用，持久归属仍以 `room_url` 为准                                                                                                                                                              |
 | created_at                | TIMESTAMP     | DEFAULT NOW()                     | 创建时间                                                                                                                                                                                                                                        |
 | updated_at                | TIMESTAMP     | DEFAULT NOW()                     | 更新时间                                                                                                                                                                                                                                        |
 | deleted_at                | TIMESTAMP     |                                   | 软删除时间（v1.12.0）；删除房间时连带软删其会话                                                                                                                                                                                                 |
@@ -110,6 +113,8 @@
 | output_path    | VARCHAR(1024) | DEFAULT ''                             | 录制输出路径（覆盖 rooms 级别）                       |
 | cover_url      | VARCHAR(1024) | DEFAULT ''                             | 直播封面 URL                                          |
 | cover_path     | VARCHAR(1024) | DEFAULT ''                             | 封面本地缓存路径                                      |
+| live_room_id   | VARCHAR(64)   | DEFAULT ''                             | 本场小红书 room_id（ADR-021），用于续播恢复时还原场次 |
+| live_url       | VARCHAR(512)  | DEFAULT ''                             | 本场直播页地址（ADR-021）                             |
 | retry_count    | INTEGER       | DEFAULT 0                              | 崩溃恢复重试次数                                      |
 | stream_url     | VARCHAR(1024) | DEFAULT ''                             | 实际直播流地址（用于重启后恢复 ffmpeg）               |
 | deleted_at     | TIMESTAMP     |                                        | 软删除时间                                            |

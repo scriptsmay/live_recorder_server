@@ -488,6 +488,15 @@ onMounted(() => {
                     >
                       {{ r.room_url }}
                     </a>
+                    <a
+                      v-if="r.live_url"
+                      :href="r.live_url"
+                      target="_blank"
+                      class="mt-0.5 inline-flex items-center gap-1 truncate text-xs text-brand-600 hover:underline"
+                      :title="r.live_url"
+                    >
+                      本场直播进行中
+                    </a>
                   </div>
                 </div>
               </td>

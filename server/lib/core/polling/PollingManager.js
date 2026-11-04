@@ -135,7 +135,8 @@ class PollingManager {
     try {
       const result = await pool.query(`
         SELECT id, room_url, room_name, avatar_url, polling_enabled, polling_platform,
-               polling_interval, monitoring_enabled, notification_enabled, status
+               polling_interval, monitoring_enabled, notification_enabled, status,
+               host_user_id, live_room_id, live_url
         FROM rooms
         WHERE polling_enabled = true AND deleted_at IS NULL
       `);
@@ -323,6 +324,9 @@ class PollingManager {
         caption: checkResult.roomTitle || '',
         room_url: room_url,
         roomCover: checkResult.roomCover || '',
+        // ADR-021：直播间链接按 host_user_id 归并到稳定目标，room_id 记录本场。
+        host_user_id: checkResult.streamInfo?.hostId || room.host_user_id || '',
+        live_room_id: checkResult.streamInfo?.roomId || room.live_room_id || '',
       });
 
       if (!recordResult.error) {

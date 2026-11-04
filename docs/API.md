@@ -6,6 +6,7 @@
 - 默认端口：`1123`
 - 请求格式：`application/json`
 - 直播间地址 `room_url` 作为稳定标识使用，服务端会在查询或创建前自动从分享口令文本中提取首个 HTTP(S) 链接，并移除分享跟踪 query string 和 fragment，避免同一地址被识别为新直播间。平台用于识别直播间的参数（如抖音 `web_rid`）会保留；小红书 `xhslink.com` 短链在创建直播间时会自动通过 302 还原为规范化的 `https://www.xiaohongshu.com/livestream/{roomId}` 地址（去除 `?host_id=` / `?xsec_token=` 等临时参数，与浏览器扩展端保持严格一致）。
+- **小红书身份归并（v1.14.0 / ADR-021）**：`rooms.room_url` 保存稳定目标（个人主页），当前场次记录在 `live_room_id` / `live_url`。直播间链接若携带 `?host_id={user_id}`，会自动归并到该主播的个人主页房间，不会每场开播新建房间；`room_url` 仍作为会话/文件的外键快照保留。
 
 ---
 
@@ -283,6 +284,7 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
    - 标准个人主页地址：`https://www.xiaohongshu.com/user/profile/{user_id}`（支持粘贴带 `?xsec_token=...&xsec_source=pc_search` 的 PC Web 主页链接或主页分享短链，自动剥离追踪参数并规范化）。
    - **限制说明**：小红书每次开播都会生成全新的 18 位数字 `room_id`，且所有未登录公开主页 SSR 与 API 均不暴露在播 `room_id`；因此个人主页链接仅能自动拉取主播昵称与头像用于预登记，**无法**在免登录条件下自动转换为 `/livestream/{room_id}` 直播间地址。
    - **轮询行为**：主页型房间在创建/更新时会强制将 `polling_enabled` 归一为 `false`；创建时仅异步执行一次 `checkRoom` 回填昵称与头像，之后不建立定时轮询。服务启动与 `reloadRoom` 时也会自愈关闭历史遗留的 `polling_enabled = true`，避免每分钟对主页发起一次无意义请求。
+   - **目标归并**：若提交的直播间链接带 `?host_id={user_id}`（或短链 302 结果带该参数），服务端会把它合并到同一主播的个人主页目标，写入 `live_room_id` / `live_url` 后立即以直播间地址执行一次 `checkRoom` 触发录制；下播/录制结束后自动清空 `live_*`，配置与历史会话保留。响应中的 `room_url` 为目标地址，当前场次见 `live_url`。
 
 **示例：**
 
@@ -353,12 +355,16 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 **请求体：**
 
-| 参数     | 类型   | 必填 | 说明                                |
-| -------- | ------ | ---- | ----------------------------------- |
-| url      | string | 是   | 直播流 URL（m3u8 / rtmp 等）        |
-| title    | string | 是   | 直播标题（用于直播间名称）          |
-| caption  | string | 否   | 直播描述/备注，存储到录制会话中     |
-| room_url | string | 否   | 直播间地址。不传则用 `url` 作为标识 |
+| 参数         | 类型   | 必填 | 说明                                                            |
+| ------------ | ------ | ---- | --------------------------------------------------------------- |
+| url          | string | 是   | 直播流 URL（m3u8 / rtmp 等）                                    |
+| title        | string | 是   | 直播标题（用于直播间名称）                                      |
+| caption      | string | 否   | 直播描述/备注，存储到录制会话中                                 |
+| room_url     | string | 否   | 直播间地址。不传则用 `url` 作为标识                             |
+| host_user_id | string | 否   | 小红书主播 user_id（ADR-021）。传入时优先按该身份归并到稳定目标 |
+| live_room_id | string | 否   | 小红书本场 room_id。传入时写入房间当前场次与会话记录            |
+
+> 小红书通知建议同时携带 `host_user_id` 与 `live_room_id`：服务端按 `host_user_id` 命中个人主页目标，避免每场开播新建房间；只传直播间地址时退化为按地址匹配的一次性目标。
 
 **示例：**
 
@@ -441,7 +447,7 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 
 | 参数   | 类型    | 必填 | 说明                                                                                                                                                       |
 | ------ | ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url    | string  | 否   | 直播间地址（`room_url`）；与 `active=true` 二选一                                                                                                          |
+| url    | string  | 否   | 直播间地址（`room_url`）；优先按目标地址匹配，未命中时回退匹配 `rooms.live_url`；与 `active=true` 二选一                                                   |
 | active | boolean | 否   | 传 `true` 或 `1` 时返回当前处于 `recording` / `paused`、开启了 `extension_danmaku_enabled = true` 且平台属于 `kuaishou` / `xiaohongshu` 的活跃录制房间列表 |
 
 **示例：**
@@ -464,7 +470,10 @@ curl 'http://127.0.0.1:1123/api/notify/status?active=true'
       {
         "id": 25,
         "room_url": "https://www.xiaohongshu.com/livestream/570523582342626238",
-        "raw_room_url": "https://www.xiaohongshu.com/livestream/570523582342626238",
+        "raw_room_url": "https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e",
+        "target_room_url": "https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e",
+        "live_room_id": "570523582342626238",
+        "live_url": "https://www.xiaohongshu.com/livestream/570523582342626238",
         "room_name": "王者荣耀女子公开赛",
         "platform": "xiaohongshu",
         "status": "recording",
@@ -487,6 +496,9 @@ curl 'http://127.0.0.1:1123/api/notify/status?active=true'
     "room": {
       "id": 1,
       "room_url": "https://live.example.com/room1",
+      "target_room_url": "https://live.example.com/room1",
+      "live_room_id": "",
+      "live_url": "",
       "room_name": "主播名"
     }
   }

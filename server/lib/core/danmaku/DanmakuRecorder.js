@@ -605,6 +605,14 @@ class DanmakuRecorder {
       let room = null;
       try {
         room = await DataService.getRoomByUrl(roomUrl);
+        // ADR-021：小红书目标以个人主页入库，扩展推送的是本场直播地址。
+        if (!room) {
+          const liveRes = await pool.query(
+            'SELECT extension_danmaku_enabled FROM rooms WHERE live_url = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+            [roomUrl]
+          );
+          room = liveRes.rows[0] || null;
+        }
       } catch (err) {
         // 查询失败时按房间已开启处理：孤儿文件是最坏兜底，宁可多落一份也不丢数据
         console.warn('[DanmakuRecorder] 查询房间弹幕开关失败，按已开启处理以保留孤儿数据:', err.message);

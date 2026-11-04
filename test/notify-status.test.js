@@ -83,13 +83,15 @@ describe('GET /api/notify/status URL 规范化回退', () => {
     expect(DataService.getRoomByUrl).toHaveBeenNthCalledWith(2, RAW_URL);
   });
 
-  test('入参已是规范地址时只查一次', async () => {
+  test('入参已是规范地址时只查一次房间，再回退本场 live_url 索引', async () => {
     DataService.getRoomByUrl.mockResolvedValueOnce(null);
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app).get('/api/notify/status').query({ url: CANONICAL_URL });
 
     expect(res.body).toEqual({ exists: false });
     expect(DataService.getRoomByUrl).toHaveBeenCalledTimes(1);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('live_url = $1'), [CANONICAL_URL]);
   });
 
   test('GET /api/notify/status?active=true 仅返回开启了 extension_danmaku_enabled 的快手/小红书在播房间', async () => {

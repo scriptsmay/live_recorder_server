@@ -166,7 +166,7 @@ router.get('/notify/status', async (req, res) => {
     try {
       const activeRes = await pool.query(
         `SELECT r.id, r.room_url, r.room_name, r.polling_platform, r.status,
-                r.extension_danmaku_enabled,
+                r.extension_danmaku_enabled, r.live_room_id, r.live_url,
                 s.id AS session_id, s.started_at
          FROM rooms r
          LEFT JOIN LATERAL (
@@ -185,10 +185,14 @@ router.get('/notify/status', async (req, res) => {
       const rooms = activeRes.rows
         .map((row) => {
           const platform = row.polling_platform || detectPlatform(row.room_url);
+          const liveUrl = row.live_url || '';
           return {
             id: row.id,
-            room_url: normalizeRoomUrl(row.room_url) || row.room_url,
+            room_url: liveUrl || normalizeRoomUrl(row.room_url) || row.room_url,
             raw_room_url: row.room_url,
+            target_room_url: normalizeRoomUrl(row.room_url) || row.room_url,
+            live_room_id: row.live_room_id || '',
+            live_url: liveUrl,
             room_name: row.room_name,
             platform,
             status: row.status,
@@ -214,9 +218,19 @@ router.get('/notify/status', async (req, res) => {
     // 兼容历史上以非规范形式落库的房间；避免对带追踪参数的请求先白跑一次查询，
     // 也避免超长分享文本在规范化之前就撞上 varchar(512) 报错。
     const normalizedUrl = normalizeRoomUrl(url) || url;
-    const room =
+    let room =
       (await DataService.getRoomByUrl(normalizedUrl)) ||
       (normalizedUrl !== url ? await DataService.getRoomByUrl(url) : null);
+
+    // ADR-021：目标可能以个人主页地址挂在 rooms 上，当前直播地址记在 live_url。
+    // 扩展按直播间地址查询时，需要回退匹配本场标识。
+    if (!room) {
+      const liveRes = await pool.query(
+        'SELECT * FROM rooms WHERE live_url = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+        [normalizedUrl]
+      );
+      room = liveRes.rows[0] || null;
+    }
     if (!room) {
       return res.json({ exists: false });
     }
@@ -225,11 +239,16 @@ router.get('/notify/status', async (req, res) => {
       const dl = getActiveDownloader(room.polling_platform);
       downloaderEngine = dl.name;
     } catch (_) {}
+    const liveUrl = room.live_url || '';
     const data = {
       room: {
         id: room.id,
-        room_url: room.room_url,
+        // 运行期地址（扩展据此匹配直播间标签页/启动弹幕）；目标地址单独返回。
+        room_url: liveUrl || room.room_url,
+        target_room_url: room.room_url,
         room_name: room.room_name,
+        live_room_id: room.live_room_id || '',
+        live_url: liveUrl,
         extension_danmaku_enabled: room.extension_danmaku_enabled === true,
       },
       extension_danmaku_enabled: room.extension_danmaku_enabled === true,
@@ -265,8 +284,16 @@ router.get('/notify/status', async (req, res) => {
 });
 
 router.post('/notify/live_download', async (req, res) => {
-  const { url, title, caption, room_url, cover_url } = req.body;
-  const result = await RecorderService.startRecording({ url, title, caption, room_url, roomCover: cover_url });
+  const { url, title, caption, room_url, cover_url, host_user_id, live_room_id } = req.body;
+  const result = await RecorderService.startRecording({
+    url,
+    title,
+    caption,
+    room_url,
+    roomCover: cover_url,
+    host_user_id,
+    live_room_id,
+  });
 
   if (result.error) {
     return res.status(result.status || 200).json({

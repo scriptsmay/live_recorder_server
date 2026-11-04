@@ -112,15 +112,19 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     const checkRoomSpy = jest.spyOn(pollingManager, 'checkRoom').mockResolvedValueOnce(undefined);
 
     const canonicalUrl = 'https://www.xiaohongshu.com/livestream/570523767964993440';
+    const profileUrl = 'https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e';
     const createdRow = {
       id: 99,
-      room_url: canonicalUrl,
+      room_url: profileUrl,
       room_name: '',
       notification_enabled: true,
       monitoring_enabled: true,
       polling_enabled: false,
       polling_platform: 'xiaohongshu',
       polling_interval: 90,
+      host_user_id: '5f849379000000000101e56e',
+      live_room_id: '570523767964993440',
+      live_url: canonicalUrl,
     };
 
     pool.query
@@ -135,10 +139,20 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.room_url).toBe(canonicalUrl);
+    // 带 host_id 的直播间链接归并到稳定的个人主页目标（ADR-021）
+    expect(res.body.data.room_url).toBe(profileUrl);
     expect(res.body.data.polling_platform).toBe('xiaohongshu');
     expect(resolveSpy).toHaveBeenCalledWith('https://xhslink.com/o/6SoiafhhH6N');
-    expect(checkRoomSpy).toHaveBeenCalledWith(createdRow);
+    // 首次检测仍使用本场直播地址，否则 checker 会把主页当成不可开播目标
+    expect(checkRoomSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 99,
+        room_url: canonicalUrl,
+        live_url: canonicalUrl,
+        live_room_id: '570523767964993440',
+        host_user_id: '5f849379000000000101e56e',
+      })
+    );
 
     resolveSpy.mockRestore();
     checkRoomSpy.mockRestore();
