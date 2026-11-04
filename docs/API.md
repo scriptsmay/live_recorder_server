@@ -364,7 +364,7 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 | host_user_id | string | 否   | 小红书主播 user_id（ADR-021）。传入时优先按该身份归并到稳定目标 |
 | live_room_id | string | 否   | 小红书本场 room_id。传入时写入房间当前场次与会话记录            |
 
-> 小红书通知建议同时携带 `host_user_id` 与 `live_room_id`：服务端按 `host_user_id` 命中个人主页目标，避免每场开播新建房间；只传直播间地址时退化为按地址匹配的一次性目标。
+> 小红书通知建议同时携带 `host_user_id` 与 `live_room_id`：服务端按 `host_user_id` 命中个人主页目标，避免每场开播新建房间。未携带 `host_user_id` 时，若已有主播目标记录了相同的 `live_room_id`，会优先归并到该目标；否则才退化为按直播间地址匹配的一次性目标。
 
 **示例：**
 

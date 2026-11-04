@@ -67,6 +67,31 @@ describe('RoomTargetService.resolve', () => {
     expect(pool.query.mock.calls.some(([q]) => q.includes('INSERT INTO rooms'))).toBe(false);
   });
 
+  test('请求不带 host_user_id 时按本场 live_room_id 归并到已有主播目标', async () => {
+    const stableTarget = roomRow({
+      id: 26,
+      room_url: 'https://www.xiaohongshu.com/user/profile/5c2f2f8c000000000701d3dd',
+      host_user_id: '5c2f2f8c000000000701d3dd',
+      live_room_id: '570523582342626238',
+      live_url: LIVE_URL,
+    });
+    pool.query.mockResolvedValueOnce({ rows: [stableTarget] });
+
+    // 手动录制链路只带直播间地址，无法从 URL 反推 host（无 host_id 参数）
+    const room = await RoomTargetService.resolve({
+      roomUrl: LIVE_URL,
+      roomName: '主播',
+    });
+
+    expect(room).toBe(stableTarget);
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain('live_room_id = $1');
+    expect(sql).toContain("host_user_id <> ''");
+    expect(params).toEqual(['570523582342626238']);
+    expect(pool.query.mock.calls.some(([q]) => q.includes('INSERT INTO rooms'))).toBe(false);
+  });
+
   test('非小红书平台继续以规范化 URL 为身份', async () => {
     const created = {
       id: 3,

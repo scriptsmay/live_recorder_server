@@ -51,6 +51,12 @@ class RoomTargetService {
       room = await this._findByHostUserId(finalHostUserId, true);
       if (!room) room = await this._findByHostUserId(finalHostUserId, false);
     }
+    // 扩展手动录制 / webRequest 链路可能拿不到 host_user_id，但能给出直播间地址。
+    // 若已有主播目标记录了同一个 live_room_id，优先归并到它，避免把请求落到
+    // 历史遗留的「单场直播间」房间上（同一场直播出现两条房间记录）。
+    if (!room && resolvedPlatform === 'xiaohongshu' && !finalHostUserId && finalLiveRoomId) {
+      room = await this._findByLiveRoomId(finalLiveRoomId);
+    }
     if (!room && targetUrl) {
       room = await this._findByRoomUrl(targetUrl);
     }
@@ -99,6 +105,22 @@ class RoomTargetService {
        ORDER BY ${activeOnly ? 'id' : 'deleted_at NULLS LAST, id'}
        LIMIT 1`,
       [hostUserId]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
+   * 按本场 live_room_id 找已绑定主播目标（host_user_id 非空）的房间。
+   * 只认稳定目标，避免命中历史遗留的单场直播间记录。
+   */
+  static async _findByLiveRoomId(liveRoomId) {
+    const result = await pool.query(
+      `SELECT * FROM rooms
+       WHERE polling_platform = 'xiaohongshu' AND live_room_id = $1
+         AND host_user_id <> '' AND deleted_at IS NULL
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [liveRoomId]
     );
     return result.rows[0] || null;
   }
