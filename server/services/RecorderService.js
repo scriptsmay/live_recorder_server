@@ -19,7 +19,6 @@ const { isUnexpectedExit } = require('../lib/utils/exit-status');
 const { fetchRoomCoverByUrl } = require('../lib/core/polling/checkers');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
-const ROOM_CACHE_TTL = 300;
 const ACTIVE_TASK_TTL = 86400;
 
 /**
@@ -34,16 +33,6 @@ const ACTIVE_TASK_TTL = 86400;
  */
 class RecorderService {
   /**
-   * 生成 Redis 房间缓存键
-   *
-   * @param {string} roomUrl - 房间URL
-   * @returns {string} Redis key
-   */
-  static redisKey(roomUrl) {
-    return `room:${roomUrl}`;
-  }
-
-  /**
    * 生成 Redis 活跃任务键
    *
    * @param {string} roomKey - 房间唯一标识
@@ -51,42 +40,6 @@ class RecorderService {
    */
   static activeTaskKey(roomKey) {
     return `active_task:${roomKey}`;
-  }
-
-  /**
-   * 获取房间缓存
-   *
-   * @param {string} roomUrl - 房间URL
-   * @returns {Promise<Object|null>} 房间信息对象或 null
-   */
-  static async getRoomCache(roomUrl) {
-    try {
-      const data = await redis.get(this.redisKey(roomUrl));
-      if (data) return JSON.parse(data);
-    } catch (_) {}
-    return null;
-  }
-
-  /**
-   * 设置房间缓存
-   *
-   * @param {Object} room - 房间信息对象
-   */
-  static async setRoomCache(room) {
-    try {
-      await redis.setEx(this.redisKey(room.room_url), ROOM_CACHE_TTL, JSON.stringify(room));
-    } catch (_) {}
-  }
-
-  /**
-   * 删除房间缓存
-   *
-   * @param {string} roomUrl - 房间URL
-   */
-  static async delRoomCache(roomUrl) {
-    try {
-      await redis.del(this.redisKey(roomUrl));
-    } catch (_) {}
   }
 
   /**
@@ -125,41 +78,6 @@ class RecorderService {
     try {
       await redis.del(this.activeTaskKey(roomKey));
     } catch (_) {}
-  }
-
-  /**
-   * 获取或创建房间记录
-   *
-   * @param {string} roomUrl - 房间URL
-   * @param {string} roomName - 房间名称
-   * @returns {Promise<Object>} 房间信息对象
-   */
-  static async getOrCreateRoom(roomUrl, roomName) {
-    const cached = await this.getRoomCache(roomUrl);
-    if (cached) return cached;
-
-    // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
-    // 查到时若为软删行则复活（清 deleted_at）；轮询路径的复活由 PollingManager
-    // 「房间已删除，跳过录制」分支拦截，不会经此重建。
-    const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [roomUrl]);
-    if (exist.rows.length > 0) {
-      const room = exist.rows[0];
-      if (room.deleted_at != null) {
-        await pool.query('UPDATE rooms SET deleted_at = NULL, updated_at = NOW() WHERE id = $1', [room.id]);
-        room.deleted_at = null;
-      }
-      await this.setRoomCache(room);
-      return room;
-    }
-    const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name)
-       VALUES ($1, $2)
-       RETURNING *`,
-      [roomUrl, roomName || '']
-    );
-    const room = result.rows[0];
-    await this.setRoomCache(room);
-    return room;
   }
 
   /**
@@ -261,7 +179,9 @@ class RecorderService {
       const roomId = room?.id ?? null;
       const roomName = room?.room_name || roomUrl;
       // 弹幕采集以运行期直播地址为 key（ADR-021）；旧会话没有 live_url 时回退目标地址。
-      const broadcastUrl = session.live_url || roomUrl;
+      // 优先取 rooms.live_url：续播会话复用了旧 recording_sessions 行，其 live_url
+      // 可能停留在上一场次；rooms.live_url 才是本次录制实际使用的地址。
+      const broadcastUrl = room?.live_url || session.live_url || roomUrl;
 
       let engineName = 'unknown';
       try {
@@ -302,7 +222,6 @@ class RecorderService {
           [roomId]
         );
       }
-      await this.delRoomCache(roomUrl);
 
       // 如果录制时长很短（小于5秒），不设置冷却期，以便快速重试获取新的流地址
       const sessionDuration = Date.now() - (sessionStart ? new Date(sessionStart).getTime() : Date.now());
@@ -815,7 +734,6 @@ class RecorderService {
         message: `下载线程池已满 (${activeTasksCount}/${poolSize})，请等待其他录制完成`,
       };
     }
-    await this.setRoomCache(room).catch(() => {});
 
     if (room.monitoring_enabled === false) {
       console.log('[RecorderService] 录制请求被拒: monitoring_enabled=false (room=' + room.id + ')');

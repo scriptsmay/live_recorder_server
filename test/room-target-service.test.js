@@ -108,11 +108,27 @@ describe('RoomTargetService.resolve', () => {
     const room = await RoomTargetService.resolve({
       roomUrl: 'https://live.bilibili.com/999?spm=abc',
       roomName: 'B站',
+      // 非小红书平台即使误传场次字段也不写入
+      liveRoomId: '570523582342626238',
     });
 
     expect(room).toBe(created);
     const insertCall = pool.query.mock.calls[1];
     expect(insertCall[1]).toEqual(['https://live.bilibili.com/999', 'B站', 'bilibili', '', '', '']);
+  });
+
+  test('暂停监听的房间不写入本场 live 字段', async () => {
+    const paused = roomRow({ monitoring_enabled: false });
+    pool.query.mockResolvedValueOnce({ rows: [paused] });
+
+    const room = await RoomTargetService.resolve({
+      roomUrl: RAW_LIVE_URL,
+      roomName: '主播',
+    });
+
+    // 只可能补充 host_user_id（此处已一致），不应产生任何 UPDATE
+    expect(room).toBe(paused);
+    expect(pool.query).toHaveBeenCalledTimes(1);
   });
 });
 

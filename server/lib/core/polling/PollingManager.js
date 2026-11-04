@@ -300,7 +300,7 @@ class PollingManager {
           return;
         }
       } else {
-        // v1.12.0：轮询进行中房间已被（软）删除——中止，避免借 getOrCreateRoom 复活房间
+        // v1.12.0：轮询进行中房间已被（软）删除——中止，避免复活房间
         log.warn(`[PollingManager] 房间已删除，跳过录制: ${room_name || room_url}`);
         return;
       }

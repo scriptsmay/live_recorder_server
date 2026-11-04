@@ -209,8 +209,8 @@ class RoomService {
     await pool.query('UPDATE recording_sessions SET deleted_at = NOW() WHERE room_url = $1 AND deleted_at IS NULL', [
       r.room_url,
     ]);
-    // v1.12.0：房间缓存与活跃任务键一并失效——否则 TTL 内 getOrCreateRoom
-    // 会拿到缓存的旧房间对象继续录制（软删前行不存在会撞 FK，软删后行仍在会静默复用）
+    // v1.12.0：活跃任务键立即失效，避免 TTL 内仍被判定为在录。
+    // `room:` 键已无读取方，这里保留清理以兼容历史版本写入的残留缓存。
     await redis.del(`room:${r.room_url}`).catch(() => {});
     await redis.del(`active_task:${r.room_url}`).catch(() => {});
 

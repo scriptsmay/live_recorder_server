@@ -227,13 +227,18 @@ router.get('/notify/status', async (req, res) => {
       (normalizedUrl !== url ? await DataService.getRoomByUrl(url) : null);
 
     // ADR-021：目标可能以个人主页地址挂在 rooms 上，当前直播地址记在 live_url。
-    // 扩展按直播间地址查询时，需要回退匹配本场标识。
-    if (!room) {
+    // 历史一次性直播间房间的 room_url 也可能等于本场地址，会先命中精确匹配；
+    // 因此精确命中的房间不在录制中时，仍要检查 live_url 上的稳定目标，避免扩展
+    // 查询本场地址时看到「未录制」的旧房间。稳定目标在录制时优先采用。
+    if (!room || (room.status !== 'recording' && room.status !== 'paused')) {
       const liveRes = await pool.query(
         'SELECT * FROM rooms WHERE live_url = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
         [normalizedUrl]
       );
-      room = liveRes.rows[0] || null;
+      const liveRoom = liveRes?.rows?.[0] || null;
+      if (liveRoom && (!room || liveRoom.status === 'recording' || liveRoom.status === 'paused')) {
+        room = liveRoom;
+      }
     }
     if (!room) {
       return res.json({ exists: false });

@@ -28,6 +28,8 @@ describe('DataService.getSessionsOverlappingWindow', () => {
     expect(sql).toMatch(/AT TIME ZONE current_setting\('TimeZone'\)/);
     // SQL 应该 JOIN recording_files 拿最后分片时间作为 ended_at 兜底
     expect(sql).toMatch(/recording_files/);
+    // ADR-021：孤儿记录可能保存本场直播地址（live_url），两列都要匹配
+    expect(sql).toMatch(/rs\.room_url = \$1 OR rs\.live_url = \$1/);
     // 参数顺序：roomUrl, windowStart, windowEnd, maxSessionMs
     expect(pool.query.mock.calls[0][1]).toEqual(['http://test-room', 1000000, 2000000, 28800000]);
   });

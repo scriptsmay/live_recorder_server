@@ -445,11 +445,11 @@ curl -X POST http://127.0.0.1:1123/api/notify/live_download \
 
 **参数（Query）：**
 
-| 参数        | 类型    | 必填 | 说明                                                                                                                                                       |
-| ----------- | ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url         | string  | 否   | 直播间地址（`room_url`）；优先按目标地址匹配，未命中时回退匹配 `rooms.live_url`；与 `active=true` 二选一                                                   |
-| active      | boolean | 否   | 传 `true` 或 `1` 时返回当前处于 `recording` / `paused`、开启了 `extension_danmaku_enabled = true` 且平台属于 `kuaishou` / `xiaohongshu` 的活跃录制房间列表 |
-| include_all | boolean | 否   | 与 `active=true` 搭配；传 `true` 或 `1` 时返回**全部**活跃录制（不要求 `extension_danmaku_enabled`，也不限制平台），用于扩展 Popup 展示跨平台录制状态      |
+| 参数        | 类型    | 必填 | 说明                                                                                                                                                                                                     |
+| ----------- | ------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url         | string  | 否   | 直播间地址（`room_url`）；优先按目标地址匹配，未命中时回退匹配 `rooms.live_url`；若精确命中历史一次性直播间但该房间未在录制，而 `live_url` 上的稳定目标正在录制，则返回稳定目标；与 `active=true` 二选一 |
+| active      | boolean | 否   | 传 `true` 或 `1` 时返回当前处于 `recording` / `paused`、开启了 `extension_danmaku_enabled = true` 且平台属于 `kuaishou` / `xiaohongshu` 的活跃录制房间列表                                               |
+| include_all | boolean | 否   | 与 `active=true` 搭配；传 `true` 或 `1` 时返回**全部**活跃录制（不要求 `extension_danmaku_enabled`，也不限制平台），用于扩展 Popup 展示跨平台录制状态                                                    |
 
 **示例：**
 

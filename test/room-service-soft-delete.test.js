@@ -48,7 +48,7 @@ describe('RoomService.deleteRoom 软删除（v1.12.0）', () => {
     expect(calls[1]).not.toContain('DELETE FROM');
     expect(calls[2]).toContain('UPDATE recording_sessions SET deleted_at = NOW()');
     expect(calls.some((sql) => sql.includes('DELETE FROM'))).toBe(false);
-    // 房间缓存与活跃任务键都失效（缓存陈旧会让 getOrCreateRoom 继续用已删房间录制）
+    // 活跃任务键失效（避免已删房间在 TTL 内仍被判定为在录）
     expect(redis.del).toHaveBeenCalledWith(`room:${ROOM_URL}`);
     expect(redis.del).toHaveBeenCalledWith(`active_task:${ROOM_URL}`);
   });

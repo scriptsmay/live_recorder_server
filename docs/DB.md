@@ -36,14 +36,13 @@
 
 ### 缓存策略
 
-| 用途       | Key 模式                     | TTL     | 说明                              |
-| ---------- | ---------------------------- | ------- | --------------------------------- |
-| 直播间缓存 | `room:{room_url}`            | 5 分钟  | 减少 `getOrCreateRoom` 的 DB 查询 |
-| 录制任务锁 | `active_task:{roomKey}`      | 24 小时 | 防止重复录制，替代内存 Map        |
-| 转码队列   | `transcode_queue`            | 无      | Redis LIST，转码任务 FIFO 队列    |
-| 转码并发   | `transcode_processing_count` | 无      | 当前处理中转码任务计数            |
+| 用途       | Key 模式                     | TTL     | 说明                           |
+| ---------- | ---------------------------- | ------- | ------------------------------ |
+| 录制任务锁 | `active_task:{roomKey}`      | 24 小时 | 防止重复录制，替代内存 Map     |
+| 转码队列   | `transcode_queue`            | 无      | Redis LIST，转码任务 FIFO 队列 |
+| 转码并发   | `transcode_processing_count` | 无      | 当前处理中转码任务计数         |
 
-- 直播间写操作（创建/更新/删除/暂停/恢复/停止）后自动清除对应缓存
+- 直播间写操作（创建/更新/删除/暂停/恢复/停止）后清除 `active_task` 锁
 - 应用启动时自动清理残留的录制任务锁
 
 ---
@@ -461,6 +460,9 @@ VIDEO_DOWNLOAD_DIR/danmaku/
 > `EXTRACT(EPOCH FROM (col AT TIME ZONE current_setting('TimeZone'))) * 1000` 取
 > epoch，避免 Node 进程时区与数据库时区不一致时整体偏移、把弹幕吸附到相邻会话。
 > 禁止在业务代码里 `new Date(row.started_at).getTime()`。
+> 候选会话同时匹配 `recording_sessions.room_url` 与 `recording_sessions.live_url`：
+> 孤儿记录的 `room_url` 来自扩展推送的本场直播地址（ADR-021），而会话上的
+> `room_url` 是稳定目标地址（小红书为个人主页），只匹配前者会永远找不到候选。
 
 ---
 

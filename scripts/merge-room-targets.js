@@ -8,7 +8,7 @@
  * 用本脚本把场次房间的会话/文件改挂到主页目标，再软删场次房间。
  *
  * 用法:
- *   node scripts/merge-room-targets.js <targetRoomId> <sourceRoomId> [sourceRoomId...] [--dry-run]
+ *   node scripts/merge-room-targets.js <targetRoomId> <sourceRoomId> [sourceRoomId...] [--dry-run] [--force]
  *
  * 示例:
  *   NODE_ENV=development node scripts/merge-room-targets.js 26 25 --dry-run
@@ -16,6 +16,7 @@
  *
  * 行为:
  *   1. 校验目标与来源房间存在、未软删、平台为 xiaohongshu；
+ *      来源房间仍在录制（ffmpeg 未停止）时默认拒绝，需先停止录制或显式 --force；
  *   2. 将 recording_sessions / recording_files 的 room_url 改挂到目标；
  *   3. 同步 danmaku_capture_records.room_url（无外键）；
  *   4. 把来源房间的 live_room_id / live_url / host_user_id 合并到目标；
@@ -34,10 +35,11 @@ const redis = require('../server/db/redis');
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
+  const force = args.includes('--force');
   const ids = args.filter((a) => !a.startsWith('--')).map((a) => parseInt(a, 10));
 
   if (ids.length < 2 || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
-    console.error('用法: node scripts/merge-room-targets.js <targetRoomId> <sourceRoomId...> [--dry-run]');
+    console.error('用法: node scripts/merge-room-targets.js <targetRoomId> <sourceRoomId...> [--dry-run] [--force]');
     process.exit(1);
   }
 
@@ -71,6 +73,14 @@ async function main() {
       }
       if (room.room_url === target.room_url) {
         throw new Error(`来源房间 ${room.id} 与目标 URL 相同，无需合并`);
+      }
+      // 软删来源房间不会停止 ffmpeg：进程会继续写文件，而 watchdog/会话收尾
+      // 已看不到该房间，容易留下无主录制。默认要求先停止录制。
+      if (!force && ['recording', 'paused'].includes(room.status)) {
+        throw new Error(
+          `来源房间 ${room.id} 正在录制中（status=${room.status}），请先在后台停止录制；` +
+            '确认可丢弃该录制时才加 --force'
+        );
       }
     }
 

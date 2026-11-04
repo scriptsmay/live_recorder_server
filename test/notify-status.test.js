@@ -51,6 +51,8 @@ describe('GET /api/notify/status URL 规范化回退', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 精确命中但不在录制的房间会再查一次 live_url 索引，默认无候选
+    pool.query.mockResolvedValue({ rows: [] });
     app = createApp();
   });
 
@@ -81,6 +83,34 @@ describe('GET /api/notify/status URL 规范化回退', () => {
     expect(res.body.exists).toBe(true);
     expect(DataService.getRoomByUrl).toHaveBeenNthCalledWith(1, CANONICAL_URL);
     expect(DataService.getRoomByUrl).toHaveBeenNthCalledWith(2, RAW_URL);
+  });
+
+  test('精确命中历史一次性直播间但稳定目标正在录制时，优先返回稳定目标', async () => {
+    const legacyRoom = {
+      ...ROOM,
+      id: 25,
+      room_url: CANONICAL_URL,
+      room_name: '历史一次性房间',
+      status: 'idle',
+    };
+    const stableRoom = {
+      ...ROOM,
+      id: 28,
+      room_url: 'https://www.xiaohongshu.com/user/profile/66c164b6aaaa',
+      room_name: '稳定目标',
+      live_url: CANONICAL_URL,
+      status: 'recording',
+    };
+    DataService.getRoomByUrl.mockResolvedValueOnce(legacyRoom);
+    pool.query.mockResolvedValueOnce({ rows: [stableRoom] });
+
+    const res = await request(app).get('/api/notify/status').query({ url: CANONICAL_URL });
+
+    expect(res.body.exists).toBe(true);
+    expect(res.body.data.room.id).toBe(28);
+    expect(res.body.data.room.target_room_url).toBe(stableRoom.room_url);
+    expect(res.body.data.status).toBe('recording');
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('live_url = $1'), [CANONICAL_URL]);
   });
 
   test('入参已是规范地址时只查一次房间，再回退本场 live_url 索引', async () => {

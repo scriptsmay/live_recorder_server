@@ -739,13 +739,6 @@ async function runMigration() {
       await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`);
     }
 
-    // ADR-021：同平台同主播只允许一个稳定目标（软删行不占用）。
-    // 存量库此列刚新增、全为空，直接建索引安全。
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_platform_host_active
-        ON rooms (polling_platform, host_user_id)
-        WHERE deleted_at IS NULL AND host_user_id <> ''
-    `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_rooms_live_url
         ON rooms (live_url)
@@ -760,11 +753,46 @@ async function runMigration() {
     // 存量小红书房间回填：个人主页 → host_user_id；直播间 → 当前场次字段。
     // 旧直播间链接若已被 normalizeRoomUrl 剥掉 ?host_id=，无法反推主播，
     // 保留为一次性历史目标，不做猜测性合并（见 ADR-021「合并与迁移规则」）。
-    await client.query(`
-      UPDATE rooms
-         SET host_user_id = substring(room_url from '/user/profile/([^/?#]+)')
-       WHERE host_user_id = ''
+    //
+    // ⚠️ 回填必须发生在唯一索引之前：若先建索引，回填遇到历史重复主播会触发
+    // 23505 并让整个迁移事务回滚、服务无法启动。
+    // 回填本身带 NOT EXISTS 守卫：同平台已存在相同 host_user_id（或同 user_id
+    // 的主页地址）时跳过，把歧义留给人工用 scripts/merge-room-targets.js 处理。
+    const ambiguousHosts = await client.query(`
+      SELECT substring(room_url from '/user/profile/([^/?#]+)') AS host_user_id,
+             array_agg(id ORDER BY id) AS ids
+        FROM rooms
+       WHERE deleted_at IS NULL
          AND room_url ~* '(xiaohongshu\\.com|redelight\\.cn)/user/profile/'
+       GROUP BY 1
+      HAVING COUNT(*) > 1
+    `);
+    if (ambiguousHosts.rows.length > 0) {
+      console.warn(
+        '[DB] 检测到重复的小红书主播目标，已跳过自动回填（保留一次性目标语义）: ' +
+          ambiguousHosts.rows.map((r) => `${r.host_user_id}=[${r.ids.join(',')}]`).join('; ')
+      );
+    }
+    await client.query(`
+      UPDATE rooms r
+         SET host_user_id = d.host_user_id
+        FROM (
+          SELECT id, polling_platform,
+                 substring(room_url from '/user/profile/([^/?#]+)') AS host_user_id
+            FROM rooms
+           WHERE host_user_id = ''
+             AND deleted_at IS NULL
+             AND room_url ~* '(xiaohongshu\\.com|redelight\\.cn)/user/profile/'
+        ) d
+       WHERE r.id = d.id
+         AND NOT EXISTS (
+           SELECT 1 FROM rooms other
+            WHERE other.id <> d.id
+              AND other.deleted_at IS NULL
+              AND other.polling_platform = r.polling_platform
+              AND (other.host_user_id = d.host_user_id
+                   OR substring(other.room_url from '/user/profile/([^/?#]+)') = d.host_user_id)
+         )
     `);
     await client.query(`
       UPDATE rooms
@@ -774,6 +802,25 @@ async function runMigration() {
          AND status IN ('recording', 'paused')
          AND room_url ~* '(xiaohongshu\\.com|redelight\\.cn)/livestream/'
     `);
+
+    // ADR-021：同平台同主播只允许一个稳定目标（软删行不占用）。
+    // 回填之后创建；极端情况下仍有重复（历史数据已被手工写入）时降级为告警，
+    // 不让升级过程因约束失败而崩溃——应用层的 _findByHostUserId 仍会归并。
+    await client.query('SAVEPOINT rooms_host_unique');
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_platform_host_active
+          ON rooms (polling_platform, host_user_id)
+          WHERE deleted_at IS NULL AND host_user_id <> ''
+      `);
+      await client.query('RELEASE SAVEPOINT rooms_host_unique');
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT rooms_host_unique');
+      if (err.code !== '23505') throw err;
+      console.warn(
+        '[DB] 无法创建主播唯一索引（存在重复目标），请先用 scripts/merge-room-targets.js 合并:\n' + err.message
+      );
+    }
 
     // v1.13.0：一场次一活跃分析记录（软删后可重算插入新行，同 biliup_accounts 惯例）
     await client.query(`
@@ -785,7 +832,7 @@ async function runMigration() {
     // ⚠️ rooms.room_url 例外：recording_sessions.room_url 与 recording_files.room_url 两个外键
     // 都引用它，PostgreSQL 要求外键引用列保持全表唯一约束，部分唯一索引不满足——
     // 故 rooms 保留 rooms_room_url_key，「软删后重建」走复活语义（清 deleted_at + 应用新配置），
-    // 由 upsertRoom / POST /rooms / getOrCreateRoom 的 revive 分支实现。
+    // 由 upsertRoom / POST /rooms / RoomTargetService 的 revive 分支实现。
     await client.query(`ALTER TABLE biliup_accounts DROP CONSTRAINT IF EXISTS biliup_accounts_name_key`);
     await client.query(`ALTER TABLE biliup_accounts DROP CONSTRAINT IF EXISTS biliup_accounts_cookies_path_key`);
     await client.query(`ALTER TABLE recording_files DROP CONSTRAINT IF EXISTS recording_files_file_path_key`);

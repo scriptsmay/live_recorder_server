@@ -663,6 +663,10 @@ class DataService {
    * 解释成 timestamptz 再取 epoch，读写用同一个时区设置，往返精确。
    * 业务代码拿到的就是 epoch ms，不做二次转换。
    *
+   * `roomUrl` 既可能是稳定目标地址（`recording_sessions.room_url`），也可能是
+   * 本场直播地址（`recording_sessions.live_url`，ADR-021）——孤儿弹幕记录的
+   * room_url 来自扩展推送的本场地址，因此两列都要匹配。
+   *
    * `ended_at IS NULL`（被 kill / 崩溃 / SIGTERM 未及时写库）不能当成无限区间，
    * 依次回退到该会话最后一个分片文件的完成时间、再回退到 `started_at + maxSessionMs`。
    * 回退值只用于匹配，绝不回写 DB（避免掩盖真实的进程崩溃事件）。
@@ -693,7 +697,7 @@ class DataService {
            WHERE session_id IS NOT NULL AND deleted_at IS NULL
            GROUP BY session_id
          ) f ON f.session_id = rs.id
-         WHERE rs.room_url = $1 AND rs.deleted_at IS NULL
+         WHERE (rs.room_url = $1 OR rs.live_url = $1) AND rs.deleted_at IS NULL
        )
        SELECT id, started_ms, ended_ms, ended_at_inferred
        FROM candidates

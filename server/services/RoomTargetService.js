@@ -33,7 +33,9 @@ class RoomTargetService {
     const identity = resolvedPlatform === 'xiaohongshu' ? parseXiaohongshuIdentity(roomUrl) : null;
 
     const finalHostUserId = hostUserId || identity?.hostUserId || '';
-    const finalLiveRoomId = liveRoomId || identity?.liveRoomId || '';
+    // live_room_id / live_url 是小红书场次字段；其他平台即使误传也不写，
+    // 避免把小红书地址结构塞进别的平台房间。
+    const finalLiveRoomId = resolvedPlatform === 'xiaohongshu' ? liveRoomId || identity?.liveRoomId || '' : '';
     const liveUrl = finalLiveRoomId
       ? identity?.liveUrl || `https://www.xiaohongshu.com/livestream/${finalLiveRoomId}`
       : '';
@@ -159,12 +161,16 @@ class RoomTargetService {
       values.push(value);
     };
 
+    // 暂停监听的房间不会真正开始录制，也就没有 finishSession 帮忙清场次字段。
+    // 这类请求不应污染 live_room_id / live_url，否则「当前场次」会长期残留。
+    const allowLiveState = room.monitoring_enabled !== false;
+
     if (room.deleted_at != null) add('deleted_at', null);
     if (hostUserId && room.host_user_id !== hostUserId) add('host_user_id', hostUserId);
     if (!room.polling_platform && platform) add('polling_platform', platform);
     if (roomName && !room.room_name) add('room_name', roomName);
-    if (liveRoomId && room.live_room_id !== liveRoomId) add('live_room_id', liveRoomId);
-    if (liveUrl && room.live_url !== liveUrl) add('live_url', liveUrl);
+    if (allowLiveState && liveRoomId && room.live_room_id !== liveRoomId) add('live_room_id', liveRoomId);
+    if (allowLiveState && liveUrl && room.live_url !== liveUrl) add('live_url', liveUrl);
 
     if (sets.length === 0) return room;
 
