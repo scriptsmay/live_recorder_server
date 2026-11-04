@@ -13,9 +13,9 @@ const {
 } = require('../server/lib/core/bilibili-season');
 
 const CREDENTIAL = {
-  cookieHeader: 'SESSDATA=secret_sessdata_value; bili_jct=secret_csrf_value; DedeUserID=724423252',
+  cookieHeader: 'SESSDATA=secret_sessdata_value; bili_jct=secret_csrf_value; DedeUserID=123456789',
   csrf: 'secret_csrf_value',
-  uid: '724423252',
+  uid: '123456789',
 };
 
 const SECRET_STRINGS = ['secret_sessdata_value', 'secret_csrf_value', 'SESSDATA', 'bili_jct'];
@@ -59,7 +59,7 @@ function seasonsPayload() {
     data: {
       seasons: [
         {
-          season: { id: 9314312, title: '测试合集', ep_num: 3, mid: 724423252 },
+          season: { id: 9314312, title: '测试合集', ep_num: 3, mid: 123456789 },
           sections: {
             sections: [
               { id: 10419712, title: '正片', seasonId: 9314312, epCount: 3, type: 1 },

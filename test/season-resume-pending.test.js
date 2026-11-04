@@ -27,7 +27,7 @@ const { loadBiliupCookie } = require('../server/lib/utils/biliup-cookie');
 const season = require('../server/lib/core/bilibili-season');
 const SeasonService = require('../server/services/SeasonService');
 
-const CREDENTIAL = { cookieHeader: 'SESSDATA=secret; bili_jct=csrf', csrf: 'csrf', uid: '724423252' };
+const CREDENTIAL = { cookieHeader: 'SESSDATA=secret; bili_jct=csrf', csrf: 'csrf', uid: '123456789' };
 const EMPTY_SUMMARY = { resumed: [], expired: [], invalid: [] };
 
 let clock;

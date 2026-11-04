@@ -51,7 +51,7 @@ const SeasonService = require('../server/services/SeasonService');
 const CREDENTIAL = {
   cookieHeader: 'SESSDATA=super_secret_value; bili_jct=super_secret_csrf',
   csrf: 'super_secret_csrf',
-  uid: '724423252',
+  uid: '123456789',
 };
 
 // 联表查询中模板侧字段的别名，与 _loadContext 的 SELECT 保持一致

@@ -9,7 +9,8 @@ const { createModuleLogger } = require('../logger');
 const log = createModuleLogger('polling');
 
 const XHS_IOS_USER_AGENT = 'ios/7.830 (ios 17.0; ; iPhone 15 (A2846/A3089/A3090/A3092))';
-const XHS_COMMON_PARAMS = 'platform=iOS&sid=session.1722166379345546829388';
+// 客户端会话 ID 由 App 本地生成，这里使用固定占位值，避免提交真实账号的会话标识。
+const XHS_COMMON_PARAMS = 'platform=iOS&sid=session.1700000000000000000000';
 const XHS_APP_REFERER = 'https://app.xhs.cn/';
 const XHS_PC_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';

@@ -34,7 +34,7 @@ const { isContainerRuntime } = require('../server/lib/utils/runtime');
 const SECRETS = {
   sessdata: 'SESSDATA-SECRET-VALUE',
   csrf: 'BILI-JCT-SECRET-VALUE',
-  uid: '724423252',
+  uid: '123456789',
   token: 'ACCESS-TOKEN-SECRET-VALUE',
 };
 
@@ -294,7 +294,7 @@ describe('loadBiliupCookie — 凭证红线', () => {
 });
 
 describe('loadBiliupCookie — 路径策略（宿主机 / 容器）', () => {
-  const HOST_PATH = '/Users/virola/biliup/cookies.json';
+  const HOST_PATH = '/Users/tester/biliup/cookies.json';
 
   beforeEach(() => {
     isContainerRuntime.mockReturnValue(false);
@@ -346,7 +346,7 @@ describe('loadBiliupCookie — 路径策略（宿主机 / 容器）', () => {
       throw new Error('穿越路径不应触达文件系统');
     });
 
-    await expect(loadBiliupCookie('/Users/virola/../etc/passwd')).rejects.toMatchObject({
+    await expect(loadBiliupCookie('/Users/tester/../etc/passwd')).rejects.toMatchObject({
       code: ERROR_CODES.PATH_INVALID,
     });
     expect(fs.promises.readFile).not.toHaveBeenCalled();
