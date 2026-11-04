@@ -44,6 +44,7 @@ const form = reactive<RoomFormData & { room_url: string }>({
   upload_template_id: null,
   polling_enabled: false,
   polling_interval: DEFAULT_POLLING_INTERVAL,
+  extension_danmaku_enabled: false,
 })
 
 function resetForm() {
@@ -56,6 +57,7 @@ function resetForm() {
   form.upload_template_id = null
   form.polling_enabled = false
   form.polling_interval = DEFAULT_POLLING_INTERVAL
+  form.extension_danmaku_enabled = false
 }
 
 // 打开弹窗时加载数据
@@ -77,6 +79,7 @@ watch(
         form.upload_template_id = r.upload_template_id ?? null
         form.polling_enabled = r.polling_enabled === true
         form.polling_interval = r.polling_interval || DEFAULT_POLLING_INTERVAL
+        form.extension_danmaku_enabled = r.extension_danmaku_enabled === true
       } catch (err) {
         toast.error('加载直播间失败: ' + (err instanceof ApiError ? err.message : '未知错误'))
         emit('close')
@@ -97,6 +100,7 @@ async function handleSave() {
       ? {
           notification_enabled: form.notification_enabled,
           upload_template_id: form.upload_template_id,
+          extension_danmaku_enabled: form.extension_danmaku_enabled,
         }
       : {
           room_name: form.room_name,
@@ -107,6 +111,7 @@ async function handleSave() {
           upload_template_id: form.upload_template_id,
           polling_enabled: form.polling_enabled,
           polling_interval: form.polling_enabled ? form.polling_interval : DEFAULT_POLLING_INTERVAL,
+          extension_danmaku_enabled: form.extension_danmaku_enabled,
         }
 
     if (props.editId) {
@@ -213,7 +218,7 @@ function onOverlayClick(e: MouseEvent) {
                   d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
                 />
               </svg>
-              <span>录制或暂停中，仅可修改通知开关与投稿模板。</span>
+              <span>录制或暂停中，仅可修改通知开关、浏览器插件弹幕采集与投稿模板。</span>
             </div>
 
             <!-- 直播间地址 -->
@@ -354,6 +359,13 @@ function onOverlayClick(e: MouseEvent) {
                 v-model="form.monitoring_enabled"
                 label="启用监听"
                 description="收到 api 请求后启动 ffmpeg 录制"
+              />
+
+              <!-- 浏览器插件弹幕采集开关 -->
+              <SwitchField
+                v-model="form.extension_danmaku_enabled"
+                label="浏览器插件弹幕采集"
+                description="在播录制时通知 Chrome 扩展自动打开后台标签页采集弹幕（快手 / 小红书）"
               />
             </div>
 

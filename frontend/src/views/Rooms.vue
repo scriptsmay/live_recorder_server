@@ -534,6 +534,26 @@ onMounted(() => {
                     />
                     录制
                   </span>
+                  <span
+                    v-if="
+                      r.extension_danmaku_enabled ||
+                      r.polling_platform === 'kuaishou' ||
+                      r.polling_platform === 'xiaohongshu'
+                    "
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
+                    :class="
+                      r.extension_danmaku_enabled
+                        ? 'border-purple-200 bg-purple-50 text-purple-600'
+                        : 'border-gray-200 text-gray-300'
+                    "
+                    title="浏览器插件自动打开后台标签页采集弹幕"
+                  >
+                    <span
+                      class="h-1.5 w-1.5 rounded-full"
+                      :class="r.extension_danmaku_enabled ? 'bg-purple-500' : 'bg-gray-300'"
+                    />
+                    弹幕
+                  </span>
                 </div>
               </td>
 

@@ -94,12 +94,17 @@ async function runMigration() {
         monitoring_enabled BOOLEAN DEFAULT TRUE,
         polling_enabled BOOLEAN DEFAULT FALSE,
         polling_platform VARCHAR(50) DEFAULT NULL,
-        polling_interval INTEGER DEFAULT 60
+        polling_interval INTEGER DEFAULT 60,
+        extension_danmaku_enabled BOOLEAN DEFAULT FALSE
       )
     `);
 
     await client.query(`
       ALTER TABLE rooms ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(1024) DEFAULT ''
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS extension_danmaku_enabled BOOLEAN DEFAULT FALSE
     `);
 
     // ========== recording_sessions ==========

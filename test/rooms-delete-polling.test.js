@@ -13,6 +13,7 @@ jest.mock('../server/db/index', () => ({
 jest.mock('../server/db/redis', () => ({
   get: jest.fn(),
   setEx: jest.fn(),
+  del: jest.fn(() => Promise.resolve(1)),
 }));
 jest.mock('../server/lib/core/polling/checkers', () => ({}));
 jest.mock('../server/services/RecorderService', () => ({
@@ -188,5 +189,45 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     expect(room.avatar_url).toBe('https://sns-avatar-qc.xhscdn.com/avatar/ag.jpg');
 
     delete checkers.xiaohongshu;
+  });
+
+  test('PUT /api/rooms/:id 录制中允许切换 extension_danmaku_enabled 并自动补建弹幕采集会话', async () => {
+    const danmakuRecorder = require('../server/lib/core/danmaku/DanmakuRecorder');
+    const isCapturingSpy = jest.spyOn(danmakuRecorder, 'isCapturing').mockReturnValue(false);
+    const startCaptureSpy = jest.spyOn(danmakuRecorder, 'startCapture').mockResolvedValue(46);
+
+    const updatedRow = {
+      id: 25,
+      room_url: 'https://www.xiaohongshu.com/livestream/570523582342626238',
+      room_name: '王者荣耀女子公开赛',
+      status: 'recording',
+      polling_platform: 'xiaohongshu',
+      extension_danmaku_enabled: true,
+    };
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ status: 'recording', room_url: 'https://www.xiaohongshu.com/livestream/570523582342626238' }],
+      }) // SELECT status, room_url
+      .mockResolvedValueOnce({ rows: [updatedRow] }) // UPDATE rooms ... RETURNING *
+      .mockResolvedValueOnce({ rows: [{ id: 71, started_ms: 1700000000000 }] }); // SELECT active recording_session
+
+    const res = await request(app).put('/api/rooms/25').send({
+      extension_danmaku_enabled: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.extension_danmaku_enabled).toBe(true);
+    expect(startCaptureSpy).toHaveBeenCalledWith({
+      sessionId: 71,
+      roomId: 25,
+      roomUrl: 'https://www.xiaohongshu.com/livestream/570523582342626238',
+      platform: 'xiaohongshu',
+      recordingStartedAt: 1700000000000,
+      extensionDanmakuEnabled: true,
+    });
+
+    isCapturingSpy.mockRestore();
+    startCaptureSpy.mockRestore();
   });
 });

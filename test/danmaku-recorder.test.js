@@ -369,4 +369,33 @@ describe('DanmakuRecorder.writeBatch — 批次时间戳分配', () => {
       else process.env.VIDEO_DOWNLOAD_DIR = prevDir;
     }
   });
+
+  test('startCapture 在全局开关关闭但房间级 extensionDanmakuEnabled=true 时仍正常启动采集', async () => {
+    const pool = require('../server/db/index');
+    const DataService = require('../server/services/DataService');
+    const prevDir = process.env.VIDEO_DOWNLOAD_DIR;
+    process.env.VIDEO_DOWNLOAD_DIR = '/tmp/xhs-capture-test';
+
+    jest.spyOn(DataService, 'getSetting').mockResolvedValueOnce('false');
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'openSync').mockReturnValue(99);
+    pool.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: 888 }] });
+
+    try {
+      const captureId = await DanmakuRecorder.startCapture({
+        sessionId: 71,
+        roomId: 25,
+        roomUrl: 'https://www.xiaohongshu.com/livestream/570523582342626238',
+        platform: 'xiaohongshu',
+        recordingStartedAt: 1700000000000,
+        extensionDanmakuEnabled: true,
+      });
+
+      expect(captureId).toBe(888);
+      expect(DanmakuRecorder.isCapturing('https://www.xiaohongshu.com/livestream/570523582342626238')).toBe(true);
+    } finally {
+      if (prevDir === undefined) delete process.env.VIDEO_DOWNLOAD_DIR;
+      else process.env.VIDEO_DOWNLOAD_DIR = prevDir;
+    }
+  });
 });

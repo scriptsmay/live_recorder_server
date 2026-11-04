@@ -18,6 +18,9 @@ const { scanRecordingFiles } = require('../lib/core/scan-files');
 const hlsGenerator = require('../lib/core/hls-generator');
 const hlsCleanupService = require('../services/HLSCleanupService');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { detectPlatform } = require('../lib/utils/platform-detector');
+
+const EXTENSION_DANMAKU_PLATFORMS = new Set(['kuaishou', 'xiaohongshu']);
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const { version } = require('../../package.json');
@@ -158,6 +161,51 @@ router.post('/notify/feishu_webhook', async (req, res) => {
 
 router.get('/notify/status', async (req, res) => {
   const url = req.query.url;
+  const activeOnly = req.query.active === 'true' || req.query.active === '1';
+
+  if (!url && activeOnly) {
+    try {
+      const activeRes = await pool.query(
+        `SELECT r.id, r.room_url, r.room_name, r.polling_platform, r.status,
+                r.extension_danmaku_enabled,
+                s.id AS session_id, s.started_at
+         FROM rooms r
+         LEFT JOIN LATERAL (
+           SELECT id, started_at
+           FROM recording_sessions
+           WHERE room_url = r.room_url AND status = 'recording'
+           ORDER BY started_at DESC
+           LIMIT 1
+         ) s ON true
+         WHERE r.deleted_at IS NULL
+           AND r.monitoring_enabled IS NOT FALSE
+           AND r.extension_danmaku_enabled = TRUE
+           AND r.status IN ('recording', 'paused')
+         ORDER BY r.id ASC`
+      );
+      const rooms = activeRes.rows
+        .map((row) => {
+          const platform = row.polling_platform || detectPlatform(row.room_url);
+          return {
+            id: row.id,
+            room_url: normalizeRoomUrl(row.room_url) || row.room_url,
+            raw_room_url: row.room_url,
+            room_name: row.room_name,
+            platform,
+            status: row.status,
+            extension_danmaku_enabled: row.extension_danmaku_enabled === true,
+            session_id: row.session_id || null,
+            started_at: row.started_at || null,
+          };
+        })
+        .filter((room) => EXTENSION_DANMAKU_PLATFORMS.has(room.platform));
+      return res.json({ status: 'ok', data: { rooms } });
+    } catch (err) {
+      console.error('[api] 活跃录制列表查询失败:', err);
+      return res.status(500).json({ status: 'error', message: '查询失败' });
+    }
+  }
+
   if (!url) {
     return res.status(400).json({ exists: false, message: '缺少 url 参数' });
   }
@@ -179,7 +227,13 @@ router.get('/notify/status', async (req, res) => {
       downloaderEngine = dl.name;
     } catch (_) {}
     const data = {
-      room: { id: room.id, room_url: room.room_url, room_name: room.room_name },
+      room: {
+        id: room.id,
+        room_url: room.room_url,
+        room_name: room.room_name,
+        extension_danmaku_enabled: room.extension_danmaku_enabled === true,
+      },
+      extension_danmaku_enabled: room.extension_danmaku_enabled === true,
       downloader: downloaderEngine,
     };
 
@@ -228,6 +282,7 @@ router.post('/notify/live_download', async (req, res) => {
     data: {
       room_id: result.room.id,
       room_url: result.room.room_url,
+      extension_danmaku_enabled: result.room.extension_danmaku_enabled === true,
       session_id: result.sessionId,
       path: result.outputFilePattern,
     },

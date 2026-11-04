@@ -11,6 +11,7 @@ const XiaohongshuChecker = require('../lib/core/polling/XiaohongshuChecker');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const { isWithinRoot, resolveAndValidate } = require('../lib/utils/path-safety');
+const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 
 const COVER_CONTENT_TYPES = new Map([
   ['.jpg', 'image/jpeg'],
@@ -156,6 +157,7 @@ router.post('/rooms', async (req, res) => {
       upload_template_id,
       polling_enabled,
       polling_interval,
+      extension_danmaku_enabled,
     } = req.body;
 
     if (!room_url) {
@@ -195,6 +197,7 @@ router.post('/rooms', async (req, res) => {
         'polling_enabled',
         'polling_platform',
         'polling_interval',
+        'extension_danmaku_enabled',
       ];
       const reqBody = {
         room_name,
@@ -206,6 +209,7 @@ router.post('/rooms', async (req, res) => {
         polling_enabled,
         polling_platform,
         polling_interval,
+        extension_danmaku_enabled,
       };
       for (const f of fieldsList) {
         if (reqBody[f] !== undefined) {
@@ -239,8 +243,8 @@ router.post('/rooms', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id, polling_enabled, polling_platform, polling_interval)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO rooms (room_url, room_name, notification_enabled, monitoring_enabled, segment_duration, filename_template, upload_template_id, polling_enabled, polling_platform, polling_interval, extension_danmaku_enabled)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
         room_url,
         room_name || '',
@@ -252,6 +256,7 @@ router.post('/rooms', async (req, res) => {
         polling_enabled === true,
         polling_platform || null,
         polling_interval || 60,
+        extension_danmaku_enabled === true,
       ]
     );
     const createdRoom = result.rows[0];
@@ -292,8 +297,9 @@ const ROOM_FIELDS_IDLE = [
   'upload_template_id',
   'polling_enabled',
   'polling_interval',
+  'extension_danmaku_enabled',
 ];
-const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id'];
+const ROOM_FIELDS_WHILE_RECORDING = ['notification_enabled', 'upload_template_id', 'extension_danmaku_enabled'];
 
 router.put('/rooms/:id', async (req, res) => {
   try {
@@ -342,13 +348,50 @@ router.put('/rooms/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'Error', message: '直播间不存在' });
     }
-    await redis.del(`room:${result.rows[0].room_url}`).catch(() => {});
+    const updatedRoom = result.rows[0];
+    await redis.del(`room:${updatedRoom.room_url}`).catch(() => {});
 
     if (req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
       await pollingManager.reloadRoom(parseInt(id, 10));
     }
 
-    res.json({ status: 'ok', data: result.rows[0] });
+    // 录制中动态开启浏览器插件弹幕采集时，若当前会话尚未建立弹幕采集记录，立即补建
+    if (
+      isActive &&
+      updatedRoom.extension_danmaku_enabled === true &&
+      typeof danmakuRecorder?.isCapturing === 'function' &&
+      !danmakuRecorder.isCapturing(updatedRoom.room_url)
+    ) {
+      try {
+        const sessRes = await pool.query(
+          `SELECT id, EXTRACT(EPOCH FROM (started_at AT TIME ZONE current_setting('TimeZone'))) * 1000 AS started_ms
+           FROM recording_sessions
+           WHERE room_url = $1 AND status = 'recording'
+           ORDER BY started_at DESC LIMIT 1`,
+          [updatedRoom.room_url]
+        );
+        if (sessRes.rows.length > 0) {
+          const sess = sessRes.rows[0];
+          const startedAtMs = Number(sess.started_ms) > 0 ? Math.round(Number(sess.started_ms)) : Date.now();
+          danmakuRecorder
+            .startCapture({
+              sessionId: sess.id,
+              roomId: updatedRoom.id,
+              roomUrl: updatedRoom.room_url,
+              platform: updatedRoom.polling_platform || detectedPlatform || 'kuaishou',
+              recordingStartedAt: startedAtMs,
+              extensionDanmakuEnabled: true,
+            })
+            .catch((e) => {
+              console.warn('[rooms] 录制中动态启动弹幕采集失败:', e.message);
+            });
+        }
+      } catch (e) {
+        console.warn('[rooms] 查询当前录制会话以启动弹幕采集失败:', e.message);
+      }
+    }
+
+    res.json({ status: 'ok', data: updatedRoom });
   } catch (err) {
     console.error('[rooms] 更新失败:', err);
     res.status(500).json({ status: 'Error', message: '更新失败' });

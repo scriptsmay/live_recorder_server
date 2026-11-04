@@ -983,7 +983,7 @@ class RecorderService {
         downloader: downloader.name,
       });
 
-      // 启动弹幕采集（如果启用）
+      // 启动弹幕采集（如果全局启用或房间开启了浏览器插件弹幕采集）
       danmakuRecorder
         .startCapture({
           sessionId,
@@ -991,6 +991,7 @@ class RecorderService {
           roomUrl: room.room_url,
           platform: room.polling_platform || 'kuaishou',
           recordingStartedAt: sessionStartMs,
+          extensionDanmakuEnabled: room.extension_danmaku_enabled === true,
         })
         .catch((err) => {
           console.warn('[弹幕] 启动采集失败:', err.message);

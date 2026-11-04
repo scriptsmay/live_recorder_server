@@ -75,9 +75,16 @@ class DanmakuRecorder {
    * startCapture 的实际实现（由 _runSerialized 保证串行）
    * @private
    */
-  async _startCapture({ sessionId, roomId, roomUrl, platform = 'kuaishou', recordingStartedAt }) {
+  async _startCapture({
+    sessionId,
+    roomId,
+    roomUrl,
+    platform = 'kuaishou',
+    recordingStartedAt,
+    extensionDanmakuEnabled = false,
+  }) {
     const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
-    if (enabled !== 'true') {
+    if (enabled !== 'true' && !extensionDanmakuEnabled) {
       return null;
     }
 
@@ -454,7 +461,9 @@ class DanmakuRecorder {
    * @returns {boolean}
    */
   isCapturing(roomUrl) {
-    return this.activeSessions.has(roomUrl);
+    if (this.activeSessions.has(roomUrl)) return true;
+    const normalizedUrl = normalizeRoomUrl(roomUrl);
+    return Boolean(this._findSessionByNormalizedUrl(normalizedUrl));
   }
 
   /**
@@ -581,8 +590,11 @@ class DanmakuRecorder {
   async _writeOrphanBatch(roomUrl, events) {
     const enabled = await DataService.getSetting('kuaishou_danmaku_enabled', 'false');
     if (enabled !== 'true') {
-      // 采集未启用时不需要落孤儿：扩展本不该向后端推
-      return null;
+      const room = typeof DataService.getRoomByUrl === 'function' ? await DataService.getRoomByUrl(roomUrl) : null;
+      if (room?.extension_danmaku_enabled !== true) {
+        // 采集未启用时不需要落孤儿：扩展本不该向后端推
+        return null;
+      }
     }
     if (!roomUrl || !Array.isArray(events) || events.length === 0) {
       return null;

@@ -27,6 +27,7 @@ export interface Room {
   polling_enabled: boolean
   polling_interval: number
   polling_platform: string | null
+  extension_danmaku_enabled?: boolean
   last_live_status: boolean
   last_polled_at: string | null
   segment_duration: number
@@ -47,6 +48,7 @@ export interface RoomFormData {
   upload_template_id: number | null
   polling_enabled: boolean
   polling_interval: number
+  extension_danmaku_enabled: boolean
 }
 
 // ====== 录制会话 ======
