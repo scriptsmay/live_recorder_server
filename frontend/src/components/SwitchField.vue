@@ -3,6 +3,7 @@ defineProps<{
   modelValue: boolean
   label: string
   description?: string
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -11,11 +12,15 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <label class="flex items-center gap-3 cursor-pointer select-none">
+  <label
+    class="flex items-center gap-3 select-none"
+    :class="disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
+  >
     <input
       :checked="modelValue"
       type="checkbox"
       class="sr-only"
+      :disabled="disabled"
       @change="emit('update:modelValue', !modelValue)"
     />
 

@@ -100,4 +100,46 @@ describe('PollingManager dashboard snapshot', () => {
     expect(pollingManager.roomLiveStatus.get(1)).toBe(true);
     expect(pollingManager.roomLiveStatus.has(2)).toBe(false);
   });
+
+  test('加载轮询房间时过滤小红书个人主页房间并自愈关闭轮询开关', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          { id: 1, room_url: 'https://www.huya.com/1', polling_platform: 'huya' },
+          {
+            id: 2,
+            room_url: 'https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e',
+            polling_platform: 'xiaohongshu',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    redis.get.mockResolvedValue(null);
+
+    const rooms = await pollingManager.loadPollingRooms();
+
+    expect(rooms).toHaveLength(1);
+    expect(rooms[0].id).toBe(1);
+    expect(pollingManager._totalRooms).toBe(1);
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining('UPDATE rooms SET polling_enabled = false'), [
+      [2],
+    ]);
+  });
+
+  test('小红书个人主页房间不会建立轮询定时器', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+    jest.spyOn(global, 'setInterval');
+
+    await pollingManager.startRoomPolling({
+      id: 7,
+      room_url: 'https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e',
+      polling_platform: 'xiaohongshu',
+      polling_interval: 60,
+    });
+
+    expect(global.setInterval).not.toHaveBeenCalled();
+    expect(pollingManager.timers.has('room:7')).toBe(false);
+    expect(pollingManager.roomPollingMeta.has(7)).toBe(false);
+    expect(pool.query).toHaveBeenCalledWith('UPDATE rooms SET polling_enabled = false WHERE id = $1', [7]);
+  });
 });

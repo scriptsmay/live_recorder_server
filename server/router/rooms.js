@@ -9,7 +9,7 @@ const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
 const XiaohongshuChecker = require('../lib/core/polling/XiaohongshuChecker');
 const { detectPlatform } = require('../lib/utils/platform-detector');
-const { normalizeRoomUrl } = require('../lib/utils/room-url');
+const { normalizeRoomUrl, isXiaohongshuProfileUrl } = require('../lib/utils/room-url');
 const { isWithinRoot, resolveAndValidate } = require('../lib/utils/path-safety');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 
@@ -176,6 +176,10 @@ router.post('/rooms', async (req, res) => {
       polling_platform = detectPlatform(room_url) || 'xiaohongshu';
     }
 
+    // 小红书个人主页链接无法推导出当前直播间 room_id（每次开播重新生成），
+    // 仅用于主播信息预登记：强制关闭轮询开关，避免每分钟抓一次主页。
+    const profileOnly = polling_platform === 'xiaohongshu' && isXiaohongshuProfileUrl(room_url);
+
     // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
     // 重新添加同名房间走复活语义：清 deleted_at 后按提交字段更新（保持房间 id 连续）。
     const exist = await pool.query('SELECT * FROM rooms WHERE room_url = $1', [room_url]);
@@ -206,7 +210,7 @@ router.post('/rooms', async (req, res) => {
         segment_duration,
         filename_template,
         upload_template_id,
-        polling_enabled,
+        polling_enabled: profileOnly ? false : polling_enabled,
         polling_platform,
         polling_interval,
         extension_danmaku_enabled,
@@ -229,7 +233,7 @@ router.post('/rooms', async (req, res) => {
         }
       }
 
-      if (req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
+      if (profileOnly || req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
         await pollingManager.reloadRoom(updatedRoom.id);
       } else if (
         updatedRoom.monitoring_enabled !== false &&
@@ -253,7 +257,7 @@ router.post('/rooms', async (req, res) => {
         segment_duration || 0,
         filename_template || '',
         upload_template_id || null,
-        polling_enabled === true,
+        polling_enabled === true && !profileOnly,
         polling_platform || null,
         polling_interval || 60,
         extension_danmaku_enabled === true,
@@ -263,7 +267,8 @@ router.post('/rooms', async (req, res) => {
     res.json({ status: 'ok', data: createdRoom, updated: false });
 
     // 后续启动轮询；若未开启定时轮询但启用了监听，也立即异步执行一次开播检测（确保直播中添加房间能立即启动录制并回填主播名）
-    if (polling_enabled === true) {
+    // 小红书个人主页房间只跑这一次元信息拉取（昵称/头像），不建立定时轮询。
+    if (polling_enabled === true && !profileOnly) {
       await pollingManager.reloadRoom(createdRoom.id);
     } else if (monitoring_enabled !== false && polling_platform && typeof pollingManager.checkRoom === 'function') {
       Promise.resolve(pollingManager.checkRoom(createdRoom)).catch(() => {});
@@ -311,12 +316,18 @@ router.put('/rooms/:id', async (req, res) => {
     const isActive = ['recording', 'paused'].includes(existing.rows[0].status);
     const fields = isActive ? ROOM_FIELDS_WHILE_RECORDING : ROOM_FIELDS_IDLE;
 
+    // 小红书个人主页房间不支持轮询，任何开启请求都归一为 false。
+    const body = { ...req.body };
+    if (isXiaohongshuProfileUrl(existing.rows[0].room_url) && body.polling_enabled !== undefined) {
+      body.polling_enabled = false;
+    }
+
     const sets = [];
     const values = [];
     for (const field of fields) {
-      if (req.body[field] !== undefined) {
+      if (body[field] !== undefined) {
         sets.push(`${field} = $${values.length + 1}`);
-        values.push(req.body[field]);
+        values.push(body[field]);
       }
     }
 
@@ -331,8 +342,8 @@ router.put('/rooms/:id', async (req, res) => {
       const msg = isActive ? '录制中仅可更新通知开关、浏览器插件弹幕采集与投稿模板' : '无更新字段';
       return res.status(400).json({ status: 'Error', message: msg });
     }
-    const blocked = Object.keys(req.body).filter(
-      (k) => req.body[k] !== undefined && !fields.includes(k) && k !== 'polling_platform'
+    const blocked = Object.keys(body).filter(
+      (k) => body[k] !== undefined && !fields.includes(k) && k !== 'polling_platform'
     );
     if (blocked.length > 0) {
       return res.status(400).json({

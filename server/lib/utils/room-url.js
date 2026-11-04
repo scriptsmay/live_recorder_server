@@ -83,4 +83,35 @@ function normalizeRoomUrl(roomUrl) {
   return trimmed.slice(0, Math.min(...delimiterIndexes));
 }
 
-module.exports = { normalizeRoomUrl };
+/**
+ * 判断是否为小红书个人主页链接。
+ *
+ * 小红书每次开播都会生成新的 room_id，个人主页链接无法推导出直播间地址，
+ * 因此这类房间只能做主播信息预登记，不具备轮询开播状态的能力。
+ *
+ * @param {*} roomUrl
+ * @returns {boolean}
+ */
+function isXiaohongshuProfileUrl(roomUrl) {
+  if (typeof roomUrl !== 'string') return false;
+
+  const trimmed = extractFirstUrlFromText(roomUrl.trim());
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    const isXhsMain =
+      host === 'xiaohongshu.com' ||
+      host.endsWith('.xiaohongshu.com') ||
+      host === 'redelight.cn' ||
+      host.endsWith('.redelight.cn');
+    if (!isXhsMain) return false;
+
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const profileIdx = segments.findIndex((s) => s.toLowerCase() === 'profile');
+    return profileIdx >= 0 && Boolean(segments[profileIdx + 1]);
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports = { normalizeRoomUrl, isXiaohongshuProfileUrl };

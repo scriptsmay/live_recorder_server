@@ -8,7 +8,7 @@ jest.mock('../server/db/redis', () => ({
 }));
 jest.mock('../server/lib/core/RecordingManager', () => ({}));
 
-const { normalizeRoomUrl } = require('../server/lib/utils/room-url');
+const { normalizeRoomUrl, isXiaohongshuProfileUrl } = require('../server/lib/utils/room-url');
 const { detectPlatform, extractFirstUrlFromText } = require('../server/lib/utils/platform-detector');
 
 describe('normalizeRoomUrl', () => {
@@ -57,6 +57,27 @@ describe('normalizeRoomUrl', () => {
 
   test('非字符串值保持不变', () => {
     expect(normalizeRoomUrl(null)).toBeNull();
+  });
+});
+
+describe('isXiaohongshuProfileUrl', () => {
+  test('识别带查询参数与分享口令的个人主页链接', () => {
+    expect(
+      isXiaohongshuProfileUrl('https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e?xsec_token=abc')
+    ).toBe(true);
+    expect(
+      isXiaohongshuProfileUrl(
+        '分享给你 https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e?xsec_source=app_share 复制打开'
+      )
+    ).toBe(true);
+  });
+
+  test('直播间、其他平台与非法输入不识别为个人主页', () => {
+    expect(isXiaohongshuProfileUrl('https://www.xiaohongshu.com/livestream/570523767964993440')).toBe(false);
+    expect(isXiaohongshuProfileUrl('https://live.kuaishou.com/u/3xhpa8nk4a7xdg6')).toBe(false);
+    expect(isXiaohongshuProfileUrl('https://www.xiaohongshu.com/user/profile/')).toBe(false);
+    expect(isXiaohongshuProfileUrl(null)).toBe(false);
+    expect(isXiaohongshuProfileUrl('')).toBe(false);
   });
 });
 

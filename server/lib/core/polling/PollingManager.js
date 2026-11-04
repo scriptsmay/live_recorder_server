@@ -7,6 +7,7 @@ const notify = require('../notify');
 const { createModuleLogger } = require('../logger');
 const log = createModuleLogger('polling');
 const { detectPlatform } = require('../../utils/platform-detector');
+const { isXiaohongshuProfileUrl } = require('../../utils/room-url');
 
 function redactStreamUrl(url) {
   if (!url) return url;
@@ -28,6 +29,19 @@ class PollingManager {
     this.roomLiveStatus = new Map();
     this.roomPollingMeta = new Map();
     this._totalRooms = 0;
+  }
+
+  /**
+   * 小红书个人主页链接无法推导出当前直播间 room_id（每次开播都会生成新 room_id），
+   * 因此这类房间只做主播信息预登记，不参与定时轮询。
+   *
+   * @param {Object} room
+   * @returns {boolean}
+   */
+  _isProfileOnlyRoom(room) {
+    if (!room) return false;
+    if (room.polling_platform && room.polling_platform !== 'xiaohongshu') return false;
+    return isXiaohongshuProfileUrl(room.room_url);
   }
 
   _setRoomPollingMeta(room) {
@@ -125,7 +139,22 @@ class PollingManager {
         FROM rooms
         WHERE polling_enabled = true AND deleted_at IS NULL
       `);
-      for (const room of result.rows) {
+
+      // 小红书个人主页房间历史配置可能残留 polling_enabled = true，启动时自愈关闭，
+      // 避免每分钟对主页发起一次无意义的 SSR 请求。
+      const profileOnlyRooms = result.rows.filter((room) => this._isProfileOnlyRoom(room));
+      if (profileOnlyRooms.length > 0) {
+        const ids = profileOnlyRooms.map((room) => room.id);
+        await pool
+          .query('UPDATE rooms SET polling_enabled = false WHERE id = ANY($1::int[])', [ids])
+          .catch((err) => log.warn(`[PollingManager] 关闭小红书主页房间轮询失败: ${err.message}`));
+        log.warn(
+          `[PollingManager] 检测到 ${profileOnlyRooms.length} 个小红书个人主页房间，已关闭轮询（仅保留主播信息预登记）`
+        );
+      }
+
+      const pollableRooms = result.rows.filter((room) => !this._isProfileOnlyRoom(room));
+      for (const room of pollableRooms) {
         try {
           const cached = await redis.get(`polling:live_status:${room.id}`);
           if (cached) {
@@ -134,8 +163,8 @@ class PollingManager {
           }
         } catch (_) {}
       }
-      this._totalRooms = result.rows.length;
-      return result.rows;
+      this._totalRooms = pollableRooms.length;
+      return pollableRooms;
     } catch (err) {
       log.error('[PollingManager] 加载轮询房间失败:', err.message);
       this._totalRooms = 0;
@@ -336,6 +365,17 @@ class PollingManager {
       clearInterval(this.timers.get(roomKey));
     }
 
+    // 防御性跳过：即使调用方漏判，也不为小红书个人主页房间建立定时器。
+    if (this._isProfileOnlyRoom(room)) {
+      log.warn(`[PollingManager] 跳过小红书个人主页房间轮询（无法推导 room_id）: ${room.room_name || room.room_url}`);
+      await pool
+        .query('UPDATE rooms SET polling_enabled = false WHERE id = $1', [room.id])
+        .catch((err) => log.warn(`[PollingManager] 关闭主页房间轮询失败: ${err.message}`));
+      this.timers.delete(roomKey);
+      this.roomPollingMeta.delete(room.id);
+      return;
+    }
+
     this._setRoomPollingMeta(room);
 
     if (!this.roomLiveStatus.has(room.id)) {
@@ -447,6 +487,16 @@ class PollingManager {
     }
 
     const room = result.rows[0];
+
+    // 小红书个人主页房间不具备轮询能力：直接关闭轮询开关并清理定时器
+    if (this._isProfileOnlyRoom(room)) {
+      await pool
+        .query('UPDATE rooms SET polling_enabled = false WHERE id = $1', [roomId])
+        .catch((err) => log.warn(`[PollingManager] 关闭主页房间轮询失败: ${err.message}`));
+      await this.stopRoomPolling(roomId);
+      log.important(`[PollingManager] 小红书个人主页房间已关闭轮询（仅预登记）: ${room.room_name || room.room_url}`);
+      return;
+    }
 
     // 判断轮询平台是否支持，不支持则自动关闭轮询
     const checkerClass = this.getChecker(room.polling_platform);

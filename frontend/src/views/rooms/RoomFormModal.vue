@@ -8,7 +8,7 @@
  *
  * 设计：与 Rooms.vue 保持 Linear Aesthetic —— 玻璃遮罩 + 超细描边 + 统一控件态。
  */
-import { ref, reactive, watch } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import SwitchField from '@/components/SwitchField.vue'
@@ -30,6 +30,31 @@ const toast = useToast()
 const saving = ref(false)
 
 const DEFAULT_POLLING_INTERVAL = 90
+
+/**
+ * 小红书个人主页链接无法推导出当前直播间 room_id（每次开播都会重新生成），
+ * 只能用于预登记主播信息，不具备轮询开播状态的能力。
+ */
+function isXiaohongshuProfileUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl.trim())
+    const host = parsed.hostname.toLowerCase()
+    const isXhs =
+      host === 'xiaohongshu.com' ||
+      host.endsWith('.xiaohongshu.com') ||
+      host === 'redelight.cn' ||
+      host.endsWith('.redelight.cn')
+    if (!isXhs) return false
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    const profileIdx = segments.findIndex((s) => s.toLowerCase() === 'profile')
+    return profileIdx >= 0 && Boolean(segments[profileIdx + 1])
+  } catch {
+    return false
+  }
+}
+
+const isProfileOnly = computed(() => isXiaohongshuProfileUrl(form.room_url))
 
 const fieldClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/60 disabled:bg-gray-100 disabled:text-gray-500'
@@ -59,6 +84,15 @@ function resetForm() {
   form.polling_interval = DEFAULT_POLLING_INTERVAL
   form.extension_danmaku_enabled = false
 }
+
+// 小红书个人主页房间强制关闭轮询（服务端也会做同样的归一）
+watch(
+  () => form.room_url,
+  (url) => {
+    if (isXiaohongshuProfileUrl(url)) form.polling_enabled = false
+  },
+  { immediate: true },
+)
 
 // 打开弹窗时加载数据
 watch(
@@ -375,7 +409,12 @@ function onOverlayClick(e: MouseEvent) {
                 <SwitchField
                   v-model="form.polling_enabled"
                   label="启用轮询"
-                  description="定期查询开播状态"
+                  :disabled="isProfileOnly"
+                  :description="
+                    isProfileOnly
+                      ? '小红书个人主页仅预登记主播信息，开播会生成新房间，无法轮询；请使用直播间分享链接'
+                      : '定期查询开播状态'
+                  "
                 />
               </div>
 
