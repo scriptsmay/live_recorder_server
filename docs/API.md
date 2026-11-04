@@ -5,7 +5,7 @@
 - 基础地址：`http://<host>:<port>/api`
 - 默认端口：`1123`
 - 请求格式：`application/json`
-- 直播间地址 `room_url` 作为稳定标识使用，服务端会在查询或创建前移除分享跟踪 query string 和 fragment，避免同一地址被识别为新直播间。平台用于识别直播间的参数（如抖音 `web_rid`）会保留。
+- 直播间地址 `room_url` 作为稳定标识使用，服务端会在查询或创建前自动从分享口令文本中提取首个 HTTP(S) 链接，并移除分享跟踪 query string 和 fragment，避免同一地址被识别为新直播间。平台用于识别直播间的参数（如抖音 `web_rid`、小红书 `host_id`）会保留；小红书 `xhslink.com` 短链在创建直播间时会自动通过 302 还原为规范化的 `xiaohongshu.com` 地址。
 
 ---
 
@@ -260,18 +260,27 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 
 **请求体：**
 
-| 参数                 | 类型    | 必填 | 说明                                                                                            |
-| -------------------- | ------- | ---- | ----------------------------------------------------------------------------------------------- |
-| room_url             | string  | 是   | 直播间地址（唯一标识）                                                                          |
-| room_name            | string  | 否   | 直播间名称                                                                                      |
-| filename_template    | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                                                       |
-| segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件                                     |
-| notification_enabled | boolean | 否   | 是否启用通知，默认 true                                                                         |
-| monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载）                                 |
-| upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）                                             |
-| polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false                                                            |
-| polling_platform     | string  | 否   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`（已实现），`douyu`（不可用-平台流2分钟超时） |
-| polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                                                                |
+| 参数                 | 类型    | 必填 | 说明                                                                                                                                                                                                                  |
+| -------------------- | ------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| room_url             | string  | 是   | 直播间地址（唯一标识）                                                                                                                                                                                                |
+| room_name            | string  | 否   | 直播间名称                                                                                                                                                                                                            |
+| filename_template    | string  | 否   | 文件名模板，默认 `{room_name}_{datetime}`                                                                                                                                                                             |
+| segment_duration     | integer | 否   | 分段录制时长（秒）。0 或留空表示不分段，3600=每小时一个文件                                                                                                                                                           |
+| notification_enabled | boolean | 否   | 是否启用通知，默认 true                                                                                                                                                                                               |
+| monitoring_enabled   | boolean | 否   | 是否启用监听，默认 true（关闭后即使收到录制通知也不会启动下载）                                                                                                                                                       |
+| upload_template_id   | integer | 否   | 关联的投稿模板 ID；不设置则不自动投稿（可手动投稿）                                                                                                                                                                   |
+| polling_enabled      | boolean | 否   | 是否启用轮询检测开播状态，默认 false（即使为 false，只要 `monitoring_enabled` 开启且平台支持检测，新增房间时也会立即异步触发一次 `checkRoom`：若在播则自动启动录制，若未开播则自动补全主播名与主播头像 `avatar_url`） |
+| polling_platform     | string  | 否   | 轮询平台：`huya`、`bilibili`、`douyin`、`kuaishou`、`xiaohongshu`（已实现），`douyu`（不可用-平台流2分钟超时）                                                                                                        |
+| polling_interval     | integer | 否   | 轮询间隔（秒），默认 60，最小 30                                                                                                                                                                                      |
+
+**小红书 `room_url` 标准格式说明（直播间链接 vs 个人主页链接）：**
+
+1. **直播中添加（添加后立即检测开播并自动启动录制）**：
+   - 标准直播间地址：`https://www.xiaohongshu.com/livestream/{room_id}`（可附带 `?host_id={user_id}`；若包含 `/livestream/dynpathXXXX/{room_id}` 动态段会自动剥离）。
+   - App 直播分享短链或整段分享口令：如 `https://xhslink.com/o/xxx` 或包含该短链的完整口令文本，服务端自动提取短链并通过 302 还原为规范化直播间长链。
+2. **个人主页预登记（自动提取主播昵称与头像，不可免登录转直播间地址）**：
+   - 标准个人主页地址：`https://www.xiaohongshu.com/user/profile/{user_id}`（支持粘贴带 `?xsec_token=...&xsec_source=pc_search` 的 PC Web 主页链接或主页分享短链，自动剥离追踪参数并规范化）。
+   - **限制说明**：小红书每次开播都会生成全新的 18 位数字 `room_id`，且所有未登录公开主页 SSR 与 API 均不暴露在播 `room_id`；因此个人主页链接仅能自动拉取主播昵称与头像用于预登记，**无法**在免登录条件下自动转换为 `/livestream/{room_id}` 直播间地址。
 
 **示例：**
 

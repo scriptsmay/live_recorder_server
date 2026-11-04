@@ -35,6 +35,7 @@ test/
 ├── danmaku-routes.test.js           # 弹幕查询接口 auth wall + search/raw 端到端
 ├── remote-browser-client.test.js    # 远程浏览器 page/context 生命周期与超时清理
 ├── polling-kuaishou.test.js         # 快手轮询测试
+├── polling-xiaohongshu.test.js      # 小红书轮询测试（短链还原、直播流提取、个人主页元数据）
 ├── polling-huya.test.js             # 虎牙轮询测试（mp API 主源 + 网页备用源封面提取，v1.9.0）
 ├── polling-checkers.test.js         # URL→checker 解析与封面自取兜底（v1.9.0）
 ├── recorder-cover-fallback.test.js  # 录制启动封面自取兜底（v1.9.0）

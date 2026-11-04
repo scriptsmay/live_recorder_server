@@ -19,6 +19,7 @@ export interface Room {
   id: number
   room_url: string
   room_name: string
+  avatar_url?: string | null
   platform: string
   status: 'idle' | 'recording' | 'paused'
   notification_enabled: boolean

@@ -93,6 +93,18 @@ do_import() {
   psql "$DEV_DATABASE_URL" -q -f "$import_file"
   rm -f "$import_file"
 
+  log "同步自增序列..."
+  for table in rooms recording_sessions recording_files replay_records danmaku_capture_records danmaku_burn_records; do
+    psql "$DEV_DATABASE_URL" -q -c "
+      SELECT setval(
+        pg_get_serial_sequence('$table', 'id'),
+        COALESCE((SELECT MAX(id) FROM \"$table\"), 1),
+        EXISTS (SELECT 1 FROM \"$table\")
+      )
+      WHERE pg_get_serial_sequence('$table', 'id') IS NOT NULL;
+    " >/dev/null 2>&1 || true
+  done
+
   log "导入完成，数据概览："
   for table in rooms recording_sessions recording_files replay_records danmaku_capture_records danmaku_burn_records; do
     count=$(psql -tA "$DEV_DATABASE_URL" -c "SELECT COUNT(*) FROM $table" 2>/dev/null || echo "N/A")

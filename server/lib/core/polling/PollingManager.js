@@ -120,7 +120,7 @@ class PollingManager {
   async loadPollingRooms() {
     try {
       const result = await pool.query(`
-        SELECT id, room_url, room_name, polling_enabled, polling_platform,
+        SELECT id, room_url, room_name, avatar_url, polling_enabled, polling_platform,
                polling_interval, monitoring_enabled, notification_enabled, status
         FROM rooms
         WHERE polling_enabled = true AND deleted_at IS NULL
@@ -195,6 +195,11 @@ class PollingManager {
       if (!room.room_name && result.roomName) {
         await pool.query(`UPDATE rooms SET room_name = $1 WHERE id = $2`, [result.roomName, id]);
         room.room_name = result.roomName;
+      }
+
+      if (result.avatarUrl && result.avatarUrl !== room.avatar_url) {
+        await pool.query(`UPDATE rooms SET avatar_url = $1 WHERE id = $2`, [result.avatarUrl, id]);
+        room.avatar_url = result.avatarUrl;
       }
 
       const statusTtl = (room.polling_interval || 60) * 2;

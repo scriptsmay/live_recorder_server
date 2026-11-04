@@ -82,6 +82,7 @@ async function runMigration() {
         id SERIAL PRIMARY KEY,
         room_url VARCHAR(512) UNIQUE NOT NULL,
         room_name VARCHAR(255) DEFAULT '',
+        avatar_url VARCHAR(1024) DEFAULT '',
         status VARCHAR(20) DEFAULT 'idle',
         filename_template VARCHAR(255) DEFAULT '{room_name}_{datetime}',
         output_path VARCHAR(1024) DEFAULT '',
@@ -95,6 +96,10 @@ async function runMigration() {
         polling_platform VARCHAR(50) DEFAULT NULL,
         polling_interval INTEGER DEFAULT 60
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(1024) DEFAULT ''
     `);
 
     // ========== recording_sessions ==========
@@ -761,6 +766,34 @@ async function runMigration() {
         ON replay_upload_records(replay_record_id)
         WHERE replay_record_id IS NOT NULL AND status = 'uploading' AND deleted_at IS NULL
     `);
+
+    // ========== 序列自愈（防显式 ID 导入后 SERIAL 序列落后于 MAX(id) 导致 23505 主键冲突）==========
+    const serialIdTables = [
+      'admin_users',
+      'rooms',
+      'recording_sessions',
+      'recording_files',
+      'transcode_records',
+      'upload_templates',
+      'biliup_accounts',
+      'upload_records',
+      'replay_records',
+      'replay_upload_records',
+      'danmaku_capture_records',
+      'danmaku_analysis_records',
+      'managed_files',
+      'file_delete_audit_logs',
+    ];
+    for (const table of serialIdTables) {
+      await client.query(`
+        SELECT setval(
+          pg_get_serial_sequence('${table}', 'id'),
+          GREATEST((SELECT COALESCE(MAX(id), 1) FROM ${table}), (SELECT last_value FROM ${table}_id_seq)),
+          true
+        )
+        WHERE EXISTS (SELECT 1 FROM ${table})
+      `);
+    }
 
     await client.query('COMMIT');
     console.log('[DB] 数据库迁移完成');

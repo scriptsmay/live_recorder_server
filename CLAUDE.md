@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-K-Recorder - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin, Kuaishou, Douyu) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. Kuaishou uses a remote Browserless/Chromium instance (or HTTP API mode). Douyu code exists and is registered in the checker registry but may experience platform-side stream timeout issues.
+K-Recorder - a lightweight Node.js/Express 5 server that records live streams from Chinese streaming platforms (Huya, Bilibili, Douyin, Kuaishou, Xiaohongshu, Douyu) using FFmpeg, with automatic transcoding (TS→MP4) and optional auto-upload to Bilibili via `biliup`. Kuaishou uses a remote Browserless/Chromium instance (or HTTP API mode). Douyu code exists and is registered in the checker registry but may experience platform-side stream timeout issues.
 
 ## Commands
 
@@ -59,7 +59,7 @@ Chrome Extension (danmaku)
 - `server/lib/core/` — Infrastructure: lifecycle bootstrap, watchdog, downloaders, polling, transcode queue, notifications
 - `server/lib/core/danmaku/` — Danmaku capture (DanmakuRecorder writes JSONL only; ASS/burn moved out)
 - `server/lib/core/downloaders/` — FFmpeg-based download engine (factory pattern, extends EventEmitter)
-- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`). Checkers: `HuyaChecker`, `BilibiliChecker`, `DouyinChecker`, `DouyuChecker`, `KuaishouAPIChecker` (HTTP API direct, the only Kuaishou checker since v1.8.3). Signature helpers under `signers/` (douyin, douyu, douyu-vip)
+- `server/lib/core/polling/` — Platform-specific live status checkers (strategy pattern, registry in `checkers.js`). Checkers: `HuyaChecker`, `BilibiliChecker`, `DouyinChecker`, `DouyuChecker`, `KuaishouAPIChecker` (HTTP API direct, the only Kuaishou checker since v1.8.3), `XiaohongshuChecker` (HTTP SSR direct, supports `livestream` / `user/profile` / `xhslink.com`). Signature helpers under `signers/` (douyin, douyu, douyu-vip)
 - `server/lib/utils/` — Shared utilities (file paths, platform detection, response helpers, Redis service)
 - `server/db/` — PostgreSQL pool, Redis facade, auto-migration on startup (`migrate.js`)
 - `public/` — static assets, `frontend/` — Vue SPA source

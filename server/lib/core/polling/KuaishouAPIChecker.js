@@ -168,6 +168,7 @@ class KuaishouChecker extends PlatformChecker {
       ),
       roomTitle: firstNonEmpty(data.caption, data.title, liveStream.caption, liveStream.title),
       roomCover: firstNonEmpty(data.coverUrl, data.poster, liveStream.coverUrl, author.headUrl, author.avatar),
+      avatarUrl: firstNonEmpty(author.headUrl, author.avatar, author.headurls?.[0]?.url),
       streamUrl: stream?.url || null,
       streamInfo: stream
         ? {
@@ -210,6 +211,7 @@ class KuaishouChecker extends PlatformChecker {
       ),
       roomTitle: firstNonEmpty(live.caption, live.title, data.caption, data.title),
       roomCover: firstNonEmpty(live.coverUrl, live.poster, data.coverUrl, author.headUrl, author.avatar),
+      avatarUrl: firstNonEmpty(author.headUrl, author.avatar, author.headurls?.[0]?.url),
       streamUrl: stream?.url || null,
       streamInfo: stream
         ? {

@@ -100,4 +100,93 @@ describe('DELETE /api/rooms/:id 轮询定时器同步', () => {
     expect(res.status).toBe(500);
     expect(pool.query).not.toHaveBeenCalled();
   });
+
+  test('POST /api/rooms 添加小红书分享口令短链时自动 302 还原并在未开轮询时立即触发一次 checkRoom', async () => {
+    const XiaohongshuChecker = require('../server/lib/core/polling/XiaohongshuChecker');
+    const resolveSpy = jest
+      .spyOn(XiaohongshuChecker, 'resolveShortUrl')
+      .mockResolvedValueOnce(
+        'https://www.xiaohongshu.com/livestream/dynpathxYjf2eb8/570523767964993440?host_id=5f849379000000000101e56e&xsec_token=abc'
+      );
+    const checkRoomSpy = jest.spyOn(pollingManager, 'checkRoom').mockResolvedValueOnce(undefined);
+
+    const canonicalUrl = 'https://www.xiaohongshu.com/livestream/570523767964993440?host_id=5f849379000000000101e56e';
+    const createdRow = {
+      id: 99,
+      room_url: canonicalUrl,
+      room_name: '',
+      notification_enabled: true,
+      monitoring_enabled: true,
+      polling_enabled: false,
+      polling_platform: 'xiaohongshu',
+      polling_interval: 90,
+    };
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [] }) // SELECT * FROM rooms WHERE room_url = $1
+      .mockResolvedValueOnce({ rows: [createdRow] }); // INSERT INTO rooms ... RETURNING *
+
+    const res = await request(app).post('/api/rooms').send({
+      room_url:
+        '小红书，你的生活指南#KPL正在直播 https://xhslink.com/o/6SoiafhhH6N 复制本条信息，打开【小红书】，直接观看直播！',
+      polling_enabled: false,
+      monitoring_enabled: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.room_url).toBe(canonicalUrl);
+    expect(res.body.data.polling_platform).toBe('xiaohongshu');
+    expect(resolveSpy).toHaveBeenCalledWith('https://xhslink.com/o/6SoiafhhH6N');
+    expect(checkRoomSpy).toHaveBeenCalledWith(createdRow);
+
+    resolveSpy.mockRestore();
+    checkRoomSpy.mockRestore();
+  });
+
+  test('pollingManager.checkRoom 自动回填 room_name 与 avatar_url', async () => {
+    const checkers = require('../server/lib/core/polling/checkers');
+    const redis = require('../server/db/redis');
+    redis.setEx.mockResolvedValue('OK');
+    redis.get.mockResolvedValue(null);
+
+    checkers.xiaohongshu = class {
+      async checkStatus() {
+        return {
+          isLive: false,
+          recordable: false,
+          roomName: '成都AG超玩会染详',
+          avatarUrl: 'https://sns-avatar-qc.xhscdn.com/avatar/ag.jpg',
+          roomCover: 'https://sns-avatar-qc.xhscdn.com/avatar/ag.jpg',
+          error: null,
+        };
+      }
+    };
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE rooms SET room_name
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE rooms SET avatar_url
+      .mockResolvedValueOnce({ rows: [{ status: 'idle', ffmpeg_pid: null }] });
+
+    const room = {
+      id: 24,
+      room_url: 'https://www.xiaohongshu.com/user/profile/635639e10000000018028e12',
+      room_name: '',
+      avatar_url: '',
+      polling_platform: 'xiaohongshu',
+      polling_interval: 60,
+      status: 'idle',
+    };
+
+    await pollingManager.checkRoom(room);
+
+    expect(pool.query).toHaveBeenCalledWith('UPDATE rooms SET room_name = $1 WHERE id = $2', ['成都AG超玩会染详', 24]);
+    expect(pool.query).toHaveBeenCalledWith('UPDATE rooms SET avatar_url = $1 WHERE id = $2', [
+      'https://sns-avatar-qc.xhscdn.com/avatar/ag.jpg',
+      24,
+    ]);
+    expect(room.room_name).toBe('成都AG超玩会染详');
+    expect(room.avatar_url).toBe('https://sns-avatar-qc.xhscdn.com/avatar/ag.jpg');
+
+    delete checkers.xiaohongshu;
+  });
 });

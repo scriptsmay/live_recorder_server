@@ -131,6 +131,7 @@ class HuyaChecker extends PlatformChecker {
       const anchorName = liveData.profileInfo?.nick || '';
       const liveTitle = liveData.liveData?.introduction || '';
       const roomCover = liveData.liveData?.screenshot || liveData.screenshot || this._webScreenshot || '';
+      const avatarUrl = liveData.profileInfo?.avatar180 || liveData.profileInfo?.avatar || '';
 
       if (!isLive) {
         return {
@@ -138,6 +139,7 @@ class HuyaChecker extends PlatformChecker {
           anchorName,
           liveTitle,
           roomCover,
+          avatarUrl,
         };
       }
 
@@ -209,6 +211,7 @@ class HuyaChecker extends PlatformChecker {
         anchorName,
         liveTitle,
         roomCover,
+        avatarUrl,
         streamUrl: flvUrl,
         cdnType: selectedCdnType,
       };
@@ -230,6 +233,7 @@ class HuyaChecker extends PlatformChecker {
       roomName: streamData.anchorName,
       roomTitle: streamData.liveTitle,
       roomCover: streamData.roomCover,
+      avatarUrl: streamData.avatarUrl,
       streamUrl: streamData.streamUrl,
       streamInfo: streamData.isLive ? { cdnType: streamData.cdnType } : null,
     });

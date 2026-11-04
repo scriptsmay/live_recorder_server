@@ -45,6 +45,7 @@ const statusFilter = ref<StatusKey>('all')
 const modalVisible = ref(false)
 const editId = ref<number | null>(null)
 const editLimited = ref(false)
+const brokenAvatars = ref<Record<number, boolean>>({})
 
 // 操作按钮基础样式
 const btnBase =
@@ -461,7 +462,16 @@ onMounted(() => {
               <!-- 直播间 -->
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
+                  <img
+                    v-if="r.avatar_url && !brokenAvatars[r.id]"
+                    :src="r.avatar_url"
+                    :alt="r.room_name || '头像'"
+                    referrerpolicy="no-referrer"
+                    class="h-8 w-8 shrink-0 rounded-lg border border-gray-200 object-cover"
+                    @error="brokenAvatars[r.id] = true"
+                  />
                   <span
+                    v-else
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-[11px] font-semibold text-gray-500"
                   >
                     {{ roomInitial(r) }}

@@ -226,9 +226,26 @@ function onOverlayClick(e: MouseEvent) {
                 v-model="form.room_url"
                 type="text"
                 :class="fieldClass"
-                placeholder="https://live.example.com/room"
+                placeholder="https://live.example.com/room 或小红书分享口令 / 短链"
                 :disabled="!!editId"
               />
+              <div class="mt-2 space-y-1 text-xs text-gray-400">
+                <p>
+                  支持虎牙、B站、斗鱼、抖音、快手、小红书标准直播间链接；正在直播的房间添加后将立即检测并启动录制。
+                </p>
+                <p class="leading-relaxed">
+                  <span class="font-medium text-gray-500">小红书填写说明：</span>
+                  小红书每次开播生成独立
+                  <code class="text-[11px]">room_id</code>，若需自动检测开播并录制，请粘贴
+                  <span class="font-medium text-gray-500">App 直播间分享口令 / 短链</span>（<code
+                    class="text-[11px]"
+                    >https://xhslink.com/...</code
+                  >）或直播间长链（<code class="text-[11px]"
+                    >https://www.xiaohongshu.com/livestream/{room_id}</code
+                  >）；个人主页链接（<code class="text-[11px]">/user/profile/{user_id}</code
+                  >）仅能自动提取主播名称与头像用于预登记，无法免登录自动转换为直播间地址。
+                </p>
+              </div>
             </div>
 
             <!-- 两列布局 -->

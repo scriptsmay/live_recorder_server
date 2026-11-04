@@ -128,6 +128,7 @@ describe('DouyuChecker', () => {
         roomName: 'TestAnchor',
         roomTitle: 'Test Title',
         roomCover: 'https://example.com/cover.jpg',
+        avatarUrl: '',
         status: 1,
         videoLoop: 0,
         isVip: false,

@@ -277,7 +277,17 @@ log "Step 3/3: 导入数据到开发库..."
 
 # reset sequences after import by running psql with the file
 if psql $TGT_PSQL_ARGS -v ON_ERROR_STOP=1 -f "$DUMP_FILE" > /tmp/sync_db_import_$$.log 2>&1; then
-  log "  导入完成"
+  for table in "${IMPORT_TABLES[@]}"; do
+    psql $TGT_PSQL_ARGS -q -c "
+      SELECT setval(
+        pg_get_serial_sequence('$table', 'id'),
+        COALESCE((SELECT MAX(id) FROM \"$table\"), 1),
+        EXISTS (SELECT 1 FROM \"$table\")
+      )
+      WHERE pg_get_serial_sequence('$table', 'id') IS NOT NULL;
+    " >/dev/null 2>&1 || true
+  done
+  log "  导入完成（已同步自增序列）"
 else
   warn "导入过程中出现错误:"
   tail -20 /tmp/sync_db_import_$$.log 2>/dev/null || true

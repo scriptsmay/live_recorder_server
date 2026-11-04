@@ -3,6 +3,7 @@ const BilibiliChecker = require('./BilibiliChecker');
 const DouyuChecker = require('./DouyuChecker');
 const DouyinChecker = require('./DouyinChecker');
 const KuaishouAPIChecker = require('./KuaishouAPIChecker');
+const XiaohongshuChecker = require('./XiaohongshuChecker');
 
 const { createModuleLogger } = require('../logger');
 
@@ -17,6 +18,7 @@ const CHECKERS = {
   douyu: DouyuChecker,
   douyin: DouyinChecker,
   kuaishou: KuaishouAPIChecker,
+  xiaohongshu: XiaohongshuChecker,
 };
 
 /**

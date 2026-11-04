@@ -9,6 +9,7 @@ jest.mock('../server/db/redis', () => ({
 jest.mock('../server/lib/core/RecordingManager', () => ({}));
 
 const { normalizeRoomUrl } = require('../server/lib/utils/room-url');
+const { detectPlatform, extractFirstUrlFromText } = require('../server/lib/utils/platform-detector');
 
 describe('normalizeRoomUrl', () => {
   test('移除快手分享链接的 query string', () => {
@@ -29,6 +30,28 @@ describe('normalizeRoomUrl', () => {
     expect(normalizeRoomUrl('https://live.douyin.com/?web_rid=123456&from=share#player')).toBe(
       'https://live.douyin.com/?web_rid=123456'
     );
+  });
+
+  test('支持从小红书分享口令文本提取短链并规范化', () => {
+    const shareText =
+      '小红书，你的生活指南#KPL王者荣耀职业联赛正在直播，来和我一起支持ta吧。 https://xhslink.com/o/6SoiafhhH6N 复制本条信息，打开【小红书】，直接观看直播！';
+    expect(extractFirstUrlFromText(shareText)).toBe('https://xhslink.com/o/6SoiafhhH6N');
+    expect(detectPlatform(shareText)).toBe('xiaohongshu');
+    expect(normalizeRoomUrl(shareText)).toBe('https://xhslink.com/o/6SoiafhhH6N');
+  });
+
+  test('规范化小红书带 dynpath 防封段与 host_id 的直播间长链', () => {
+    const longUrl =
+      'https://www.xiaohongshu.com/livestream/dynpathxYjf2eb8/570523767964993440?timestamp=1793721783836&host_id=5f849379000000000101e56e&xsec_token=abc';
+    expect(normalizeRoomUrl(longUrl)).toBe(
+      'https://www.xiaohongshu.com/livestream/570523767964993440?host_id=5f849379000000000101e56e'
+    );
+  });
+
+  test('规范化小红书个人主页链接并去除多余参数', () => {
+    const profileUrl =
+      'https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e?xsec_token=abc&xsec_source=app_share';
+    expect(normalizeRoomUrl(profileUrl)).toBe('https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e');
   });
 
   test('非字符串值保持不变', () => {

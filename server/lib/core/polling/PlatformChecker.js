@@ -91,6 +91,7 @@ class PlatformChecker {
       roomName: partial.roomName ?? '',
       roomTitle: partial.roomTitle ?? '',
       roomCover: partial.roomCover ?? '',
+      avatarUrl: partial.avatarUrl ?? '',
       streamUrl: partial.streamUrl ?? null,
       streamInfo: partial.streamInfo ?? null,
       error: partial.error ?? null,

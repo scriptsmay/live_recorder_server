@@ -388,6 +388,12 @@ class DouyinChecker extends PlatformChecker {
         roomInfo.owner_name || roomInfo.anchor_name || roomInfo.nickname || roomInfo.data?.owner_name || '';
       const roomTitle = roomInfo.title || roomInfo.room_title || '';
       const roomCover = roomInfo.cover?.url_list?.[0] || roomInfo.cover || roomInfo.room_cover || '';
+      const avatarUrl =
+        roomInfo.owner?.avatar_thumb?.url_list?.[0] ||
+        apiResponse?.user?.avatar_thumb?.url_list?.[0] ||
+        roomInfo.avatar_url ||
+        roomInfo.avatar ||
+        '';
 
       if (status !== 2) {
         return PlatformChecker.normalizeResult({
@@ -395,6 +401,7 @@ class DouyinChecker extends PlatformChecker {
           roomName,
           roomTitle,
           roomCover,
+          avatarUrl,
         });
       }
 
@@ -405,6 +412,7 @@ class DouyinChecker extends PlatformChecker {
           roomName,
           roomTitle,
           roomCover,
+          avatarUrl,
           error: '不支持的直播类型',
         });
       }
@@ -418,6 +426,7 @@ class DouyinChecker extends PlatformChecker {
           roomName,
           roomTitle,
           roomCover,
+          avatarUrl,
           error: '无法获取流地址',
         });
       }
@@ -427,6 +436,7 @@ class DouyinChecker extends PlatformChecker {
         roomName,
         roomTitle,
         roomCover,
+        avatarUrl,
         streamUrl: streamData.streamUrl,
         streamInfo: { format: streamData.format, source: isFromWebAPI ? 'webapi' : 'html' },
       });

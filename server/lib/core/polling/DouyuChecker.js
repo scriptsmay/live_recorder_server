@@ -85,6 +85,7 @@ class DouyuChecker extends PlatformChecker {
         roomName: room.owner_name || '',
         roomTitle: room.room_name || '',
         roomCover: room.room_pic || '',
+        avatarUrl: room.owner_avatar || (typeof room.avatar === 'object' ? room.avatar?.big : room.avatar) || '',
         status: room.show_status,
         videoLoop: room.videoLoop || 0,
         isVip: room.isVip === 1,
@@ -259,6 +260,7 @@ class DouyuChecker extends PlatformChecker {
           roomName: roomStatus.roomName,
           roomTitle: roomStatus.roomTitle,
           roomCover: roomStatus.roomCover,
+          avatarUrl: roomStatus.avatarUrl,
         });
       }
 
@@ -269,6 +271,7 @@ class DouyuChecker extends PlatformChecker {
           roomName: roomStatus.roomName,
           roomTitle: roomStatus.roomTitle,
           roomCover: roomStatus.roomCover,
+          avatarUrl: roomStatus.avatarUrl,
           error: '当前为录播回放',
         });
       }
@@ -281,6 +284,7 @@ class DouyuChecker extends PlatformChecker {
           roomName: roomStatus.roomName,
           roomTitle: roomStatus.roomTitle,
           roomCover: roomStatus.roomCover,
+          avatarUrl: roomStatus.avatarUrl,
           error: '当前为互动游戏',
         });
       }
@@ -295,6 +299,7 @@ class DouyuChecker extends PlatformChecker {
           roomName: roomStatus.roomName,
           roomTitle: roomStatus.roomTitle,
           roomCover: roomStatus.roomCover,
+          avatarUrl: roomStatus.avatarUrl,
           error: '签名获取失败',
         });
       }
@@ -308,6 +313,7 @@ class DouyuChecker extends PlatformChecker {
           roomName: roomStatus.roomName,
           roomTitle: roomStatus.roomTitle,
           roomCover: roomStatus.roomCover,
+          avatarUrl: roomStatus.avatarUrl,
           error: '无法获取流地址',
         });
       }
@@ -317,6 +323,7 @@ class DouyuChecker extends PlatformChecker {
         roomName: roomStatus.roomName,
         roomTitle: roomStatus.roomTitle,
         roomCover: roomStatus.roomCover,
+        avatarUrl: roomStatus.avatarUrl,
         streamUrl: streamData.streamUrl,
         streamInfo: {
           format: streamData.format,

@@ -1,5 +1,52 @@
 'use strict';
 
+const { extractFirstUrlFromText } = require('./platform-detector');
+
+/**
+ * Normalize Xiaohongshu / RedNote URLs into canonical form:
+ * - /livestream/dynpath.../570523767964993440?... -> https://www.xiaohongshu.com/livestream/570523767964993440(?host_id=...)
+ * - /hina/livestream/570523767964993440/... -> https://www.xiaohongshu.com/livestream/570523767964993440(?host_id=...)
+ * - /user/profile/5f849379000000000101e56e?... -> https://www.xiaohongshu.com/user/profile/5f849379000000000101e56e
+ *
+ * @param {URL} parsed
+ * @returns {string|null}
+ */
+function normalizeXiaohongshuParsedUrl(parsed) {
+  const host = parsed.hostname.toLowerCase();
+  const isXhsMain =
+    host === 'xiaohongshu.com' ||
+    host.endsWith('.xiaohongshu.com') ||
+    host === 'redelight.cn' ||
+    host.endsWith('.redelight.cn');
+
+  if (!isXhsMain) return null;
+
+  const segments = parsed.pathname.split('/').filter(Boolean);
+
+  // Match /user/profile/:userId
+  const profileIdx = segments.findIndex((s) => s.toLowerCase() === 'profile');
+  if (profileIdx >= 0 && segments[profileIdx + 1]) {
+    const userId = segments[profileIdx + 1];
+    return `https://www.xiaohongshu.com/user/profile/${userId}`;
+  }
+
+  // Match /livestream/... or /hina/livestream/...
+  const liveIdx = segments.findIndex((s) => s.toLowerCase() === 'livestream');
+  if (liveIdx >= 0) {
+    const afterLive = segments.slice(liveIdx + 1).filter((seg) => !/^dynpath/i.test(seg));
+    const roomIdCandidate = afterLive.find((seg) => /^\d{10,}$/.test(seg)) || afterLive[0];
+    if (roomIdCandidate) {
+      const hostId = parsed.searchParams.get('host_id') || parsed.searchParams.get('hostId');
+      if (hostId && /^[a-f0-9]{24}$/i.test(hostId)) {
+        return `https://www.xiaohongshu.com/livestream/${roomIdCandidate}?host_id=${hostId}`;
+      }
+      return `https://www.xiaohongshu.com/livestream/${roomIdCandidate}`;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Return the stable part of a live-room URL used as the room identifier.
  * Share links often append tracking parameters that must not create a new room.
@@ -10,7 +57,7 @@
 function normalizeRoomUrl(roomUrl) {
   if (typeof roomUrl !== 'string') return roomUrl;
 
-  const trimmed = roomUrl.trim();
+  const trimmed = extractFirstUrlFromText(roomUrl.trim());
 
   // Douyin also supports a query-only room identifier. Keep that identity
   // parameter while discarding unrelated share/tracking parameters.
@@ -22,6 +69,11 @@ function normalizeRoomUrl(roomUrl) {
       parsed.searchParams.has('web_rid')
     ) {
       return `${parsed.origin}/?web_rid=${encodeURIComponent(parsed.searchParams.get('web_rid'))}`;
+    }
+
+    const xhsNormalized = normalizeXiaohongshuParsedUrl(parsed);
+    if (xhsNormalized) {
+      return xhsNormalized;
     }
   } catch (_) {
     // Keep the normal string-based fallback for malformed or scheme-less input.

@@ -126,7 +126,7 @@ describe('BilibiliChecker', () => {
       const checker = new BilibiliChecker('https://live.bilibili.com/123456');
       const result = await checker.getAnchorInfo(789012);
 
-      expect(result).toEqual({ anchorName: 'TestAnchor' });
+      expect(result).toEqual({ anchorName: 'TestAnchor', avatarUrl: '' });
     });
 
     it('should return empty name on API failure', async () => {
@@ -136,7 +136,7 @@ describe('BilibiliChecker', () => {
       const checker = new BilibiliChecker('https://live.bilibili.com/123456');
       const result = await checker.getAnchorInfo(789012);
 
-      expect(result).toEqual({ anchorName: '' });
+      expect(result).toEqual({ anchorName: '', avatarUrl: '' });
     });
   });
 
@@ -159,6 +159,7 @@ describe('BilibiliChecker', () => {
       expect(result).toEqual({
         title: 'Test Title',
         cover: 'https://example.com/cover.jpg',
+        avatarUrl: '',
       });
     });
 
@@ -169,7 +170,7 @@ describe('BilibiliChecker', () => {
       const checker = new BilibiliChecker('https://live.bilibili.com/123456');
       const result = await checker.getRoomTitle('123456');
 
-      expect(result).toEqual({ title: '', cover: '' });
+      expect(result).toEqual({ title: '', cover: '', avatarUrl: '' });
     });
   });
 

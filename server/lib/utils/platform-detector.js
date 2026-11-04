@@ -18,13 +18,29 @@ const SUPPORTED_PLATFORMS = [
   { domain: 'huya.com', platformId: 'huya' },
   { domain: 'live.bilibili.com', platformId: 'bilibili' },
   { domain: 'douyin.com', platformId: 'douyin' },
+  { domain: 'xiaohongshu.com', platformId: 'xiaohongshu' },
+  { domain: 'xhslink.com', platformId: 'xiaohongshu' },
+  { domain: 'redelight.cn', platformId: 'xiaohongshu' },
 ];
+
+/**
+ * Extract the first HTTP(S) URL from a share text string if present.
+ *
+ * @param {string} input
+ * @returns {string}
+ */
+function extractFirstUrlFromText(input) {
+  if (typeof input !== 'string') return input;
+  const trimmed = input.trim();
+  const match = trimmed.match(/https?:\/\/[^\s，。！!、；;”"’'】\]）)]+/i);
+  return match ? match[0] : trimmed;
+}
 
 /**
  * Detect the live streaming platform from a URL string.
  *
  * @param {*} url - URL string to inspect (any type accepted; non-strings return null).
- * @returns {string|null} Platform ID ('douyu' | 'huya' | 'bilibili' | 'douyin'),
+ * @returns {string|null} Platform ID ('douyu' | 'huya' | 'bilibili' | 'douyin' | 'kuaishou' | 'xiaohongshu'),
  *   or null if the URL is unrecognized, invalid, or the input is not a string.
  */
 function detectPlatform(url) {
@@ -34,11 +50,11 @@ function detectPlatform(url) {
       return null;
     }
 
-    // Prepend http:// if no scheme is present (case-insensitive check)
-    let normalized = url;
-    const lower = url.toLowerCase();
+    // Support share texts that wrap an HTTP(S) link
+    let normalized = extractFirstUrlFromText(url);
+    const lower = normalized.toLowerCase();
     if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
-      normalized = 'http://' + url;
+      normalized = 'http://' + normalized;
     }
 
     // Extract hostname and normalize to lowercase
@@ -57,4 +73,4 @@ function detectPlatform(url) {
   }
 }
 
-module.exports = { detectPlatform, SUPPORTED_PLATFORMS };
+module.exports = { detectPlatform, extractFirstUrlFromText, SUPPORTED_PLATFORMS };

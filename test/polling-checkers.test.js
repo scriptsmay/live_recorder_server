@@ -15,6 +15,9 @@ jest.mock('../server/lib/core/polling/BilibiliChecker', () => mockCheckerFactory
 jest.mock('../server/lib/core/polling/DouyuChecker', () => mockCheckerFactory(/douyu\.com/i));
 jest.mock('../server/lib/core/polling/DouyinChecker', () => mockCheckerFactory(/douyin\.com/i));
 jest.mock('../server/lib/core/polling/KuaishouAPIChecker', () => mockCheckerFactory(/(?:^|\.)kuaishou\.com/i));
+jest.mock('../server/lib/core/polling/XiaohongshuChecker', () =>
+  mockCheckerFactory(/(?:xiaohongshu\.com|xhslink\.com|redelight\.cn)/i)
+);
 
 const checkers = require('../server/lib/core/polling/checkers');
 const HuyaChecker = require('../server/lib/core/polling/HuyaChecker');
@@ -22,6 +25,7 @@ const BilibiliChecker = require('../server/lib/core/polling/BilibiliChecker');
 const DouyuChecker = require('../server/lib/core/polling/DouyuChecker');
 const DouyinChecker = require('../server/lib/core/polling/DouyinChecker');
 const KuaishouAPIChecker = require('../server/lib/core/polling/KuaishouAPIChecker');
+const XiaohongshuChecker = require('../server/lib/core/polling/XiaohongshuChecker');
 
 describe('checkers.resolveCheckerByUrl', () => {
   it.each([
@@ -30,6 +34,8 @@ describe('checkers.resolveCheckerByUrl', () => {
     ['https://www.douyu.com/456', DouyuChecker],
     ['https://live.douyin.com/789', DouyinChecker],
     ['https://www.kuaishou.com/abc', KuaishouAPIChecker],
+    ['https://www.xiaohongshu.com/livestream/570523767964993440', XiaohongshuChecker],
+    ['https://xhslink.com/o/6SoiafhhH6N', XiaohongshuChecker],
   ])('should resolve %s', (url, Checker) => {
     expect(checkers.resolveCheckerByUrl(url)).toBe(Checker);
   });

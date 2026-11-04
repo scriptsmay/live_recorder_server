@@ -57,11 +57,12 @@ class BilibiliChecker extends PlatformChecker {
     });
 
     if (data.code !== 0 || !data.data) {
-      return { anchorName: '' };
+      return { anchorName: '', avatarUrl: '' };
     }
 
     return {
       anchorName: data.data.info?.uname || '',
+      avatarUrl: data.data.info?.face || '',
     };
   }
 
@@ -79,12 +80,13 @@ class BilibiliChecker extends PlatformChecker {
     );
 
     if (data.code !== 0 || !data.data) {
-      return { title: '', cover: '' };
+      return { title: '', cover: '', avatarUrl: '' };
     }
 
     return {
       title: data.data.room_info?.title || '',
       cover: data.data.room_info?.cover || '',
+      avatarUrl: data.data.anchor_info?.base_info?.face || '',
     };
   }
 
@@ -185,12 +187,15 @@ class BilibiliChecker extends PlatformChecker {
 
       const [anchorData, titleData] = await Promise.all([this.getAnchorInfo(uid), this.getRoomTitle(realRoomId)]);
 
+      const avatarUrl = anchorData.avatarUrl || titleData.avatarUrl || '';
+
       if (!liveStatus) {
         return PlatformChecker.normalizeResult({
           isLive: false,
           roomName: anchorData.anchorName,
           roomTitle: titleData.title,
           roomCover: titleData.cover,
+          avatarUrl,
         });
       }
 
@@ -201,6 +206,7 @@ class BilibiliChecker extends PlatformChecker {
         roomName: anchorData.anchorName,
         roomTitle: titleData.title,
         roomCover: titleData.cover,
+        avatarUrl,
         streamUrl,
         streamInfo: streamUrl ? { format } : null,
       });

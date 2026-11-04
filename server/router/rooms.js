@@ -7,6 +7,7 @@ const redis = require('../db/redis');
 const RoomService = require('../services/RoomService');
 const DataService = require('../services/DataService');
 const { pollingManager } = require('../lib/core/polling');
+const XiaohongshuChecker = require('../lib/core/polling/XiaohongshuChecker');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const { isWithinRoot, resolveAndValidate } = require('../lib/utils/path-safety');
@@ -164,7 +165,14 @@ router.post('/rooms', async (req, res) => {
     room_url = normalizeRoomUrl(room_url);
 
     // 直接根据room_url自动检测平台
-    const polling_platform = detectPlatform(room_url) || null;
+    let polling_platform = detectPlatform(room_url) || null;
+
+    // 若为小红书短链 (xhslink.com)，在入库前解析 302 还原为规范化的直播间或个人主页长链
+    if (polling_platform === 'xiaohongshu' && /(?:^|\.|\/)xhslink\.com/i.test(room_url)) {
+      const resolvedUrl = await XiaohongshuChecker.resolveShortUrl(room_url);
+      room_url = normalizeRoomUrl(resolvedUrl);
+      polling_platform = detectPlatform(room_url) || 'xiaohongshu';
+    }
 
     // v1.12.0：rooms.room_url 有外键依赖，保留全表唯一约束——软删行仍占用 URL。
     // 重新添加同名房间走复活语义：清 deleted_at 后按提交字段更新（保持房间 id 连续）。
@@ -205,19 +213,29 @@ router.post('/rooms', async (req, res) => {
           values.push(reqBody[f]);
         }
       }
+      let updatedRoom = exist.rows[0];
       if (fields.length > 0) {
         values.push(room_url);
-        await pool.query(
-          `UPDATE rooms SET ${fields.join(', ')}, updated_at = NOW() WHERE room_url = $${values.length}`,
+        const updateRes = await pool.query(
+          `UPDATE rooms SET ${fields.join(', ')}, updated_at = NOW() WHERE room_url = $${values.length} RETURNING *`,
           values
         );
+        if (updateRes?.rows?.[0]) {
+          updatedRoom = updateRes.rows[0];
+        }
       }
 
       if (req.body.polling_enabled !== undefined || req.body.polling_interval !== undefined) {
-        await pollingManager.reloadRoom(exist.rows[0].id);
+        await pollingManager.reloadRoom(updatedRoom.id);
+      } else if (
+        updatedRoom.monitoring_enabled !== false &&
+        updatedRoom.polling_platform &&
+        typeof pollingManager.checkRoom === 'function'
+      ) {
+        Promise.resolve(pollingManager.checkRoom(updatedRoom)).catch(() => {});
       }
 
-      return res.json({ status: 'ok', data: exist.rows[0], updated: true });
+      return res.json({ status: 'ok', data: updatedRoom, updated: true });
     }
 
     const result = await pool.query(
@@ -236,11 +254,14 @@ router.post('/rooms', async (req, res) => {
         polling_interval || 60,
       ]
     );
-    res.json({ status: 'ok', data: result.rows[0], updated: false });
+    const createdRoom = result.rows[0];
+    res.json({ status: 'ok', data: createdRoom, updated: false });
 
-    // 后续启动轮询
+    // 后续启动轮询；若未开启定时轮询但启用了监听，也立即异步执行一次开播检测（确保直播中添加房间能立即启动录制并回填主播名）
     if (polling_enabled === true) {
-      await pollingManager.reloadRoom(result.rows[0].id);
+      await pollingManager.reloadRoom(createdRoom.id);
+    } else if (monitoring_enabled !== false && polling_platform && typeof pollingManager.checkRoom === 'function') {
+      Promise.resolve(pollingManager.checkRoom(createdRoom)).catch(() => {});
     }
   } catch (err) {
     console.error('[rooms] 创建失败:', err);

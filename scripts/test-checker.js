@@ -57,6 +57,7 @@ const SAMPLE_URLS = {
   huya: 'https://www.huya.com/kaerlol',
   douyin: 'https://live.douyin.com/61204923995',
   kuaishou: 'https://live.kuaishou.com/u/KPL704668133',
+  xiaohongshu: 'https://xhslink.com/o/6SoiafhhH6N',
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────

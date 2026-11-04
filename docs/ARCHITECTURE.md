@@ -598,13 +598,14 @@ server/app.js
 ```text
 PollingManager (单例)
 ├── CHECKERS 注册表
-│   ├── huya     → HuyaChecker     (mp.huya.com/cache.php)
-│   ├── bilibili → BilibiliChecker (api.live.bilibili.com)
-│   ├── douyu    → DouyuChecker    (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
-│   │                          signers/douyu.js (完整签名 + 单飞机制)
-│   │                          signers/douyu-vip.js (VIP房间 JS 签名)
-│   ├── douyin   → DouyinChecker   (webcast/room/web/enter + HTML 降级)
-│   └── kuaishou → KuaishouAPIChecker (live_api/liveroom/livedetail + profile/public)
+│   ├── huya        → HuyaChecker        (mp.huya.com/cache.php)
+│   ├── bilibili    → BilibiliChecker    (api.live.bilibili.com)
+│   ├── douyu       → DouyuChecker       (playweb.douyucdn.cn/hlsH5Preview) [不可用 - 平台流2分钟超时]
+│   │                             signers/douyu.js (完整签名 + 单飞机制)
+│   │                             signers/douyu-vip.js (VIP房间 JS 签名)
+│   ├── douyin      → DouyinChecker      (webcast/room/web/enter + HTML 降级)
+│   ├── kuaishou    → KuaishouAPIChecker (live_api/liveroom/livedetail + profile/public)
+│   └── xiaohongshu → XiaohongshuChecker (livestream SSR __INITIAL_STATE__ + user/profile SSR)
 └── timers 调度表
     └── room:{id} → setInterval(pollRoom, interval)
 ```
@@ -672,6 +673,17 @@ PollingManager (单例)
 - 任一房间触发风控后写入房间 backoff 和平台级 backoff，保留上一轮 Redis 直播状态。
 
 > v1.8.3 起浏览器版 `KuaishouChecker`（Browserless + `__INITIAL_STATE__`）已移除，快手仅保留 API 直连。`RemoteBrowserClient` 仍保留，供回放 m3u8 提取使用。
+
+### XiaohongshuChecker 实现要点
+
+- **纯 HTTP SSR 直连**：无需浏览器、Cookie、`xsec_token` 或 `X-s` 签名，支持 `XIAOHONGSHU_CHECKER_ENABLED=false` 总开关。
+- **地址输入与规范化（兼容开播中与未开播添加）**：
+  - **开播中分享链接 / 整段分享口令**：支持 `https://www.xiaohongshu.com/livestream/{room_id}`（自动剥离 `/livestream/dynpathXXXX/{room_id}` 中的动态防封段并保留 `host_id`）及 `https://xhslink.com/o/xxx` 短链（含整段小红书分享口令文本）。`POST /api/rooms` 创建时若传入 `xhslink.com` 短链，自动通过 `GET` + `redirect: 'manual'` 解析 302 Location 还原为标准长链入库。
+  - **未开播个人主页链接**：支持 `https://www.xiaohongshu.com/user/profile/{user_id}`（含带 `xsec_token` 的 PC 搜索主页链接或主页分享短链）。通过 Node `https.get`（HTTP/1.1 + PC Chrome UA，绕过 Node `fetch` 自动附加 `Sec-Fetch-Mode: cors` 触发的 302 登录拦截）请求个人主页 SSR `window.__INITIAL_STATE__.user.userPageData.basicInfo`，免 Cookie、免 `xsec_token` 提取主播昵称（`nickname`）与头像（`images`）回填直播间名称与封面，返回 `isLive: false, recordable: false`（因小红书每次开播生成全新的 18 位数字 `room_id`，且所有未登录公开主页 SSR 与 API 均不返回在播 `room_id`，个人主页链接仅用于预登记主播信息，无法免登录自动转换为直播间地址）。
+- **直播状态与流地址提取**：
+  - 使用 iOS 客户端 UA（`ios/7.830 ...` + `xy-common-params: platform=iOS...`）请求 `https://www.xiaohongshu.com/livestream/{roomId}`，解析 `window.__INITIAL_STATE__.liveStream`。
+  - 严格校验 `liveStatus === 'success' && Number(roomInfo.status) === 2 && !roomTitle.includes('回放')`，下播态（`liveStatus === 'end'` / `status === 5`）忽略平台随机推荐的 `nextRoomInfo`，防止误录其他主播。
+  - 从 `roomInfo.pullConfig`（JSON 字符串）的 `h264[].master_url` 提取无防盗链的 `xhscdn.com` `.flv` 主流（优先 `live-source-play.xhscdn.com`）与多 CDN 备流（`-bak-tx`、`-hw`、`.m3u8`），`roomInfo.deeplink` 作为兜底。
 
 ### 轮询流程
 
