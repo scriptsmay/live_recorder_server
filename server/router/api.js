@@ -163,10 +163,13 @@ router.get('/notify/status', async (req, res) => {
   }
 
   try {
-    const normalizedUrl = normalizeRoomUrl(url);
+    // 先按规范化地址查（rooms.room_url 入库时已规范化），再回退到原始入参，
+    // 兼容历史上以非规范形式落库的房间；避免对带追踪参数的请求先白跑一次查询，
+    // 也避免超长分享文本在规范化之前就撞上 varchar(512) 报错。
+    const normalizedUrl = normalizeRoomUrl(url) || url;
     const room =
-      (await DataService.getRoomByUrl(url)) ||
-      (normalizedUrl && normalizedUrl !== url ? await DataService.getRoomByUrl(normalizedUrl) : null);
+      (await DataService.getRoomByUrl(normalizedUrl)) ||
+      (normalizedUrl !== url ? await DataService.getRoomByUrl(url) : null);
     if (!room) {
       return res.json({ exists: false });
     }

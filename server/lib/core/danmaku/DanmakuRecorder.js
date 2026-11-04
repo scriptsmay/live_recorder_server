@@ -298,7 +298,8 @@ class DanmakuRecorder {
     const normalizedUrl = typeof roomUrl === 'string' ? normalizeRoomUrl(roomUrl) : roomUrl;
     const session =
       this.activeSessions.get(roomUrl) ||
-      (normalizedUrl && normalizedUrl !== roomUrl ? this.activeSessions.get(normalizedUrl) : null);
+      (normalizedUrl && normalizedUrl !== roomUrl ? this.activeSessions.get(normalizedUrl) : null) ||
+      this._findSessionByNormalizedUrl(normalizedUrl);
     if (!session) {
       const orphan = await this._writeOrphanBatch(normalizedUrl || roomUrl, events);
       return { written: 0, error: 'no_active_session', orphan };
@@ -464,6 +465,24 @@ class DanmakuRecorder {
    */
   getSession(roomUrl) {
     return this.activeSessions.get(roomUrl) || null;
+  }
+
+  /**
+   * 按规范化后的房间 URL 反查活跃采集会话
+   *
+   * 会话键来自 `rooms.room_url`，可能仍是搜索非规范形式（短链、带 dynpath 段或分享参数），
+   * 而扩展推送的 URL 形式并不固定。活跃会话数受下载线程池上限约束，线性扫描成本可忽略。
+   *
+   * @param {string} normalizedUrl
+   * @returns {Object|null}
+   * @private
+   */
+  _findSessionByNormalizedUrl(normalizedUrl) {
+    if (!normalizedUrl || typeof normalizedUrl !== 'string') return null;
+    for (const [key, session] of this.activeSessions) {
+      if (normalizeRoomUrl(key) === normalizedUrl) return session;
+    }
+    return null;
   }
 
   /**

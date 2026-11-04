@@ -319,6 +319,28 @@ describe('DanmakuRecorder.writeBatch — 批次时间戳分配', () => {
     ).toBe(1);
   });
 
+  test('writeBatch 能命中以 dynpath 旧形式注册的活跃采集会话', async () => {
+    DanmakuRecorder.activeSessions.set('https://www.xiaohongshu.com/livestream/dynpathX/570523582342626238', {
+      sessionId: 43,
+      captureId: 100,
+      fd: 11,
+      startedAt: 1700000000000,
+      eventCount: 0,
+      rawPath: '/tmp/test/43.jsonl',
+    });
+
+    const res = await DanmakuRecorder.writeBatch(
+      'https://www.xiaohongshu.com/livestream/570523582342626238?xsec_token=abc',
+      [{ ts_abs_ms: 1700000005000, type: 'comment', user: 'XhsUser', text: '旧键命中' }]
+    );
+
+    expect(res).toEqual({ written: 1, error: null });
+    expect(
+      DanmakuRecorder.activeSessions.get('https://www.xiaohongshu.com/livestream/dynpathX/570523582342626238')
+        .eventCount
+    ).toBe(1);
+  });
+
   test('_writeOrphanBatch 对小红书直播间登记 platform=xiaohongshu 而非硬编码 kuaishou', async () => {
     const pool = require('../server/db/index');
     const DataService = require('../server/services/DataService');

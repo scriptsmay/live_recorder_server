@@ -276,7 +276,7 @@ curl http://127.0.0.1:1123/api/rooms?status=recording
 **小红书 `room_url` 标准格式说明（直播间链接 vs 个人主页链接）：**
 
 1. **直播中添加（添加后立即检测开播并自动启动录制）**：
-   - 标准直播间地址：`https://www.xiaohongshu.com/livestream/{room_id}`（可附带 `?host_id={user_id}`；若包含 `/livestream/dynpathXXXX/{room_id}` 动态段会自动剥离）。
+   - 标准直播间地址：`https://www.xiaohongshu.com/livestream/{room_id}`（输入可附带 `?host_id={user_id}`、`?xsec_token=...` 等参数，入库前统一剥离为无参格式；若包含 `/livestream/dynpathXXXX/{room_id}` 动态段也会自动剥离）。
    - App 直播分享短链或整段分享口令：如 `https://xhslink.com/o/xxx` 或包含该短链的完整口令文本，服务端自动提取短链并通过 302 还原为规范化直播间长链。
 2. **个人主页预登记（自动提取主播昵称与头像，不可免登录转直播间地址）**：
    - 标准个人主页地址：`https://www.xiaohongshu.com/user/profile/{user_id}`（支持粘贴带 `?xsec_token=...&xsec_source=pc_search` 的 PC Web 主页链接或主页分享短链，自动剥离追踪参数并规范化）。
