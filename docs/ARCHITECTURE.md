@@ -402,7 +402,7 @@ FFmpeg 写入分段文件(.flv)
 - 扩展名：`.ts` (录制输出，容错性更强) → `.mp4` (转码后)
 - 停止信号：SIGTERM → 进程正常退出 → close handler
 - stderr pipe → 上层 tee 到日志文件
-- 支持网络重连：`-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`
+- 支持网络重连：标准无限流（FLV）使用 `-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1`；HLS（`.m3u8`）使用 `-reconnect 1 -reconnect_streamed 1`（不传 `-reconnect_at_eof 1`，避免有限长度的 m3u8 播放列表在正常 EOF 处触发 26s 重连等待导致首个 ts 分片过期）
 - 用户代理伪装：通过 `server/lib/core/config/userAgents.js` 配置化，避免被 CDN 403 拦截
 - 协议白名单：`-protocol_whitelist rtmp,crypto,file,http,https,tcp,tls,udp,rtp,httpproxy`
 - **流类型自动检测**：支持 FLV 和 HLS/m3u8 两种流格式
@@ -410,7 +410,7 @@ FFmpeg 写入分段文件(.flv)
   - HTTP 头检测（Content-Type + 响应体 `#EXTM3U` 标记）
   - `detectStreamType(url)` 异步方法供外部预检
   - `buildArgs()` 根据 `streamType` 选项选择参数策略
-- **HLS 专用参数**：更长超时（60s）、`-live_start_index -1`、`-avoid_negative_ts make_zero`、协议白名单含 `hls`
+- **HLS 专用参数**：更长超时（60s）、`-live_start_index -1`、`-avoid_negative_ts make_zero`、协议白名单含 `hls`、禁用 `-reconnect_at_eof`
 
 ---
 
@@ -688,7 +688,7 @@ PollingManager (单例)
   - 使用 iOS 客户端 UA（`ios/7.830 ...` + `xy-common-params: platform=iOS...`）请求 `https://www.xiaohongshu.com/livestream/{roomId}`，解析 `window.__INITIAL_STATE__.liveStream`。
   - 严格校验 `liveStatus === 'success' && Number(roomInfo.status) === 2 && !roomTitle.includes('回放')`，下播态（`liveStatus === 'end'` / `status === 5`）忽略平台随机推荐的 `nextRoomInfo`，防止误录其他主播。
   - 从 `roomInfo.pullConfig`（JSON 字符串）的 `h264[].master_url` 提取无防盗链的 `xhscdn.com` `.flv` 主流（优先 `live-source-play.xhscdn.com`）与多 CDN 备流（`-bak-tx`、`-hw`、`.m3u8`），`roomInfo.deeplink` 作为兜底。
-  - **FLV 封装的 HEVC 预检与降级**：小红书 HEVC 档位（`pullConfig.h265`，`_hcv540` 等后缀）的流是 FLV 封装 HEVC（视频 codec tag `0x0c`=12）。旧版 ffmpeg（如 7.1.x）的 flv demuxer 不认识，ffprobe 报 `Video codec (c) is not implemented` 且只识别出音频流，录制成品丢失视频轨（v1.14.0 会话 #80 即此问题）；新版 ffmpeg（如 9.x）能识别并 `-c copy` 录出 HEVC，但直出 HEVC 对浏览器/B 站不友好且后处理需 CPU 重编码。录制前 `RecorderService.startRecording` 对 `.flv` 主流调用 `transcoder.probeVideoTrack()` 预检：按视频编码判定（`flv-hevc-unrecordable`）或按 stderr 判定（`flv-hevc-not-implemented`）命中后，先经 `_findRecordableStream()` 降级到备份流（m3u8 优先——TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别；逐个预检挑第一个明确含视频轨的）；若无可用降级流，旧版 ffmpeg（`flv-hevc-not-implemented`，无视频轨）拒绝录制（返回 `Unsupported codec`），新版 ffmpeg（`flv-hevc-unrecordable`，可解复用视频轨）兜底继续录制主流并交由后续转码/HLS 链路重编码为 H.264。探测失败一律放行不误伤。备份流有两个来源：`PollingManager` 从 `checkResult.streamInfo.backupUrls` 透传，或 `POST /api/notify/live_download` 请求体的 `backupUrls`；扩展推送不带备份流时，服务端按 CDN 规则 `_deriveBackupUrls()` 从主流 URL 去掉 `_hcvXXX` 后缀派生同 CDN 节点与主节点的 `.m3u8` 及 H.264 `.flv`，保证降级链路在扩展路径同样可用。
+  - **FLV 封装的 HEVC 预检与两级降级策略**：小红书 HEVC 档位（`pullConfig.h265`，`_hcv540` 等后缀）的流是 FLV 封装 HEVC（视频 codec tag `0x0c`=12）。旧版 ffmpeg（如 7.1.x）的 flv demuxer 不认识，ffprobe 报 `Video codec (c) is not implemented` 且只识别出音频流，录制成品丢失视频轨（v1.14.0 会话 #80 即此问题）；新版 ffmpeg（`mwader/static-ffmpeg:9.0.2`，v1.14.4+ 生产内置）已能识别并解复用 FLV `0x0c` HEVC，但若直接 `-c copy` 录下 HEVC，后续 TS→MP4 转码与 HLS 切片都必须消耗 NAS CPU 进行 `libx264` 软编，而小红书 CDN 的无后缀备份流（`/live/{roomId}.m3u8` 与 `/live/{roomId}.flv`）往往直接提供 CDN 转好的原生 1080p H.264 流。因此 `RecorderService.startRecording` 对 `.flv` 主流调用 `transcoder.probeVideoTrack()` 实行**两级策略**：① 按视频编码判定（`flv-hevc-unrecordable`）或按 stderr 判定（`flv-hevc-not-implemented`）命中后，**优先尝试 `_findRecordableStream()` 降级到备份流**（m3u8 优先，逐个预检挑第一个明确含可直录视频轨的流，优先白嫖 CDN 原生 H.264 免去本地 CPU 软编，v1.14.4 生产会话 #81 实测直接拿到 1080p30 H.264）；② **若无可用降级流**（如快手无备份流，或备份流均探测失败），旧版 ffmpeg（`flv-hevc-not-implemented`，无视频轨）拒绝录制（返回 `Unsupported codec`），新版 ffmpeg 9.0.2（`flv-hevc-unrecordable`，可解复用视频轨）则**兜底继续录制原主流**，再交由后续转码/HLS 链路重编码为 H.264。探测失败一律放行不误伤。备份流来源：`PollingManager` 透传 `checkResult.streamInfo.backupUrls`、`POST /api/notify/live_download` 请求体 `backupUrls`，或服务端 `_deriveBackupUrls()` 按 CDN 规则从主流 URL 去掉 `_hcvXXX` 后缀自动派生同 CDN 节点与主节点的 `.m3u8` 及 H.264 `.flv`。
 
 ### 轮询流程
 

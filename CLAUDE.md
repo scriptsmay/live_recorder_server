@@ -138,7 +138,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 APP_VERSION=v1.8.2 docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.cron.yml up -d
 ```
 
-**Dockerfiles:** root `Dockerfile` is the only production image (4 stages: frontend build → backend deps → BtbN n7.1 static ffmpeg → runtime with yt-dlp + CJK fonts). `docker/Dockerfile.local` is a local-acceleration build and is **not equivalent to production**. `docker/Dockerfile.replay-cron` is a lightweight Alpine that contains **no scripts** and depends entirely on the mounted volume.
+**Dockerfiles:** root `Dockerfile` is the only production image (4 stages: frontend build → backend deps → `mwader/static-ffmpeg:9.0.2` static ffmpeg → runtime with yt-dlp + CJK fonts). `docker/Dockerfile.local` is a local-acceleration build and is **not equivalent to production**. `docker/Dockerfile.replay-cron` is a lightweight Alpine that contains **no scripts** and depends entirely on the mounted volume.
 
 **shared_scripts sync (v1.8.2):** Docker named volumes only seed from the image on first creation, so image updates to `scripts/` were previously masked. The production `Dockerfile` now snapshots `cp -a /app/scripts /app/scripts.image`, and `docker/scripts/docker-entrypoint.sh` refreshes `/app/scripts` from that snapshot on every boot. If a release only changes `scripts/`, force-recreate the main container to trigger the sync, then restart `replay_cron`.
 

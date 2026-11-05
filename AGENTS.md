@@ -46,6 +46,7 @@
 │   │   │   ├── DouyinChecker.js     # 抖音
 │   │   │   ├── DouyuChecker.js      # 斗鱼
 │   │   │   ├── KuaishouAPIChecker.js # 快手（HTTP API 直连，唯一快手 checker）
+│   │   │   ├── XiaohongshuChecker.js # 小红书（iOS SSR 直连）
 │   │   │   ├── signers/             # 签名模块（douyin.js / douyu.js / douyu-vip.js）
 │   │   │   ├── PollingManager.js    # 轮询管理器（定时调度）
 │   │   │   └── index.js
@@ -213,9 +214,10 @@ npm run lint && npm run format && npm run test
 ## 直播轮询 (Polling)
 
 - **策略模式**：`server/lib/core/polling/PlatformChecker.js` — 平台检查器抽象基类，`checkStatus()` / `canHandleUrl()` / `getPlatformId()`。新增平台只需继承并注册到 `server/lib/core/polling/checkers.js`
-- **已注册检查器**（`checkers.js`）：`huya`（HuyaChecker）、`bilibili`（BilibiliChecker）、`douyu`（DouyuChecker）、`douyin`（DouyinChecker）、`kuaishou`（KuaishouAPIChecker）
+- **已注册检查器**（`checkers.js`）：`huya`（HuyaChecker）、`bilibili`（BilibiliChecker）、`douyu`（DouyuChecker）、`douyin`（DouyinChecker）、`kuaishou`（KuaishouAPIChecker）、`xiaohongshu`（XiaohongshuChecker）
 - **虎牙检查器**：`server/lib/core/polling/HuyaChecker.js` — 通过虎牙移动 API (`mp.huya.com`) 查询开播状态，自动解析短房间号→数字ID，去掉 `-imgplus` 构建 ffmpeg 兼容流地址
 - **快手检查器**：`server/lib/core/polling/KuaishouAPIChecker.js` — HTTP API 直连（`live_api/liveroom/livedetail` 为主，`live_api/profile/public` 兜底），不依赖浏览器。受 `KUAISHOU_CHECKER_ENABLED` 控制开关。v1.8.3 起浏览器版 checker 与 `KUAISHOU_CHECKER_MODE` 已移除
+- **小红书检查器**：`server/lib/core/polling/XiaohongshuChecker.js` — iOS 客户端 UA 请求直播间 SSR `__INITIAL_STATE__` 提取流地址，个人主页链接通过 HTTP/1.1 提取主播元信息并作为稳定录制目标（ADR-021）
 - **轮询管理器**：`server/lib/core/polling/PollingManager.js` — 单例
   - 启动时只检查一次所有 `polling_enabled=true` 房间的状态（无定时器）
   - `reloadRoom()` 控制定时轮询：新增/修改房间时启动定时器，按各房间的 `polling_interval` 定时查询（含 0~5s 随机 jitter 防惊群）
@@ -239,8 +241,8 @@ npm run lint && npm run format && npm run test
 
 - **边下边转码**：`server/services/RecorderService.js` — 监听 FFmpeg stderr 输出，新分段打开时自动入队上一个已完成的分段
 - **转码队列**：`server/lib/core/TranscodeQueue.js` — Redis 队列 + 并发控制（`transcode_concurrency`），异步处理转码任务
-- **转码器**：`server/lib/core/transcoder.js` — 调用 FFmpeg `-c copy` 快速转码（TS → MP4）
-- **转码配置**：`auto_transcode`（启用/禁用）、`transcode_delete_originals`（删除原文件）
+- **转码器**：`server/lib/core/transcoder.js` — 默认对 H.264 调用 FFmpeg `-c copy` 快速转码（TS → MP4），对 HEVC/H.265 输入自动用 `libx264` 重编码为 H.264（`hls-generator.js` 切片时同样对 HEVC 自动重编码为 H.264）
+- **转码配置**：`auto_transcode`（启用/禁用）、`transcode_delete_originals`（删除原文件）、`transcode_hevc_to_h264`（HEVC 自动转 H.264，默认开启）
 - **双重保障**：边下边转码为主，`finishSession` 批量处理为兜底，确保无遗漏
 
 ## 文件路径结构

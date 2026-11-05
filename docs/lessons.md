@@ -809,40 +809,36 @@ RUN curl -fSL -O https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static
 
 ### 时间线
 
-| 日期  | 版本    | 事件                                                                          |
-| ----- | ------- | ----------------------------------------------------------------------------- |
-| 06-09 | v1.4.5  | Docker 镜像从 johnvansickle.com 更新 FFmpeg 静态二进制到最新 nightly          |
-| 06-11 | v1.4.10 | johnvansickle.com 源不稳定导致构建失败，增加 BtbN GitHub Release 作为降级备选 |
-| 06-21 | v1.5.1  | nightly 静态构建 SIGSEGV 导致生产事故，改用 Debian apt 安装 `ffmpeg 5.1.9`    |
-| 06-22 | v1.5.3  | 切换到 BtbN 锁定版本 `n7.1.5` 稳定构建，生产验证通过                          |
+| 日期  | 版本    | 事件                                                                               |
+| ----- | ------- | ---------------------------------------------------------------------------------- |
+| 06-09 | v1.4.5  | Docker 镜像从 johnvansickle.com 更新 FFmpeg 静态二进制到最新 nightly               |
+| 06-11 | v1.4.10 | johnvansickle.com 源不稳定导致构建失败，增加 BtbN GitHub Release 作为降级备选      |
+| 06-21 | v1.5.1  | nightly 静态构建 SIGSEGV 导致生产事故，改用 Debian apt 安装 `ffmpeg 5.1.9`         |
+| 06-22 | v1.5.3  | 切换到 BtbN 锁定版本 `n7.1.5` 稳定构建，生产验证通过                               |
+| 08-31 | v1.10.0 | BtbN `latest` tag 轮换清理 7.1 分支资产导致 CI 404，切回 Debian trixie apt `7.1.5` |
+| 11-05 | v1.14.4 | 小红书 FLV `0x0c` HEVC 在 7.1.5 下丢视频轨，升级为 `mwader/static-ffmpeg:9.0.2`    |
 
 ### 根因
 
-johnvansickle 提供的是 **nightly 编译的静态二进制**，每天从 FFmpeg master 分支自动构建。master 分支包含未充分测试的代码变更，在特定输入流（快手 FLV）上触发段错误。Debian bookworm 默认源的 `ffmpeg 5.1.9` 虽然稳定但版本过老（5.x），缺少对新格式和编解码器的支持。
+johnvansickle 提供的是 **nightly 编译的静态二进制**，每天从 FFmpeg master 分支自动构建。master 分支包含未充分测试的代码变更，在特定输入流（快手 FLV）上触发段错误。Debian bookworm 默认源的 `ffmpeg 5.1.9` 版本过老；Debian trixie 的 `ffmpeg 7.1.5` 稳定可复现，但官方 flv demuxer 在 7.1 分支尚不支持国内 CDN 广泛使用的非标 FLV `codec tag 0x0c`（HEVC），导致录制时视频轨被丢弃。
 
-### 最终方案
+### 当前方案（v1.14.4+）
 
-Dockerfile 多阶段构建，从 BtbN GitHub Release 下载 **锁定版本** 的静态二进制：
+Dockerfile 多阶段构建直接从不可变镜像标签 `mwader/static-ffmpeg:9.0.2` 注入 `ffmpeg` 与 `ffprobe` 静态二进制：
 
 ```dockerfile
-# 阶段3：下载并解压 FFmpeg 7.1.5 静态二进制文件
-# 使用 BtbN GitHub Release（GitHub CDN，构建时走内网，稳定可靠）
-# 锁定 7.1.5 稳定版，升级时只需更新版本号和解压目录名
-FROM alpine:latest AS ffmpeg-downloader
-RUN apk add --no-cache curl tar xz
-RUN curl -fSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1.5-linux64-gpl-7.1.tar.xz \
-        -o /tmp/ffmpeg.tar.xz \
-    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
-    && mv /tmp/ffmpeg-n7.1.5-linux64-gpl-7.1/bin/ffmpeg /usr/local/bin/ \
-    && mv /tmp/ffmpeg-n7.1.5-linux64-gpl-7.1/bin/ffprobe /usr/local/bin/ \
-    && rm -rf /tmp/ffmpeg*
+# 阶段 3: 提取 FFmpeg 9.0.2 静态二进制文件
+FROM mwader/static-ffmpeg:9.0.2 AS ffmpeg-provider
+
+# 阶段 4: 生产运行环境
+FROM node:22-trixie-slim
+COPY --from=ffmpeg-provider /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-provider /ffprobe /usr/local/bin/ffprobe
 ```
 
-### 踩坑点：BtbN 没有 `latest` tag
+### 历史踩坑点：BtbN 没有固定 `7.1` 的 `latest` tag
 
-BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），不存在固定的 `latest` tag。URL 中的 `latest` 实际指向一个特殊重定向，**只能用于 master 分支构建**，不能用于指定版本。
-
-正确的版本锁定方式：使用 `autobuild-*` tag 下的 `ffmpeg-n7.1.5-linux64-gpl-7.1.tar.xz` 文件名。该文件在每次自动构建中都会更新（补丁版本可能递增），但 7.1 稳定分支的兼容性有保障。
+BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），`releases/download/latest` 仅保留当前活跃大版本的资产。当上游切到 8.x/9.0 后，`latest` 下的 `ffmpeg-n7.1.5-linux64-gpl-7.1.tar.xz` 会被轮换清理导致构建 404（v1.10.0 实测踩坑）。
 
 ### 方案对比
 
@@ -856,11 +852,11 @@ BtbN 的 release tag 格式是 `autobuild-YYYY-MM-DD-HH-MM`（日期时间），
 
 ### 经验总结
 
-1. **nightly 构建不适合生产环境**：master 分支的 nightly 构建包含未充分测试的代码，在特定输入（如快手 FLV 流）上可能触发崩溃。生产环境应锁定稳定分支版本。
-2. **Docker 镜像源比 wget 更可靠**：之前考虑的 `mwader/static-ffmpeg:7.1` Docker 镜像方案也验证可用（Docker Hub tag 固定），但 BtbN + GitHub CDN 在 GitHub Actions 构建场景下走内网更快。
-3. **FFmpeg 版本选择要匹配场景**：录制场景用 `-c copy` 不涉及编解码，7.x 稳定分支完全够用，8.x 的新特性（Vulkan 硬件加速、新编码器）对本项目无实际价值。
+1. **nightly 构建不适合生产环境**：master 分支的 nightly 构建包含未充分测试的代码，在特定输入（如快手 FLV 流）上可能触发崩溃。生产环境应锁定稳定发布版本。
+2. **不可变 Docker 镜像 tag 比外部 tar 包 URL 更可靠**：`mwader/static-ffmpeg:9.0.2` 由 `COPY --from` 直接提取二进制，无外部站点宕机或 GitHub Release 资产轮换 404 风险。
+3. **FFmpeg 版本需覆盖国内直播 CDN 的非标封装**：虽然 `-c copy` 录制不涉及重编码，但解复用器（demuxer）与编码器（如 HEVC→H.264 转码/HLS 切片的 `libx264`）依赖 FFmpeg 版本——例如小红书/快手等平台的 FLV `0x0c` HEVC 需 FFmpeg 9.0+ 才能识别视频轨。
 4. **`ffmpeg -version` 验证是上线前必做项**：构建成功不代表运行时正常，生产容器启动后应立即验证 FFmpeg 版本和功能（如 `ffmpeg -version`、`ffmpeg -codecs | grep flv`）。
-5. **升级路径要记录**：从 nightly → Debian stable → BtbN locked，每次变更都应记录版本号和原因，方便后续回溯。
+5. **升级路径要记录**：从 nightly → Debian bookworm 5.1 → BtbN 7.1.5 → Debian trixie 7.1.5 → `mwader/static-ffmpeg:9.0.2`，每次变更都应记录版本号和原因，方便后续回溯。
 
 ## 构建期 Python 工具未固定版本：biliup 上游停发 wheel 导致镜像构建中断
 
