@@ -457,12 +457,14 @@ class RecorderService {
             [stat.size, sessionId, file.file_path]
           );
         } else {
+          // completed_at 用 boolean 参数驱动，避免 $2 同时出现在 enum status 列与 text 比较里
+          // 触发 PostgreSQL 的 "inconsistent types deduced for parameter" 推断错误。
           await pool.query(
             `UPDATE recording_files
              SET file_size = $1, status = $2, ended_at = NOW(),
-                 completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END
+                 completed_at = CASE WHEN $5 THEN NOW() ELSE completed_at END
              WHERE session_id = $3 AND file_path = $4 AND deleted_at IS NULL`,
-            [stat.size, fileStatus, sessionId, file.file_path]
+            [stat.size, fileStatus, sessionId, file.file_path, fileStatus === 'completed']
           );
         }
 
@@ -497,14 +499,16 @@ class RecorderService {
           }
           if (!stat.isFile() || stat.size < thresholdBytes) continue;
 
+          // completed_at 在应用层算好（timestamp 或 null），避免 $6 同时出现在 enum status
+          // 列与 text 比较里触发 "inconsistent types deduced for parameter $6"。
+          const completedAt = fileStatus === 'completed' ? new Date() : null;
           const inserted = await pool.query(
             `INSERT INTO recording_files
                (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, completed_at, segment_index, checked_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(),
-                     CASE WHEN $6 = 'completed' THEN NOW() ELSE NULL END, $8, NOW())
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())
              ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING
              RETURNING id`,
-            [sessionId, sessRow.room_url, fp, name, stat.size, fileStatus, sessRow.started_at, nextSegIdx]
+            [sessionId, sessRow.room_url, fp, name, stat.size, fileStatus, sessRow.started_at, completedAt, nextSegIdx]
           );
 
           // ON CONFLICT 命中说明已被并发路径登记，不重复计数/入队
