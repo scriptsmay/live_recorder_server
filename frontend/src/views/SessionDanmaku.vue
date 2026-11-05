@@ -175,6 +175,10 @@ const filesTotalSize = computed(() =>
   (detail.value?.files ?? []).reduce((sum, f) => sum + (Number(f.file_size) || 0), 0),
 )
 
+// 录制进行中：分段文件由 ffmpeg 事件 / watchdog 稳定期后入账，列表会滞后于磁盘，
+// 正在写入的分段可能尚未列出，结束（finishSession）后才补全并校准总数。
+const isRecording = computed(() => detail.value?.session?.status === 'recording')
+
 const durationText = computed(() => {
   const s = detail.value?.session
   if (!s?.started_at) return '—'
@@ -200,7 +204,7 @@ const statCards = computed(() => [
   {
     label: '分段文件',
     value: String(detail.value?.files.length ?? 0),
-    sublines: ['已写入磁盘'],
+    sublines: [isRecording.value ? '已入库，录制结束后校准' : '已入库'],
     tone: 'indigo',
     iconPath:
       'm15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z',
@@ -872,6 +876,13 @@ onMounted(() => {
             >{{ detail.files.length }} 个文件</span
           >
         </div>
+
+        <p
+          v-if="isRecording"
+          class="border-b border-amber-100 bg-amber-50/70 px-4 py-2 text-[11px] leading-relaxed text-amber-700"
+        >
+          正在录制中：分段文件在录制结束后校准，当前正在写入的分段可能尚未列出，此处数量与总大小会小于磁盘实际文件。
+        </p>
 
         <p v-if="detail.files.length === 0" class="px-4 py-6 text-center text-xs text-gray-400">
           无分段文件

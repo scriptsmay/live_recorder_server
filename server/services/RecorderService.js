@@ -3,7 +3,7 @@ const fs = require('fs');
 const pool = require('../db/index');
 const redis = require('../db/redis');
 
-const { generateOutputPath } = require('../lib/utils/tool');
+const { generateOutputPath, parseSegmentStartFromFilename } = require('../lib/utils/tool');
 const { downloadFile } = require('../lib/utils/download');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const recordingManager = require('../lib/core/RecordingManager');
@@ -502,13 +502,16 @@ class RecorderService {
           // completed_at 在应用层算好（timestamp 或 null），避免 $6 同时出现在 enum status
           // 列与 text 比较里触发 "inconsistent types deduced for parameter $6"。
           const completedAt = fileStatus === 'completed' ? new Date() : null;
+          // started_at 统一取分段文件名里的 strftime 时间戳；无时间戳的固定文件名
+          // 回退到会话 started_at，保持不分段录制行为不变（v1.14.5 时间轴修复）。
+          const startedAt = parseSegmentStartFromFilename(fp, sessRow.started_at);
           const inserted = await pool.query(
             `INSERT INTO recording_files
                (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, completed_at, segment_index, checked_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())
              ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING
              RETURNING id`,
-            [sessionId, sessRow.room_url, fp, name, stat.size, fileStatus, sessRow.started_at, completedAt, nextSegIdx]
+            [sessionId, sessRow.room_url, fp, name, stat.size, fileStatus, startedAt, completedAt, nextSegIdx]
           );
 
           // ON CONFLICT 命中说明已被并发路径登记，不重复计数/入队

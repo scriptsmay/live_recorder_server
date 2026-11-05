@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const pool = require('../../db/index');
-const { DANMAKU_DIR_NAME, DANMAKU_ANALYSIS_DIR_NAME } = require('../utils/tool');
+const { DANMAKU_DIR_NAME, DANMAKU_ANALYSIS_DIR_NAME, parseSegmentStartFromFilename } = require('../utils/tool');
 
 /**
  * 扫描录像文件目录的冷却时间（5分钟）
@@ -161,11 +161,13 @@ async function scanRecordingFiles(force = false) {
       // 如果找到匹配的会话，则将文件标记为已完成并关联到会话
       // v1.12.0：ON CONFLICT 谓词必须与部分唯一索引一致（仅约束未删除行），
       // 软删同行路径的文件重新入账建新行，不再被 DO NOTHING 静默跳过
+      // started_at 统一取分段文件名里的 strftime 时间戳；无时间戳回退到会话 started_at
+      const startedAt = parseSegmentStartFromFilename(fp, matchedSession.started_at);
       const insertRes = await pool.query(
         `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, checked_at)
          VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), 0, NOW())
          ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
-        [matchedSession.id, roomUrl, fp, path.basename(fp), stat.size, matchedSession.started_at]
+        [matchedSession.id, roomUrl, fp, path.basename(fp), stat.size, startedAt]
       );
 
       if (insertRes.rowCount > 0) {

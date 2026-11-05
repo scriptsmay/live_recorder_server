@@ -7,6 +7,7 @@ const DataService = require('../../services/DataService');
 const UploadService = require('../../services/UploadService');
 const { getActiveDownloader } = require('./downloaders/DownloaderFactory');
 const { scanRecordingFiles } = require('./scan-files');
+const { parseSegmentStartFromFilename } = require('../utils/tool');
 const transcodeQueue = require('./TranscodeQueue');
 const hlsGenerator = require('./hls-generator');
 const analysisService = require('../../services/DanmakuAnalysisService');
@@ -334,17 +335,20 @@ async function scanActiveSegments() {
         if (managedCheck.rows.length > 0) continue;
 
         // segment times 已由 recordSegment() 写入，watchdog 只补充运行时数据
+        // started_at 统一取分段文件名里的 strftime 时间戳，避免补登记时用 NOW()
+        // 把分段起点写成发现时刻（v1.14.5 时间轴修复）。
         // v1.12.0：ON CONFLICT 谓词与部分唯一索引一致——软删同路径行不冲突，建新行
+        const startedAt = parseSegmentStartFromFilename(fp, stat.mtimeMs);
         await pool.query(
           `INSERT INTO recording_files (session_id, room_url, file_path, file_name, file_size, status, started_at, ended_at, segment_index, duration_seconds, checked_at)
-           VALUES ($1, $2, $3, $4, $5, 'completed', NOW(), NOW(), $6, $7, NOW())
+           VALUES ($1, $2, $3, $4, $5, 'completed', $6, NOW(), $7, $8, NOW())
            ON CONFLICT (file_path) WHERE deleted_at IS NULL DO UPDATE SET
              duration_seconds = EXCLUDED.duration_seconds,
              file_size = EXCLUDED.file_size,
              status = 'completed',
              ended_at = NOW(),
              checked_at = NOW()`,
-          [session.session_id, session.room_url, fp, f, stat.size, segIndex, durationSec]
+          [session.session_id, session.room_url, fp, f, stat.size, startedAt, segIndex, durationSec]
         );
 
         await pool.query(

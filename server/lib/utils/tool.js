@@ -69,6 +69,44 @@ function templateToStrftime(template, roomName, ext = '.mp4') {
 }
 
 /**
+ * 从分段文件名解析该分段的真实起始时间。
+ *
+ * 分段录制启用 -strftime 1 后，ffmpeg 会把 {datetime} 展开成每个分段
+ * 打开时刻的 YYYYMMDD_HHmmss（见 templateToStrftime）。文件名是这个时刻
+ * 唯一的可靠记录：补登记路径（watchdog / finishSession 增量补录）事后
+ * 拿不到 ffmpeg 打开文件的精确时刻，用 NOW() 或会话启动时间都会给出
+ * 错误的时间轴，因此统一以文件名时间戳为准。
+ *
+ * 解析失败（不分段录制的固定文件名、自定义模板无时间戳等）回退到
+ * 调用方提供的 fallback（如会话 started_at），保证行为与改动前一致。
+ *
+ * @param {string} filePath - 分段文件路径或文件名
+ * @param {Date|string|number} fallback - 解析失败时的回退时间
+ * @returns {Date} 分段起始时间
+ */
+function parseSegmentStartFromFilename(filePath, fallback = new Date()) {
+  const parsedFallback = fallback instanceof Date ? fallback : dayjs(fallback).toDate();
+  // fallback 可能来自可空的 DB 列（如会话 started_at 为 null），不能把 Invalid Date 写进库
+  const fallbackDate = Number.isNaN(parsedFallback.getTime()) ? new Date() : parsedFallback;
+  if (!filePath) return fallbackDate;
+
+  const name = path.basename(String(filePath));
+  // 匹配 YYYYMMDD_HHmmss 或独立的 YYYYMMDD / HHmmss 组合，取文件名中最后一组，
+  // 避免房间名里恰好含 8 位数字时误判（时间戳恒在文件名尾部、扩展名之前）。
+  const match = name.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?=\.[^.]+$|$)/);
+  if (!match) return fallbackDate;
+
+  const [, y, mo, d, h, mi, s] = match;
+  const parsed = dayjs(`${y}-${mo}-${d}T${h}:${mi}:${s}`);
+  // dayjs 对越界字段会自动进位（如月份 99 变成 2034 年），isValid() 仍为 true，
+  // 必须回读格式化结果与原串逐位比对，杜绝把非法时间戳写进 started_at。
+  if (!parsed.isValid() || parsed.format('YYYYMMDD_HHmmss') !== `${y}${mo}${d}_${h}${mi}${s}`) {
+    return fallbackDate;
+  }
+  return parsed.toDate();
+}
+
+/**
  * 生成输出文件路径
  *
  * 路径结构：VIDEO_DOWNLOAD_DIR/[sessionId]/[filename]
@@ -352,6 +390,7 @@ function readJsonlLines(filePath, options = {}) {
 module.exports = {
   generateFilename,
   templateToStrftime,
+  parseSegmentStartFromFilename,
   sanitizeFilename,
   generateOutputPath,
   getDanmakuJsonlPath,

@@ -195,6 +195,12 @@ VIDEO_DOWNLOAD_DIR/
 
 **会话的文件列表以 `recording_files` 表为唯一数据源**。`recordings` 表已废弃，数据已迁移到 `recording_files` 表。
 
+> **录制进行中的列表滞后**：分段行由 ffmpeg 的 `segment` 事件触发 INSERT，watchdog 的
+> `scanActiveSegments()` 另有 20 秒 mtime 稳定期兜底，正在写入的分段因此可能尚未入表；
+> `finishSession()` 结束时增量补录并校准 `total_segments` 后，表与磁盘才完全一致。
+> 前端「会话详情 / 录制文件」页在会话 `status = recording` 时会提示这一点，不应把
+> 列表条数当作磁盘实时文件数。
+
 ```text
                       ┌── 新录制请求 ──────────────────┐
                       │                                │
@@ -310,6 +316,13 @@ VIDEO_DOWNLOAD_DIR/
 - 投稿简化：直接从会话目录获取文件
 
 ### recording_files 表状态流转
+
+**`started_at` 口径**：分段录制启用 `-strftime 1` 后，文件名含该分段打开时刻的
+`YYYYMMDD_HHmmss`。所有写入路径（`recordSegment()` 事件登记、`watchdog`
+`scanActiveSegments()` 补登记、`finishSession()` 增量补录、`scanRecordingFiles()`
+孤儿关联）统一经 `parseSegmentStartFromFilename()` 从文件名解析 `started_at`；
+无时间戳的固定文件名（不分段录制、自定义模板）回退到会话 `started_at`。
+不要用 `NOW()` 或「发现文件的时刻」作为分段起点，否则时间轴会整体右移。
 
 ```text
                  ┌──────────────┐

@@ -567,8 +567,11 @@ class DataService {
       params.push(room_url);
     }
 
-    // 基础查询SQL，关联房间表
-    let sql = `SELECT rf.*, rm.room_name
+    // 基础查询SQL，关联房间表。
+    // session_status 供前端在会话进行中提示「分段数尚未校准」：录制中的分段文件
+    // 由 ffmpeg 事件 / watchdog 稳定期后入账，列表天然滞后于磁盘（v1.14.5）。
+    let sql = `SELECT rf.*, rm.room_name,
+               (SELECT rs.status FROM recording_sessions rs WHERE rs.id = rf.session_id) AS session_status
         FROM recording_files rf
         LEFT JOIN rooms rm ON rf.room_url = rm.room_url`;
 

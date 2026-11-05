@@ -29,6 +29,7 @@ interface RecordingRow {
   is_hls_ready: boolean
   session_started_at: string
   session_ended_at: string | null
+  session_status: string | null
   started_at: string
   ended_at: string | null
   file_exists?: boolean
@@ -46,6 +47,11 @@ const playerVisible = ref(false)
 const playerRecordingId = ref<number | null>(null)
 const playerTitle = ref('视频播放')
 const currentRoomFilter = computed(() => (route.query.room_url as string) || '')
+
+// 录制进行中的会话，其分段文件由 ffmpeg 事件 / watchdog 稳定期后入账，列表会滞后于磁盘。
+const hasRecordingSessions = computed(() =>
+  recordings.value.some((r) => r.session_status === 'recording'),
+)
 
 async function loadData() {
   loading.value = true
@@ -182,6 +188,13 @@ watch(
       <h1 class="text-2xl font-bold text-gray-900">录制文件</h1>
       <span class="text-sm text-gray-500">共 {{ total }} 条记录</span>
     </div>
+
+    <p
+      v-if="hasRecordingSessions"
+      class="mb-4 rounded-lg border border-amber-100 bg-amber-50/70 px-4 py-2.5 text-xs leading-relaxed text-amber-700"
+    >
+      列表中包含正在录制的会话：分段文件在录制结束后校准，当前正在写入的分段可能尚未列出，此处的条数会小于磁盘实际文件数。
+    </p>
 
     <!-- Room filter -->
     <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">

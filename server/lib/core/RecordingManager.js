@@ -7,6 +7,7 @@ const liveProcesses = require('../utils/live-processes');
 const transcodeQueue = require('./TranscodeQueue');
 const segmenter = require('./segmenter');
 const DataService = require('../../services/DataService');
+const { parseSegmentStartFromFilename } = require('../utils/tool');
 
 const SEGMENT_TRACKER_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟无心跳则强制清理
 
@@ -84,12 +85,15 @@ class RecordingManager {
 
     // 主动 INSERT recording_files，避免竞态条件（watchdog 可能尚未扫描到该文件）
     const fileName = filePath.split('/').pop();
+    // started_at 统一取分段文件名里的 strftime 时间戳（ffmpeg 打开分段的真实时刻），
+    // 与 watchdog / finishSession 的补登记口径一致；无时间戳的固定文件名回退到会话启动时间。
+    const startedAt = parseSegmentStartFromFilename(filePath, new Date(tracker.sessionStartMs + elapsedMs));
     pool
       .query(
         `INSERT INTO recording_files (session_id, room_url, file_path, file_name, status, started_at, segment_index, checked_at)
-         VALUES ($1, $2, $3, $4, 'recording', to_timestamp($5 / 1000.0), $6, NOW())
+         VALUES ($1, $2, $3, $4, 'recording', $5, $6, NOW())
          ON CONFLICT (file_path) WHERE deleted_at IS NULL DO NOTHING`,
-        [sessionId, tracker.roomUrl, filePath, fileName, tracker.sessionStartMs + elapsedMs, segIndex]
+        [sessionId, tracker.roomUrl, filePath, fileName, startedAt, segIndex]
       )
       .catch((err) => {
         console.warn(`[RecordingManager] recordSegment INSERT 失败: ${err.message}`);

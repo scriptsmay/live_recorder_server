@@ -173,6 +173,44 @@ describe('RecorderService._handleSessionFinish — 增量补录与状态', () =>
     expect(RecordingManager.addTranscodeQueue).not.toHaveBeenCalled();
   });
 
+  test('补录分段文件的 started_at 取文件名时间戳，而非会话启动时间（v1.14.5 时间轴修复）', async () => {
+    DataService.getRecordingFiles.mockResolvedValue({ rows: [] });
+    jest.spyOn(fs, 'readdirSync').mockReturnValue(['room_20261105_224306.ts']);
+
+    await RecorderService._handleSessionFinish({
+      sessionId: 42,
+      code: 0,
+      signal: null,
+      isManualStop: false,
+    });
+
+    const insertParams = pool.query.mock.calls.find(([sql]) => /INSERT INTO recording_files/.test(sql))[1];
+    const startedAt = insertParams[6];
+    expect(startedAt).toBeInstanceOf(Date);
+    // 解析自 20261105_224306，而不是回退到会话 started_at（2026-01-01）
+    expect(startedAt.getFullYear()).toBe(2026);
+    expect(startedAt.getMonth()).toBe(10);
+    expect(startedAt.getDate()).toBe(5);
+    expect(startedAt.getHours()).toBe(22);
+    expect(startedAt.getMinutes()).toBe(43);
+    expect(startedAt.getSeconds()).toBe(6);
+  });
+
+  test('无时间戳的补录文件 started_at 回退到会话启动时间', async () => {
+    DataService.getRecordingFiles.mockResolvedValue({ rows: [] });
+    jest.spyOn(fs, 'readdirSync').mockReturnValue(['room_fixed.ts']);
+
+    await RecorderService._handleSessionFinish({
+      sessionId: 42,
+      code: 0,
+      signal: null,
+      isManualStop: false,
+    });
+
+    const insertParams = pool.query.mock.calls.find(([sql]) => /INSERT INTO recording_files/.test(sql))[1];
+    expect(insertParams[6]).toEqual(STARTED_AT);
+  });
+
   test('低于阈值的新文件不补录', async () => {
     DataService.getRecordingFiles.mockResolvedValue({ rows: [] });
     fs.statSync.mockReturnValue({ size: 1024, isFile: () => true });
