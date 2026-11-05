@@ -303,7 +303,11 @@ router.post('/notify/probe_stream', async (req, res) => {
   try {
     const result = await probeStream(url);
     if (!result.ok) {
-      return res.json({ status: 'Error', message: result.error || '探测失败' });
+      return res.json({
+        status: 'Error',
+        message: result.error || '探测失败',
+        detail: result.message || '',
+      });
     }
     return res.json({ status: 'ok', data: result });
   } catch (err) {

@@ -542,7 +542,8 @@ curl 'http://127.0.0.1:1123/api/notify/status?active=true&include_all=true'
 **安全与限制：**
 
 - 只接受小红书直播 CDN：主机以 `live` 开头且后缀为 `.xhscdn.com` / `.xhscdn.net`，其他地址返回 400；
-- 探测并发上限 3，超限返回 `busy`；成功结果缓存 5 分钟、失败缓存 1 分钟（按 `origin + pathname` 收敛，忽略签名参数）。
+- 探测超时 6 秒（须小于扩展 fetch 超时，避免响应未及返回就被断开）；并发上限 8，超限返回 `busy`；
+- 成功结果缓存 5 分钟、失败结果缓存 15 秒（按 `origin + pathname` 收敛，忽略签名参数）；`timeout` / `busy` 属瞬时失败，不缓存，便于立即重试。
 
 **请求：**
 
@@ -567,7 +568,7 @@ curl 'http://127.0.0.1:1123/api/notify/status?active=true&include_all=true'
 }
 ```
 
-**返回（失败）：** `{ "status": "Error", "message": "probe_failed" }`（`unsupported_url` / `busy` / `timeout` 等）。
+**返回（失败）：** `{ "status": "Error", "message": "probe_failed", "detail": "Server returned 403 Forbidden" }`（`unsupported_url` / `busy` / `timeout` 等）。`detail` 为 ffprobe stderr 摘要，可能为空字符串；扩展据此区分「探测失败」与「未知」并展示原因。
 
 ---
 

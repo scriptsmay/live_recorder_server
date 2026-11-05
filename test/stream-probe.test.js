@@ -12,11 +12,16 @@ function urlFor(name) {
   return `https://live-source-play.xhscdn.com/live/${name}.flv?userId=69ad`;
 }
 
-function mockProbeOnce({ stdout = '', stderr = '', code = 0, error = null } = {}) {
+function newChild() {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.kill = jest.fn();
+  return child;
+}
+
+function mockProbeOnce({ stdout = '', stderr = '', code = 0, error = null } = {}) {
+  const child = newChild();
 
   spawn.mockImplementationOnce(() => {
     setImmediate(() => {
@@ -31,6 +36,22 @@ function mockProbeOnce({ stdout = '', stderr = '', code = 0, error = null } = {}
     return child;
   });
   return child;
+}
+
+/** 不自动结束的探测，用于占住并发槽位并由用例手动收尾。 */
+function mockProbePending() {
+  const child = newChild();
+  spawn.mockImplementationOnce(() => child);
+  return child;
+}
+
+const VIDEO_JSON = JSON.stringify({
+  streams: [{ codec_name: 'h264', width: 1280, height: 720 }],
+});
+
+function finishPending(child, { stdout = VIDEO_JSON, code = 0 } = {}) {
+  if (stdout) child.stdout.emit('data', Buffer.from(stdout));
+  child.emit('close', code);
 }
 
 describe('isProbeableStreamUrl', () => {
@@ -119,5 +140,68 @@ describe('probeStream', () => {
     const result = await probeStream('https://example.com/live/1.flv');
     expect(result).toEqual({ ok: false, error: 'unsupported_url' });
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  test('失败结果在 TTL 内复用，且退出码非 0 时带 stderr 摘要', async () => {
+    mockProbeOnce({ code: 1, stderr: 'Server returned 403 Forbidden' });
+
+    const first = await probeStream(urlFor('failure-cache'));
+    const second = await probeStream(urlFor('failure-cache'));
+
+    expect(first.error).toBe('probe_failed');
+    expect(first.message).toContain('403');
+    expect(second).toEqual(first);
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  test('并发达到上限时返回 busy，且不触发 ffprobe', async () => {
+    const pending = Array.from({ length: 8 }, () => mockProbePending());
+    const tasks = pending.map((_, i) => probeStream(urlFor(`concurrent-${i}`)));
+
+    const busy = await probeStream(urlFor('over-limit'));
+    expect(busy).toEqual({ ok: false, error: 'busy' });
+    expect(spawn).toHaveBeenCalledTimes(8);
+
+    pending.forEach(finishPending);
+    await Promise.all(tasks);
+  });
+
+  test('busy 不写入缓存，槽位释放后立即重新探测', async () => {
+    const pending = Array.from({ length: 8 }, () => mockProbePending());
+    const tasks = pending.map((_, i) => probeStream(urlFor(`busy-retry-${i}`)));
+
+    const busy = await probeStream(urlFor('busy-retry-same'));
+    expect(busy.error).toBe('busy');
+
+    pending.forEach(finishPending);
+    await Promise.all(tasks);
+
+    mockProbeOnce({ stdout: VIDEO_JSON });
+    const retried = await probeStream(urlFor('busy-retry-same'));
+    expect(retried.ok).toBe(true);
+    expect(spawn).toHaveBeenCalledTimes(9);
+  });
+
+  test('timeout 属瞬时失败，不缓存且可立即重试', async () => {
+    jest.useFakeTimers();
+    try {
+      const stalled = mockProbePending();
+      const timedOut = probeStream(urlFor('timeout'));
+      jest.advanceTimersByTime(6000);
+      const first = await timedOut;
+
+      expect(first).toEqual({ ok: false, error: 'timeout' });
+      expect(stalled.kill).toHaveBeenCalledWith('SIGKILL');
+
+      const retryChild = mockProbePending();
+      const retriedTask = probeStream(urlFor('timeout'));
+      finishPending(retryChild);
+      const retried = await retriedTask;
+
+      expect(retried.ok).toBe(true);
+      expect(spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -15,11 +15,17 @@ const { spawn } = require('child_process');
  * - 并发上限 + 结果缓存，避免被反复刷探测。
  */
 
-const PROBE_TIMEOUT_MS = 8000;
+// 服务端超时须小于扩展 fetch 超时（12s），否则 ffprobe 被 kill 时请求已断开，
+// 扩展只能看到网络错误而非明确的 timeout，日志里表现为 morgan 的 "- - ms"。
+const PROBE_TIMEOUT_MS = 6000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const FAILURE_CACHE_TTL_MS = 60 * 1000;
+const FAILURE_CACHE_TTL_MS = 15 * 1000;
 const CACHE_LIMIT = 200;
-const MAX_CONCURRENT = 3;
+// Popup 会并发探测多条候选流，上限过低会让第 4 条起直接 busy。
+const MAX_CONCURRENT = 8;
+
+// 瞬时失败不写入缓存，否则扩展的重试会在 TTL 内反复命中同一份失败结果。
+const TRANSIENT_ERRORS = new Set(['timeout', 'busy']);
 
 const cache = new Map();
 let activeProbes = 0;
@@ -145,7 +151,8 @@ function runProbe(url) {
  *
  * @param {string} url
  * @returns {Promise<Object>} 与 runProbe 相同；不允许的地址返回 unsupported_url，
- *   并发已满返回 busy（均不触发 ffprobe）。
+ *   并发已满返回 busy（均不触发 ffprobe）。timeout / busy 属瞬时失败，不缓存，
+ *   避免扩展重试时命中同一份失败结果。
  */
 async function probeStream(url) {
   if (!isProbeableStreamUrl(url)) {
@@ -166,6 +173,9 @@ async function probeStream(url) {
   activeProbes++;
   try {
     const result = await runProbe(url);
+    if (!result.ok && TRANSIENT_ERRORS.has(result.error)) {
+      return result;
+    }
     setCache(key, result);
     return result;
   } finally {
