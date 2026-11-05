@@ -36,9 +36,7 @@ describe('RecorderService._findRecordableStream', () => {
       return { hasVideo: true, videoCodec: 'hevc', error: null };
     });
 
-    const result = await RecorderService._findRecordableStream(
-      'http://a/bak.flv,http://a/main.m3u8,http://a/bak2.flv'
-    );
+    const result = await RecorderService._findRecordableStream('http://a/bak.flv,http://a/main.m3u8,http://a/bak2.flv');
 
     expect(result).toBe('http://a/main.m3u8');
     expect(order[0]).toBe('http://a/main.m3u8');
@@ -72,10 +70,7 @@ describe('RecorderService._findRecordableStream', () => {
       error: null,
     });
 
-    const result = await RecorderService._findRecordableStream([
-      'http://a/bak.flv',
-      'http://a/main.m3u8',
-    ]);
+    const result = await RecorderService._findRecordableStream(['http://a/bak.flv', 'http://a/main.m3u8']);
 
     expect(result).toBe('http://a/main.m3u8');
   });

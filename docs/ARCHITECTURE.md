@@ -457,11 +457,11 @@ FFmpeg 写入分段文件(.flv)
 
 **配置项**:
 
-| 设置项                       | 默认值 | 说明                 |
-| ---------------------------- | ------ | -------------------- |
-| `auto_transcode`             | `true` | 是否启用自动转码     |
-| `transcode_concurrency`      | `3`    | 转码并发数           |
-| `transcode_delete_originals` | `true` | 转码后是否删除原文件 |
+| 设置项                       | 默认值 | 说明                                                  |
+| ---------------------------- | ------ | ----------------------------------------------------- |
+| `auto_transcode`             | `true` | 是否启用自动转码                                      |
+| `transcode_concurrency`      | `3`    | 转码并发数                                            |
+| `transcode_delete_originals` | `true` | 转码后是否删除原文件                                  |
 | `transcode_hevc_to_h264`     | `true` | HEVC 输入是否重编码为 H.264（浏览器可播、B 站可投稿） |
 
 **监控API** (可选扩展):
