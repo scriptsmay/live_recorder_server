@@ -327,6 +327,7 @@ class PollingManager {
         // ADR-021：直播间链接按 host_user_id 归并到稳定目标，room_id 记录本场。
         host_user_id: checkResult.streamInfo?.hostId || room.host_user_id || '',
         live_room_id: checkResult.streamInfo?.roomId || room.live_room_id || '',
+        backupUrls: checkResult.streamInfo?.backupUrls || '',
       });
 
       if (!recordResult.error) {

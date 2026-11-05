@@ -665,7 +665,7 @@ class RecorderService {
    * @param {string} params.room_url - 房间URL
    * @returns {Promise<Object>} 录制结果，包含错误信息和录制详情
    */
-  static async startRecording({ url, title, caption, room_url, roomCover, host_user_id, live_room_id }) {
+  static async startRecording({ url, title, caption, room_url, roomCover, host_user_id, live_room_id, backupUrls }) {
     const normalizedRoomUrl = normalizeRoomUrl(room_url);
     console.log('[RecorderService] 收到录制请求:', {
       title,
@@ -758,20 +758,27 @@ class RecorderService {
       };
     }
 
-    // 防御性预检：小红书 HEVC 档位用 FLV 封装 HEVC（codec tag 0x0c），ffmpeg 官方从不支持，
-    // 录制时视频流会被丢弃（成品只剩音频）。录制前探测到该情况直接拒绝，避免产出无画面废文件。
-    // 仅对 flv 流预检；m3u8 是 TS 封装，HEVC 用标准 stream_type，ffmpeg 能正常识别。
+    // 防御性预检 + 降级：小红书 HEVC 档位用 FLV 封装 HEVC（codec tag 0x0c），ffmpeg 官方从不支持，
+    // 录制时视频流会被丢弃（成品只剩音频）。主流探测到该情况时先尝试降级到备份流（m3u8 优先，
+    // TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别），无可用降级流才拒绝，避免产出无画面废文件。
+    // 仅对 flv 流预检；m3u8 主流本身可正常识别，无需预检。
     if (/\.flv(\?|$)/i.test(url)) {
       const videoProbe = await transcoder.probeVideoTrack(url);
       if (videoProbe.error === 'flv-hevc-not-implemented') {
-        console.error(`[视频轨预检] 拒绝录制（FLV HEVC 无法识别，将丢失视频轨）: ${url.slice(0, 60)}`);
-        return {
-          error: true,
-          status: 200,
-          code: 400,
-          status_str: 'Unsupported codec',
-          message: '该直播流视频为 FLV 封装的 HEVC，当前 FFmpeg 无法识别，录制会丢失画面，已自动跳过。',
-        };
+        const fallbackUrl = await this._findRecordableStream(backupUrls);
+        if (fallbackUrl) {
+          console.warn(`[视频轨预检] 主流 FLV HEVC 不可录制，降级到: ${fallbackUrl.slice(0, 60)}`);
+          url = fallbackUrl;
+        } else {
+          console.error(`[视频轨预检] 拒绝录制（FLV HEVC 且无可用降级流）: ${url.slice(0, 60)}`);
+          return {
+            error: true,
+            status: 200,
+            code: 400,
+            status_str: 'Unsupported codec',
+            message: '该直播流视频为 FLV 封装的 HEVC，当前 FFmpeg 无法识别，且无可用降级流，已自动跳过。',
+          };
+        }
       }
     }
 
@@ -782,6 +789,36 @@ class RecorderService {
     );
 
     return await this.startRoomRecording({ roomId: room.id, caption, url, roomCover });
+  }
+
+  /**
+   * 从备份流列表中找一个「明确含可识别视频轨」的流，用于 FLV HEVC 主流的降级。
+   * m3u8 优先（TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别）；其余按原顺序逐个 ffprobe 预检。
+   * 探测失败（超时/网络抖动）的候选不采用，避免降级到一个同样录不出视频轨的流。
+   *
+   * @param {string|string[]|null} backupUrls - checker 返回的备份流（逗号分隔字符串或数组）
+   * @returns {Promise<string|null>} 可录制的降级流 URL，找不到返回 null
+   */
+  static async _findRecordableStream(backupUrls) {
+    if (!backupUrls) return null;
+
+    const candidates = (typeof backupUrls === 'string' ? backupUrls.split(',') : backupUrls)
+      .map((u) => String(u || '').trim())
+      .filter(Boolean);
+    if (candidates.length === 0) return null;
+
+    const ordered = [
+      ...candidates.filter((u) => /\.m3u8(\?|$)/i.test(u)),
+      ...candidates.filter((u) => !/\.m3u8(\?|$)/i.test(u)),
+    ];
+
+    for (const candidate of ordered) {
+      const probe = await transcoder.probeVideoTrack(candidate);
+      if (probe.hasVideo && probe.error === null) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /**
