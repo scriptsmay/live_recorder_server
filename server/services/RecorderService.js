@@ -773,15 +773,21 @@ class RecorderService {
       // 两者都要先尝试降级到备份流，避免产出无画面废文件。
       if (videoProbe.error === 'flv-hevc-not-implemented' || videoProbe.error === 'flv-hevc-unrecordable') {
         // 扩展推送路径不带 backupUrls（小红书定时轮询默认关闭），按 CDN 规则
-        // 从主流 URL 派生同 roomId 的 m3u8 备份流，保证降级链路真正可用。
+        // 从主流 URL 派生同 roomId 的 m3u8 / H.264 flv 备份流，保证降级链路真正可用。
         const derived = this._deriveBackupUrls(url);
-        const allBackups = [...(typeof backupUrls === 'string' ? backupUrls.split(',') : backupUrls || []), ...derived]
-          .map((u) => String(u || '').trim())
-          .filter(Boolean);
+        const rawBackups =
+          typeof backupUrls === 'string' ? backupUrls.split(',') : Array.isArray(backupUrls) ? backupUrls : [];
+        const allBackups = [...rawBackups, ...derived].map((u) => String(u || '').trim()).filter(Boolean);
         const fallbackUrl = await this._findRecordableStream([...new Set(allBackups)]);
         if (fallbackUrl) {
           console.warn(`[视频轨预检] 主流 FLV HEVC 不可录制，降级到: ${fallbackUrl.slice(0, 60)}`);
           url = fallbackUrl;
+        } else if (videoProbe.error === 'flv-hevc-unrecordable') {
+          // 新版 FFmpeg（9.0+）能识别并解复用 FLV 0x0c HEVC（hasVideo=true）；
+          // 若无可用降级流（如快手无备份流），兜底继续录制主流，由转码/HLS 链路重编码为 H.264。
+          console.warn(
+            `[视频轨预检] 主流为 FLV HEVC 且无可用降级流，当前 FFmpeg 支持解复用，继续录制主流（后续重编码 H.264）: ${url.slice(0, 60)}`
+          );
         } else {
           console.error(`[视频轨预检] 拒绝录制（FLV HEVC 且无可用降级流）: ${url.slice(0, 60)}`);
           return {
@@ -827,11 +833,21 @@ class RecorderService {
     if (!(host.endsWith('.xhscdn.com') || host.endsWith('.xhscdn.net'))) return [];
     if (!/\.flv$/i.test(parsed.pathname)) return [];
 
-    // /live/570528044501046832_hcv540.flv → /live/570528044501046832.m3u8
-    const roomId = path.basename(parsed.pathname, '.flv').replace(/_hcv\d+.*$/i, '');
+    // /live/570528044501046832_hcv540.flv → roomId=570528044501046832
+    const baseName = path.basename(parsed.pathname).replace(/\.flv$/i, '');
+    const roomId = baseName.replace(/_hcv\d+.*$/i, '');
     if (!/^\d+$/.test(roomId)) return [];
 
-    return [`http://live-source-play.xhscdn.com/live/${roomId}.m3u8`];
+    // 优先保留原 CDN 节点（如 live-source-play-hw.xhscdn.com），同时兜底主节点，
+    // 避免单节点 404；若原流带 _hcv 后缀，同时派生去掉后缀的 H.264 FLV 流作为候选。
+    const hosts = [...new Set([host, 'live-source-play.xhscdn.com'])];
+    const urls = hosts.map((h) => `http://${h}/live/${roomId}.m3u8`);
+    if (baseName.toLowerCase() !== roomId.toLowerCase()) {
+      for (const h of hosts) {
+        urls.push(`http://${h}/live/${roomId}.flv`);
+      }
+    }
+    return urls;
   }
 
   /**
@@ -845,9 +861,9 @@ class RecorderService {
   static async _findRecordableStream(backupUrls) {
     if (!backupUrls) return null;
 
-    const candidates = (typeof backupUrls === 'string' ? backupUrls.split(',') : backupUrls)
-      .map((u) => String(u || '').trim())
-      .filter(Boolean);
+    const rawList =
+      typeof backupUrls === 'string' ? backupUrls.split(',') : Array.isArray(backupUrls) ? backupUrls : [];
+    const candidates = rawList.map((u) => String(u || '').trim()).filter(Boolean);
     if (candidates.length === 0) return null;
 
     const ordered = [

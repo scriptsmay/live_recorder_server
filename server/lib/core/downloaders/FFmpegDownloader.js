@@ -217,8 +217,9 @@ class FFmpegDownloader extends DownloaderInterface {
 
       '-reconnect',
       '1',
-      '-reconnect_at_eof',
-      '1',
+      // 注意：HLS 的 .m3u8 列表与 .ts 分片是有限长度的短请求，正常读取完即触发 EOF。
+      // 严禁在此开启 -reconnect_at_eof 1，否则当 CDN 采用 chunked 传输 m3u8 时，
+      // FFmpeg 会在正常 EOF 处原地重试 0+1+3+7+15=26s，导致列表内首个 .ts 分片在 CDN 过期（Error when loading first segment）。
       '-reconnect_streamed',
       '1',
       '-reconnect_delay_max',

@@ -86,8 +86,21 @@ describe('FFmpeg Downloader Module', () => {
         expect(args).toContain('30000000');
         expect(args).toContain('-reconnect');
         expect(args).toContain('1');
+        expect(args).toContain('-reconnect_at_eof');
         expect(args).toContain('-reconnect_delay_max');
         expect(args).toContain('60');
+      });
+
+      it('should NOT include -reconnect_at_eof for HLS (.m3u8) streams to prevent playlist EOF stall', () => {
+        const url = 'http://live-source-play-hw.xhscdn.com/live/570528044501046832.m3u8';
+        const outputPath = '/tmp/test_%Y%m%d_%H%M%S.ts';
+
+        const args = downloader.buildArgs(url, outputPath, { streamType: 'hls', segmentDuration: 3600 });
+
+        expect(args).toContain('-reconnect');
+        expect(args).toContain('-reconnect_streamed');
+        expect(args).not.toContain('-reconnect_at_eof');
+        expect(args).toContain('-live_start_index');
       });
 
       it('should include error tolerance and timestamp correction flags', () => {

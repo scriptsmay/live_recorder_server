@@ -213,8 +213,8 @@ class TranscodeQueue {
         await this.updateDatabasePaths(videoPathToTrans, mp4Path, result.outputSize, _sessionId);
         await this.completeTranscodeRecord(videoPathToTrans, mp4Path, true);
 
-        // 自动生成 HLS（如果启用）
-        this.triggerHLSGeneration(mp4Path, _sessionId).catch((err) => {
+        // 自动生成 HLS（如果启用）；reencode（原地重转 H.264）时强制重新切片覆盖旧 HEVC HLS
+        this.triggerHLSGeneration(mp4Path, _sessionId, { force: reencode }).catch((err) => {
           console.warn('[转码队列] HLS 生成触发失败:', err.message);
         });
 
@@ -321,7 +321,7 @@ class TranscodeQueue {
   /**
    * 触发 HLS 生成
    */
-  async triggerHLSGeneration(mp4Path, _sessionId) {
+  async triggerHLSGeneration(mp4Path, _sessionId, options = {}) {
     try {
       const autoGenerateHLS = await this.getSetting('auto_generate_hls', 'true');
       if (autoGenerateHLS !== 'true') {
@@ -337,7 +337,7 @@ class TranscodeQueue {
       if (result.rows.length > 0) {
         const recordingId = result.rows[0].id;
         console.log(`[转码队列] 触发 HLS 生成: ${path.basename(mp4Path)}`);
-        const genResult = await hlsGenerator.generateForRecording(recordingId);
+        const genResult = await hlsGenerator.generateForRecording(recordingId, options);
         if (genResult.success) {
           console.log(`[转码队列] HLS 生成成功: ${genResult.playlistPath}`);
         } else {

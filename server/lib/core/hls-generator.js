@@ -10,6 +10,9 @@ const PLAYLIST_NAME = 'playlist.m3u8';
 // HEVC（H.265）切片成 HLS ts 后浏览器 hls.js 无法解码，播放会黑屏。
 // 生成 HLS 前探测输入编码，HEVC 输入重编码为 H.264（与 TS→MP4 转码链路一致）。
 const REENCODE_CODECS = new Set(['hevc', 'h265']);
+// 无损 copy 切片 5 分钟足够；HEVC→H.264 走 CPU 软编，长场次需放宽到 6 小时（与 transcoder 对齐）
+const COPY_TIMEOUT_MS = 5 * 60 * 1000;
+const REENCODE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 
 class HLSGenerator {
   constructor() {
@@ -63,6 +66,15 @@ class HLSGenerator {
 
       if (!fs.existsSync(hlsDir)) {
         fs.mkdirSync(hlsDir, { recursive: true });
+      } else {
+        // 重新生成 HLS（如历史 HEVC MP4 重转 H.264 后重切）时清理旧分片，避免残留旧编码 ts
+        try {
+          for (const entry of fs.readdirSync(hlsDir)) {
+            if (entry === PLAYLIST_NAME || /^segment_\d+\.ts$/.test(entry)) {
+              fs.unlinkSync(path.join(hlsDir, entry));
+            }
+          }
+        } catch (_) {}
       }
 
       const args = this._buildArgs(inputPath, hlsDir, shouldReencode);
@@ -98,10 +110,15 @@ class HLSGenerator {
         resolve(value);
       };
 
+      const timeoutMs = shouldReencode ? REENCODE_TIMEOUT_MS : COPY_TIMEOUT_MS;
       const timeoutTimer = setTimeout(() => {
         if (!proc.killed) proc.kill();
         finish({ success: false, error: 'HLS generation timeout', logPath });
-      }, 300000);
+      }, timeoutMs);
+
+      proc.on('error', (err) => {
+        finish({ success: false, error: `HLS generation spawn error: ${err.message}`, logPath });
+      });
 
       proc.on('close', (code) => {
         if (code === 0) {
@@ -120,7 +137,7 @@ class HLSGenerator {
   }
 
   async generateForRecording(recordingId, options = {}) {
-    const { manual = false } = options;
+    const { manual = false, force = false } = options;
     let transitionedToGenerating = false;
     try {
       // v1.12.0：软删文件不生成 HLS
@@ -140,18 +157,20 @@ class HLSGenerator {
 
       if (currentStatus === 'ready' && recording.hls_playlist_path) {
         const exists = fs.existsSync(recording.hls_playlist_path);
-        if (exists) {
+        if (exists && !force) {
           return { success: true, playlistPath: recording.hls_playlist_path, alreadyExists: true };
         }
 
-        await pool.query(
-          `UPDATE recording_files
-           SET hls_status = 'missing', is_hls_ready = FALSE
-           WHERE id = $1 AND hls_status = 'ready'`,
-          [recordingId]
-        );
-        if (!manual) {
-          return { success: false, error: 'HLS playlist is missing; manual regeneration is required' };
+        if (!exists) {
+          await pool.query(
+            `UPDATE recording_files
+             SET hls_status = 'missing', is_hls_ready = FALSE
+             WHERE id = $1 AND hls_status = 'ready'`,
+            [recordingId]
+          );
+          if (!manual && !force) {
+            return { success: false, error: 'HLS playlist is missing; manual regeneration is required' };
+          }
         }
       }
 
@@ -159,7 +178,8 @@ class HLSGenerator {
         return { success: false, error: 'Source file not found' };
       }
 
-      const allowedStatuses = manual ? ['pending', 'expired', 'deleted', 'missing', 'failed', 'ready'] : ['pending'];
+      const allowedStatuses =
+        manual || force ? ['pending', 'expired', 'deleted', 'missing', 'failed', 'ready'] : ['pending'];
       const transition = await pool.query(
         `UPDATE recording_files
          SET hls_status = 'generating', is_hls_ready = FALSE

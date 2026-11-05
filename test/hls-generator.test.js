@@ -97,6 +97,27 @@ describe('HLSGenerator.generate', () => {
     const args = spawn.mock.calls.find((c) => c[0] === 'ffmpeg')[1];
     expect(args).toContain('copy');
   });
+
+  test('ffmpeg spawn 触发 error 事件时优雅返回失败结果而非未捕获异常', async () => {
+    const probeChild = makeChild();
+    const ffmpegChild = makeChild();
+    spawn.mockImplementation((cmd) => {
+      if (cmd === 'ffprobe') {
+        setImmediate(() => {
+          probeChild.stdout.emit('data', JSON.stringify({ streams: [{ codec_name: 'h264' }] }));
+          probeChild.emit('close', 0);
+        });
+        return probeChild;
+      }
+      setImmediate(() => ffmpegChild.emit('error', new Error('spawn ffmpeg ENOENT')));
+      return ffmpegChild;
+    });
+
+    const result = await hlsGenerator.generate('/data/videos/seg.ts', '/data/videos', 1);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('spawn ffmpeg ENOENT');
+  });
 });
 
 describe('HLSGenerator.generateForRecording', () => {
@@ -134,6 +155,38 @@ describe('HLSGenerator.generateForRecording', () => {
     expect(generateSpy).toHaveBeenCalledWith('/data/video_downloads/2/20/segment.ts', '/data/video_downloads/2/20', 20);
     expect(pool.query.mock.calls[1][0]).toContain("hls_status = 'generating'");
     expect(pool.query.mock.calls[2][0]).toContain("hls_status = 'ready'");
+    expect(pool.query.mock.calls[2][1]).toEqual(['/data/video_downloads/2/20/hls_segment/playlist.m3u8', 7]);
+  });
+
+  test('force=true 时即使 ready 且 playlist 已存在也强制重新生成（覆盖旧 HEVC HLS）', async () => {
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            file_path: '/data/video_downloads/20/segment.mp4',
+            is_hls_ready: true,
+            hls_playlist_path: '/data/video_downloads/20/hls_segment/playlist.m3u8',
+            hls_status: 'ready',
+            session_id: 20,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 9 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ session_id: 20 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const generateSpy = jest.spyOn(hlsGenerator, 'generate').mockResolvedValue({
+      success: true,
+      playlistPath: '/data/video_downloads/20/hls_segment/playlist.m3u8',
+    });
+
+    const result = await hlsGenerator.generateForRecording(9, { force: true });
+
+    expect(result.success).toBe(true);
+    expect(result.alreadyExists).toBeUndefined();
+    expect(generateSpy).toHaveBeenCalledWith('/data/video_downloads/20/segment.mp4', '/data/video_downloads/20', 20);
+    expect(pool.query.mock.calls[1][1][1]).toContain('ready');
   });
 
   test('手动生成允许 expired 状态恢复为 ready', async () => {

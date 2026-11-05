@@ -17,6 +17,7 @@ jest.mock('../server/db/redis', () => ({
 jest.mock('../server/lib/core/RecordingManager', () => ({ __mockedSingleton: true }));
 
 const RecorderService = require('../server/services/RecorderService');
+const RoomTargetService = require('../server/services/RoomTargetService');
 const transcoder = require('../server/lib/core/transcoder');
 
 describe('RecorderService._findRecordableStream', () => {
@@ -77,22 +78,95 @@ describe('RecorderService._findRecordableStream', () => {
 });
 
 describe('RecorderService._deriveBackupUrls', () => {
-  it('小红书 _hcv HEVC FLV 主流派生出同 roomId 的 m3u8 备份流', () => {
+  it('小红书 _hcv HEVC FLV 主流派生出同 CDN 与主节点的 m3u8 及去掉 _hcv 的 H.264 FLV 备份流', () => {
     const urls = RecorderService._deriveBackupUrls(
       'https://live-source-play-hw.xhscdn.com/live/570528044501046832_hcv540.flv?userId=abc&abr_pts=-3000'
     );
 
-    expect(urls).toEqual(expect.arrayContaining(['http://live-source-play.xhscdn.com/live/570528044501046832.m3u8']));
+    expect(urls).toEqual([
+      'http://live-source-play-hw.xhscdn.com/live/570528044501046832.m3u8',
+      'http://live-source-play.xhscdn.com/live/570528044501046832.m3u8',
+      'http://live-source-play-hw.xhscdn.com/live/570528044501046832.flv',
+      'http://live-source-play.xhscdn.com/live/570528044501046832.flv',
+    ]);
   });
 
-  it('普通 FLV 主流也能派生 m3u8 备份流（供降级使用）', () => {
-    const urls = RecorderService._deriveBackupUrls('http://live-source-play-hw.xhscdn.com/live/570528044501046832.flv');
+  it('普通 FLV 主流（含大写 .FLV）派生同 CDN 与主节点的 m3u8 备份流', () => {
+    const urls = RecorderService._deriveBackupUrls('http://live-source-play-hw.xhscdn.com/live/570528044501046832.FLV');
 
-    expect(urls).toContain('http://live-source-play.xhscdn.com/live/570528044501046832.m3u8');
+    expect(urls).toEqual([
+      'http://live-source-play-hw.xhscdn.com/live/570528044501046832.m3u8',
+      'http://live-source-play.xhscdn.com/live/570528044501046832.m3u8',
+    ]);
   });
 
   it('非小红书 CDN 地址返回空数组', () => {
     expect(RecorderService._deriveBackupUrls('http://example.com/live/abc.flv')).toEqual([]);
     expect(RecorderService._deriveBackupUrls('')).toEqual([]);
+  });
+});
+
+describe('RecorderService.startRecording FLV HEVC 预检与兜底', () => {
+  beforeEach(() => {
+    jest.spyOn(RoomTargetService, 'resolve').mockResolvedValue({
+      id: 42,
+      room_url: 'https://live.kuaishou.com/u/test_user',
+      room_name: '测试直播间',
+      monitoring_enabled: true,
+      status: 'idle',
+    });
+    jest.spyOn(RecorderService, 'isActiveTask').mockResolvedValue(false);
+    jest.spyOn(RecorderService, 'getPoolSize').mockResolvedValue(5);
+    jest.spyOn(RecorderService, 'getActiveTasksCount').mockResolvedValue(0);
+    jest.spyOn(RecorderService, 'startRoomRecording').mockResolvedValue({ status: 200, code: 0 });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('flv-hevc-unrecordable（FFmpeg 9.0+ 可识别视频轨）且无可用降级流时，兜底继续录制主流而非误拒', async () => {
+    jest.spyOn(transcoder, 'probeVideoTrack').mockResolvedValue({
+      hasVideo: true,
+      videoCodec: 'hevc',
+      error: 'flv-hevc-unrecordable',
+    });
+
+    await RecorderService.startRecording({
+      url: 'https://pull.kuaishou.com/live/stream_hevc.flv',
+      room_url: 'https://live.kuaishou.com/u/test_user',
+      title: '测试直播间',
+      caption: '标题',
+    });
+
+    expect(RecorderService.startRoomRecording).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: 42,
+        url: 'https://pull.kuaishou.com/live/stream_hevc.flv',
+      })
+    );
+  });
+
+  it('flv-hevc-not-implemented（旧版 FFmpeg 丢弃视频轨）且无可用降级流时，拒绝录制', async () => {
+    jest.spyOn(transcoder, 'probeVideoTrack').mockResolvedValue({
+      hasVideo: false,
+      videoCodec: null,
+      error: 'flv-hevc-not-implemented',
+    });
+
+    const res = await RecorderService.startRecording({
+      url: 'https://pull.kuaishou.com/live/stream_hevc.flv',
+      room_url: 'https://live.kuaishou.com/u/test_user',
+      title: '测试直播间',
+      caption: '标题',
+    });
+
+    expect(res).toEqual(
+      expect.objectContaining({
+        error: true,
+        status_str: 'Unsupported codec',
+      })
+    );
+    expect(RecorderService.startRoomRecording).not.toHaveBeenCalled();
   });
 });

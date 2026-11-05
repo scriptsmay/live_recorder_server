@@ -712,8 +712,9 @@ router.post('/recordings/:id/generate-hls', async (req, res) => {
       return res.status(400).json({ status: 'Error', message: '源文件不存在' });
     }
 
-    console.log(`[api] 开始生成 HLS: recording_id=${id}`);
-    const genResult = await hlsGenerator.generateForRecording(id, { manual: true });
+    const force = req.body?.force === true || req.query?.force === 'true';
+    console.log(`[api] 开始生成 HLS: recording_id=${id}${force ? ' (force)' : ''}`);
+    const genResult = await hlsGenerator.generateForRecording(id, { manual: true, force });
 
     if (genResult.success) {
       res.json({

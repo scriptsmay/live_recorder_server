@@ -231,8 +231,10 @@ class Transcoder {
    * @param {Object} [options]
    * @param {number} [options.timeoutMs=20000] - 探测超时（毫秒）
    * @returns {Promise<{hasVideo: boolean, videoCodec: string|null, error: string|null}>}
-   *   - hasVideo=true 表示探测到可识别的视频轨（含探测失败放行）
-   *   - hasVideo=false 且 error='flv-hevc-not-implemented' 表示 FLV HEVC（ffmpeg 不认识）
+   *   - hasVideo=true 且 error=null 表示探测到可直接录制的视频轨
+   *   - hasVideo=true 且 error='flv-hevc-unrecordable' 表示 FLV 封装的 HEVC（新版 ffmpeg 可识别，优先尝试降级）
+   *   - hasVideo=true 且 error='probe-timeout'|'spawn-failed'|'proc-error'|'parse-failed' 表示探测失败放行
+   *   - hasVideo=false 且 error='flv-hevc-not-implemented' 表示 FLV HEVC（旧版 ffmpeg 不认识，丢视频轨）
    *   - hasVideo=false 且 error='no-video-stream' 表示流中无视频轨
    */
   probeVideoTrack(inputPath, options = {}) {

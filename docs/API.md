@@ -355,14 +355,14 @@ curl -X POST http://127.0.0.1:1123/api/rooms \
 
 **请求体：**
 
-| 参数         | 类型   | 必填 | 说明                                                            |
-| ------------ | ------ | ---- | --------------------------------------------------------------- |
-| url          | string | 是   | 直播流 URL（m3u8 / rtmp 等）                                    |
-| title        | string | 是   | 直播标题（用于直播间名称）                                      |
-| caption      | string | 否   | 直播描述/备注，存储到录制会话中                                 |
-| room_url     | string | 否   | 直播间地址。不传则用 `url` 作为标识                             |
-| host_user_id | string | 否   | 小红书主播 user_id（ADR-021）。传入时优先按该身份归并到稳定目标 |
-| live_room_id | string | 否   | 小红书本场 room_id。传入时写入房间当前场次与会话记录            |
+| 参数         | 类型   | 必填 | 说明                                                                                                      |
+| ------------ | ------ | ---- | --------------------------------------------------------------------------------------------------------- |
+| url          | string | 是   | 直播流 URL（m3u8 / rtmp 等）                                                                              |
+| title        | string | 是   | 直播标题（用于直播间名称）                                                                                |
+| caption      | string | 否   | 直播描述/备注，存储到录制会话中                                                                           |
+| room_url     | string | 否   | 直播间地址。不传则用 `url` 作为标识                                                                       |
+| host_user_id | string | 否   | 小红书主播 user_id（ADR-021）。传入时优先按该身份归并到稳定目标                                           |
+| live_room_id | string | 否   | 小红书本场 room_id。传入时写入房间当前场次与会话记录                                                      |
 | backupUrls   | string | 否   | 备份流地址（逗号分隔）。主流为 FLV 封装 HEVC 时用于降级；不传时服务端按小红书 CDN 规则自动派生同场次 m3u8 |
 
 > 小红书通知建议同时携带 `host_user_id` 与 `live_room_id`：服务端按 `host_user_id` 命中个人主页目标，避免每场开播新建房间。未携带 `host_user_id` 时，若已有主播目标记录了相同的 `live_room_id`，会优先归并到该目标；否则才退化为按直播间地址匹配的一次性目标。
@@ -782,7 +782,7 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
 ### POST /api/recordings/:id/generate-hls
 
 手动触发生成 HLS 播放文件。允许从 `pending`、`expired`、`deleted`、`missing`、
-`failed` 状态生成；成功后状态恢复为 `ready`，并重新激活对应文件管理索引。
+`failed` 状态生成（传入 `force=true` 或请求体 `{ "force": true }` 时可对已 `ready` 的记录强制重新切片覆盖旧分片）；成功后状态恢复为 `ready`，并重新激活对应文件管理索引。
 数据源：`recording_files` 表
 
 **返回（成功）：**
