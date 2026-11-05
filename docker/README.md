@@ -30,8 +30,8 @@ APP_VERSION=v1.8.2 docker compose -f docker-compose.yml -f docker-compose.prod.y
 
 ## Dockerfile
 
-- `../Dockerfile` — 生产镜像（4 阶段：前端构建 → 后端依赖 → BtbN n7.1 静态 ffmpeg → 运行环境，含 yt-dlp / CJK 字体）。**唯一用于生产的镜像**
-- `Dockerfile.local` — 本地加速构建（阿里云源、apt 版 ffmpeg、无前端产物、无 yt-dlp）。**不等价于生产镜像**，仅供本地开发
+- `../Dockerfile` — 生产镜像（4 阶段：前端构建 → 后端依赖 → `mwader/static-ffmpeg:9.0.2` 静态 ffmpeg → 运行环境，含 yt-dlp）。**唯一用于生产的镜像**
+- `Dockerfile.local` — 本地加速构建（阿里云源、`mwader/static-ffmpeg:9.0.2` 静态 ffmpeg、无前端产物、无 yt-dlp）。**不等价于生产镜像**，仅供本地开发
 - `Dockerfile.replay-cron` — replay_cron 专用轻量 Alpine（curl / redis-cli / psql），**不含 scripts**，完全依赖挂载
 
 ## shared_scripts 同步机制（v1.8.2）

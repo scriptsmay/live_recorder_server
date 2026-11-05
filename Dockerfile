@@ -21,16 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# 阶段 3: 下载并解压 FFmpeg 7.1 静态二进制文件
-# 使用 BtbN GitHub Release（release/7.1 分支自动构建，稳定可靠）
-# v1.8.6 曾切到 Debian trixie apt 包（7.1.5-0+deb13u1），生产实测对虎牙 FLV 流
-# 出现 "Timestamps are unset" 且 segment 切割点漂移（52 号会话首段 2h35m/9.7GB），
-# 阶段 3 已移除：FFmpeg 不再使用 BtbN 静态构建，改回 Debian 官方源 apt 包。
-# 历史：v1.8.6 首播（会话 52）出现 Timestamps are unset + segment 切割漂移，
-# 当时常怀疑为 apt 包导致而 revert 回 BtbN 静态构建（66b3501）；后续在播流对照
-# 实验裁决根因为虎牙流侧时间戳异常，与 FFmpeg 构建源无关。且 BtbN latest 发布
-# 只保留最新分支构建、会轮换删除旧资源（v1.10.0 CI 构建即 404），Debian 官方源
-# 构建更稳定可复现，故 v1.10.0 起复原 apt ffmpeg（trixie 为 7.1.5）。
+# 阶段 3: 提取 FFmpeg 9.0.2 静态二进制文件
+# 背景：Debian trixie apt 源的 ffmpeg 锁定在 7.1.5，其官方 flv demuxer 不支持
+# 国内直播 CDN（小红书/快手等）广泛使用的非标 FLV HEVC codec tag 0x0c，
+# 录制时会报 "Video codec (c) is not implemented" 并丢弃视频轨，产出仅含音频的无画面文件。
+# FFmpeg 9.0+ 已在 flv demuxer 中原生支持 0x0c HEVC。
+# 采用 mwader/static-ffmpeg:9.0.2 固定版本镜像多阶段注入，既避免 nightly 构建的稳定性风险，
+# 又规避 BtbN GitHub Release 轮换删除旧分支资产导致 CI 构建 404 的问题。
+FROM mwader/static-ffmpeg:9.0.2 AS ffmpeg-provider
+
 # 阶段 4: 运行环境
 FROM node:22-trixie-slim
 
@@ -41,11 +40,15 @@ ENV LANG=C.UTF-8 \
 
 WORKDIR /app
 
-# ffmpeg/mkvtoolnix：视频处理和封装（Debian 官方源，见上方阶段说明）
+# 从阶段 3 注入 FFmpeg 9.0.2 静态二进制（无需 apt 安装 ffmpeg）
+COPY --from=ffmpeg-provider /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-provider /ffprobe /usr/local/bin/ffprobe
+
+# mkvtoolnix：视频处理和封装
 # biliup 必须固定版本：上游 1.2.10 起只发 sdist 不发 wheel，uv 会退回 maturin 源码构建，
 # 而本阶段没有 Rust 工具链，构建直接失败（v1.11.0 CI 实测）。1.2.8 与生产现网一致。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg ca-certificates curl mkvtoolnix python3 python3-pip \
+    ca-certificates curl mkvtoolnix python3 python3-pip \
     && pip3 install --break-system-packages --no-cache-dir uv \
     && uv tool install biliup==1.2.8 --python /usr/bin/python3 \
     && uv tool install yt-dlp --python /usr/bin/python3 \

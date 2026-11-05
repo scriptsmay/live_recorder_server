@@ -453,7 +453,7 @@ FFmpeg 写入分段文件(.flv)
 - **智能去重**: `finishSession` 中会跳过已通过边下边转码处理过的文件,避免重复入队
 - **双重保障**: 边下边转码为主,`finishSession` 批量处理为兜底,确保无遗漏
 - **错误容忍**: 单个分片转码失败不影响其他分片
-- **HEVC 重编码**: 转码前用 `ffprobe` 探测首个视频流编码，HEVC/H.265 输入自动重编码为 H.264（`libx264 -preset veryfast -crf 23` + `aac`），保证浏览器可播、B 站可投稿；其余编码保持 `-c copy` 无损重封装。可用 `transcode_hevc_to_h264=false` 关闭回退到 copy。重编码是 CPU 密集操作，超时上限（6 小时）远大于 copy 转码（120 秒）。**注意**：仅对 TS/MP4 里可识别的 HEVC 生效；FLV 封装的 HEVC 在录制阶段即被 ffmpeg 丢弃（见 XiaohongshuChecker 防御性预检），无视频轨可转，重编码救不回。
+- **HEVC 重编码**: 转码前用 `ffprobe` 探测首个视频流编码，HEVC/H.265 输入自动重编码为 H.264（`libx264 -preset veryfast -crf 23` + `aac`），保证浏览器可播、B 站可投稿；其余编码保持 `-c copy` 无损重封装。可用 `transcode_hevc_to_h264=false` 关闭回退到 copy。重编码是 CPU 密集操作，超时上限（6 小时）远大于 copy 转码（120 秒）。生产镜像内置 `mwader/static-ffmpeg:9.0.2`（支持 FLV `0x0c` HEVC 解复用），同时保留录制前 `probeVideoTrack` 防御性预检与备份流降级兜底，兼容旧版 FFmpeg（如 7.1.x）环境。
 
 **配置项**:
 
