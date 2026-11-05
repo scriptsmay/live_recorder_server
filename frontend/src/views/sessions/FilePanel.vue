@@ -67,8 +67,14 @@ function getFileName(fp: string) {
   return fp ? fp.split('/').pop() || '' : ''
 }
 
+const DIRECT_PLAY_EXT = /\.mp4$/i
+
+function canPlay(file: RecordingFile) {
+  return !!file.file_path && (file.is_hls_ready || DIRECT_PLAY_EXT.test(file.file_path))
+}
+
 async function handlePlay(file: RecordingFile) {
-  if (!file.is_hls_ready) {
+  if (!canPlay(file)) {
     toast.error('HLS 未就绪，请稍后再试')
     return
   }
@@ -211,7 +217,7 @@ function closePlayer() {
             </td>
             <td class="py-2 pr-3">
               <button
-                v-if="file.is_hls_ready"
+                v-if="canPlay(file)"
                 class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
                 @click="handlePlay(file)"
               >

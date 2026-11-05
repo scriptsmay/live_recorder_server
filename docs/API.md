@@ -730,11 +730,13 @@ curl -X DELETE "http://127.0.0.1:1123/api/recordings/42?delete_file=true"
 流式播放录制文件。支持 HTTP Range 请求（拖拽播放）。
 数据源：`recording_files` 表
 
+> 仅支持 `.mp4` 文件直连播放，其他格式（ts/flv 等）返回 400，需等待 HLS 就绪后走 HLS 播放。
+
 **查询参数：**
 
 **返回：**
 
-视频流（`video/mp4` / `video/x-flv` / `video/mp2t` 等，根据文件扩展名自动判断 MIME 类型）。
+`video/mp4` 视频流；文件不存在返回 404，非 mp4 返回 400。
 
 ---
 
@@ -1232,17 +1234,18 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 
 **返回字段说明：**
 
-| 字段            | 类型     | 说明                                     |
-| --------------- | -------- | ---------------------------------------- |
-| id              | integer  | 记录 ID                                  |
-| session_id      | integer  | 关联的录制会话 ID                        |
-| original_path   | string   | 原文件路径（FLV）                        |
-| transcoded_path | string   | 转码后文件路径（MP4）                    |
-| status          | string   | 状态：queued/processing/completed/failed |
-| enqueued_at     | datetime | 入队时间                                 |
-| started_at      | datetime | 开始转码时间                             |
-| completed_at    | datetime | 完成转码时间                             |
-| room_name       | string   | 关联的直播间名称                         |
+| 字段              | 类型            | 说明                                                                      |
+| ----------------- | --------------- | ------------------------------------------------------------------------- |
+| id                | integer         | 记录 ID                                                                   |
+| session_id        | integer         | 关联的录制会话 ID                                                         |
+| original_path     | string          | 原文件路径（FLV）                                                         |
+| transcoded_path   | string          | 转码后文件路径（MP4）                                                     |
+| status            | string          | 状态：queued/processing/completed/failed                                  |
+| enqueued_at       | datetime        | 入队时间                                                                  |
+| started_at        | datetime        | 开始转码时间                                                              |
+| completed_at      | datetime        | 完成转码时间                                                              |
+| room_name         | string          | 关联的直播间名称                                                          |
+| recording_file_id | integer \| null | 转码产物在 `recording_files` 中的行 ID（供播放入口使用，未关联时为 null） |
 
 **响应结构：**
 
@@ -1259,6 +1262,25 @@ curl -X POST http://127.0.0.1:1123/api/sessions/25/upload \
 ```bash
 curl http://127.0.0.1:1123/api/transcode_records
 curl http://127.0.0.1:1123/api/transcode_records?status=completed&page=2&limit=20
+```
+
+---
+
+### GET /api/transcode_records/:id/stream
+
+流式播放转码产物，支持 HTTP Range 请求。用于转码记录未关联到 `recording_files` 行（历史/手工任务）时的兜底播放入口。
+数据源：`transcode_records` 表
+
+> 仅支持 `.mp4`；记录状态必须为 `completed` 且未软删，文件不存在返回 404。
+
+**返回：**
+
+`video/mp4` 视频流。
+
+**示例：**
+
+```bash
+curl -H "Range: bytes=0-1023" http://127.0.0.1:1123/api/transcode_records/42/stream
 ```
 
 ---

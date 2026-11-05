@@ -8,6 +8,7 @@ import { apiGet, apiDelete, ApiError } from '@/utils/api'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
+import VideoPlayerModal from '@/components/VideoPlayerModal.vue'
 
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -23,6 +24,8 @@ interface TranscodeRow {
   session_id: number
   enqueued_at: string
   completed_at: string | null
+  /** 转码产物在 recording_files 中的行 ID（可优先走 HLS 播放） */
+  recording_file_id: number | null
 }
 
 const records = ref<TranscodeRow[]>([])
@@ -83,6 +86,19 @@ async function loadData() {
 function handlePageChange(p: number) {
   page.value = p
   loadData()
+}
+
+// Video player modal
+const playerVisible = ref(false)
+const playerRecordingId = ref<number | null>(null)
+const playerDirectSrc = ref('')
+const playerTitle = ref('视频播放')
+
+function handlePlay(r: TranscodeRow) {
+  playerRecordingId.value = r.recording_file_id
+  playerDirectSrc.value = `/api/transcode_records/${r.id}/stream`
+  playerTitle.value = fileName(r.transcoded_path)
+  playerVisible.value = true
 }
 
 async function deleteTranscode(id: number) {
@@ -276,12 +292,22 @@ onMounted(loadData)
                   <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(r.enqueued_at) }}</td>
                   <td class="px-4 py-3 text-xs text-gray-500">{{ $formatTime(r.completed_at) }}</td>
                   <td class="px-4 py-3 text-right">
-                    <button
-                      class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                      @click="deleteTranscode(r.id)"
-                    >
-                      删除
-                    </button>
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button
+                        v-if="r.status === 'completed' && r.transcoded_path"
+                        class="px-2 py-1 text-xs rounded border border-sky-300 text-sky-600 hover:bg-sky-50 transition-colors"
+                        title="播放"
+                        @click="handlePlay(r)"
+                      >
+                        ▶
+                      </button>
+                      <button
+                        class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+                        @click="deleteTranscode(r.id)"
+                      >
+                        删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -298,5 +324,14 @@ onMounted(loadData)
         </div>
       </div>
     </template>
+
+    <!-- Video Player Modal -->
+    <VideoPlayerModal
+      :open="playerVisible"
+      :recording-id="playerRecordingId"
+      :direct-src="playerDirectSrc"
+      :title="playerTitle"
+      @close="playerVisible = false"
+    />
   </div>
 </template>

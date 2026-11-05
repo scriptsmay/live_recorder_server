@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/index');
@@ -15,6 +17,61 @@ router.get('/transcode_records', async (req, res) => {
   } catch (err) {
     console.error('[transcode_records] 查询失败:', err);
     res.status(500).json({ status: 'Error', message: '查询失败' });
+  }
+});
+
+/**
+ * 播放转码产物（仅 mp4），支持 HTTP Range。
+ * 用于转码记录未关联到 recording_files 行（历史/手工任务）时的兜底播放入口。
+ */
+router.get('/transcode_records/:id/stream', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT transcoded_path FROM transcode_records
+       WHERE id = $1 AND status = 'completed' AND deleted_at IS NULL`,
+      [id]
+    );
+    const filePath = result.rows[0]?.transcoded_path;
+
+    if (!filePath) {
+      return res.status(404).json({ status: 'Error', message: '转码产物不存在' });
+    }
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'Error', message: '文件已从磁盘删除' });
+    }
+
+    // 与 /api/recordings/:id/stream 保持一致：仅支持 mp4 直连
+    if (path.extname(filePath).toLowerCase() !== '.mp4') {
+      return res.status(400).json({ status: 'Error', message: '仅支持播放mp4文件' });
+    }
+
+    const stat = fs.statSync(filePath);
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunksize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/mp4',
+      });
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': 'video/mp4',
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    console.error('[transcode_records] 播放失败:', err);
+    res.status(500).json({ status: 'Error', message: '播放失败' });
   }
 });
 

@@ -10,6 +10,7 @@ import { formatBytes } from '@/utils/lib'
 import { useToast } from '@/utils/toast'
 import { useConfirm } from '@/utils/confirm'
 import Pagination from '@/components/Pagination.vue'
+import VideoPlayerModal from '@/components/VideoPlayerModal.vue'
 import type { Room } from '@/types/api'
 
 const toast = useToast()
@@ -42,10 +43,8 @@ const page = ref(1)
 
 // Video player modal
 const playerVisible = ref(false)
-const playerSrc = ref('')
+const playerRecordingId = ref<number | null>(null)
 const playerTitle = ref('视频播放')
-const videoRef = ref<HTMLVideoElement | null>(null)
-let hlsPlayer: InstanceType<typeof import('hls.js').default> | null = null
 const currentRoomFilter = computed(() => (route.query.room_url as string) || '')
 
 async function loadData() {
@@ -88,91 +87,18 @@ function getFileName(fp: string) {
 }
 
 const TRANSCODE_EXT = /\.(ts|flv|m2ts)$/i
+// 后端 /api/recordings/:id/stream 仅支持 mp4 直连；其他格式必须等 HLS 就绪
+const DIRECT_PLAY_EXT = /\.mp4$/i
 
-async function handlePlay(rec: RecordingRow) {
-  if (!rec.is_hls_ready) {
-    return toast.error('HLS 未就绪，无法预览ts视频文件')
-  }
+function canPlay(rec: RecordingRow) {
+  if (rec.status !== 'completed' || !rec.file_path) return false
+  return rec.is_hls_ready || DIRECT_PLAY_EXT.test(rec.file_path)
+}
+
+function handlePlay(rec: RecordingRow) {
+  playerRecordingId.value = rec.id
   playerTitle.value = getFileName(rec.file_path) || '视频播放'
-  playerSrc.value = ''
   playerVisible.value = true
-
-  try {
-    // 优先尝试 HLS
-    const hlsRes = await apiGet<{ is_ready: boolean; relative_path: string }>(
-      `/api/recordings/${rec.id}/hls`,
-    )
-    if (hlsRes.data?.is_ready) {
-      const hlsSrc = `/hls/${hlsRes.data.relative_path}`
-      openHlsPlayer(hlsSrc)
-      return
-    }
-  } catch {
-    // HLS 检查失败，继续尝试普通播放
-  }
-
-  // 降级：直接播放流
-  playerSrc.value = `/api/recordings/${rec.id}/stream`
-}
-
-async function openHlsPlayer(src: string) {
-  const video = videoRef.value
-  if (!video) return
-
-  const { default: Hls } = await import('hls.js')
-
-  closeHlsPlayer()
-
-  if (Hls.isSupported()) {
-    hlsPlayer = new Hls()
-    hlsPlayer.loadSource(src)
-    hlsPlayer.attachMedia(video)
-    hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch((e) => {
-        if (e.name !== 'AbortError') console.error('[hls.js] play error:', e)
-      })
-    })
-    hlsPlayer.on(Hls.Events.ERROR, (_event, data) => {
-      console.error('[hls.js] Error:', data.fatal, data.type, data.details)
-      if (data.fatal) {
-        switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            hlsPlayer?.startLoad()
-            break
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            hlsPlayer?.recoverMediaError()
-            break
-          default:
-            closeHlsPlayer()
-            break
-        }
-      }
-    })
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = src
-    video.addEventListener('loadedmetadata', () => {
-      video.play().catch((e) => {
-        if (e.name !== 'AbortError') console.error('[hls.js] play error:', e)
-      })
-    })
-  }
-}
-
-function closeHlsPlayer() {
-  if (hlsPlayer) {
-    hlsPlayer.destroy()
-    hlsPlayer = null
-  }
-}
-
-function closePlayer() {
-  const video = videoRef.value
-  if (video) {
-    video.pause()
-    video.src = ''
-  }
-  closeHlsPlayer()
-  playerVisible.value = false
 }
 
 async function handleTranscode(rec: RecordingRow) {
@@ -340,7 +266,7 @@ watch(
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
-                    v-if="rec.status === 'completed' && rec.file_path && rec.is_hls_ready"
+                    v-if="canPlay(rec)"
                     class="px-2 py-1 text-xs rounded border border-sky-300 text-sky-600 hover:bg-sky-50 transition-colors"
                     title="播放"
                     @click="handlePlay(rec)"
@@ -378,35 +304,11 @@ watch(
     </div>
 
     <!-- Video Player Modal -->
-    <Teleport to="body">
-      <div
-        v-if="playerVisible"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      >
-        <div class="bg-black rounded-xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-2 bg-gray-900">
-            <span class="text-sm text-gray-300 truncate">{{ playerTitle }}</span>
-            <button class="text-gray-400 hover:text-white transition-colors" @click="closePlayer">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-          <video
-            ref="videoRef"
-            controls
-            autoplay
-            class="w-full"
-            style="max-height: 70vh"
-            :src="playerSrc"
-          />
-        </div>
-      </div>
-    </Teleport>
+    <VideoPlayerModal
+      :open="playerVisible"
+      :recording-id="playerRecordingId"
+      :title="playerTitle"
+      @close="playerVisible = false"
+    />
   </div>
 </template>

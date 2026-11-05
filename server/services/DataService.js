@@ -623,10 +623,20 @@ class DataService {
     }
 
     const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
-    let sql = `SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name
+    // recording_file_id：转码成功后 recording_files.file_path 已指向转码产物，供前端播放入口使用。
+    // 用 LATERAL + LIMIT 1 避免同路径多行（软删/重建）导致记录行重复。
+    let sql = `SELECT tr.*, rs.room_url, rm.id AS room_id, rm.room_name,
+         rf.id AS recording_file_id
        FROM transcode_records tr
        LEFT JOIN recording_sessions rs ON tr.session_id = rs.id
-       LEFT JOIN rooms rm ON rs.room_url = rm.room_url AND rm.deleted_at IS NULL${where} ORDER BY tr.id DESC`;
+       LEFT JOIN rooms rm ON rs.room_url = rm.room_url AND rm.deleted_at IS NULL
+       LEFT JOIN LATERAL (
+         SELECT r.id
+         FROM recording_files r
+         WHERE r.file_path = tr.transcoded_path AND r.deleted_at IS NULL
+         ORDER BY r.id DESC
+         LIMIT 1
+       ) rf ON TRUE${where} ORDER BY tr.id DESC`;
 
     if (page) {
       const pageSize = parseInt(limit, 10);

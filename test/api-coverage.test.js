@@ -105,6 +105,7 @@ const EXPECTED_APIS = [
 
   // ===== transcode.js =====
   { method: 'GET', path: '/transcode_records' },
+  { method: 'GET', path: '/transcode_records/:id/stream' },
   { method: 'DELETE', path: '/transcode_records/:id' },
 
   // ===== logs.js =====
