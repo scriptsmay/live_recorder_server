@@ -116,7 +116,7 @@ async function handleTranscode(rec: RecordingRow) {
 async function handleReencode(rec: RecordingRow) {
   const filename = getFileName(rec.file_path)
   const ok = await confirm(
-    `将该 HEVC 文件重新编码为 H.264（原地覆盖，浏览器可播、B 站可投稿）。确定？`,
+    `将该 HEVC 文件重新编码为 H.264，浏览器可播、B 站可投稿。转码先写入临时文件、成功后替换源文件，失败不影响原文件。确定？`,
     { title: filename },
   )
   if (!ok) return
