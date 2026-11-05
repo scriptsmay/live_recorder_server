@@ -161,7 +161,7 @@ class TranscodeQueue {
    * 处理单个转码任务
    */
   async processTask(task) {
-    const { videoPathToTrans, mp4Path, sessionId: _sessionId, force } = task;
+    const { videoPathToTrans, mp4Path, sessionId: _sessionId, force, reencode = false } = task;
 
     try {
       await this.startTranscodeRecord(videoPathToTrans);
@@ -195,13 +195,18 @@ class TranscodeQueue {
         return;
       }
 
-      console.log(`[转码队列] 开始转码: ${path.basename(videoPathToTrans)} → ${path.basename(mp4Path)}`);
+      console.log(
+        `[转码队列] 开始${reencode ? '重新转码' : '转码'}: ${path.basename(videoPathToTrans)} → ${path.basename(mp4Path)}`
+      );
 
-      const result = await transcoder.fastTranscode(videoPathToTrans, mp4Path, task.sessionId);
+      // HEVC 输入默认重编码为 H.264（浏览器可播、B 站可投稿），可用设置项关闭回退到 copy。
+      const reencodeHevc = (await this.getSetting('transcode_hevc_to_h264', 'true')) !== 'false';
+      const result = await transcoder.fastTranscode(videoPathToTrans, mp4Path, task.sessionId, { reencodeHevc });
 
       if (result.success) {
         console.log(
-          `[转码队列] 转码成功: ${path.basename(mp4Path)} (${(result.outputSize / 1024 / 1024).toFixed(1)}MB)`
+          `[转码队列] 转码成功: ${path.basename(mp4Path)} (${(result.outputSize / 1024 / 1024).toFixed(1)}MB)` +
+            (result.reencoded ? ' [HEVC→H.264]' : '')
         );
 
         // 更新数据库记录
@@ -213,9 +218,9 @@ class TranscodeQueue {
           console.warn('[转码队列] HLS 生成触发失败:', err.message);
         });
 
-        // 删除原文件(如果配置了)
+        // 删除原文件(如果配置了)；原地重转（reencode）输入即输出，不能删
         const deleteOriginals = await this.getSetting('transcode_delete_originals', 'true');
-        if (deleteOriginals === 'true') {
+        if (deleteOriginals === 'true' && !reencode) {
           try {
             fs.unlinkSync(videoPathToTrans);
             console.log(`[转码队列] 已删除原文件: ${path.basename(videoPathToTrans)}`);
@@ -226,8 +231,9 @@ class TranscodeQueue {
       } else {
         console.error(`[转码队列] 转码失败: ${path.basename(videoPathToTrans)}, ${result.error}`);
         await this.completeTranscodeRecord(videoPathToTrans, mp4Path, false);
+        // 原地重转失败时 mp4Path 即原文件，绝不能删；transcoder 已自行清理临时文件
         try {
-          if (fs.existsSync(mp4Path)) {
+          if (!reencode && fs.existsSync(mp4Path)) {
             fs.unlinkSync(mp4Path);
             console.log(`[转码队列] 已清理失败产物: ${path.basename(mp4Path)}`);
           }

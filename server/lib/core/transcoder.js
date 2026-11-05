@@ -1,10 +1,19 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 const { createProcLog } = require('../utils/proc-log');
+
+// copy 转码只需重封装，几秒到几十秒即可；重编码（HEVC→H.264）是 CPU 密集操作，
+// 长时间直播可达数倍文件时长，需要独立的、宽松的超时上限。
+const COPY_TIMEOUT_MS = 120000;
+const REENCODE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6 小时
+
+const PROBE_TIMEOUT_MS = 30000;
 
 /**
  * 转码器类，提供视频文件的快速转码功能
- * 使用 FFmpeg 进行无损复制转码，优化文件结构以支持流式播放
+ * 默认使用 FFmpeg 无损复制转码（TS→MP4，faststart）；当输入视频轨为 HEVC/H.265 时，
+ * 按需重编码为 H.264（libx264 + AAC），保证浏览器可播、B 站可投稿。
  */
 class Transcoder {
   constructor() {
@@ -12,24 +21,136 @@ class Transcoder {
   }
 
   /**
-   * 执行快速转码操作
-   * 使用 copy 编码模式进行无损转码，并添加 faststart 标志优化 MP4 文件结构
+   * 探测输入文件首个视频流的编码名称。
+   * ffprobe 读本地文件，仅解析头部，失败或非视频一律返回 null（由调用方回退 copy）。
+   *
+   * @param {string} inputPath
+   * @returns {Promise<string|null>} codec_name 小写（如 'h264' / 'hevc'），探测失败返回 null
+   */
+  probeVideoCodec(inputPath) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let proc = null;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+
+      const timer = setTimeout(() => {
+        finish(null);
+        try {
+          proc?.kill('SIGKILL');
+        } catch (_) {}
+      }, PROBE_TIMEOUT_MS);
+
+      try {
+        proc = spawn(
+          'ffprobe',
+          ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'json', inputPath],
+          { stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+      } catch (_) {
+        return finish(null);
+      }
+
+      let stdout = '';
+      proc.stdout.on('data', (chunk) => {
+        if (stdout.length < 10240) stdout += chunk;
+      });
+      proc.on('error', () => finish(null));
+      proc.on('close', (code) => {
+        if (code !== 0) return finish(null);
+        try {
+          const json = JSON.parse(stdout);
+          const codec = json?.streams?.[0]?.codec_name;
+          finish(typeof codec === 'string' ? codec.toLowerCase() : null);
+        } catch (_) {
+          finish(null);
+        }
+      });
+    });
+  }
+
+  /**
+   * 构建转码参数。HEVC 输入走重编码（libx264 + AAC），其余走 copy 无损重封装。
+   *
+   * @param {string} inputPath
+   * @param {string} outputPath
+   * @param {boolean} shouldReencode
+   * @returns {string[]}
+   */
+  _buildArgs(inputPath, outputPath, shouldReencode) {
+    if (shouldReencode) {
+      return [
+        '-y',
+        '-i',
+        inputPath,
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a:0?',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        outputPath,
+      ];
+    }
+    return ['-i', inputPath, '-c', 'copy', '-movflags', '+faststart', '-y', outputPath];
+  }
+
+  /**
+   * 执行快速转码操作。
+   * 默认对 HEVC 输入重编码为 H.264（可经 options.reencodeHevc 关闭回退到 copy），
+   * 其余编码保持无损 copy 并添加 faststart 标志优化 MP4 流式播放。
+   * inputPath === outputPath 时按原地覆盖处理：先写临时文件，成功后原子替换，
+   * 避免 ffmpeg 在读取输入的同时截断同一路径。
    *
    * @param {string} inputPath - 输入视频文件的完整路径
    * @param {string} outputPath - 输出视频文件的完整路径
    * @param {string|null} sessionId - 会话ID，用于日志追踪和归档，可选参数
+   * @param {Object} [options]
+   * @param {boolean} [options.reencodeHevc=true] - HEVC 输入是否重编码为 H.264
    * @returns {Promise<Object>} 返回转码结果的 Promise 对象
    * @returns {boolean} return.success - 转码是否成功
    * @returns {string} [return.outputPath] - 成功时返回输出文件路径
    * @returns {number} [return.outputSize] - 成功时返回输出文件大小（字节）
+   * @returns {boolean} [return.reencoded] - 是否执行了重编码（HEVC→H.264）
    * @returns {string} [return.error] - 失败时返回错误信息
    * @returns {string} return.logPath - 始终返回日志文件路径
    */
-  async fastTranscode(inputPath, outputPath, sessionId = null) {
-    return new Promise((resolve) => {
-      // 构建 FFmpeg 命令参数：无损复制编码、启用 faststart、覆盖输出文件
-      const args = ['-i', inputPath, '-c', 'copy', '-movflags', '+faststart', '-y', outputPath];
+  async fastTranscode(inputPath, outputPath, sessionId = null, options = {}) {
+    const { reencodeHevc = true } = options;
 
+    let inputCodec = null;
+    if (reencodeHevc) {
+      inputCodec = await this.probeVideoCodec(inputPath);
+    }
+
+    const shouldReencode = inputCodec === 'hevc' || inputCodec === 'h265';
+    if (shouldReencode) {
+      console.log(`[转码] 检测到 HEVC 视频轨，重编码为 H.264: ${path.basename(inputPath)}`);
+    }
+
+    const isInPlace = path.resolve(inputPath) === path.resolve(outputPath);
+    const tmpOutputPath = isInPlace ? `${outputPath}.reencode.tmp` : outputPath;
+
+    const args = this._buildArgs(inputPath, tmpOutputPath, shouldReencode);
+    const timeoutMs = shouldReencode ? REENCODE_TIMEOUT_MS : COPY_TIMEOUT_MS;
+
+    return new Promise((resolve) => {
       const procLog = createProcLog('transcode', sessionId);
       const { stream, logCommand } = procLog;
       logCommand('ffmpeg', args);
@@ -43,27 +164,56 @@ class Transcoder {
         proc.stderr.on('data', (chunk) => stream.write(chunk));
       }
 
-      proc.on('close', (code) => {
-        // 结束时，释放日志资源
+      let settled = false;
+      let timeoutTimer = null;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutTimer) clearTimeout(timeoutTimer);
         procLog.destroy();
+        resolve(value);
+      };
+
+      proc.on('close', (code) => {
         if (code === 0) {
+          if (isInPlace) {
+            try {
+              fs.renameSync(tmpOutputPath, outputPath);
+            } catch (err) {
+              finish({
+                success: false,
+                error: `Fast transcode rename failed: ${err.message}`,
+                logPath: procLog.logPath,
+              });
+              return;
+            }
+          }
           let outputSize = 0;
           try {
             outputSize = fs.statSync(outputPath).size;
           } catch (_) {}
-          resolve({ success: true, outputPath, outputSize, logPath: procLog.logPath });
+          finish({ success: true, outputPath, outputSize, reencoded: shouldReencode, logPath: procLog.logPath });
         } else {
-          resolve({ success: false, error: `Fast transcode failed with code ${code}`, logPath: procLog.logPath });
+          if (isInPlace) {
+            try {
+              fs.unlinkSync(tmpOutputPath);
+            } catch (_) {}
+          }
+          finish({
+            success: false,
+            error: `Fast transcode failed with code ${code}`,
+            logPath: procLog.logPath,
+          });
         }
       });
 
       // 设置超时保护，防止转码过程卡死
-      setTimeout(() => {
+      timeoutTimer = setTimeout(() => {
         if (!proc.killed) {
           proc.kill();
-          resolve({ success: false, error: 'Fast transcode timeout' });
+          finish({ success: false, error: 'Fast transcode timeout' });
         }
-      }, 120000);
+      }, timeoutMs);
     });
   }
 }

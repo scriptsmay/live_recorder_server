@@ -840,6 +840,40 @@ curl -X POST http://127.0.0.1:1123/api/recordings/42/transcode
 
 ---
 
+### POST /api/recordings/:id/reencode
+
+将已转码的 HEVC MP4 **原地重编码为 H.264**（`libx264` + AAC），解决 HEVC 产物浏览器无法播放、B 站投稿被拒的问题。转码前先 ffprobe 探测编码，只有 HEVC/H.265 才允许入队；成功后原子覆盖原文件，`file_path` 不变。
+
+**前置条件：**
+
+- 文件状态为 `completed` 且文件存在于磁盘
+- 文件格式为 `.mp4`
+- 视频轨编码为 HEVC / H.265
+- 文件未在转码队列中（无 `queued` / `processing` 状态的转码记录）
+
+**返回：**
+
+```json
+{ "status": "ok", "message": "已加入重新转码队列（HEVC→H.264）" }
+```
+
+**错误：**
+
+| 状态码 | 说明                             |
+| ------ | -------------------------------- |
+| 400    | 文件不存在 / 非 mp4 / 非 HEVC 编码 |
+| 404    | 记录不存在                       |
+| 409    | 文件已在转码队列中               |
+| 500    | 服务端异常                       |
+
+**示例：**
+
+```bash
+curl -X POST http://127.0.0.1:1123/api/recordings/42/reencode
+```
+
+---
+
 ### GET /api/hls/\*
 
 HLS 文件服务，提供 `.m3u8` 播放列表和 `.ts` 分片文件。
@@ -954,6 +988,7 @@ curl -X PUT http://127.0.0.1:1123/api/settings/pool_size \
 | `hls_segment_duration`       | number | `10`     | HLS 分片时长（秒）                                         |
 | `hls_cleanup_days`           | number | `30`     | HLS 独立保留期；`0` 禁用，正整数按生成时间每日清理         |
 | `transcode_concurrency`      | number | `3`      | 转码并发数，同时进行的转码任务数                           |
+| `transcode_hevc_to_h264`     | string | `true`   | HEVC 输入是否重编码为 H.264（浏览器可播、B 站可投稿）      |
 
 ---
 

@@ -113,6 +113,21 @@ async function handleTranscode(rec: RecordingRow) {
   }
 }
 
+async function handleReencode(rec: RecordingRow) {
+  const filename = getFileName(rec.file_path)
+  const ok = await confirm(
+    `将该 HEVC 文件重新编码为 H.264（原地覆盖，浏览器可播、B 站可投稿）。确定？`,
+    { title: filename },
+  )
+  if (!ok) return
+  try {
+    const res = await apiPost(`/api/recordings/${rec.id}/reencode`)
+    toast.success((res as unknown as { message?: string }).message || '已加入重新转码队列')
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : '重新转码失败')
+  }
+}
+
 async function handleDelete(rec: RecordingRow) {
   const filename = getFileName(rec.file_path)
   const ok = await confirm(`确定删除此录制记录？${filename ? '\n' + filename : ''}`, {
@@ -283,6 +298,18 @@ watch(
                     @click="handleTranscode(rec)"
                   >
                     转码
+                  </button>
+                  <button
+                    v-if="
+                      rec.status === 'completed' &&
+                      rec.file_path &&
+                      DIRECT_PLAY_EXT.test(rec.file_path)
+                    "
+                    class="px-2 py-1 text-xs rounded border border-violet-300 text-violet-600 hover:bg-violet-50 transition-colors"
+                    title="HEVC→H.264"
+                    @click="handleReencode(rec)"
+                  >
+                    重转H264
                   </button>
                   <button
                     class="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"

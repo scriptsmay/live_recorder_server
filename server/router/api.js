@@ -11,6 +11,7 @@ const RecorderService = require('../services/RecorderService');
 const DataService = require('../services/DataService');
 const { getActiveDownloader } = require('../lib/core/downloaders/DownloaderFactory');
 const transcodeQueue = require('../lib/core/TranscodeQueue');
+const transcoder = require('../lib/core/transcoder');
 const danmakuRecorder = require('../lib/core/danmaku/DanmakuRecorder');
 const replayProcessQueue = require('../lib/core/ReplayProcessQueue');
 const pollingManager = require('../lib/core/polling/PollingManager');
@@ -777,6 +778,66 @@ router.post('/recordings/:id/transcode', async (req, res) => {
   } catch (err) {
     console.error('[api] 手动转码失败:', err);
     res.status(500).json({ status: 'Error', message: '手动转码失败' });
+  }
+});
+
+/**
+ * 重新转码（原地覆盖）：对已转码的 HEVC MP4 重编码为 H.264。
+ * 用于历史 HEVC 产物救回（浏览器可播、B 站可投稿），file_path 不变。
+ */
+router.post('/recordings/:id/reencode', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT rf.id, rf.file_path, rf.session_id
+       FROM recording_files rf
+       WHERE rf.id = $1 AND rf.deleted_at IS NULL`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'Error', message: '录制记录不存在' });
+    }
+
+    const file = result.rows[0];
+
+    if (!file.file_path || !fs.existsSync(file.file_path)) {
+      return res.status(400).json({ status: 'Error', message: '源文件不存在于磁盘' });
+    }
+
+    if (path.extname(file.file_path).toLowerCase() !== '.mp4') {
+      return res.status(400).json({ status: 'Error', message: '仅支持对 mp4 文件重新转码' });
+    }
+
+    // 前置探测：只有 HEVC 才需要重转，避免对 H.264 文件做无意义的重编码
+    const codec = await transcoder.probeVideoCodec(file.file_path);
+    if (codec !== 'hevc' && codec !== 'h265') {
+      return res.status(400).json({ status: 'Error', message: `该文件为 ${codec || '未知'} 编码，无需重新转码` });
+    }
+
+    // 检查是否已在队列（queued 或 processing）
+    const existingRecord = await pool.query(
+      `SELECT id FROM transcode_records WHERE original_path = $1 AND status IN ('queued', 'processing') AND deleted_at IS NULL`,
+      [file.file_path]
+    );
+    if (existingRecord.rows.length > 0) {
+      return res.status(409).json({ status: 'Error', message: '该文件已在转码队列中' });
+    }
+
+    await transcodeQueue.enqueue({
+      videoPathToTrans: file.file_path,
+      mp4Path: file.file_path,
+      sessionId: file.session_id,
+      force: true,
+      reencode: true,
+    });
+
+    console.log(`[api] 重新转码入队: ${file.file_path}`);
+    res.json({ status: 'ok', message: '已加入重新转码队列（HEVC→H.264）' });
+  } catch (err) {
+    console.error('[api] 重新转码失败:', err);
+    res.status(500).json({ status: 'Error', message: '重新转码失败' });
   }
 });
 

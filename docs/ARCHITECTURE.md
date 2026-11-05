@@ -453,6 +453,7 @@ FFmpeg 写入分段文件(.flv)
 - **智能去重**: `finishSession` 中会跳过已通过边下边转码处理过的文件,避免重复入队
 - **双重保障**: 边下边转码为主,`finishSession` 批量处理为兜底,确保无遗漏
 - **错误容忍**: 单个分片转码失败不影响其他分片
+- **HEVC 重编码**: 转码前用 `ffprobe` 探测首个视频流编码，HEVC/H.265 输入自动重编码为 H.264（`libx264 -preset veryfast -crf 23` + `aac`），保证浏览器可播、B 站可投稿；其余编码保持 `-c copy` 无损重封装。可用 `transcode_hevc_to_h264=false` 关闭回退到 copy。重编码是 CPU 密集操作，超时上限（6 小时）远大于 copy 转码（120 秒）
 
 **配置项**:
 
@@ -461,6 +462,7 @@ FFmpeg 写入分段文件(.flv)
 | `auto_transcode`             | `true` | 是否启用自动转码     |
 | `transcode_concurrency`      | `3`    | 转码并发数           |
 | `transcode_delete_originals` | `true` | 转码后是否删除原文件 |
+| `transcode_hevc_to_h264`     | `true` | HEVC 输入是否重编码为 H.264（浏览器可播、B 站可投稿） |
 
 **监控API** (可选扩展):
 
