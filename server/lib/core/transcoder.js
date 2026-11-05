@@ -290,11 +290,17 @@ class Transcoder {
           const json = JSON.parse(stdout);
           const video = (json?.streams || []).find((s) => s.codec_type === 'video');
           if (video) {
-            return finish({
-              hasVideo: true,
-              videoCodec: typeof video.codec_name === 'string' ? video.codec_name.toLowerCase() : null,
-              error: null,
-            });
+            const videoCodec = typeof video.codec_name === 'string' ? video.codec_name.toLowerCase() : null;
+            // FLV 封装的 HEVC（小红书 _hcv 档位，codec tag 0x0c）：
+            // 旧版 ffmpeg（如生产 7.1.5）的 flv demuxer 不认识，录出来只有音频；
+            // 新版 ffmpeg（如 9.x）能识别并用 -c copy 录出 HEVC，但浏览器/B 站仍无法解码。
+            // 两种情况下 FLV 主流都不适合直接录制，一律标记需降级（按编码判定，与
+            // ffmpeg 版本解耦）。m3u8/TS 封装的 HEVC 用标准 stream_type，由转码链路
+            // 负责转 H.264，这里不拦截。
+            if ((videoCodec === 'hevc' || videoCodec === 'h265') && /\.flv(\?|$)/i.test(inputPath)) {
+              return finish({ hasVideo: true, videoCodec, error: 'flv-hevc-unrecordable' });
+            }
+            return finish({ hasVideo: true, videoCodec, error: null });
           }
           const reason = /not implemented/i.test(stderr) ? 'flv-hevc-not-implemented' : 'no-video-stream';
           finish({ hasVideo: false, videoCodec: null, error: reason });

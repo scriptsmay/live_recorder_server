@@ -336,6 +336,7 @@ generating -> failed
 
 - 看门狗仅为 `pending` 自动生成；播放列表意外缺失时标记 `missing`，不自动重建。
 - 手动生成可将 `expired`、`deleted`、`missing`、`failed` 恢复为 `ready`。
+- **HEVC 输入切片时转 H.264**：生成前用 `ffprobe` 探测输入视频编码，HEVC/H.265 走 `libx264 -preset veryfast -crf 23` + `aac` 重编码，其余编码保持 `-c copy`。否则 HEVC 会被无损 copy 进 ts 分片，浏览器 hls.js 无法解码导致播放黑屏。探测失败回退 copy。
 - `HLSCleanupService` 在启动 5 分钟后首次运行，之后每 24 小时读取一次
   `hls_cleanup_days`；`0` 表示禁用，且不受 `file_cleanup_enabled` 控制。
 - 用户删除和保留期删除使用同一服务：advisory lock → `deleting` → 递归统计大小 →
@@ -687,7 +688,7 @@ PollingManager (单例)
   - 使用 iOS 客户端 UA（`ios/7.830 ...` + `xy-common-params: platform=iOS...`）请求 `https://www.xiaohongshu.com/livestream/{roomId}`，解析 `window.__INITIAL_STATE__.liveStream`。
   - 严格校验 `liveStatus === 'success' && Number(roomInfo.status) === 2 && !roomTitle.includes('回放')`，下播态（`liveStatus === 'end'` / `status === 5`）忽略平台随机推荐的 `nextRoomInfo`，防止误录其他主播。
   - 从 `roomInfo.pullConfig`（JSON 字符串）的 `h264[].master_url` 提取无防盗链的 `xhscdn.com` `.flv` 主流（优先 `live-source-play.xhscdn.com`）与多 CDN 备流（`-bak-tx`、`-hw`、`.m3u8`），`roomInfo.deeplink` 作为兜底。
-  - **FLV 封装的 HEVC 不可录制（防御性降级）**：小红书 HEVC 档位（`pullConfig.h265`）的流是 FLV 封装 HEVC（视频 codec tag `0x0c`=12），ffmpeg 官方 flv demuxer 从不支持（官方只走 Enhanced FLV v2 的 fourcc 路线，`FLV_CODECID_HEVC=12` 是非标准第三方约定），ffprobe 会报 `Video codec (c) is not implemented` 且只识别出音频流，录制成品丢失视频轨（v1.14.0 会话 #80 即此问题）。录制前 `RecorderService.startRecording` 对 `.flv` 主流调用 `transcoder.probeVideoTrack()` 预检，探测到 FLV HEVC 时先经 `_findRecordableStream()` 降级到 `backupUrls` 备份流（m3u8 优先——TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别；逐个预检挑第一个明确含视频轨的），无可用降级流才拒绝录制（返回 `Unsupported codec`），避免产出无画面废文件；探测失败一律放行不误伤。备份流由 `PollingManager` 从 `checkResult.streamInfo.backupUrls` 透传。
+  - **FLV 封装的 HEVC 不可录制（防御性降级）**：小红书 HEVC 档位（`pullConfig.h265`，`_hcv540` 等后缀）的流是 FLV 封装 HEVC（视频 codec tag `0x0c`=12）。旧版 ffmpeg（如 7.1.x）的 flv demuxer 不认识，ffprobe 报 `Video codec (c) is not implemented` 且只识别出音频流，录制成品丢失视频轨（v1.14.0 会话 #80 即此问题）；新版 ffmpeg（如 9.x）能识别并 `-c copy` 录出 HEVC，但浏览器/B 站仍无法解码。两种情况下录制前 `RecorderService.startRecording` 对 `.flv` 主流调用 `transcoder.probeVideoTrack()` 预检：按视频编码判定（`flv-hevc-unrecordable`）或按 stderr 判定（`flv-hevc-not-implemented`）命中后，先经 `_findRecordableStream()` 降级到备份流（m3u8 优先——TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别；逐个预检挑第一个明确含视频轨的），无可用降级流才拒绝录制（返回 `Unsupported codec`）。探测失败一律放行不误伤。备份流有两个来源：`PollingManager` 从 `checkResult.streamInfo.backupUrls` 透传，或 `POST /api/notify/live_download` 请求体的 `backupUrls`；扩展推送不带备份流时，服务端按 CDN 规则 `_deriveBackupUrls()` 从主流 URL 去掉 `_hcvXXX` 后缀派生同场次 `.m3u8`，保证降级链路在扩展路径同样可用。
 
 ### 轮询流程
 

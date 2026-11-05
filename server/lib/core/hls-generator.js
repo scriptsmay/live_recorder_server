@@ -4,15 +4,59 @@ const path = require('path');
 const pool = require('../../db/index');
 const { createProcLog } = require('../utils/proc-log');
 const { getDirectoryStats } = require('../utils/directory-stats');
+const transcoder = require('./transcoder');
 
 const PLAYLIST_NAME = 'playlist.m3u8';
+// HEVC（H.265）切片成 HLS ts 后浏览器 hls.js 无法解码，播放会黑屏。
+// 生成 HLS 前探测输入编码，HEVC 输入重编码为 H.264（与 TS→MP4 转码链路一致）。
+const REENCODE_CODECS = new Set(['hevc', 'h265']);
 
 class HLSGenerator {
   constructor() {
     this.name = 'hls-generator';
   }
 
+  /**
+   * 构建 HLS 切片参数：H.264 等走 -c copy 无损重封装；HEVC 输入改为
+   * libx264 重编码 + AAC，保证浏览器（hls.js）能解码、播放有画面。
+   *
+   * @param {string} inputPath
+   * @param {string} hlsDir
+   * @param {boolean} shouldReencode
+   * @returns {string[]}
+   */
+  _buildArgs(inputPath, hlsDir, shouldReencode) {
+    const codecArgs = shouldReencode
+      ? ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k']
+      : ['-c', 'copy'];
+
+    return [
+      '-i',
+      inputPath,
+      ...codecArgs,
+      '-f',
+      'hls',
+      '-hls_time',
+      '10',
+      '-hls_list_size',
+      '0',
+      '-hls_segment_filename',
+      path.join(hlsDir, 'segment_%03d.ts'),
+      path.join(hlsDir, PLAYLIST_NAME),
+    ];
+  }
+
   async generate(inputPath, outputDir, sessionId = null) {
+    // 探测失败（ffprobe 缺失/超时/解析失败）一律回退到 copy，不误伤正常录制。
+    let inputCodec = null;
+    try {
+      inputCodec = await transcoder.probeVideoCodec(inputPath);
+    } catch (_) {}
+    const shouldReencode = REENCODE_CODECS.has(String(inputCodec || '').toLowerCase());
+    if (shouldReencode) {
+      console.log(`[HLS] 检测到 HEVC 视频轨，切片时重编码为 H.264: ${path.basename(inputPath)}`);
+    }
+
     return new Promise((resolve) => {
       const fileName = path.basename(inputPath, path.extname(inputPath));
       const hlsDir = path.join(outputDir, `hls_${fileName}`);
@@ -21,21 +65,7 @@ class HLSGenerator {
         fs.mkdirSync(hlsDir, { recursive: true });
       }
 
-      const args = [
-        '-i',
-        inputPath,
-        '-c',
-        'copy',
-        '-f',
-        'hls',
-        '-hls_time',
-        '10',
-        '-hls_list_size',
-        '0',
-        '-hls_segment_filename',
-        path.join(hlsDir, 'segment_%03d.ts'),
-        path.join(hlsDir, PLAYLIST_NAME),
-      ];
+      const args = this._buildArgs(inputPath, hlsDir, shouldReencode);
 
       // 日志命名：hls_{sessionId}_{inputBasename}.log
       const inputBasename = path.basename(inputPath, path.extname(inputPath));
@@ -59,8 +89,21 @@ class HLSGenerator {
         proc.stderr.on('data', (chunk) => stream.write(chunk));
       }
 
-      proc.on('close', (code) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutTimer);
         procLog.destroy();
+        resolve(value);
+      };
+
+      const timeoutTimer = setTimeout(() => {
+        if (!proc.killed) proc.kill();
+        finish({ success: false, error: 'HLS generation timeout', logPath });
+      }, 300000);
+
+      proc.on('close', (code) => {
         if (code === 0) {
           const playlistPath = path.join(hlsDir, PLAYLIST_NAME);
           let fileSize = 0;
@@ -68,18 +111,11 @@ class HLSGenerator {
             const stat = fs.statSync(playlistPath);
             fileSize = stat.size;
           } catch (_) {}
-          resolve({ success: true, playlistPath, hlsDir, fileSize, logPath });
+          finish({ success: true, playlistPath, hlsDir, fileSize, logPath });
         } else {
-          resolve({ success: false, error: `HLS generation failed with code ${code}`, logPath });
+          finish({ success: false, error: `HLS generation failed with code ${code}`, logPath });
         }
       });
-
-      setTimeout(() => {
-        if (!proc.killed) {
-          proc.kill();
-          resolve({ success: false, error: 'HLS generation timeout' });
-        }
-      }, 300000);
     });
   }
 

@@ -768,8 +768,17 @@ class RecorderService {
     // 仅对 flv 流预检；m3u8 主流本身可正常识别，无需预检。
     if (/\.flv(\?|$)/i.test(url)) {
       const videoProbe = await transcoder.probeVideoTrack(url);
-      if (videoProbe.error === 'flv-hevc-not-implemented') {
-        const fallbackUrl = await this._findRecordableStream(backupUrls);
+      // flv-hevc-not-implemented：旧版 ffmpeg flv demuxer 不认识 codec tag 0x0c，只录出音频；
+      // flv-hevc-unrecordable：新版 ffmpeg 能识别，但 -c copy 录出的 HEVC 浏览器/B 站无法解码。
+      // 两者都要先尝试降级到备份流，避免产出无画面废文件。
+      if (videoProbe.error === 'flv-hevc-not-implemented' || videoProbe.error === 'flv-hevc-unrecordable') {
+        // 扩展推送路径不带 backupUrls（小红书定时轮询默认关闭），按 CDN 规则
+        // 从主流 URL 派生同 roomId 的 m3u8 备份流，保证降级链路真正可用。
+        const derived = this._deriveBackupUrls(url);
+        const allBackups = [...(typeof backupUrls === 'string' ? backupUrls.split(',') : backupUrls || []), ...derived]
+          .map((u) => String(u || '').trim())
+          .filter(Boolean);
+        const fallbackUrl = await this._findRecordableStream([...new Set(allBackups)]);
         if (fallbackUrl) {
           console.warn(`[视频轨预检] 主流 FLV HEVC 不可录制，降级到: ${fallbackUrl.slice(0, 60)}`);
           url = fallbackUrl;
@@ -793,6 +802,36 @@ class RecorderService {
     );
 
     return await this.startRoomRecording({ roomId: room.id, caption, url, roomCover });
+  }
+
+  /**
+   * 从小红书直播 CDN 的 FLV 主流 URL 派生可用的备份流（m3u8 优先）。
+   *
+   * 扩展嗅探推送（POST /api/notify/live_download）只带一条 streamUrl，不带 backupUrls，
+   * 而小红书定时轮询默认关闭，导致 FLV HEVC 预检后的降级拿不到候选流。小红书 CDN 的
+   * 流地址遵循 `/live/{roomId}[_hcvXXX].flv` 规则，去掉清晰度后缀换 .m3u8 即可得到
+   * 同一场的 TS 封装流（ffmpeg 能正确识别，转码链路再负责转 H.264 可播）。
+   *
+   * @param {string} url - 主流 URL
+   * @returns {string[]} 派生出的备份流 URL（非小红书 CDN 返回空数组）
+   */
+  static _deriveBackupUrls(url) {
+    if (typeof url !== 'string' || !url) return [];
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (_) {
+      return [];
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (!(host.endsWith('.xhscdn.com') || host.endsWith('.xhscdn.net'))) return [];
+    if (!/\.flv$/i.test(parsed.pathname)) return [];
+
+    // /live/570528044501046832_hcv540.flv → /live/570528044501046832.m3u8
+    const roomId = path.basename(parsed.pathname, '.flv').replace(/_hcv\d+.*$/i, '');
+    if (!/^\d+$/.test(roomId)) return [];
+
+    return [`http://live-source-play.xhscdn.com/live/${roomId}.m3u8`];
   }
 
   /**

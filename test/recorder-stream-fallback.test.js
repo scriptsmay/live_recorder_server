@@ -75,3 +75,24 @@ describe('RecorderService._findRecordableStream', () => {
     expect(result).toBe('http://a/main.m3u8');
   });
 });
+
+describe('RecorderService._deriveBackupUrls', () => {
+  it('小红书 _hcv HEVC FLV 主流派生出同 roomId 的 m3u8 备份流', () => {
+    const urls = RecorderService._deriveBackupUrls(
+      'https://live-source-play-hw.xhscdn.com/live/570528044501046832_hcv540.flv?userId=abc&abr_pts=-3000'
+    );
+
+    expect(urls).toEqual(expect.arrayContaining(['http://live-source-play.xhscdn.com/live/570528044501046832.m3u8']));
+  });
+
+  it('普通 FLV 主流也能派生 m3u8 备份流（供降级使用）', () => {
+    const urls = RecorderService._deriveBackupUrls('http://live-source-play-hw.xhscdn.com/live/570528044501046832.flv');
+
+    expect(urls).toContain('http://live-source-play.xhscdn.com/live/570528044501046832.m3u8');
+  });
+
+  it('非小红书 CDN 地址返回空数组', () => {
+    expect(RecorderService._deriveBackupUrls('http://example.com/live/abc.flv')).toEqual([]);
+    expect(RecorderService._deriveBackupUrls('')).toEqual([]);
+  });
+});

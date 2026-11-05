@@ -220,6 +220,26 @@ describe('transcoder.probeVideoTrack', () => {
     });
   });
 
+  test('新版 ffmpeg 能识别 FLV HEVC 视频轨时，仍标记需降级（与 ffmpeg 版本解耦）', async () => {
+    mockFfprobe({ streams: [{ codec_type: 'video', codec_name: 'hevc' }] });
+
+    await expect(transcoder.probeVideoTrack('http://live.xhscdn.com/live/123_hcv540.flv')).resolves.toMatchObject({
+      hasVideo: true,
+      videoCodec: 'hevc',
+      error: 'flv-hevc-unrecordable',
+    });
+  });
+
+  test('m3u8/TS 封装的 HEVC 不拦截（交给转码链路转 H.264）', async () => {
+    mockFfprobe({ streams: [{ codec_type: 'video', codec_name: 'hevc' }] });
+
+    await expect(transcoder.probeVideoTrack('http://live.xhscdn.com/live/123.m3u8')).resolves.toMatchObject({
+      hasVideo: true,
+      videoCodec: 'hevc',
+      error: null,
+    });
+  });
+
   test('无视频流且无 not implemented 返回 no-video-stream', async () => {
     mockFfprobe({ streams: [{ codec_type: 'audio', codec_name: 'aac' }] });
 

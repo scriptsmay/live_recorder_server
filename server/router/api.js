@@ -317,7 +317,7 @@ router.post('/notify/probe_stream', async (req, res) => {
 });
 
 router.post('/notify/live_download', async (req, res) => {
-  const { url, title, caption, room_url, cover_url, host_user_id, live_room_id } = req.body;
+  const { url, title, caption, room_url, cover_url, host_user_id, live_room_id, backupUrls } = req.body;
   const result = await RecorderService.startRecording({
     url,
     title,
@@ -326,6 +326,7 @@ router.post('/notify/live_download', async (req, res) => {
     roomCover: cover_url,
     host_user_id,
     live_room_id,
+    backupUrls,
   });
 
   if (result.error) {
