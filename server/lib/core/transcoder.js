@@ -216,6 +216,94 @@ class Transcoder {
       }, timeoutMs);
     });
   }
+
+  /**
+   * 探测输入流/文件是否存在可识别的视频轨，供录制前防御性预检使用。
+   *
+   * 背景：小红书 HEVC 档位用 FLV 封装 HEVC（视频 codec tag 0x0c=12），ffmpeg 官方
+   * 从不支持，录制时 ffprobe 会报 `Video codec (c) is not implemented` 且只识别出音频流，
+   * 最终成品丢失视频轨。录制前探测可识别这种情况并拒绝，避免产出无画面废文件。
+   *
+   * 探测失败（超时 / spawn 失败 / JSON 解析失败）一律按「有视频轨」放行，
+   * 避免因网络抖动误伤正常录制。
+   *
+   * @param {string} inputPath - 直播流 URL 或本地文件路径
+   * @param {Object} [options]
+   * @param {number} [options.timeoutMs=20000] - 探测超时（毫秒）
+   * @returns {Promise<{hasVideo: boolean, videoCodec: string|null, error: string|null}>}
+   *   - hasVideo=true 表示探测到可识别的视频轨（含探测失败放行）
+   *   - hasVideo=false 且 error='flv-hevc-not-implemented' 表示 FLV HEVC（ffmpeg 不认识）
+   *   - hasVideo=false 且 error='no-video-stream' 表示流中无视频轨
+   */
+  probeVideoTrack(inputPath, options = {}) {
+    const { timeoutMs = 20000 } = options;
+    return new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      let proc = null;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+
+      const timer = setTimeout(() => {
+        try {
+          proc?.kill('SIGKILL');
+        } catch (_) {}
+        finish({ hasVideo: true, videoCodec: null, error: 'probe-timeout' });
+      }, timeoutMs);
+
+      try {
+        proc = spawn(
+          'ffprobe',
+          [
+            '-v',
+            'error',
+            '-show_entries',
+            'stream=codec_type,codec_name',
+            '-of',
+            'json',
+            '-analyzeduration',
+            '8000000',
+            '-probesize',
+            '8000000',
+            inputPath,
+          ],
+          { stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+      } catch (_) {
+        return finish({ hasVideo: true, videoCodec: null, error: 'spawn-failed' });
+      }
+
+      proc.stdout.on('data', (chunk) => {
+        if (stdout.length < 10240) stdout += chunk;
+      });
+      proc.stderr.on('data', (chunk) => {
+        if (stderr.length < 4096) stderr += chunk;
+      });
+      proc.on('error', () => finish({ hasVideo: true, videoCodec: null, error: 'proc-error' }));
+      proc.on('close', () => {
+        try {
+          const json = JSON.parse(stdout);
+          const video = (json?.streams || []).find((s) => s.codec_type === 'video');
+          if (video) {
+            return finish({
+              hasVideo: true,
+              videoCodec: typeof video.codec_name === 'string' ? video.codec_name.toLowerCase() : null,
+              error: null,
+            });
+          }
+          const reason = /not implemented/i.test(stderr) ? 'flv-hevc-not-implemented' : 'no-video-stream';
+          finish({ hasVideo: false, videoCodec: null, error: reason });
+        } catch (_) {
+          finish({ hasVideo: true, videoCodec: null, error: 'parse-failed' });
+        }
+      });
+    });
+  }
 }
 
 module.exports = new Transcoder();

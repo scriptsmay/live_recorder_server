@@ -453,7 +453,7 @@ FFmpeg 写入分段文件(.flv)
 - **智能去重**: `finishSession` 中会跳过已通过边下边转码处理过的文件,避免重复入队
 - **双重保障**: 边下边转码为主,`finishSession` 批量处理为兜底,确保无遗漏
 - **错误容忍**: 单个分片转码失败不影响其他分片
-- **HEVC 重编码**: 转码前用 `ffprobe` 探测首个视频流编码，HEVC/H.265 输入自动重编码为 H.264（`libx264 -preset veryfast -crf 23` + `aac`），保证浏览器可播、B 站可投稿；其余编码保持 `-c copy` 无损重封装。可用 `transcode_hevc_to_h264=false` 关闭回退到 copy。重编码是 CPU 密集操作，超时上限（6 小时）远大于 copy 转码（120 秒）
+- **HEVC 重编码**: 转码前用 `ffprobe` 探测首个视频流编码，HEVC/H.265 输入自动重编码为 H.264（`libx264 -preset veryfast -crf 23` + `aac`），保证浏览器可播、B 站可投稿；其余编码保持 `-c copy` 无损重封装。可用 `transcode_hevc_to_h264=false` 关闭回退到 copy。重编码是 CPU 密集操作，超时上限（6 小时）远大于 copy 转码（120 秒）。**注意**：仅对 TS/MP4 里可识别的 HEVC 生效；FLV 封装的 HEVC 在录制阶段即被 ffmpeg 丢弃（见 XiaohongshuChecker 防御性预检），无视频轨可转，重编码救不回。
 
 **配置项**:
 
@@ -687,6 +687,7 @@ PollingManager (单例)
   - 使用 iOS 客户端 UA（`ios/7.830 ...` + `xy-common-params: platform=iOS...`）请求 `https://www.xiaohongshu.com/livestream/{roomId}`，解析 `window.__INITIAL_STATE__.liveStream`。
   - 严格校验 `liveStatus === 'success' && Number(roomInfo.status) === 2 && !roomTitle.includes('回放')`，下播态（`liveStatus === 'end'` / `status === 5`）忽略平台随机推荐的 `nextRoomInfo`，防止误录其他主播。
   - 从 `roomInfo.pullConfig`（JSON 字符串）的 `h264[].master_url` 提取无防盗链的 `xhscdn.com` `.flv` 主流（优先 `live-source-play.xhscdn.com`）与多 CDN 备流（`-bak-tx`、`-hw`、`.m3u8`），`roomInfo.deeplink` 作为兜底。
+  - **FLV 封装的 HEVC 不可录制（防御性拒绝）**：小红书 HEVC 档位（`pullConfig.h265`）的流是 FLV 封装 HEVC（视频 codec tag `0x0c`=12），ffmpeg 官方 flv demuxer 从不支持（官方只走 Enhanced FLV v2 的 fourcc 路线，`FLV_CODECID_HEVC=12` 是非标准第三方约定），ffprobe 会报 `Video codec (c) is not implemented` 且只识别出音频流，录制成品丢失视频轨（v1.14.0 会话 #80 即此问题）。录制前 `RecorderService.startRecording` 对 `.flv` 流调用 `transcoder.probeVideoTrack()` 预检，探测到该情况直接拒绝录制（返回 `Unsupported codec`），避免产出无画面废文件；探测失败一律放行不误伤。m3u8 流不受影响（TS 封装 HEVC 用标准 stream_type，ffmpeg 能识别）。
 
 ### 轮询流程
 

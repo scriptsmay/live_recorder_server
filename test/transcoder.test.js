@@ -181,3 +181,91 @@ describe('transcoder.fastTranscode', () => {
     statSpy.mockRestore();
   });
 });
+
+describe('transcoder.probeVideoTrack', () => {
+  beforeEach(() => spawn.mockReset());
+
+  function mockFfprobe({ streams = [], stderrText = '' } = {}) {
+    const child = makeChild();
+    spawn.mockImplementationOnce(() => {
+      setImmediate(() => {
+        if (stderrText) child.stderr.emit('data', Buffer.from(stderrText));
+        if (streams.length) child.stdout.emit('data', Buffer.from(JSON.stringify({ streams })));
+        child.emit('close', 0);
+      });
+      return child;
+    });
+    return child;
+  }
+
+  test('探测到视频轨返回 hasVideo=true', async () => {
+    mockFfprobe({ streams: [{ codec_type: 'video', codec_name: 'h264' }] });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: true,
+      videoCodec: 'h264',
+      error: null,
+    });
+  });
+
+  test('FLV HEVC（stderr 报 not implemented 且无视频流）返回 hasVideo=false', async () => {
+    mockFfprobe({
+      streams: [{ codec_type: 'audio', codec_name: 'aac' }],
+      stderrText: '[flv] Video codec (c) is not implemented',
+    });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: false,
+      error: 'flv-hevc-not-implemented',
+    });
+  });
+
+  test('无视频流且无 not implemented 返回 no-video-stream', async () => {
+    mockFfprobe({ streams: [{ codec_type: 'audio', codec_name: 'aac' }] });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: false,
+      error: 'no-video-stream',
+    });
+  });
+
+  test('spawn 失败放行 hasVideo=true', async () => {
+    spawn.mockImplementationOnce(() => {
+      throw new Error('spawn ffprobe ENOENT');
+    });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: true,
+      error: 'spawn-failed',
+    });
+  });
+
+  test('ffprobe 进程 error 放行 hasVideo=true', async () => {
+    const child = makeChild();
+    spawn.mockImplementationOnce(() => {
+      setImmediate(() => child.emit('error', new Error('boom')));
+      return child;
+    });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: true,
+      error: 'proc-error',
+    });
+  });
+
+  test('stdout 非法 JSON 放行 hasVideo=true', async () => {
+    const child = makeChild();
+    spawn.mockImplementationOnce(() => {
+      setImmediate(() => {
+        child.stdout.emit('data', Buffer.from('not json'));
+        child.emit('close', 0);
+      });
+      return child;
+    });
+
+    await expect(transcoder.probeVideoTrack('/x.flv')).resolves.toMatchObject({
+      hasVideo: true,
+      error: 'parse-failed',
+    });
+  });
+});

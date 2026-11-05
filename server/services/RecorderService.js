@@ -17,6 +17,7 @@ const { normalizeRoomUrl } = require('../lib/utils/room-url');
 const { detectPlatform } = require('../lib/utils/platform-detector');
 const { isUnexpectedExit } = require('../lib/utils/exit-status');
 const { fetchRoomCoverByUrl } = require('../lib/core/polling/checkers');
+const transcoder = require('../lib/core/transcoder');
 
 const DOWNLOAD_DIR = process.env.VIDEO_DOWNLOAD_DIR;
 const ACTIVE_TASK_TTL = 86400;
@@ -755,6 +756,23 @@ class RecorderService {
         status_str: 'Already recording',
         message: `直播间 ${room.room_name || room.room_url} 已在录制中`,
       };
+    }
+
+    // 防御性预检：小红书 HEVC 档位用 FLV 封装 HEVC（codec tag 0x0c），ffmpeg 官方从不支持，
+    // 录制时视频流会被丢弃（成品只剩音频）。录制前探测到该情况直接拒绝，避免产出无画面废文件。
+    // 仅对 flv 流预检；m3u8 是 TS 封装，HEVC 用标准 stream_type，ffmpeg 能正常识别。
+    if (/\.flv(\?|$)/i.test(url)) {
+      const videoProbe = await transcoder.probeVideoTrack(url);
+      if (videoProbe.error === 'flv-hevc-not-implemented') {
+        console.error(`[视频轨预检] 拒绝录制（FLV HEVC 无法识别，将丢失视频轨）: ${url.slice(0, 60)}`);
+        return {
+          error: true,
+          status: 200,
+          code: 400,
+          status_str: 'Unsupported codec',
+          message: '该直播流视频为 FLV 封装的 HEVC，当前 FFmpeg 无法识别，录制会丢失画面，已自动跳过。',
+        };
+      }
     }
 
     await pool.query(
